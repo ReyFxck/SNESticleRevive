@@ -101,13 +101,14 @@ int CDVD_getdir(const char* pathname, const char* extensions, enum CDVD_getMode 
 	// This will get the directory contents, and fill tocEntry via DMA
 	SifCallRpc(&cd0,CDVD_GETDIR,0,(void*)(&sbuff[0]),1024+128+4+4+4,(void*)(&sbuff[0]),4+1024,0,0);
 
-	num_entries = sbuff[0];
+        num_entries = sbuff[0];
 
-	if (new_pathname != NULL)
-		strncpy(new_pathname, (char *)&sbuff[1], 1023);
-                new_pathname[1023] = '\0';
+        if (new_pathname != NULL) {
+                strncpy(new_pathname, (char *)&sbuff[1], 1023);
+                new_pathname[1023] = 0;
+        }
 
-	return (num_entries);
+        return (num_entries);
 }
 
 void CDVD_FlushCache()

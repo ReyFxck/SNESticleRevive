@@ -221,6 +221,7 @@ int
 xpadInit(int a)
 {
     int ver;
+    (void)ver;
     int i;
 
     if(padInitialised)
@@ -338,7 +339,7 @@ xpadPortOpen(int port, int slot, void *padArea)
 
     PadState[port][slot].open = 1;
     PadState[port][slot].padData = padArea;
-    PadState[port][slot].padBuf = *(char **)(&buffer[20]);
+    PadState[port][slot].padBuf = *(unsigned char **)(&buffer[20]);
 
     return *(u32 *)(&buffer[12]);
 }
