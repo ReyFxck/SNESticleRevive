@@ -203,7 +203,7 @@ void SNSpcDspMix::RestoreState(struct SNStateSPCDSPT *pState)
 }
 
 
-void _SNStateMemDiff(char *pTag, Uint8 *pA, Uint8 *pB, Int32 nBytes)
+void _SNStateMemDiff(const char *pTag, Uint8 *pA, Uint8 *pB, Int32 nBytes)
 {
     Int32 iOffset;
 
