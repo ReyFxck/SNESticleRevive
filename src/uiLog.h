@@ -18,7 +18,7 @@ class CLogScreen : public CScreen
 public:
 	CLogScreen();
 
-	void AddMessage(char *pStr);
+	void AddMessage(const char *pStr);
 	void Draw();
 	void Process();
 	void Input(Uint32 Buttons, Uint32 Trigger);

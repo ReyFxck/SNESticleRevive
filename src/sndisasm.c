@@ -483,7 +483,7 @@ static SNDInstDefT _SND_InstDefs[]=
     {0x00, SND_INST_NONE, SND_OPERAND_NONE              }
 };
 
-static char *_SND_pMnemonics[]=
+static const char *_SND_pMnemonics[]=
 {
     (char *)""   ,
     (char *)"adc", // SND_INST_ADC  

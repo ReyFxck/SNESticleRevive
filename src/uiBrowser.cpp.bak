@@ -21,9 +21,9 @@ extern "C" {
 
 static char *_MenuEntries[]=
 {
-	"Copy File",
-	"Paste File",
-	"Delete file",
+	(char *)"Copy File",
+	(char *)"Paste File",
+	(char *)"Delete file",
 	NULL
 };
 

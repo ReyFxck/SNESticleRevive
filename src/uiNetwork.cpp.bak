@@ -240,35 +240,35 @@ void _MenuPrintAlignCenter(int x, int y, char *str, Bool bHighlight = FALSE)
 
 static char *m_DHCPStr[]=
 {
-    "disabled",   //  DHCP_DISABLED 0
-    "requesting", //  DHCP_REQUESTING 1
-    "init",       //  DHCP_INIT 2
-    "rebooting",  //  DHCP_REBOOTING 3
-    "rebinding",  //  DHCP_REBINDING 4
-    "renewing",   //  DHCP_RENEWING 5
-    "selecting",  //  DHCP_SELECTING 6
-    "informing",  //  DHCP_INFORMING 7
-    "checking",   //  DHCP_CHECKING 8
-    "permanent",  //  DHCP_PERMANENT 9
-    "bound",      //  DHCP_BOUND 10
-    "releasing",  //  DHCP_RELEASING 11 
-    "backingoff", //  DHCP_BACKING_OFF 12
-    "off",        //  DHCP_OFF 13
+    (char *)"disabled",   //  DHCP_DISABLED 0
+    (char *)"requesting", //  DHCP_REQUESTING 1
+    (char *)"init",       //  DHCP_INIT 2
+    (char *)"rebooting",  //  DHCP_REBOOTING 3
+    (char *)"rebinding",  //  DHCP_REBINDING 4
+    (char *)"renewing",   //  DHCP_RENEWING 5
+    (char *)"selecting",  //  DHCP_SELECTING 6
+    (char *)"informing",  //  DHCP_INFORMING 7
+    (char *)"checking",   //  DHCP_CHECKING 8
+    (char *)"permanent",  //  DHCP_PERMANENT 9
+    (char *)"bound",      //  DHCP_BOUND 10
+    (char *)"releasing",  //  DHCP_RELEASING 11 
+    (char *)"backingoff", //  DHCP_BACKING_OFF 12
+    (char *)"off",        //  DHCP_OFF 13
 };
 
 
 static char *m_NetplayClientStatusStr[]=
 {
-    "not connected",
-    "connecting",
-    "connected"
+    (char *)"not connected",
+    (char *)"connecting",
+    (char *)"connected"
 };
 
 static char *m_NetplayServerStatusStr[]=
 {
-    "idle",
-    "connecting",
-    "listening"
+    (char *)"idle",
+    (char *)"connecting",
+    (char *)"listening"
 };
 
 void _MenuHeader(int vy, char *str)

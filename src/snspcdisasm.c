@@ -481,7 +481,7 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0x00, SNDSPC_INST_NONE, SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE }
 };
 
-static char *_SNDSPC_pMnemonics[]=
+static const char *_SNDSPC_pMnemonics[]=
 {
     (char *)""   ,
 

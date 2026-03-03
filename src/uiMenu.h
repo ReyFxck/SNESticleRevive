@@ -10,7 +10,7 @@ class CMenuScreen : public CScreen
 	void 	*m_pUserData;
 
 	char	m_strTitle[64];
-	char    *m_pEntries[32];
+	const char *m_pEntries[32];
 
 	Int32 	m_iSelect;   // current selected item
 	Int32	m_nItems;	 // total number of items
@@ -22,9 +22,9 @@ public:
 
 	void SetUserData(void *pUserData) {m_pUserData = pUserData;}
 
-	void SetEntries(char **ppStrings);
-	void SetTitle(char *pTitle);
-	void SetText(int iText, char *pStr);
+	void SetEntries(const char **ppStrings);
+	void SetTitle(const char *pTitle);
+	void SetText(int iText, const char *pStr);
 	char *GetText(int iText) {return m_strText[iText];}
 
 	void Draw();

@@ -12,7 +12,7 @@
 #include "uiMenu.h"
 
 
-void CMenuScreen::SetEntries(char **ppStrings)
+void CMenuScreen::SetEntries(const char **ppStrings)
 {
 	m_nItems = 0;
 
@@ -33,17 +33,17 @@ CMenuScreen::CMenuScreen()
 //	SetText(0, "crapppy");
 }
 
-void CMenuScreen::SetTitle(char *pTitle)
+void CMenuScreen::SetTitle(const char *pTitle)
 {
 	strcpy(m_strTitle, pTitle);
 }
 
-void CMenuScreen::SetText(int iText, char *pStr)
+void CMenuScreen::SetText(int iText, const char *pStr)
 {
 	strcpy(m_strText[iText], pStr);
 }
 
-static void _MenuPrintAlignCenter(int x, int y, char *str, Bool bHighlight = FALSE)
+static void _MenuPrintAlignCenter(int x, int y, const Char *str, Bool bHighlight = FALSE)
 {                
     x-= FontGetStrWidth(str) / 2;
     FontPuts(x, y, str);
@@ -55,7 +55,7 @@ static void _MenuPrintAlignCenter(int x, int y, char *str, Bool bHighlight = FAL
     }
 }
 
-static void _MenuHeader(int vy, char *str)
+static void _MenuHeader(int vy, const Char *str)
 {
     PolyColor4f(0.0f, 0.2f, 0.2f, 0.5f); 
 	PolyRect(32, vy, 256-64, 9);
@@ -81,7 +81,7 @@ void CMenuScreen::Draw()
 
 	for (iLine=0; iLine < m_nItems; iLine++)
 	{
-		Char *pStr = m_pEntries[iLine]; 
+		const Char *pStr = m_pEntries[iLine]; 
 		Int32 iWidth;;
 
 		iWidth = FontGetStrWidth(pStr);

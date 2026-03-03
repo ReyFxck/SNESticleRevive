@@ -25,7 +25,7 @@ CLogScreen::CLogScreen()
 	*/
 }
 
-void CLogScreen::AddMessage(char *pStr)
+void CLogScreen::AddMessage(const char *pStr)
 {
 	if (m_nMessages < UILOG_NUMMESSAGES)
 	{
@@ -35,7 +35,7 @@ void CLogScreen::AddMessage(char *pStr)
 	}
 }
 
-static void _MenuPrintAlignCenter(int x, int y, char *str, Bool bHighlight = FALSE)
+static void _MenuPrintAlignCenter(int x, int y, const Char *str, Bool bHighlight = FALSE)
 {                
     x-= FontGetStrWidth(str) / 2;
     FontPuts(x, y, str);
@@ -47,7 +47,7 @@ static void _MenuPrintAlignCenter(int x, int y, char *str, Bool bHighlight = FAL
     }
 }
 
-static void _MenuHeader(int vy, char *str)
+static void _MenuHeader(int vy, const Char *str)
 {
     PolyColor4f(0.0f, 0.2f, 0.2f, 0.5f); 
 	PolyRect(32, vy, 256-64, 9);

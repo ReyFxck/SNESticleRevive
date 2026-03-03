@@ -76,7 +76,7 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
 
 }
 
-Int32 FontGetStrWidth(Char *pStr)
+Int32 FontGetStrWidth(const Char *pStr)
 {
     Int32 iWidth = 0;
 	FontT *pFont;
@@ -101,7 +101,7 @@ Int32 FontGetStrWidth(Char *pStr)
 }
 
 
-static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, char *pStr, Uint32 uColor)
+static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const Char *pStr, Uint32 uColor)
 {
     TextureT *pTexture = &pFont->Texture;
     if (!pTexture) return;
@@ -172,7 +172,7 @@ static void _FontBiosMake(FontT *pFont)
   */
 
 
-void FontMake(FontT *pFont, CSurface *pSurface, Uint32 uVramAddr, Char *pCharList)
+void FontMake(FontT *pFont, CSurface *pSurface, Uint32 uVramAddr, const Char *pCharList)
 {
     TextureT *pTexture = &pFont->Texture;
 
@@ -212,7 +212,7 @@ void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
 
 }
 
-void FontPuts(Float32 vx, Float32 vy, Char *pStr)
+void FontPuts(Float32 vx, Float32 vy, const Char *pStr)
 {
 	FontT *pFont;
 	pFont = _Font_State.pFont;
@@ -226,7 +226,7 @@ void FontPuts(Float32 vx, Float32 vy, Char *pStr)
 
 }
 
-void FontPrintf(Float32 vx, Float32 vy, Char *pFormat, ...)
+void FontPrintf(Float32 vx, Float32 vy, const Char *pFormat, ...)
 {
 	static char strbuf[1024];
 	va_list args;
@@ -353,7 +353,7 @@ static Bool _FontScanVertWhite(CSurface *pSurface, Uint32 uStartY, Uint32 uEndY,
     return TRUE;
 }
 
-Char *_FontParseLine(FontT *pFont, CSurface *pSurface, Char *pCharList, Uint32 uStartY, Uint32 uEndY)
+const Char *_FontParseLine(FontT *pFont, CSurface *pSurface, const Char *pCharList, Uint32 uStartY, Uint32 uEndY)
 {
     Uint32 uX;
     Uint32 uWidth;//, uHeight;
@@ -400,7 +400,7 @@ Char *_FontParseLine(FontT *pFont, CSurface *pSurface, Char *pCharList, Uint32 u
     return pCharList;
 }
 
-void FontParseChars(FontT *pFont, CSurface *pSurface, Char *pCharList)
+void FontParseChars(FontT *pFont, CSurface *pSurface, const Char *pCharList)
 {
     Uint32 uY;
     Uint32 uWidth, uHeight;

@@ -1082,33 +1082,33 @@ static int _MainLoopLogEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 
 static char *_MainLoopMenuEntries[]=
 {
-	"Copy cdrom0: -> mc0:",
-	"Copy cdrom0: -> mc1:",
-	"Copy host: -> mc0:",
-	"Copy mc0: -> mc1:",
-	"Copy mc1: -> mc0:",
-	"Copy mc0: -> host:",
-	"Dump memory -> host:",
-	"Add PSX CD to mc0:title.db",
-	"Dump mc0:title.db -> tty0:",
-	"Copy rom0:libsd -> host:",
+	(char *)"Copy cdrom0: -> mc0:",
+	(char *)"Copy cdrom0: -> mc1:",
+	(char *)"Copy host: -> mc0:",
+	(char *)"Copy mc0: -> mc1:",
+	(char *)"Copy mc1: -> mc0:",
+	(char *)"Copy mc0: -> host:",
+	(char *)"Dump memory -> host:",
+	(char *)"Add PSX CD to mc0:title.db",
+	(char *)"Dump mc0:title.db -> tty0:",
+	(char *)"Copy rom0:libsd -> host:",
 	NULL
 };
 
 
 static char *_MainLoop_pInstallFiles[] =
 {
-	"BOOT.ELF",		"BOOT.ELF",
-	"TITLE.DB",		"TITLE.DB",
-	"ICON.SYS",		"ICON.SYS",
-	"PS2IP.IRX",	"PS2IP.IRX",
-	"PS2IPS.IRX",	"PS2IPS.IRX",
-	"PS2LINK.IRX",	"PS2LINK.IRX",
-	"PS2SMAP.IRX",	"PS2SMAP.IRX",
-	"CDVD.IRX",		"CDVD.IRX",
-	"SJPCM2.IRX",	"SJPCM2.IRX",
-	"MCSAVE.IRX",	"MCSAVE.IRX",
-	"NETPLAY.IRX",	"NETPLAY.IRX",
+	(char *)"BOOT.ELF",		"BOOT.ELF",
+	(char *)"TITLE.DB",		"TITLE.DB",
+	(char *)"ICON.SYS",		"ICON.SYS",
+	(char *)"PS2IP.IRX",	"PS2IP.IRX",
+	(char *)"PS2IPS.IRX",	"PS2IPS.IRX",
+	(char *)"PS2LINK.IRX",	"PS2LINK.IRX",
+	(char *)"PS2SMAP.IRX",	"PS2SMAP.IRX",
+	(char *)"CDVD.IRX",		"CDVD.IRX",
+	(char *)"SJPCM2.IRX",	"SJPCM2.IRX",
+	(char *)"MCSAVE.IRX",	"MCSAVE.IRX",
+	(char *)"NETPLAY.IRX",	"NETPLAY.IRX",
 	NULL
 };
 
@@ -1339,16 +1339,16 @@ static char _MainLoop_BootDir[256];
 static char *_MainLoop_IOPModulePaths[]=
 {
 	_MainLoop_BootDir,
-    "host:",
-    "cdrom:\\",
-    "rom0:",
+    (char *)"host:",
+    (char *)"cdrom:\\",
+    (char *)"rom0:",
     NULL
 };
 
 
 static char *_MainLoop_NetConfigPaths[]=
 {
-	"mc0:/SNESticle/",
+	(char *)"mc0:/SNESticle/",
 	_MainLoop_BootDir,
     NULL
 };

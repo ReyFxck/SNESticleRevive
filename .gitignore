@@ -5,3 +5,8 @@ logs/
 *.elf
 *.log
 *.tar.gz
+build/
+*.o
+*.elf
+*.log
+*.bak*

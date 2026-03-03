@@ -216,7 +216,7 @@ static Int32 _MainLoop_StatusCount=0;
 static Bool _MainLoop_BlackScreen = FALSE;
 static Uint32 _MainLoop_uDebugDisplay = 0;
 
-void MainLoopModalPrintf(Int32 Time, Char *pFormat, ...)
+void MainLoopModalPrintf(Int32 Time, const Char *pFormat, ...)
 {
 	va_list argptr;
 	va_start(argptr,pFormat);
@@ -233,7 +233,7 @@ void MainLoopModalPrintf(Int32 Time, Char *pFormat, ...)
 	}
 }
 
-void MainLoopStatusPrintf(Int32 Time, Char *pFormat, ...)
+void MainLoopStatusPrintf(Int32 Time, const Char *pFormat, ...)
 {
 	va_list argptr;
 	va_start(argptr,pFormat);
@@ -243,7 +243,7 @@ void MainLoopStatusPrintf(Int32 Time, Char *pFormat, ...)
 	_MainLoop_StatusCount = Time;
 }
 
-void ScrPrintf(Char *pFormat, ...)
+void ScrPrintf(const Char *pFormat, ...)
 {
 	va_list argptr;
 	char str[256];
@@ -260,7 +260,7 @@ void ScrPrintf(Char *pFormat, ...)
 	MainLoopRender();
 }
 
-static Uint32 _PathCalcHash(char *pStr)
+static Uint32 _PathCalcHash(const char *pStr)
 {
 	Uint32 hash = 0;
 	while (*pStr)
@@ -305,9 +305,9 @@ int PathGetMaxFileNameLength(const char *pPath)
 }
 
 
-static void _MainLoopGetName(Char *pName, Char *pPath)
+static void _MainLoopGetName(Char *pName, const Char *pPath)
 {
-	char *pFileName;
+	const Char *pFileName;
 
 	pFileName = strrchr(pPath, '/');
 	if (pFileName==NULL)
@@ -857,7 +857,7 @@ static Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 			if (!pBios->IsLoaded())
 			{
 				char diskrompath[256];
-				char *pFileName;
+                            Char *pFileName;
 				strcpy(diskrompath, FileName);
 				pFileName = strrchr(diskrompath, '/');
 				if (!pFileName) 
@@ -1080,7 +1080,7 @@ static int _MainLoopLogEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 }
 
 
-static char *_MainLoopMenuEntries[]=
+static const char *_MainLoopMenuEntries[]=
 {
 	(char *)"Copy cdrom0: -> mc0:",
 	(char *)"Copy cdrom0: -> mc1:",
@@ -1699,7 +1699,7 @@ int CopyFile(char *pDest, char *pSrc, CopyProgressCallBackT pCallBack)
 }
 
 
-static Bool _bTrailingPath(char *pStr)
+static Bool _bTrailingPath(const char *pStr)
 {
 	int len;
 	char cLastChar;

@@ -19,7 +19,7 @@ extern "C" {
 #include "mcsave_ee.h"
 };
 
-static char *_MenuEntries[]=
+static const char *_MenuEntries[]=
 {
 	(char *)"Copy File",
 	(char *)"Paste File",
@@ -215,7 +215,7 @@ void CBrowserScreen::SortEntries()
 }
 
 
-void CBrowserScreen::AddEntry(Char *pName, BrowserEntryTypeE eType, Int32 size)
+void CBrowserScreen::AddEntry(const Char *pName, BrowserEntryTypeE eType, Int32 size)
 {
 	if (m_nEntries < m_MaxEntries)
 	{
@@ -467,7 +467,7 @@ static int _BrowserDread(int fd, fio_dirent_t *dirent)
 }
 
 
-void CBrowserScreen::SetDir(Char *pDir)
+void CBrowserScreen::SetDir(const Char *pDir)
 {
 //    Int32 nEntries, iEntry;
 	int fd;
@@ -542,7 +542,7 @@ void CBrowserScreen::SetDir(Char *pDir)
     printf("BrowserEntries: %d\n", m_nEntries);
 }
 
-void CBrowserScreen::Chdir(Char *pSubDir)
+void CBrowserScreen::Chdir(const Char *pSubDir)
 {
 	Char dir[256];
 
