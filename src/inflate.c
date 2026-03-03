@@ -264,10 +264,7 @@ int ZEXPORT inflate(z_streamp z, int f)
 }
 
 
-int ZEXPORT inflateSetDictionary(z, dictionary, dictLength)
-z_streamp z;
-const Bytef *dictionary;
-uInt  dictLength;
+int ZEXPORT inflateSetDictionary(z_streamp z, const Bytef *dictionary, uInt dictLength)
 {
   uInt length = dictLength;
 
