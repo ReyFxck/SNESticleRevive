@@ -67,7 +67,7 @@ unzlocal_getShort (FILE * fin, uLong * pX)
 #ifdef PS2_EE
 	int 			i = 0;
 #else
-    int             i;
+    int i = 0;
 #endif
     int             err;
 
@@ -92,7 +92,7 @@ unzlocal_getLong (FILE * fin, uLong * pX)
 #ifdef PS2_EE
 	int             i = 0;
 #else
-    int             i;
+    int i = 0;
 #endif
     int             err;
 
@@ -204,7 +204,7 @@ unzlocal_SearchCentralDir (FILE * fin)
     while (uBackRead < uMaxBack)
     {
 	uLong           uReadSize, uReadPos;
-	int             i;
+	int i = 0;
 	if (uBackRead + BUFREADCOMMENT > uMaxBack)
 	    uBackRead = uMaxBack;
 	else

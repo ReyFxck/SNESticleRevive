@@ -357,7 +357,7 @@ static Bool _MainLoopSaveSRAM(Bool bSync)
 
 		PathTruncFileName(SaveName, _RomName, PathGetMaxFileNameLength(_SramPath) - 4);
 
-        sprintf(Path, "%s/%s.%s", _SramPath, SaveName, _pSystem->GetString(Emu::System::StringE::STRING_STATEEXT) );
+        snprintf(Path, sizeof(Path), "%s/%s.%s", _SramPath, SaveName, _pSystem->GetString(Emu::System::StringE::STRING_STATEEXT) );
 
 		MCSave_WriteSync(TRUE, NULL);
 		MCSave_Write((char *)Path, (char *)pSRAM, nSramBytes);
@@ -388,7 +388,7 @@ static void _MainLoopLoadSRAM()
 
 		PathTruncFileName(SaveName, _RomName, PathGetMaxFileNameLength(_SramPath) - 4);
 
-        sprintf(Path, "%s/%s.%s", _SramPath, SaveName, _pSystem->GetString(Emu::System::StringE::STRING_STATEEXT));
+        snprintf(Path, sizeof(Path), "%s/%s.%s", _SramPath, SaveName, _pSystem->GetString(Emu::System::StringE::STRING_STATEEXT));
 
 		if (MemCardReadFile(Path, pSRAM, nSramBytes))
 		{
@@ -463,7 +463,7 @@ void _MainLoopLoadState()
 
     if (_pSystem == _pSnes)
     {
-	    sprintf(Path, "%s%s.sns", MAINLOOP_STATEPATH, _RomName);
+	    snprintf(Path, sizeof(Path), "%s%s.sns", MAINLOOP_STATEPATH, _RomName);
 
         if (FileReadMem(Path, &_SnesState, sizeof(_SnesState)))
         {
@@ -506,7 +506,7 @@ void _MainLoopSaveState()
 
     if (_pSystem == _pSnes)
     {
-	    sprintf(Path, "%s%s.sns", MAINLOOP_STATEPATH, _RomName);
+	    snprintf(Path, sizeof(Path), "%s%s.sns", MAINLOOP_STATEPATH, _RomName);
 
         _pSnes->SaveState(&_SnesState);
         _bStateSaved = TRUE;
@@ -1098,17 +1098,17 @@ static const char *_MainLoopMenuEntries[]=
 
 static char *_MainLoop_pInstallFiles[] =
 {
-	(char *)"BOOT.ELF",		"BOOT.ELF",
-	(char *)"TITLE.DB",		"TITLE.DB",
-	(char *)"ICON.SYS",		"ICON.SYS",
-	(char *)"PS2IP.IRX",	"PS2IP.IRX",
-	(char *)"PS2IPS.IRX",	"PS2IPS.IRX",
-	(char *)"PS2LINK.IRX",	"PS2LINK.IRX",
-	(char *)"PS2SMAP.IRX",	"PS2SMAP.IRX",
-	(char *)"CDVD.IRX",		"CDVD.IRX",
-	(char *)"SJPCM2.IRX",	"SJPCM2.IRX",
-	(char *)"MCSAVE.IRX",	"MCSAVE.IRX",
-	(char *)"NETPLAY.IRX",	"NETPLAY.IRX",
+	(char *)"BOOT.ELF", (char *)"BOOT.ELF",
+	(char *)"TITLE.DB", (char *)"TITLE.DB",
+	(char *)"ICON.SYS", (char *)"ICON.SYS",
+	(char *)"PS2IP.IRX", (char *)"PS2IP.IRX",
+	(char *)"PS2IPS.IRX", (char *)"PS2IPS.IRX",
+	(char *)"PS2LINK.IRX", (char *)"PS2LINK.IRX",
+	(char *)"PS2SMAP.IRX", (char *)"PS2SMAP.IRX",
+	(char *)"CDVD.IRX", (char *)"CDVD.IRX",
+	(char *)"SJPCM2.IRX", (char *)"SJPCM2.IRX",
+	(char *)"MCSAVE.IRX", (char *)"MCSAVE.IRX",
+	(char *)"NETPLAY.IRX", (char *)"NETPLAY.IRX",
 	NULL
 };
 
@@ -1215,8 +1215,8 @@ static int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 
 				_GetExploitDir(exploit_dir);
 
-				sprintf(mc0, "mc0:/%s", exploit_dir);
-				sprintf(mc1, "mc1:/%s", exploit_dir);
+				snprintf(mc0, sizeof(mc0), "mc0:/%s", exploit_dir);
+				snprintf(mc1, sizeof(mc1), "mc1:/%s", exploit_dir);
 
 				// hack in default destination name for elf
 				ppInstallFiles[0] = (char *)"BOOT.ELF"; // dest
@@ -1254,11 +1254,11 @@ static int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 						_DumpMemory();
 						break;
 					case 7:
-						sprintf(mc0, "mc0:/%s/TITLE.DB", exploit_dir);
+						snprintf(mc0, sizeof(mc0), "mc0:/%s/TITLE.DB", exploit_dir);
 						_AddTitleDB(mc0);
 						break;
 					case 8:
-						sprintf(mc0, "mc0:/%s/TITLE.DB", exploit_dir);
+						snprintf(mc0, sizeof(mc0), "mc0:/%s/TITLE.DB", exploit_dir);
 						list_title_db(mc0);
 						break;
 					case 9: // copy rom0:libsd -> host

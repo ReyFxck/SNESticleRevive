@@ -259,7 +259,7 @@ void CEmuShell::UnloadRom()
 Bool CEmuShell::LoadRom(Char *pRomFile, Uint8 *pBuffer, Uint32 nBufferBytes)
 {
 	Int32 eType;
-	Bool bCompressed;
+	Bool bCompressed = FALSE;
 
     UnloadRom();
 

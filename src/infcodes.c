@@ -78,10 +78,7 @@ z_streamp z;
 }
 
 
-int inflate_codes(s, z, r)
-inflate_blocks_statef *s;
-z_streamp z;
-int r;
+int inflate_codes(inflate_blocks_statef *s, z_streamp z, int r)
 {
   uInt j;               /* temporary storage */
   inflate_huft *t;      /* temporary pointer */
@@ -248,9 +245,7 @@ int r;
 }
 
 
-void inflate_codes_free(c, z)
-inflate_codes_statef *c;
-z_streamp z;
+void inflate_codes_free(inflate_codes_statef *c, z_streamp z)
 {
   ZFREE(z, c);
   Tracev((stderr, "inflate:       codes free\n"));
