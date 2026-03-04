@@ -217,15 +217,16 @@ void CBrowserScreen::SortEntries()
 
 void CBrowserScreen::AddEntry(const Char *pName, BrowserEntryTypeE eType, Int32 size)
 {
-	if (m_nEntries < m_MaxEntries)
-	{
-		strncpy(m_pDirEntries[m_nEntries].name, pName, BROWSER_ENTRY_MAXCHARS - 1);
-		m_pDirEntries[m_nEntries].name[BROWSER_ENTRY_MAXCHARS - 1] = '\\0';
-		m_pDirEntries[m_nEntries].size = size;
-		m_pDirEntries[m_nEntries].eType = eType;
-		m_nEntries++;
-	}
+        if (m_nEntries < m_MaxEntries)
+        {
+                strncpy(m_pDirEntries[m_nEntries].name, pName, BROWSER_ENTRY_MAXCHARS - 1);
+                m_pDirEntries[m_nEntries].name[BROWSER_ENTRY_MAXCHARS - 1] = 0;
+                m_pDirEntries[m_nEntries].size = size;
+                m_pDirEntries[m_nEntries].eType = eType;
+                m_nEntries++;
+        }
 }
+
 
 
 void CBrowserScreen::Draw()
