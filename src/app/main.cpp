@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <debug.h>
 #include <ctype.h>
 #include <sifrpc.h>
 #include <loadfile.h>
@@ -122,6 +123,22 @@ int full_reset()
 
 
 
+
+
+static void MainDebugLogToFile(const char *msg)
+{
+    if (!msg) return;
+
+    // tenta host: (HostFS do emulador), depois mc0:
+    int fd = fioOpen("host:SNESLOG.TXT", O_WRONLY | O_CREAT | O_APPEND);
+    if (fd < 0)
+        fd = fioOpen("mc0:/SNESLOG.TXT", O_WRONLY | O_CREAT | O_APPEND);
+
+    if (fd >= 0) {
+        fioWrite(fd, msg, (int)strlen(msg));
+        fioClose(fd);
+    }
+}
 
 /* ---------------- IRX LOADER ----------------
    Carrega IRX do mesmo diretorio do ELF (MainGetBootDir()).
@@ -257,6 +274,95 @@ static void MainLoadIrxFromBootDir(void)
 /* Your program's main entry point */
 int main(int argc, char **argv) 
 {
+          init_scr();
+  scr_printf("\n\n*** STAGE 1 ***\n");
+  scr_printf("Entrou no main\n");
+  scr_printf("argv0=%s\n", (argc>0 && argv && argv[0]) ? argv[0] : "(null)");
+
+  scr_printf("before MainSetBootDir\n");
+  if (argc > 0 && argv && argv[0])
+    MainSetBootDir(argv[0]);
+  else
+    MainSetBootDir("host:");
+  scr_printf("after MainSetBootDir\n");
+  scr_printf("bootdir=%s\n", MainGetBootDir() ? MainGetBootDir() : "(null)");
+
+  scr_printf("\n*** STAGE 2 ***\n");
+  scr_printf("before ConInit\n");
+  ConInit();
+
+  init_scr();
+  scr_printf("\n\n*** STAGE 1 RECAP ***\n");
+  scr_printf("Entrou no main\n");
+  scr_printf("argv0=%s\n", (argc>0 && argv && argv[0]) ? argv[0] : "(null)");
+  scr_printf("after MainSetBootDir\n");
+  scr_printf("bootdir=%s\n", MainGetBootDir() ? MainGetBootDir() : "(null)");
+
+  scr_printf("\n*** STAGE 2 POST-CONINIT ***\n");
+  scr_printf("after ConInit\n");
+
+  scr_printf("\n*** STAGE 3 ***\n");
+  SifInitRpc(0);
+  SifLoadFileInit();
+  fioInit();
+
+  char p1[512];
+  snprintf(p1, sizeof(p1), "%sioptrap.irx", MainGetBootDir() ? MainGetBootDir() : "");
+  int fd = fioOpen(p1, O_RDONLY);
+  scr_printf("fioOpen(bootdir+ioptrap)=%d\n", fd);
+  if (fd >= 0) fioClose(fd);
+
+  fd = fioOpen("host:ioptrap.irx", O_RDONLY);
+  scr_printf("fioOpen(host:ioptrap)=%d\n", fd);
+  if (fd >= 0) fioClose(fd);
+
+  scr_printf("try load ioptrap...\n");
+  int r = MainLoadIrxFromBootDirOne("ioptrap.irx");
+  scr_printf("load ioptrap ret=%d\n", r);
+
+  scr_printf("try load poweroff...\n");
+  r = MainLoadIrxFromBootDirOne("poweroff.irx");
+  scr_printf("load poweroff ret=%d\n", r);
+  scr_printf("\n*** STAGE 4 (ROM0 + MC) ***\n");
+
+  int ret;
+  ret = SifLoadModule("rom0:XSIO2MAN", 0, NULL);
+  if (ret < 0) ret = SifLoadModule("rom0:SIO2MAN", 0, NULL);
+  scr_printf("SIO2MAN ret=%d\n", ret);
+
+  ret = SifLoadModule("rom0:XPADMAN", 0, NULL);
+  if (ret < 0) ret = SifLoadModule("rom0:PADMAN", 0, NULL);
+  scr_printf("PADMAN ret=%d\n", ret);
+
+  ret = SifLoadModule("rom0:XMCMAN", 0, NULL);
+  if (ret < 0) ret = SifLoadModule("rom0:MCMAN", 0, NULL);
+  scr_printf("MCMAN ret=%d\n", ret);
+
+  ret = SifLoadModule("rom0:XMCSERV", 0, NULL);
+  if (ret < 0) ret = SifLoadModule("rom0:MCSERV", 0, NULL);
+  scr_printf("MCSERV ret=%d\n", ret);
+
+  int dh = fioDopen("mc0:/");
+  scr_printf("fioDopen(mc0:/)=%d\n", dh);
+  if (dh >= 0) fioDclose(dh);
+
+
+  for (;;) { SleepThread(); }
+
+  // --- file log probe ---
+  SifInitRpc(0);
+  SifLoadFileInit();
+  fioInit();
+  MainDebugLogToFile("SNESLOG: entered main\n");
+  // trava aqui pra garantir que o log foi escrito
+  while (1) { SleepThread(); }
+  // --- /file log probe ---
+
+  init_scr();
+  scr_printf("\n\n\n*** PROBE: ENTROU NO MAIN ***\n");
+  scr_printf("Se voce esta vendo isso, o ELF iniciou.\n");
+  for (;;) { }
+
     int iArg;
 //    init_scr();
 
@@ -291,7 +397,9 @@ int main(int argc, char **argv)
 
 	ConInit();
 
+  scr_printf("before IRX load\n");
   MainLoadIrxFromBootDir();
+  scr_printf("after IRX load\n");
 
 
 	if (MainLoopInit())

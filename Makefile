@@ -175,7 +175,7 @@ count:
 ISO_LABEL ?= SNESTICLE
 ISO_OUT   ?= $(OBJ_DIR)/$(ISO_LABEL).iso
 ISO_DIR   ?= $(OBJ_DIR)/iso_root
-BOOT_ELF  ?= $(ISO_LABEL).ELF
+BOOT_ELF  ?= SNEBOOT.ELF
 VMODE     ?= NTSC
 VER       ?= 1.00
 
@@ -185,7 +185,7 @@ MKISOFS ?= $(shell if command -v xorriso >/dev/null 2>&1; then echo "xorriso -as
 	elif command -v mkisofs >/dev/null 2>&1; then echo "mkisofs"; \
 	else echo "mkisofs"; fi)
 
-MKISOFSFLAGS ?= -J -R -l -iso-level 2
+MKISOFSFLAGS ?= -iso-level 1 -pad -sysid PLAYSTATION -A PLAYSTATION
 
 .PHONY: iso iso_stage iso_image
 
