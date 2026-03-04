@@ -12,6 +12,11 @@ CFLAGS   := -G0 -O2 -Wall -D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=
 CXXFLAGS := -G0 -O2 -Wall -fno-exceptions -fno-rtti -D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3
 
 INCS := \
+-I$(CURDIR)/src/platform/ps2 \
+-I$(CURDIR)/src/platform/ps2/ui \
+-I$(CURDIR)/src/platform/ps2/system \
+-I$(CURDIR)/src/platform/ps2/input \
+-I$(CURDIR)/src/platform/ps2/memcard \
 -I$(CURDIR)/src \
 -I/root/SNESticle-Beta/Gep/Include/common \
 -I/root/SNESticle-Beta/Gep/Include/ps2 \
@@ -71,7 +76,7 @@ $(OBJ_DIR)/%.o: src/%.S | $(OBJ_DIR)
 	@echo "AS  $<"
 	@$(EE_CC) $(CFLAGS) $(INCS) -c $< -o $@
 
-$(OBJ_DIR)/input.o: src/input.c | $(OBJ_DIR)
+$(OBJ_DIR)/platform/ps2/input/input.o: src/platform/ps2/input/input.c | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
 	@echo "CXX $<"
 	@$(EE_CXX) -x c++ $(CXXFLAGS) $(INCS) -c $< -o $@
