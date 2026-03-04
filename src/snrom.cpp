@@ -307,7 +307,7 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 	m_pCartInfo = pCartInfo;
 	if (pCartInfo)
 	{
-		SNRomLicenseT* pLicense;
+		SNRomLicenseT* pLicense __attribute__((unused));
 		SNRomCountryT* pCountry;
 
 		pCountry = _SNRomGetCountry(pCartInfo->Country);

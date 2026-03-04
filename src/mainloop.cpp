@@ -349,7 +349,7 @@ static Bool _MainLoopSaveSRAM(Bool bSync)
 
 	if (nSramBytes > 0)
 	{
-		Char Path[256];
+		Char Path[1024];
 		Char SaveName[256];
 
 		Uint8 *pSRAM;
@@ -380,7 +380,7 @@ static void _MainLoopLoadSRAM()
 
 	if (nSramBytes > 0)
 	{
-		Char Path[256];
+		Char Path[1024];
 		Char SaveName[256];
 
 		Uint8 *pSRAM;
@@ -447,7 +447,7 @@ static Bool _MainLoopCheckSRAM()
 
 void _MainLoopLoadState()
 {
-    Char Path[256];
+    Char Path[1024];
 
 
 /*
@@ -501,7 +501,7 @@ void _MainLoopLoadState()
 
 void _MainLoopSaveState()
 {
-    Char Path[256];
+    Char Path[1024];
     if (!_pSystem) return;
 
     if (_pSystem == _pSnes)

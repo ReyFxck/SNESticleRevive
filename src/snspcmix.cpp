@@ -1588,6 +1588,8 @@ void SNSpcDspMixSilent::Mix(CMixBuffer *pMixBuf)
 {
 	Int32 nTotalSamples;
 	Uint32 nSampleRate, nSampleChannels, nSampleBits;
+	(void)nSampleChannels;
+	(void)nSampleBits;
 	Uint8 Envelope[SNSPCDSP_SAMPLERATE / 60];
 	Int32 iChannel;
 
