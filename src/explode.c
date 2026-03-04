@@ -178,12 +178,7 @@ ULONG bitbuf;
 int bits_left;
 boolean zipeof;
 
-int get_tree(l, n)
-unsigned *l;            /* bit lengths */
-unsigned n;             /* number expected */
-/* Get the bit lengths for a code representation from the compressed
-   stream.  If get_tree() returns 4, then there is an error in the data.
-   Otherwise zero is returned. */
+int get_tree(unsigned *l, unsigned n)
 {
   unsigned i;           /* bytes remaining in list */
   unsigned k;           /* lengths entered */
@@ -210,11 +205,7 @@ unsigned n;             /* number expected */
 
 
 
-int explode_lit8(tb, tl, td, bb, bl, bd)
-struct huft *tb, *tl, *td;      /* literal, length, and distance tables */
-int bb, bl, bd;                 /* number of bits decoded by those */
-/* Decompress the imploded data using coded literals and an 8K sliding
-   window. */
+int explode_lit8(struct huft *tb, struct huft *tl, struct huft *td, int bb, int bl, int bd)
 {
   longint s;            /* bytes to decompress */
   register unsigned e;  /* table entry flag/number of extra bits */
@@ -332,11 +323,7 @@ int bb, bl, bd;                 /* number of bits decoded by those */
 
 
 
-int explode_lit4(tb, tl, td, bb, bl, bd)
-struct huft *tb, *tl, *td;      /* literal, length, and distance tables */
-int bb, bl, bd;                 /* number of bits decoded by those */
-/* Decompress the imploded data using coded literals and a 4K sliding
-   window. */
+int explode_lit4(struct huft *tb, struct huft *tl, struct huft *td, int bb, int bl, int bd)
 {
   longint s;            /* bytes to decompress */
   register unsigned e;  /* table entry flag/number of extra bits */
@@ -454,11 +441,7 @@ int bb, bl, bd;                 /* number of bits decoded by those */
 
 
 
-int explode_nolit8(tl, td, bl, bd)
-struct huft *tl, *td;   /* length and distance decoder tables */
-int bl, bd;             /* number of bits decoded by tl[] and td[] */
-/* Decompress the imploded data using uncoded literals and an 8K sliding
-   window. */
+int explode_nolit8(struct huft *tl, struct huft *td, int bl, int bd)
 {
   longint s;            /* bytes to decompress */
   register unsigned e;  /* table entry flag/number of extra bits */
@@ -567,11 +550,7 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
 
 
 
-int explode_nolit4(tl, td, bl, bd)
-struct huft *tl, *td;   /* length and distance decoder tables */
-int bl, bd;             /* number of bits decoded by tl[] and td[] */
-/* Decompress the imploded data using uncoded literals and a 4K sliding
-   window. */
+int explode_nolit4(struct huft *tl, struct huft *td, int bl, int bd)
 {
   longint s;            /* bytes to decompress */
   register unsigned e;  /* table entry flag/number of extra bits */
@@ -854,19 +833,7 @@ int ReadByte(UWORD *x)
 unsigned hufts;         /* track memory usage */
 
 
-int huft_build(b, n, s, d, e, t, m)
-unsigned *b;            /* code lengths in bits (all assumed <= BMAX) */
-unsigned n;             /* number of codes (assumed <= N_MAX) */
-unsigned s;             /* number of simple-valued codes (0..s-1) */
-ush *d;                 /* list of base values for non-simple codes */
-ush *e;                 /* list of extra bits for non-simple codes */
-struct huft **t;        /* result: starting table */
-int *m;                 /* maximum lookup bits, returns actual */
-/* Given a list of code lengths and a maximum table size, make a set of
-   tables to decode that set of codes.  Return zero on success, one if
-   the given code set is incomplete (the tables are still built in this
-   case), two if the input is invalid (all zero length codes or an
-   oversubscribed set of lengths), and three if not enough memory. */
+int huft_build(unsigned *b, unsigned n, unsigned s, UWORD *d, UWORD *e, struct huft **t, int *m)
 {
   unsigned a;                   /* counter for codes of length k */
   unsigned c[BMAX+1];           /* bit length count table */
@@ -1047,11 +1014,7 @@ int *m;                 /* maximum lookup bits, returns actual */
 }
 
 
-int huft_free(t)
-struct huft *t;         /* table to free */
-/* Free the malloc'ed tables built by huft_build(), which makes a linked
-   list of the tables it made, with the links in a dummy first entry of
-   each table. */
+int huft_free(struct huft *t)
 {
   register struct huft *p, *q;
 
@@ -1067,9 +1030,7 @@ struct huft *t;         /* table to free */
   return 0;
 }
 
-void flush(w)
-unsigned w;             /* number of bytes to flush */
-/* Do the equivalent of OUTB for the bytes slide[0..w-1]. */
+void flush(unsigned w)
 {
   memmove (pfile_in_zip_read_info->stream.next_out, slide, w);
   pfile_in_zip_read_info->crc32 = crc32 (pfile_in_zip_read_info->crc32,
@@ -1080,9 +1041,7 @@ unsigned w;             /* number of bytes to flush */
   pfile_in_zip_read_info->stream.total_out += w;
 }
 
-void flush_stack(w)
-unsigned w;             /* number of bytes to flush */
-/* Do the equivalent of OUTB for the bytes slide[0..w-1]. */
+void flush_stack(unsigned w)
 {
   memmove (pfile_in_zip_read_info->stream.next_out, stack, w);
   pfile_in_zip_read_info->crc32 = crc32 (pfile_in_zip_read_info->crc32,
