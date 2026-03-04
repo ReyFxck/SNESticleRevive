@@ -6,8 +6,7 @@ Status atual
 - Build final está gerando o ELF com sucesso.
 - Branch atual: cleanup-const-warnings
 - Tag criada: warning-cleanup-final
-- Warning cleanup foi praticamente finalizado.
-- O projeto está em estado muito melhor e mais limpo do que no começo.
+- O projeto atual virou a base principal de trabalho.
 
 O que já foi feito
 ------------------
@@ -22,7 +21,7 @@ Origem do projeto atual
 -----------------------
 - A base usada veio principalmente do fork do Wolf3s.
 - Também foram comparados Makefiles e estrutura com iaddis e tmaul.
-- O projeto atual já está funcional e enxuto com ok-files.txt.
+- O fork beta antigo foi descartado/apagado por não trazer vantagem real.
 
 Conclusão atual sobre arquivos "faltando" dos Makefiles antigos
 ---------------------------------------------------------------
@@ -43,10 +42,6 @@ Arquivos / objetos que parecem legado ou baixa prioridade
 - linebuffer
 - msgnode
 - romdisk
-
-Observação:
-Esses nomes parecem mais relacionados a startup, SDK antigo, utilitários,
-ou caminhos antigos de build, e não parecem prioridade agora.
 
 Arquivos que parecem realmente interessantes para o projeto
 -----------------------------------------------------------
@@ -129,14 +124,3 @@ Checklist curto
 [ ] Compilar
 [ ] Testar ELF
 [ ] Registrar resultado em novo commit
-
-Notas finais
-------------
-O projeto já está em um ponto muito bom.
-Agora o risco maior não é warning/build, e sim:
-- puxar arquivo antigo demais
-- trazer dependência quebrada
-- misturar backend velho com header novo
-
-Então a próxima fase deve ser:
-entender o pipeline de render antes de portar os arquivos.
