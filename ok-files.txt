@@ -1,7 +1,7 @@
 src/adler32.c
 src/bmpfile.cpp
 src/cd.c
-src/cdvd_rpc.c
+src/modules/cdvd/cdvd_rpc.c
 src/compress.c
 src/console.cpp
 src/crc32.c
@@ -33,11 +33,11 @@ src/libxmtap.c
 src/libxpad.c
 src/main.cpp
 src/mainloop.cpp
-src/mcsave_ee.c
+src/modules/mcsave/mcsave_ee.c
 src/memcard.c
 src/memspace.cpp
 src/mixbuffer.cpp
-src/netplay_ee.c
+src/modules/netplay/netplay_ee.c
 src/pathext.c
 src/pixelformat.c
 src/poly.cpp
@@ -47,7 +47,7 @@ src/proflog.c
 src/ps2dma.c
 src/rendersurface.cpp
 src/sjpcmbuffer.cpp
-src/sjpcm_rpc.c
+src/modules/sjpcm/sjpcm_rpc.c
 src/sn65816.S
 src/sncpu.c
 src/sncpu_c.c

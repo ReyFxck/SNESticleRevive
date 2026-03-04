@@ -1,6 +1,0 @@
-537:/opt/ps2dev/ee/mips64r5900el-ps2-elf/include/stdlib.h:164:1: error: 'e' does not name a type
-541:/opt/ps2dev/ee/mips64r5900el-ps2-elf/include/c++/15.1.0/bits/std_abs.h:7:1: error: 'blic' does not name a type
-544:/opt/ps2dev/ee/mips64r5900el-ps2-elf/include/c++/15.1.0/cstdlib:177:11: error: 'strtol' has not been declared in '::'
-547:/opt/ps2dev/ee/mips64r5900el-ps2-elf/include/c++/15.1.0/stdlib.h:79:12: error: 'strtol' has not been declared in 'std'
-552:/opt/ps2dev/ee/mips64r5900el-ps2-elf/include/c++/15.1.0/stdlib.h:17:1: error: 'd' does not name a type
-555:/root/SNESticle-Beta/Gep/Include/common/emusys.h:64:62: error: 'SysInputT' has not been declared

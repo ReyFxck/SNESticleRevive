@@ -1,0 +1,51 @@
+SNESticle PS2 - plano de reorganizacao de source
+================================================
+
+Objetivo inicial
+----------------
+Comecar a separar o codigo em grupos sem quebrar o build.
+
+Primeira etapa
+--------------
+Criar a base:
+- src/modules/cdvd
+- src/modules/mcsave
+- src/modules/netplay
+- src/modules/sjpcm
+
+Motivo
+------
+Esses arquivos parecem modulos mais independentes do resto do core SNES.
+
+Arquivos candidatos para mover primeiro
+---------------------------------------
+- src/cdvd_rpc.c
+- src/mcsave_ee.c
+- src/netplay_ee.c
+- src/sjpcm_rpc.c
+
+Antes de mover
+--------------
+- garantir que Makefile aceite headers em src/
+- revisar includes reais desses arquivos
+- mover por lote pequeno
+- compilar depois de cada lote
+
+Depois
+------
+Se isso funcionar bem, pensar em:
+- src/core/
+- src/video/
+- src/audio/
+- src/ui/
+- src/platform/ps2/
+- src/third_party/zlib/
+
+Regra
+-----
+Nao mover tudo de uma vez.
+Cada reorganizacao deve:
+1. mover pouco
+2. ajustar ok-files.txt
+3. compilar
+4. salvar no GitHub
