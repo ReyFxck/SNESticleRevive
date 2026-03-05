@@ -1,6 +1,7 @@
 PS2DEV ?= /opt/ps2dev
 PS2SDK ?= $(PS2DEV)/ps2sdk
 GSKIT  ?= $(PS2DEV)/gsKit
+EXTRA_DEFS ?=
 
 SRC_DIR := $(CURDIR)/src
 OBJ_DIR := $(CURDIR)/build
@@ -14,10 +15,10 @@ EE_STRIP ?= ee-strip
 LEGACY_ROOT ?= /root/SNESticle-Beta
 IRX_DIR     ?= $(PS2SDK)/iop/irx
 
-CFLAGS := -G0 -O2 -Wall \
+CFLAGS := -G0 -O2 -Wall $(EXTRA_DEFS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3
 
-CXXFLAGS := -G0 -O2 -Wall -fno-exceptions -fno-rtti \
+CXXFLAGS := -G0 -O2 -Wall -fno-exceptions -fno-rtti $(EXTRA_DEFS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3
 
 INCS := \

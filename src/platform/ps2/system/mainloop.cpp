@@ -1589,8 +1589,11 @@ static void _MainLoopLoadModules(Char **ppSearchPaths)
 			#endif
 		}
 	}
-
-	bLoadedNetwork = _MainLoopInitNetwork(ppSearchPaths);
+        ScrPrintf("\n\n*** STAGE 5B ***\n");
+        ScrPrintf("ROM0 modules loaded\n");
+        ScrPrintf("Skipping external IOP modules\n");
+        return;
+bLoadedNetwork = _MainLoopInitNetwork(ppSearchPaths);
 
 	// configure network if we started it ourselves
 	if (bLoadedNetwork)
@@ -1837,9 +1840,12 @@ static SNPPUColorCalibT _ColorCalib =
 	0.2f
 };
 #endif
+static void ML_STOP(int n, const char *msg);
 
 Bool MainLoopInit()
 {
+    ML_STOP(1, "MainLoopInit entry");
+
 //    assert(0);
     #if PROF_ENABLED
     ProfInit(128 * 1024);
@@ -1881,7 +1887,9 @@ Bool MainLoopInit()
 	// set boot dir
 	strcpy(_MainLoop_BootDir, MainGetBootDir());
 
-    _MainLoopLoadModules(_MainLoop_IOPModulePaths);
+        ML_STOP(2, "before _MainLoopLoadModules");
+    ML_STOP(3, "after _MainLoopLoadModules");
+_MainLoopLoadModules(_MainLoop_IOPModulePaths);
 
 	VramInit();
 
@@ -1967,6 +1975,7 @@ Bool MainLoopInit()
 	s_pMovieClip = new Emu::MovieClip(_pSnes->GetStateSize(), 60 * 60 * 60);
 
 	// init menu
+	ML_STOP(4, "before BrowserScreen new");
 	_MainLoop_pBrowserScreen = new CBrowserScreen(6000);
 	_MainLoop_pBrowserScreen->SetMsgFunc(_MainLoopBrowserEvent);
 	_MainLoop_pBrowserScreen->SetDir(MENU_STARTDIR);
@@ -1987,11 +1996,18 @@ Bool MainLoopInit()
 //	while (1);
 
 	// load snes palette
+	ML_STOP(5, "before LoadSnesPalette");
 	_MainLoopLoadSnesPalette("mc0:/SNESticle/default.snpal");
+	ML_STOP(6, "after LoadSnesPalette");
 
 	// load rom
+	ML_STOP(7, "before ExecuteFile");
 	_MainLoopExecuteFile(_pRomFile, TRUE);
+	ML_STOP(8, "after ExecuteFile");
+
 	_bMenu = _pSystem ? FALSE : TRUE;
+
+	ML_STOP(9, "before SjPCM_Clearbuff");
 
 	SjPCM_Clearbuff();
 	SjPCM_Play();
@@ -2004,8 +2020,12 @@ Bool MainLoopInit()
     }
   */
 
-	InputPoll();
+	ML_STOP(10, "before InputPoll");
 
+	#if !defined(SKIP_INPUTPOLL)
+        ML_STOP(11, "before InputPoll");
+        InputPoll();
+#endif
 #if 0
 	while (1)
 	{
@@ -2016,8 +2036,8 @@ Bool MainLoopInit()
 	}
 #endif
 
-    return TRUE;
-}
+    ML_STOP(12, "before return TRUE");
+    return TRUE;}
 
 
 static Uint16 _MainLoopSnesInput(Uint32 cond)
@@ -2247,6 +2267,22 @@ Uint16 _MainLoopInput(Uint32 pad)
 #include "snppublend_gs.h"
 
 
+
+#include <debug.h>
+#ifndef ML_STOP_AT
+#define ML_STOP_AT 0
+#endif
+
+static void ML_STOP(int n, const char *msg)
+{
+    if (ML_STOP_AT != n) return;
+    init_scr();
+    scr_printf("\n\n[ML_STOP %d] %s\n", n, msg ? msg : "(null)");
+    for (;;) { SleepThread(); }
+}
+
+extern "C" void init_scr(void);
+extern "C" void scr_printf(const char *format, ...);
 
 void MainLoopRender()
 {

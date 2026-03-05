@@ -344,6 +344,15 @@ int main(int argc, char **argv)
 
   int dh = fioDopen("mc0:/");
   scr_printf("fioDopen(mc0:/)=%d\n", dh);
+  scr_printf("\n*** STAGE 5 (MAIN LOOP) ***\n");
+  scr_printf("before MainLoopInit\n");
+
+  int ml_ok = MainLoopInit();
+
+  init_scr();
+  scr_printf("\n\n*** STAGE 5 POST-MAINLOOPINIT ***\n");
+  scr_printf("MainLoopInit ret=%d\n", ml_ok);
+
   if (dh >= 0) fioDclose(dh);
 
 
@@ -402,8 +411,12 @@ int main(int argc, char **argv)
   scr_printf("after IRX load\n");
 
 
-	if (MainLoopInit())
-	{
+	if (MainLoopInit()) {
+	  init_scr();
+	  scr_printf("\n\n*** POST INIT STOP ***\n");
+	  scr_printf("MainLoopInit terminou OK\n");
+	  for (;;) { SleepThread(); }
+
 		// do stuff here
 		while (MainLoopProcess())
 		{
