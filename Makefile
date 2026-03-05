@@ -198,6 +198,10 @@ iso_stage: | $(OBJ_DIR)
 	mkdir -p "$(ISO_DIR)"; \
 	echo "[ISO] copiando arquivos do pkg..."; \
 	cp -a "$(PKG_DIR)/." "$(ISO_DIR)/"; \
+		if [ -d "$(CURDIR)/cdroot" ]; then \
+			echo "[ISO] copiando cdroot extras..."; \
+			cp -a "$(CURDIR)/cdroot/." "$(ISO_DIR)/"; \
+		fi; \
 	# renomeia o ELF de boot para MAIUSCULO (padrao de disco)
 	if [ -f "$(ISO_DIR)/SNESticle.elf" ]; then \
 		mv "$(ISO_DIR)/SNESticle.elf" "$(ISO_DIR)/$(BOOT_ELF)"; \

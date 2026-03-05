@@ -92,3 +92,4 @@ src/platform/ps2/system/version.cpp
 src/common/render/vram.c
 src/common/render/wavfile.cpp
 src/third_party/zlib/zutil.c
+src/common/debug/dbgterm.cpp

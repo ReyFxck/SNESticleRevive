@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define MENU_STARTDIR ""
 #define NEWLIB_PORT_AWARE
 #include <fileio.h>
 #include <iopheap.h>
@@ -83,11 +84,15 @@ extern "C" Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
 
 #define MAINLOOP_NETPORT (6113)
 
+
 #if CODE_RELEASE
-#define MENU_STARTDIR ""
+#else
+#endif
+
+
+#if CODE_RELEASE
 #define MAINLOOP_STATEPATH "host0:"
 #else
-#define MENU_STARTDIR "cdfs:/"
 #define MAINLOOP_STATEPATH "host0:/cygdrive/d/emu/"
 #endif
 
@@ -205,7 +210,7 @@ static void  _MainLoopResetHistory();
 #endif
 static void _MainLoopResetInputChecksums();
 
-static Bool _bMenu = FALSE;
+static Bool _bMenu = TRUE;
 
 static Char _MainLoop_ModalStr[256];
 static Int32 _MainLoop_ModalCount=0;
@@ -991,6 +996,85 @@ static void _MainLoopSetScreen(CScreen *pScreen)
 {
 	_MainLoop_pScreen = pScreen;
 }
+
+/* UI_L1R1_CYCLE */
+static int _UIGetIdx(void)
+{
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pBrowserScreen) return 0;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pNetworkScreen) return 1;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pMenuScreen)    return 2;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 3;
+    return 0;
+}
+
+static CScreen* _UIByIdx(int idx)
+{
+    switch (idx & 3)
+    {
+        case 0: return (CScreen*)_MainLoop_pBrowserScreen;
+        case 1: return (CScreen*)_MainLoop_pNetworkScreen;
+        case 2: return (CScreen*)_MainLoop_pMenuScreen;
+        case 3: return (CScreen*)_MainLoop_pLogScreen;
+    }
+    return (CScreen*)_MainLoop_pBrowserScreen;
+}
+
+static void _UICycle(int dir)
+{
+    int idx = _UIGetIdx();
+    for (int n = 0; n < 4; n++)
+    {
+        idx = (idx + dir + 4) & 3;
+        CScreen *scr = _UIByIdx(idx);
+        if (scr)
+        {
+            _MainLoopSetScreen(scr);
+            _bMenu = TRUE;
+            ConPrint("UI: screen=%d (L1/R1)\n", idx);
+            return;
+        }
+    }
+}
+
+
+/* UI_CYCLE_L1R1 */
+static int _MainLoopGetScreenIndex(void)
+{
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pBrowserScreen) return 0;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pNetworkScreen) return 1;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pMenuScreen)    return 2;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 3;
+    return 0;
+}
+
+static CScreen* _MainLoopGetScreenByIndex(int idx)
+{
+    switch (idx & 3)
+    {
+        case 0: return (CScreen*)_MainLoop_pBrowserScreen;
+        case 1: return (CScreen*)_MainLoop_pNetworkScreen;
+        case 2: return (CScreen*)_MainLoop_pMenuScreen;
+        case 3: return (CScreen*)_MainLoop_pLogScreen;
+    }
+    return (CScreen*)_MainLoop_pBrowserScreen;
+}
+
+static void _MainLoopCycleScreen(int dir)
+{
+    int idx = _MainLoopGetScreenIndex();
+    for (int n = 0; n < 4; n++)
+    {
+        idx = (idx + dir + 4) & 3;
+        CScreen *scr = _MainLoopGetScreenByIndex(idx);
+        if (scr)
+        {
+            _MainLoopSetScreen(scr);
+            _bMenu = TRUE;
+            return;
+        }
+    }
+}
+
 
 static int _MainLoopBrowserEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 {
@@ -1860,7 +1944,7 @@ Bool MainLoopInit()
 	// setup log screen
 	_MainLoop_pLogScreen = new CLogScreen();
 	_MainLoop_pLogScreen->SetMsgFunc(_MainLoopLogEvent);
-	_MainLoopSetScreen(_MainLoop_pLogScreen);
+	_MainLoopSetScreen(_MainLoop_pBrowserScreen);
 	_bMenu = TRUE;
 #if 0
 	const VersionInfoT *pVersionInfo = VersionGetInfo();
@@ -1982,6 +2066,8 @@ Bool MainLoopInit()
 
 
 	_MainLoopSetScreen(_MainLoop_pBrowserScreen);
+        // espera ~2s (ajuste se quiser)
+        _MainLoopSetScreen(_MainLoop_pBrowserScreen);
 	_bMenu = FALSE;
 
 //	while (1);
@@ -1991,7 +2077,7 @@ Bool MainLoopInit()
 
 	// load rom
 	_MainLoopExecuteFile(_pRomFile, TRUE);
-	_bMenu = _pSystem ? FALSE : TRUE;
+	_bMenu = TRUE;
 
 	SjPCM_Clearbuff();
 	SjPCM_Play();
@@ -2248,8 +2334,22 @@ Uint16 _MainLoopInput(Uint32 pad)
 
 
 
+#include "common/debug/dbgterm.h"
+
 void MainLoopRender()
 {
+    static int __dbg_render_calls = 0;
+    __dbg_render_calls++;
+    if (__dbg_render_calls <= 20)
+    {
+        DbgLog("MainLoopRender #%d bMenu=%d black=%d screen=0x%08x system=0x%08x",
+               __dbg_render_calls,
+               (int)_bMenu,
+               (int)_MainLoop_BlackScreen,
+               (unsigned int)_MainLoop_pScreen,
+               (unsigned int)_pSystem);
+    }
+
 	static Uint32 _iFrame=0;
 	static int whichdrawbuf = 0;
 
@@ -2441,9 +2541,8 @@ void MainLoopRender()
     PROF_LEAVE("WaitVBlank");
 
     PROF_ENTER("GSSetCrt");
-    GS_SetCrtFB(whichdrawbuf);
-    whichdrawbuf ^= 1;
-    GS_SetDrawFB(whichdrawbuf);
+    GS_SetCrtFB(0);
+    GS_SetDrawFB(0);
     PROF_LEAVE("GSSetCrt");
 
     _iFrame++;
@@ -2462,6 +2561,26 @@ Bool MainLoopProcess()
 
     PROF_ENTER("InputProcess");
     InputPoll();
+    /* UI_L1R1_PROCESS */
+    {
+        static Uint32 _prev = 0;
+        Uint32 now = InputGetPadData(0);
+        Uint32 pressed = now & ~_prev;
+        _prev = now;
+        if (pressed & PAD_L1) _UICycle(-1);
+        if (pressed & PAD_R1) _UICycle(+1);
+    }
+
+    /* UI_CYCLE_L1R1_PROCESS */
+    {
+        static Uint32 s_prev = 0;
+        Uint32 now = InputGetPadData(0);
+        Uint32 pressed = now & ~s_prev;
+        s_prev = now;
+
+        if (pressed & PAD_L1) _MainLoopCycleScreen(-1);
+        if (pressed & PAD_R1) _MainLoopCycleScreen(+1);
+    }
     PROF_LEAVE("InputProcess");
 
 
@@ -2930,7 +3049,7 @@ static void _MainLoopInputProcess(Uint32 buttons)
 					_MainLoopSetScreen(_MainLoop_pMenuScreen);
 				 else
 				if (_MainLoop_pScreen == _MainLoop_pMenuScreen)
-					_MainLoopSetScreen(_MainLoop_pLogScreen);
+					_MainLoopSetScreen(_MainLoop_pBrowserScreen);
 				else
 					_MainLoopSetScreen(_MainLoop_pBrowserScreen);
 		    } else
@@ -2938,7 +3057,7 @@ static void _MainLoopInputProcess(Uint32 buttons)
 		    if (trigger & PAD_L1)
 		    {
 				if (_MainLoop_pScreen == _MainLoop_pBrowserScreen)
-					_MainLoopSetScreen(_MainLoop_pLogScreen);
+					_MainLoopSetScreen(_MainLoop_pBrowserScreen);
 				 else
 				if (_MainLoop_pScreen == _MainLoop_pNetworkScreen)
 					_MainLoopSetScreen(_MainLoop_pBrowserScreen);
