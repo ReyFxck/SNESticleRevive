@@ -19,6 +19,7 @@
 #include "mainloop_ui.h"
 #include "mainloop_install.h"
 #include "mainloop_menu.h"
+#include "mainloop_browser.h"
 #include "types.h"
 #include "vram.h"
 #include "mainloop.h"
@@ -700,53 +701,6 @@ static void _MainLoopSetPalette(NesPalE eNesPal)
 
 /* UI_L1R1_CYCLE */
 /* UI_CYCLE_L1R1 */
-static int _MainLoopBrowserEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
-{
-	switch (Type)
-	{
-		case 1:
-		{
-			Char *str = (Char *)Parm2;
-	        NetPlayRPCStatusT status;
-	        NetPlayGetStatus(&status);
-
-	        if (status.eClientStatus == NETPLAY_STATUS_CONNECTED)
-	        {
-	            NetPlayClientSendLoadReq(str);
-	        } else
-			{
-				// load rom with sram load
-				if (_MainLoopExecuteFile(str, TRUE))
-				{
-					_MenuEnable(FALSE);
-				}else
-				{
-					MainLoopModalPrintf(60*1, "ERROR: %s\n", str);
-				}
-			}
-			return 1;
-		}
-
-		case 2:
-		{
-			char str[256];
-			char *pName = (char *)Parm2;
-		    PathExtTypeE eType;
-
-			strcpy(str, pName);
-
-			// figure out what type of file this is
-		   	if ( PathExtResolve(str, &eType, TRUE))
-			{
-				return BROWSER_ENTRYTYPE_EXECUTABLE;
-			}
-
-			return BROWSER_ENTRYTYPE_OTHER;
-		}
-	} 
-	return 0;
-}
-
 static int _MainLoopNetworkEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 {
     NetPlayRPCStatusT status;
