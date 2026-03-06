@@ -94,3 +94,5 @@ src/common/render/wavfile.cpp
 src/third_party/zlib/zutil.c
 src/common/debug/dbgterm.cpp
 src/platform/ps2/system/mainloop_state.cpp
+src/platform/ps2/system/mainloop_iop.cpp
+src/platform/ps2/system/mainloop_net.cpp
