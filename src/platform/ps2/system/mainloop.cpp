@@ -111,19 +111,6 @@ extern "C" Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
 #define MAINLOOP_HISTORY (CODE_DEBUG && 0)
 #define MAINLOOP_MAXSRAMSIZE (64 * 1024)
 
-enum
-{					   
-	MAINLOOP_ENTRYTYPE_GZ	   ,
-	MAINLOOP_ENTRYTYPE_ZIP	   ,
-	MAINLOOP_ENTRYTYPE_NESROM  ,
-	MAINLOOP_ENTRYTYPE_NESFDSDISK  ,
-	MAINLOOP_ENTRYTYPE_NESFDSBIOS,
-	MAINLOOP_ENTRYTYPE_SNESROM ,
-	MAINLOOP_ENTRYTYPE_SNESPALETTE ,
-
-	MAINLOOP_ENTRYTYPE_NUM 
-};
-
 #include "uiBrowser.h"
 #include "uiNetwork.h"
 #include "uiMenu.h"
@@ -137,7 +124,7 @@ CLogScreen *_MainLoop_pLogScreen;
 CScreen *_MainLoop_pScreen = NULL;
 
 SnesSystem *_pSnes;
-static SnesRom	  *_pSnesRom;
+SnesRom *_pSnesRom;
 #if 0
 static NesSystem  *_pNes;
 static NesRom	  *_pNesRom;
@@ -157,22 +144,22 @@ Char _SramPath[256] = "host0:/cygdrive/d/emu/";
 
 Emu::System  *_pSystem;
 
-static CRenderSurface *_fbTexture[2];
+CRenderSurface *_fbTexture[2];
 static Uint32 _iframetex=0;
 
-static TextureT _OutTex;
+TextureT _OutTex;
 #ifdef DEBUG
 static CWavFile _WavFile;
 #endif
 
-static Uint8 _RomData[4 * 1024 * 1024 + 1024] __attribute__((aligned(64))) __attribute__ ((section (".bss")));
+Uint8 _RomData[4 * 1024 * 1024 + 1024] __attribute__((aligned(64))) __attribute__ ((section (".bss")));
 
 SnesStateT		_SnesState;
 #if 0
 static NesStateT		_NesState;
 #endif
 
-static Emu::MovieClip *  s_pMovieClip;
+Emu::MovieClip *s_pMovieClip;
 
 
 Uint32 _MainLoop_SRAMChecksum;
@@ -180,7 +167,7 @@ Uint32 _MainLoop_SaveCounter = 0;
 Uint32 _MainLoop_AutoSaveTime = 8 * 60;
 Bool _MainLoop_SRAMUpdated = FALSE;
 Bool _bStateSaved = FALSE;
-static Float32 _MainLoop_fOutputIntensity = 0.8f;
+Float32 _MainLoop_fOutputIntensity = 0.8f;
 
 
 static Uint8 _MainLoop_GfxPipe[0x40000] _ALIGN(128) __attribute__ ((section (".bss")));
@@ -216,9 +203,9 @@ void MainLoopRender();
 static void _MainLoopInputProcess(Uint32);
 
 #if MAINLOOP_HISTORY
-static void  _MainLoopResetHistory();
+void _MainLoopResetHistory();
 #endif
-static void _MainLoopResetInputChecksums();
+void _MainLoopResetInputChecksums();
 
 Bool _bMenu = TRUE;
 
@@ -231,295 +218,11 @@ Int32 _MainLoop_StatusCount=0;
 static Bool _MainLoop_BlackScreen = FALSE;
 static Uint32 _MainLoop_uDebugDisplay = 0;
 
-void _MainLoopUnloadRom()
-{
-
-    // stop recording if we are recording
-    if (s_pMovieClip->IsRecording())
-    {
-        printf("Movie: Record End\n");
-        s_pMovieClip->RecordEnd();
-    } 
-    // stop playing if we are playing
-    if (s_pMovieClip->IsPlaying())
-    {
-        printf("Movie: Play End\n");
-        s_pMovieClip->PlayEnd();
-    } 
-
-	// unload old rom
-	_pSnes->SetRom(NULL);
-	_pSnesRom->Unload();
-#if 0
-	_pNes->SetRom(NULL);
-	_pNesRom->Unload();
-	_pNesFDSDisk->Unload();
-#endif
-    _bStateSaved = FALSE;
-    _pSystem = NULL;
-
-	_fbTexture[0]->Clear();
-	_fbTexture[1]->Clear();
-}
-
-static void _MainLoopSetSampleRate(Uint32 uSampleRate);
+void _MainLoopSetSampleRate(Uint32 uSampleRate);
 
 extern "C" {
 #include "unzip.h"
 };
-
-Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
-{
-	PathExtTypeE eType;
-	Emu::Rom *pRom = NULL;
-	Emu::System *pSystem = NULL;
-	Emu::Rom *pBios = NULL;
-	char FileName[256];
-
-	if (pFileName==NULL)
-	{
-		return FALSE;
-	}
-
-	// make copy of filename
-	strcpy(FileName, pFileName);
-
-	// see if file exists first...
-	int hFile;
-    hFile = fioOpen(pFileName, O_RDONLY);
-	if (hFile < 0)
-	{
-		return FALSE;
-	}
-	fioClose(hFile);
-
-
-	// resolve file extension of filename
-	if (!PathExtResolve(FileName, &eType, TRUE))
-	{
-		return FALSE;
-  	}
-
-	if (eType == MAINLOOP_ENTRYTYPE_SNESPALETTE)
-	{
-		return _MainLoopLoadSnesPalette(pFileName);
-	}
-
-	// unload existing game
-    _MainLoopUnloadRom();
-
-    #if MAINLOOP_HISTORY
-    _MainLoopResetHistory();
-    #endif
-	_MainLoopResetInputChecksums();
-
-	int nRomBytes = 0;
-	Uint8 *pBuffer = _RomData;
-	Int32 nBufferBytes = sizeof(_RomData);
-
-	// clear rom data buffer
-    memset(pBuffer, 0, nBufferBytes);
-
-	// load rom data from disk into our buffer
-	if (eType == MAINLOOP_ENTRYTYPE_GZ)
-	{
-		// if its a GZ file, then the next extension is the one we use
-		if (!PathExtResolve(FileName, &eType, TRUE))
-		{
-			return FALSE;
-		}
-
-		// load GZ-ipped data
-		nRomBytes = _MainLoopReadGZData(pBuffer, nBufferBytes, pFileName);
-
-	} else
-	if (eType == MAINLOOP_ENTRYTYPE_ZIP)
-	{
-		// if it is a ZIP file then we have to look in the file to find the right file to load
-		nRomBytes = _MainLoopReadZipData(pBuffer, nBufferBytes, pFileName, FileName);
-		if (nRomBytes > 0)
-		{
-			// resolve extension of unzipped file
-			if (!PathExtResolve(FileName, &eType, TRUE))
-			{
-				return FALSE;
-			}
-		}
-
-	} else
-	{
-		// read as binary data
-		nRomBytes = _MainLoopReadBinaryData(pBuffer, nBufferBytes, pFileName);
-	}
-
-	// was load successful?
-	if (nRomBytes <= 0)
-	{
-		return FALSE;
-	}
-
-    printf("ROM data read: %s (%d bytes)\n", pFileName, nRomBytes);
-
-	_MainLoopGetName(_RomName, FileName);
-	printf("ROMName: '%s'\n", _RomName);
-
-	// determine what kind of system to use for this rom
-	switch (eType)
-	{
-#if 0		
-		case MAINLOOP_ENTRYTYPE_NESROM:
-			pSystem = _pNes;
-			pRom    = _pNesRom;
-			pBios   = NULL;
-			_MainLoop_fOutputIntensity = 0.8f;
-			break;
-
-		case MAINLOOP_ENTRYTYPE_NESFDSDISK:
-			pSystem = _pNes;
-			pRom    = _pNesFDSDisk;
-			pBios   = _pNesFDSBios;
-			_MainLoop_fOutputIntensity = 0.8f;
-			break;
-
-		case MAINLOOP_ENTRYTYPE_NESFDSBIOS:
-			pSystem = _pNes;
-			pRom    = NULL;
-			pBios   = _pNesFDSBios;
-			_MainLoop_fOutputIntensity = 0.8f;
-			break;
-#endif
-		case MAINLOOP_ENTRYTYPE_SNESROM:
-			pSystem = _pSnes;
-			pRom    = _pSnesRom;
-			pBios   = NULL;
-			_MainLoop_fOutputIntensity = 1.0f;
-			break;
-		default:
-			return FALSE;
-	}
-
-	if (pBios)
-	{
-		if (pRom==NULL)
-		{
-			// try to load disksys.rom directly
-			if (!_MainLoopLoadBios(pBios, pFileName))
-			{
-				MainLoopModalPrintf(60*5, "ERROR: Cannot load disksys.rom");
-				return FALSE;
-			}
-		} else
-		{
-			// can't run disks unless we have the FDS Bios loaded
-			if (!pBios->IsLoaded())
-			{
-				char diskrompath[256];
-                            Char *pFileName;
-				strcpy(diskrompath, FileName);
-				pFileName = strrchr(diskrompath, '/');
-				if (!pFileName) 
-					pFileName = strrchr(diskrompath, ':');
-				if (!pFileName)
-					return FALSE;
-
-				// 
-				strcpy(pFileName + 1, "disksys.rom");
-
-				printf("FDSRom: '%s'\n", diskrompath);
-
-				// try to load disksys.rom
-				if (!_MainLoopLoadBios(pBios, diskrompath))
-				{
-					MainLoopModalPrintf(60*5, "ERROR: Cannot load disksys.rom");
-					return FALSE;
-				}
-			}
-		}
-	}
-
-	if (pRom)
-	{
-		// attempt to load rom for that system
-		if (!_MainLoopLoadRomData(pRom, _RomData, nRomBytes))
-		{
-			return FALSE;
-		}
-	}
-
-	if (pBios)
-	{
-		// setup disk system
-		pSystem->SetRom(pBios);
-#if 0
-		_pNes->SetNesDisk(_pNesFDSDisk);
-#else
-		_pSnes->SetSnesRom(_pSnesRom);
-#endif
-	} 
-	else
-	{
-		pSystem->SetRom(pRom);
-	}
-
-	pSystem->Reset();
-
-    _pSystem = pSystem;
-
-	ConPrint("ROM Loaded: %s\n", pFileName);
-
-	if (pRom)
-	{
-		int nRegions, iRegion;
-		Char *pRomTitle;
-		Char *pRomMapper;
-
-		// print mapper info
-		pRomMapper = pRom->GetMapperName();
-		if (pRomMapper && !strcmp(pRomMapper, "<unknown>"))
-		{
-			MainLoopModalPrintf(60*1, "WARNING: Unsupported NES Mapper");
-		}
-
-		// print rom title
-		pRomTitle = pRom->GetRomTitle();
-		if (pRomTitle)
-		{
-		    printf("Rom Title: %s\n", pRomTitle);
-		}
-
-		// print info about rom regions
-		nRegions = pRom->GetNumRomRegions();
-		for (iRegion=0; iRegion < nRegions; iRegion++)
-		{
-			printf("%s: %d bytes\n", pRom->GetRomRegionName(iRegion), pRom->GetRomRegionSize(iRegion));
-		}
-	}
-
-    _MainLoopSetSampleRate(pSystem->GetSampleRate());
-
-	if (bLoadSRAM)
-	{
-		_MainLoopLoadSRAM();
-	}
-
-	// clear screen
-    _fbTexture[0]->Clear();
-    TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
-#if 0
-	if (eType == MAINLOOP_ENTRYTYPE_NESFDSDISK)
-	{
-		// default to disk 0
-		_MainLoop_iDisk=0;
-		_MainLoop_bDiskInserted=TRUE;
-		_pNes->GetMMU()->InsertDisk(_MainLoop_iDisk);
-	}
-#endif
-	return TRUE;
-}
-
-
-
-
 
 #if 0
 static void _MainLoopSetPalette(NesPalE eNesPal)
@@ -1094,7 +797,7 @@ static Uint16 _MainLoopNesInput(Uint32 cond)
 	return pad;
 }
 #endif
-static void _MainLoopSetSampleRate(Uint32 uSampleRate)
+void _MainLoopSetSampleRate(Uint32 uSampleRate)
 {
     _SJPCMMix->SetSampleRate(uSampleRate);
 }
@@ -1116,7 +819,7 @@ Uint32 _nHistory = 0;
 #endif
 
 #if MAINLOOP_HISTORY
-static void  _MainLoopResetHistory()
+void _MainLoopResetHistory()
 {
     _nHistory = 0;
 }
@@ -1136,7 +839,7 @@ static Uint32 _uVblankCycle;
 static Uint32 _uInputFrame;
 static Uint32 _uInputChecksum[5];
 
-static void _MainLoopResetInputChecksums()
+void _MainLoopResetInputChecksums()
 {
 	_uInputFrame =0;
 	memset(_uInputChecksum, 0, sizeof(_uInputChecksum));
