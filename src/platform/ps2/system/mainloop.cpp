@@ -987,17 +987,6 @@ Bool MainLoopProcess()
     return TRUE;
 }
 
-void MainLoopShutdown()
-{
-    FontShutdown();
-    PolyShutdown();
-}
-
-
-
-
-
-
 //
 //
 //

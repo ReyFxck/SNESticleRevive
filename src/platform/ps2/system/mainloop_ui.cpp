@@ -9,6 +9,8 @@
 #include "uiNetwork.h"
 #include "uiMenu.h"
 #include "uiLog.h"
+#include "poly.h"
+#include "../../../Gep/Include/ps2/font.h"
 
 extern void MainLoopRender();
 
@@ -146,4 +148,10 @@ void _MainLoopCycleScreen(int dir)
             return;
         }
     }
+}
+
+void MainLoopShutdown()
+{
+    FontShutdown();
+    PolyShutdown();
 }

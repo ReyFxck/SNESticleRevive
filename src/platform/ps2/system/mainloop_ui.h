@@ -11,3 +11,4 @@ void ScrPrintf(const Char *pFormat, ...);
 void _MainLoopSetScreen(CScreen *pScreen);
 void _UICycle(int dir);
 void _MainLoopCycleScreen(int dir);
+void MainLoopShutdown();
