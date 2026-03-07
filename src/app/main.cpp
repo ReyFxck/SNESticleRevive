@@ -1,7 +1,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>
 #include <sifrpc.h>
 #include <loadfile.h>
 #include <kernel.h>
@@ -41,30 +40,21 @@ char *MainGetBootPath()
 
 void MainSetBootDir(const char *pPath)
 {
-  if (!pPath) { _Main_BootDir[0] = 0; return; }
+	int i;
+	strcpy(_Main_BootDir, pPath);
 
-  // copia com limite
-  strncpy(_Main_BootDir, pPath, sizeof(_Main_BootDir)-1);
-  _Main_BootDir[sizeof(_Main_BootDir)-1] = 0;
+	i = strlen(_Main_BootDir);
 
-  // remove ;1 (cdrom) se existir
-  char *semi = strchr(_Main_BootDir, ';');
-  if (semi) *semi = 0;
+	// search backward for start of filename
+	while (i>0 
+			&& _Main_BootDir[i]!='/'
+			&& _Main_BootDir[i]!='\\'
+			&& _Main_BootDir[i]!=':'
+		) i--;
 
-  // procura ultima barra / ou barra invertida
-  char *s1 = strrchr(_Main_BootDir, '/');
-  char *s2 = strrchr(_Main_BootDir, '\\');
-  char *sep = s1;
-  if (s2 && (!sep || s2 > sep)) sep = s2;
+	i++;
 
-  if (sep) {
-    *(sep+1) = 0; // mantém a barra
-    return;
-  }
-
-  // sem barra: vira "device:"
-  char *col = strchr(_Main_BootDir, ':');
-  if (col) *(col+1) = 0;
+	_Main_BootDir[i] = 0;
 }
 
 /* Reset the IOP and all of its subsystems.  */
@@ -122,138 +112,6 @@ int full_reset()
 
 
 
-
-/* ---------------- IRX LOADER ----------------
-   Carrega IRX do mesmo diretorio do ELF (MainGetBootDir()).
-   Use USE_COMPAT_NET=1 se quiser stack antiga (ps2ip/ps2ips/smap-ps2ip). */
-
-#ifndef USE_COMPAT_NET
-#define USE_COMPAT_NET 0
-#endif
-
-static int g_IopServicesReady = 0;
-
-static void MainEnsureIopServicesReady(void)
-{
-    if (g_IopServicesReady) return;
-
-    SifInitRpc(0);
-    SifLoadFileInit();
-    SifInitIopHeap();
-    fioInit();
-
-    g_IopServicesReady = 1;
-}
-
-static void _str_to_lower(char *dst, int cap, const char *src)
-{
-    int i = 0;
-    if (cap <= 0) return;
-    for (; i < cap-1 && src[i]; i++)
-        dst[i] = (char)tolower((unsigned char)src[i]);
-    dst[i] = 0;
-}
-
-static void _str_to_upper(char *dst, int cap, const char *src)
-{
-    int i = 0;
-    if (cap <= 0) return;
-    for (; i < cap-1 && src[i]; i++)
-        dst[i] = (char)toupper((unsigned char)src[i]);
-    dst[i] = 0;
-}
-
-static int MainExecModuleFile(const char *path)
-{
-    int mod_res = 0;
-    int ret = SifExecModuleFile(path, 0, NULL, &mod_res);
-    if (ret < 0) {
-        // printf("[IRX] FAIL %s (ret=%d)\n", path, ret);
-    } else {
-        // printf("[IRX] OK   %s (id=%d, start=%d)\n", path, ret, mod_res);
-    }
-    return ret;
-}
-
-static int MainLoadIrxFromBootDirOne(const char *name)
-{
-    const char *dir = MainGetBootDir();
-    char path[512], low[256], up[256];
-
-    if (!dir || !*dir) return -1;
-
-    // helper: tenta sem ;1 e com ;1
-    auto try_exec = [&](const char *p)->int {
-        if (MainExecModuleFile(p) >= 0) return 0;
-        char p1[520];
-        snprintf(p1, sizeof(p1), "%s;1", p);
-        if (MainExecModuleFile(p1) >= 0) return 0;
-        return -1;
-    };
-
-    // 1) como veio
-    snprintf(path, sizeof(path), "%s%s", dir, name);
-    if (try_exec(path) == 0) return 0;
-
-    // 2) lower
-    _str_to_lower(low, sizeof(low), name);
-    if (low[0]) {
-        snprintf(path, sizeof(path), "%s%s", dir, low);
-        if (try_exec(path) == 0) return 0;
-    }
-
-    // 3) UPPER
-    _str_to_upper(up, sizeof(up), name);
-    if (up[0]) {
-        snprintf(path, sizeof(path), "%s%s", dir, up);
-        if (try_exec(path) == 0) return 0;
-    }
-
-    return -1;
-}
-
-static void MainLoadIrxFromBootDir(void)
-{
-    const char *dir = MainGetBootDir();
-
-    MainEnsureIopServicesReady();
-    // printf("[IRX] BootDir: %s\n", dir ? dir : "(null)");
-
-    // base / util
-    MainLoadIrxFromBootDirOne("ioptrap.irx");
-    MainLoadIrxFromBootDirOne("poweroff.irx");
-
-    // pad (opcional, mas ajuda)
-    MainLoadIrxFromBootDirOne("sio2man.irx");
-    MainLoadIrxFromBootDirOne("padman.irx");
-
-    // memory card
-    MainLoadIrxFromBootDirOne("mcman.irx");
-    MainLoadIrxFromBootDirOne("mcserv.irx");
-
-#if USE_COMPAT_NET
-    // stack antiga
-    MainLoadIrxFromBootDirOne("ps2ip.irx");
-    MainLoadIrxFromBootDirOne("ps2ips.irx");
-    MainLoadIrxFromBootDirOne("smap-ps2ip.irx");
-#else
-    // stack netman (moderna)
-    MainLoadIrxFromBootDirOne("ps2dev9.irx");
-    MainLoadIrxFromBootDirOne("netman.irx");
-    MainLoadIrxFromBootDirOne("ps2ip-nm.irx");
-    MainLoadIrxFromBootDirOne("smap.irx");
-#endif
-
-    // custom (do Wolf3s)
-    MainLoadIrxFromBootDirOne("NETPLAY.IRX");
-    MainLoadIrxFromBootDirOne("MCSAVE.IRX");
-    MainLoadIrxFromBootDirOne("SJPCM2.IRX");
-
-    FlushCache(0);
-}
-/* -------------- /IRX LOADER -------------- */
-
-
 /* Your program's main entry point */
 int main(int argc, char **argv) 
 {
@@ -282,7 +140,7 @@ int main(int argc, char **argv)
 
     for (iArg=0; iArg < argc; iArg++)
     {
-        // printf("%d: %s\n", iArg, argv[iArg]);
+        printf("%d: %s\n", iArg, argv[iArg]);
     }
 
 	DmaReset();
@@ -290,9 +148,6 @@ int main(int argc, char **argv)
     install_VRstart_handler();
 
 	ConInit();
-
-  MainLoadIrxFromBootDir();
-
 
 	if (MainLoopInit())
 	{

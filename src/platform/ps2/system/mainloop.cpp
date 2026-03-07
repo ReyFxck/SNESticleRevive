@@ -205,7 +205,7 @@ void MainLoopRender();
 
 #if MAINLOOP_HISTORY
 #endif
-Bool _bMenu = TRUE;
+Bool _bMenu = FALSE;
 
 Char _MainLoop_ModalStr[256];
 Int32 _MainLoop_ModalCount=0;
@@ -342,7 +342,7 @@ Bool MainLoopInit()
 	// setup log screen
 	_MainLoop_pLogScreen = new CLogScreen();
 	_MainLoop_pLogScreen->SetMsgFunc(_MainLoopLogEvent);
-	_MainLoopSetScreen(_MainLoop_pBrowserScreen);
+	_MainLoopSetScreen(_MainLoop_pLogScreen);
 	_bMenu = TRUE;
 #if 0
 	const VersionInfoT *pVersionInfo = VersionGetInfo();
@@ -465,22 +465,17 @@ Bool MainLoopInit()
 
 	_MainLoopSetScreen(_MainLoop_pBrowserScreen);
         // espera ~2s (ajuste se quiser)
-        _MainLoopSetScreen(_MainLoop_pBrowserScreen);
 	_bMenu = FALSE;
 
 //	while (1);
 
 	// load snes palette
-	printf("[DBG] palette load desativado para teste\n");
-        //_MainLoopLoadSnesPalette("mc0:/SNESticle/default.snpal");
-
+        _MainLoopLoadSnesPalette("mc0:/SNESticle/default.snpal");
 	// load rom
 	_MainLoopExecuteFile(_pRomFile, TRUE);
-	_bMenu = TRUE;
-
-	SjPCM_Clearbuff();
-	SjPCM_Play();
-//   SjPCM_Setvol(0xF);
+        _bMenu = _pSystem ? FALSE : TRUE;
+        SjPCM_Clearbuff();
+        SjPCM_Play();
 
 /*
     if (!_WavFile.Open(_pSnesWavFileName, 32000, 16, 2))
