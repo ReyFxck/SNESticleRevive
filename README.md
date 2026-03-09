@@ -40,11 +40,11 @@ make clean
 
 ## Credits
 
-iaddis/SNESticle — original project
+[iaddis/SNESticle](https://github.com/iaddis/SNESticle) — original project
 
-tmaul/SNESticle — many later improvements
+[tmaul/SNESticle](https://github.com/tmaul/SNESticle) — many later improvements
 
-Wolf3s/SNESticle — improved fork used as one of the bases for this repository
+[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle) — improved fork used as one of the bases for this repository
 
 
 TODO
