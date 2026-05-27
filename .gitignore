@@ -1,0 +1,12 @@
+build/
+refs/
+logs/
+*.o
+*.elf
+*.log
+*.tar.gz
+build/
+*.o
+*.elf
+*.log
+*.bak*
