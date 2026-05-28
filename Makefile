@@ -1,3 +1,19 @@
+ISO_TOOL ?= $(firstword $(shell command -v mkisofs 2>/dev/null) $(shell command -v genisoimage 2>/dev/null) $(shell command -v xorriso 2>/dev/null))
+PS2_PACKER_SRC_DIR ?= $(PS2DEV_CACHE_DIR)/ps2-packer-src
+PS2_PACKER_REPO ?= https://github.com/ps2dev/ps2-packer.git
+AUTO_INSTALL ?= ask
+BUILD_OUTPUT_FILE ?= $(BUILD_META_DIR)/output.txt
+ROMS ?= 
+BUILD_COPIED_FILE ?= $(BUILD_META_DIR)/copied.txt
+BUILD_START_TEXT ?= $(BUILD_META_DIR)/start.txt
+BUILD_START_EPOCH ?= $(BUILD_META_DIR)/start.epoch
+BUILD_ERROR_FILE ?= $(BUILD_META_DIR)/error.list
+BUILD_WARN_FILE ?= $(BUILD_META_DIR)/warn.list
+BUILD_OK_FILE ?= $(BUILD_META_DIR)/ok.list
+BUILD_META_DIR ?= $(OBJ_DIR)/.meta
+BUILD_TOTAL ?= $(words $(OBJS))
+SHOW_WARN_LOG ?= 0
+COLOR ?= 1
 PS2DEV_CACHE_DIR ?= $(shell if [ -n "$$XDG_CACHE_HOME" ]; then printf "%s/ps2dev" "$$XDG_CACHE_HOME"; else printf "%s/.cache/ps2dev" "$$HOME"; fi)
 PS2DEV_URL_ARM ?= https://github.com/ps2dev/ps2dev/releases/download/latest/ps2dev-ubuntu-22.04-arm.tar.gz
 PS2DEV_URL_DEFAULT ?= https://github.com/ps2dev/ps2dev/releases/download/latest/ps2dev-ubuntu-latest.tar.gz
@@ -10,7 +26,7 @@ PS2DEV_ENV ?= $(PS2DEV)/env.sh
 PS2DEV_REF ?= master
 PS2DEV_REPO ?= https://github.com/ps2dev/ps2dev.git
 PS2DEV_BUILD_DIR ?= $(HOME)/.cache/snesticle-ps2dev
-JOBS ?= 2
+JOBS ?= 1
 LOAD_LIMIT ?= $(JOBS)
 OUTPUT_SYNC ?= --output-sync=target
 .DEFAULT_GOAL := fast
@@ -35,7 +51,7 @@ EE_STRIP ?= $(shell command -v ee-strip 2>/dev/null || command -v mips64r5900el-
 # When present the ISO embeds the packed ELF instead of the stripped
 # one: typically a ~70% size reduction (1.6 MB -> 490 KB).  Override
 # with PS2_PACKER=... or PACK=0 to skip the pack step entirely.
-PS2_PACKER ?= ps2-packer
+PS2_PACKER ?= $(shell if [ -x "$(PS2DEV)/bin/ps2-packer" ]; then printf "%s" "$(PS2DEV)/bin/ps2-packer"; else command -v ps2-packer 2>/dev/null; fi)
 PACK       ?= 1
 
 IRX_DIR     ?= $(PS2SDK)/iop/irx
@@ -354,7 +370,7 @@ NETMAN_IRX_PATH  ?= $(PS2SDK)/iop/irx/netman.irx
 SMAP_IRX_PATH    ?= $(PS2SDK)/iop/irx/smap.irx
 PS2IP_IRX_PATH   ?= $(PS2SDK)/iop/irx/ps2ip.irx
 
-.PHONY: all clean strip list count package package-irx check-env packed elf fix-packer fast serial turbo rebuild-fast help ensure-ps2sdk install-ps2sdk ps2sdk-env ensure-ps2dev install-ps2dev-tar ps2dev-env
+.PHONY: all clean strip list count package package-irx check-env packed elf fix-packer fast serial turbo rebuild-fast help ensure-ps2sdk install-ps2sdk ps2sdk-env ensure-ps2dev install-ps2dev-tar ps2dev-env build-begin build-summary copy-output iso-build-image ensure-ps2-packer install-ps2-packer ensure-iso-tool install-iso-tool ensure-local-ps2-packer
 
 all: check-env $(TARGET)
 
@@ -376,60 +392,120 @@ $(EMBED_DIR):
 # lets us include each generated file exactly once into embedded_irx.cpp,
 # which keeps the array definitions as ordinary file-scope globals.
 $(EMBED_DIR)/audsrv_irx.h: $(AUDSRV_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" audsrv_irx
+	$(call RUN_BIN2C,$<,$@,audsrv_irx)
 $(EMBED_DIR)/freesd_irx.h: $(FREESD_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" freesd_irx
+	$(call RUN_BIN2C,$<,$@,freesd_irx)
 $(EMBED_DIR)/sio2man_irx.h: $(SIO2MAN_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" sio2man_irx
+	$(call RUN_BIN2C,$<,$@,sio2man_irx)
 $(EMBED_DIR)/mcman_irx.h: $(MCMAN_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" mcman_irx
+	$(call RUN_BIN2C,$<,$@,mcman_irx)
 $(EMBED_DIR)/mcserv_irx.h: $(MCSERV_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" mcserv_irx
+	$(call RUN_BIN2C,$<,$@,mcserv_irx)
 $(EMBED_DIR)/ps2dev9_irx.h: $(PS2DEV9_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" ps2dev9_irx
+	$(call RUN_BIN2C,$<,$@,ps2dev9_irx)
 $(EMBED_DIR)/netman_irx.h: $(NETMAN_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" netman_irx
+	$(call RUN_BIN2C,$<,$@,netman_irx)
 $(EMBED_DIR)/smap_irx.h: $(SMAP_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" smap_irx
+	$(call RUN_BIN2C,$<,$@,smap_irx)
 $(EMBED_DIR)/ps2ip_irx.h: $(PS2IP_IRX_PATH) | $(EMBED_DIR)
-	@echo "BIN2C $<"
-	@$(BIN2C) "$<" "$@" ps2ip_irx
+	$(call RUN_BIN2C,$<,$@,ps2ip_irx)
 
 # embedded_irx.cpp #includes the generated headers, so make sure they
 # exist before that file is compiled.
+
+define RUN_BIN2C
+	@mkdir -p "$(dir $(2))" "$(OBJ_DIR)/.logs"
+	@log="$(OBJ_DIR)/.logs/bin2c_$(notdir $(2)).log"; \
+	name=$$(basename "$(1)"); \
+	start=$$(date +%s%N); \
+	if $(BIN2C) "$(1)" "$(2)" "$(3)" > "$$log" 2>&1; then rc=0; else rc=$$?; fi; \
+	end=$$(date +%s%N); \
+	elapsed=$$(awk "BEGIN { printf \"%.2f\", ($$end - $$start) / 1000000000 }"); \
+	reset=""; green=""; red=""; \
+	if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; red="\033[31m"; fi; \
+	if [ "$$rc" -ne 0 ]; then \
+		msg=$$(head -n1 "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		[ -n "$$msg" ] || msg="bin2c failed"; \
+		printf "[ BIN2C ] %-23s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
+		cat "$$log"; \
+		exit "$$rc"; \
+	else \
+		printf "[ BIN2C ] %-23s [ $${green}OK$${reset} -> %ss ]\n" "$$name" "$$elapsed"; \
+	fi
+endef
+
+define RUN_LINK
+	@mkdir -p "$(dir $(1))" "$(OBJ_DIR)/.logs"
+	@log="$(OBJ_DIR)/.logs/link_$(notdir $(1)).log"; \
+	name=$$(basename "$(1)"); \
+	start=$$(date +%s%N); \
+	if $(2) > "$$log" 2>&1; then rc=0; else rc=$$?; fi; \
+	end=$$(date +%s%N); \
+	elapsed=$$(awk "BEGIN { printf \"%.2f\", ($$end - $$start) / 1000000000 }"); \
+	reset=""; green=""; yellow=""; red=""; \
+	if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; yellow="\033[33m"; red="\033[31m"; fi; \
+	if [ "$$rc" -ne 0 ]; then \
+		msg=$$(grep -Eim1 "error:|fatal:|undefined reference|cannot find|No such file" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		[ -n "$$msg" ] || msg="link failed"; \
+		printf "[ LD    ] %-23s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
+		cat "$$log"; \
+		exit "$$rc"; \
+	elif grep -Eiq "warning:" "$$log"; then \
+		msg=$$(grep -Eim1 "warning:" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		printf "[ LD    ] %-23s [ $${yellow}WARN$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
+	else \
+		printf "[ LD    ] %-23s [ $${green}OK$${reset} -> %ss ]\n" "$$name" "$$elapsed"; \
+	fi
+endef
+
+define RUN_COMPILE
+	@mkdir -p "$(dir $@)" "$(OBJ_DIR)/.logs" "$(BUILD_META_DIR)"
+	@log="$(OBJ_DIR)/.logs/$(notdir $@).log"; \
+	src_name=$$(basename "$(2)"); \
+	start=$$(date +%s%N); \
+	if $(3) > "$$log" 2>&1; then rc=0; else rc=$$?; fi; \
+	end=$$(date +%s%N); \
+	elapsed=$$(awk "BEGIN { printf \"%.2f\", ($$end - $$start) / 1000000000 }"); \
+	done_count=$$(find "$(OBJ_DIR)" -type f -name '*.o' 2>/dev/null | wc -l | tr -d ' '); \
+	total="$(BUILD_TOTAL)"; \
+	if [ -z "$$total" ] || [ "$$total" = "0" ]; then total=1; fi; \
+	percent=$$((done_count * 100 / total)); \
+	name_width=$$((23 - $${#percent})); \
+	[ "$$name_width" -lt 18 ] && name_width=18; \
+	src_name=$$(printf "%s" "$$src_name" | cut -c1-$$name_width); \
+	reset=""; green=""; yellow=""; red=""; \
+	if [ "$(COLOR)" = "1" ]; then \
+		reset="\033[0m"; green="\033[32m"; yellow="\033[33m"; red="\033[31m"; \
+	fi; \
+	if [ "$$rc" -ne 0 ]; then \
+		msg=$$(grep -Eim1 "error:|fatal:|undefined reference|No such file" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		[ -n "$$msg" ] || msg="compiler failed"; \
+		printf "%s\n" "$$src_name" >> "$(BUILD_ERROR_FILE)"; \
+		printf "[ %s%% ] %-3s %-*s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$percent" "$(1)" "$$name_width" "$$src_name" "$$elapsed" "$$msg"; \
+		cat "$$log"; \
+		exit "$$rc"; \
+	elif grep -Eiq "warning:" "$$log"; then \
+		msg=$$(grep -Eim1 "warning:" "$$log" | sed "s|.*/||; s/^[[:space:]]*//" | cut -c1-58); \
+		printf "%s\n" "$$src_name" >> "$(BUILD_WARN_FILE)"; \
+		printf "[ %s%% ] %-3s %-*s [ $${yellow}WARN$${reset} -> %ss -> %s ]\n" "$$percent" "$(1)" "$$name_width" "$$src_name" "$$elapsed" "$$msg"; \
+		if [ "$(SHOW_WARN_LOG)" = "1" ]; then cat "$$log"; fi; \
+	else \
+		printf "%s\n" "$$src_name" >> "$(BUILD_OK_FILE)"; \
+		printf "[ %s%% ] %-3s %-*s [ $${green}OK$${reset} -> %ss ]\n" "$$percent" "$(1)" "$$name_width" "$$src_name" "$$elapsed"; \
+	fi
+endef
 $(OBJ_DIR)/platform/ps2/system/embedded_irx.o: $(EMBED_HEADERS)
 
 $(OBJ_DIR)/%.o: src/%.c | $(OBJ_DIR)
-	@mkdir -p "$(dir $@)"
-	@echo "CC  $<"
-	@$(EE_CC) $(CFLAGS) $(INCS) -c $< -o $@
-
+	$(call RUN_COMPILE,CC,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
 $(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
-	@mkdir -p "$(dir $@)"
-	@echo "CXX $<"
-	@$(EE_CXX) $(CXXFLAGS) $(INCS) -c $< -o $@
-
+	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(CXXFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
 $(OBJ_DIR)/%.o: src/%.s | $(OBJ_DIR)
-	@mkdir -p "$(dir $@)"
-	@echo "AS  $<"
-	@$(EE_CC) $(CFLAGS) -c $< -o $@
-
+	$(call RUN_COMPILE,AS,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
 $(OBJ_DIR)/%.o: src/%.S | $(OBJ_DIR)
-	@mkdir -p "$(dir $@)"
-	@echo "AS  $<"
-	@$(EE_CC) $(CFLAGS) $(INCS) -c $< -o $@
-
+	$(call RUN_COMPILE,AS,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
 $(TARGET): $(OBJS) | $(OBJ_DIR)
-	@echo "LD  $@"
-	@$(EE_CXX) -o $@ $(OBJS) $(LIBDIRS) $(LIBS)
+	$(call RUN_LINK,$@,$(EE_CXX) -o "$@" $(OBJS) $(LIBDIRS) $(LIBS))
 
 strip: $(TARGET)
 	@echo "STRIP $<"
@@ -450,9 +526,8 @@ strip: $(TARGET)
 # binary on the exact same host, so the fix is to always rebuild from
 # source as soon as we detect the bug.  Source clone is depth=1 so
 # the download is small.
-PS2_PACKER_TOOLS    := $(OBJ_DIR)/tools
-PS2_PACKER_SRC_DIR  := $(PS2_PACKER_TOOLS)/ps2-packer-src
-PS2_PACKER_LOCAL    := $(PS2_PACKER_TOOLS)/ps2-packer
+PS2_PACKER_TOOLS ?= $(OBJ_DIR)/tools
+PS2_PACKER_LOCAL ?= $(PS2_PACKER_SRC_DIR)/ps2-packer
 PS2_PACKER_REPO_URL ?= https://github.com/ps2dev/ps2-packer.git
 
 $(PS2_PACKER_LOCAL):
@@ -460,24 +535,25 @@ $(PS2_PACKER_LOCAL):
 	mkdir -p "$(PS2_PACKER_TOOLS)"; \
 	host_cc=$$(command -v cc 2>/dev/null || command -v gcc 2>/dev/null || command -v clang 2>/dev/null || true); \
 	if [ -z "$$host_cc" ]; then \
-		echo "ERRO: nenhum compilador C encontrado (cc/gcc/clang)"; \
-		echo "       instale com 'apt install build-essential' / 'apk add gcc musl-dev'"; \
+		echo "ERROR: no host C compiler found"; \
+		echo "       install with: apt install build-essential"; \
 		exit 1; \
 	fi; \
 	if ! command -v git >/dev/null 2>&1; then \
-		echo "ERRO: 'git' nao encontrado; instale-o para rebuildar ps2-packer"; \
+		echo "ERROR: git not found"; \
 		exit 1; \
 	fi; \
 	if [ ! -d "$(PS2_PACKER_SRC_DIR)/.git" ]; then \
-		echo "FETCH $(PS2_PACKER_REPO_URL) -> $(PS2_PACKER_SRC_DIR)"; \
+		echo "[ PACK ] fetching ps2-packer source"; \
 		rm -rf "$(PS2_PACKER_SRC_DIR)"; \
 		git clone --depth=1 "$(PS2_PACKER_REPO_URL)" "$(PS2_PACKER_SRC_DIR)" >/dev/null 2>&1; \
 	fi; \
-	echo "BUILD ps2-packer (local, CC=$$host_cc) -> $(PS2_PACKER_LOCAL)"; \
+	echo "[ PACK ] building local ps2-packer"; \
 	$(MAKE) -C "$(PS2_PACKER_SRC_DIR)" ps2-packer CC="$$host_cc" >/dev/null; \
-	cp "$(PS2_PACKER_SRC_DIR)/ps2-packer" "$(PS2_PACKER_LOCAL)"; \
-	chmod +x "$(PS2_PACKER_LOCAL)"
-
+	cp -f "$(PS2_PACKER_SRC_DIR)/ps2-packer" "$(PS2_PACKER_LOCAL)"; \
+	chmod +x "$(PS2_PACKER_LOCAL)"; \
+	rm -rf "$(PS2_PACKER_TOOLS)/stub"; \
+	cp -R "$(PS2_PACKER_SRC_DIR)/stub" "$(PS2_PACKER_TOOLS)/stub"
 fix-packer: $(PS2_PACKER_LOCAL)
 	@echo "[fix-packer] OK -> $(PS2_PACKER_LOCAL)"
 	@"$(PS2_PACKER_LOCAL)" 2>&1 | head -3 | sed 's/^/[fix-packer]   /'
@@ -504,25 +580,29 @@ fix-packer: $(PS2_PACKER_LOCAL)
 # argv handling.  When we detect this, we rebuild ps2-packer locally
 # from source (see $(PS2_PACKER_LOCAL) above) and use the rebuild
 # silently.  No user action required.
-$(TARGET_PACKED): $(TARGET)
+$(TARGET_PACKED): ensure-local-ps2-packer $(TARGET)
 	@set -e; \
-	if ! command -v $(PS2_PACKER) >/dev/null 2>&1; then \
-		echo "ERRO: $(PS2_PACKER) nao encontrado no PATH (instale com 'pacman -S ps2-packer' no docker ps2dev)"; \
-		exit 1; \
-	fi; \
-	ps2_packer="$(PS2_PACKER)"; \
-	if "$$ps2_packer" </dev/null 2>&1 | head -5 | grep -q "Unknown option"; then \
-		echo "[pack] AVISO: $$ps2_packer parece corrompido (Unknown option)"; \
-		echo "[pack] rebuildando ps2-packer do source..."; \
-		$(MAKE) -s $(PS2_PACKER_LOCAL); \
-		ps2_packer="$(PS2_PACKER_LOCAL)"; \
-		echo "[pack] usando rebuild local: $$ps2_packer"; \
-	fi; \
-	_in=$$(printf %s '$(TARGET)' | tr -d '\r\t' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//'); \
-	_out=$$(printf %s '$(TARGET_PACKED)' | tr -d '\r\t' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//'); \
-	echo "PACK $$_out"; \
-	"$$ps2_packer" -- "$$_in" "$$_out"
-
+	mkdir -p "$(dir $@)" "$(OBJ_DIR)/.logs"; \
+	log="$(OBJ_DIR)/.logs/pack_$$(basename "$@").log"; \
+	name=$$(basename "$@"); \
+	in_elf="$(abspath $(TARGET))"; \
+	out_elf="$(abspath $@)"; \
+	start=$$(date +%s%N); \
+	if cd "$(PS2_PACKER_SRC_DIR)" && ./ps2-packer "$$in_elf" "$$out_elf" > "$$log" 2>&1; then rc=0; else rc=$$?; fi; \
+	end=$$(date +%s%N); \
+	elapsed=$$(awk "BEGIN { printf \"%.2f\", ($$end - $$start) / 1000000000 }"); \
+	reset=""; green=""; red=""; cyan=""; \
+	if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; red="\033[31m"; cyan="\033[36m"; fi; \
+	if [ "$$rc" -ne 0 ]; then \
+		msg=$$(grep -Eim1 "Unable|error|failed|cannot|No such file|Unknown option" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-70); \
+		[ -n "$$msg" ] || msg="pack failed"; \
+		printf "$${cyan}[ PACK ]$${reset} %-24s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
+		cat "$$log"; \
+		exit "$$rc"; \
+	else \
+		bytes=$$(wc -c <"$@" | tr -d " "); \
+		printf "$${cyan}[ PACK ]$${reset} %-24s [ $${green}OK$${reset} -> %ss -> %s bytes ]\n" "$$name" "$$elapsed" "$$bytes"; \
+	fi
 packed: $(TARGET_PACKED)
 
 # Standalone ELF copy target.  Mirrors the ISO `out=` flow but skips
@@ -581,9 +661,21 @@ package-irx: | $(PKG_DIR)
 	for f in $(SDK_EXTRA_IRX); do copy_sdk "$$f"; done; \
 	echo "Pronto: $(PKG_DIR)"
 clean:
-	rm -rf "$(OBJ_DIR)"
-	rm -f "$(TARGET_PACKED)"
-
+	@set -e; \
+	reset=""; green=""; yellow=""; red=""; \
+	if [ "$(COLOR)" = "1" ]; then \
+		reset="\033[0m"; green="\033[32m"; yellow="\033[33m"; red="\033[31m"; \
+	fi; \
+	if [ -d "$(OBJ_DIR)" ] || [ -f "$(TARGET_PACKED)" ]; then \
+		if rm -rf "$(OBJ_DIR)" && rm -f "$(TARGET_PACKED)"; then \
+			printf "$${green}[ CLEAN ]$${reset} BUILD FOLDER DELETED SUCCESSFULLY!\n"; \
+		else \
+			printf "$${red}[ CLEAN ]$${reset} ERROR -> FAILED TO DELETE BUILD FOLDER!\n"; \
+			exit 1; \
+		fi; \
+	else \
+		printf "$${yellow}[ CLEAN ]$${reset} NOTHING TO CLEAN.\n"; \
+	fi
 list:
 	@printf '%s\n' $(SRCS)
 
@@ -625,18 +717,25 @@ ISO_BOOT      ?= $(ISO_GAME_ID)
 ISO_VMODE     ?= NTSC
 
 # User-facing knobs (lowercase)
-out  ?=
-roms ?=
+OUT ?= 
+out ?= $(OUT)
+roms ?= $(ROMS)
 
 .PHONY: iso-check iso-root iso
 
 iso-check:
-	@command -v xorriso >/dev/null 2>&1 \
-	  || command -v genisoimage >/dev/null 2>&1 \
-	  || command -v mkisofs >/dev/null 2>&1 \
-	  || { echo "ERRO: nenhum gerador de ISO encontrado (xorriso, genisoimage ou mkisofs)."; \
-	       echo "Instale com: apt install xorriso"; exit 1; }
-
+	@set -e; \
+	if command -v mkisofs >/dev/null 2>&1 || command -v genisoimage >/dev/null 2>&1 || command -v xorriso >/dev/null 2>&1; then \
+		exit 0; \
+	fi; \
+	printf "[ SETUP ] ISO tool is missing. Install xorriso now? [y/N] "; \
+	if [ "$(AUTO_INSTALL)" = "yes" ] || [ "$(AUTO_INSTALL)" = "1" ]; then ans="y"; \
+	elif [ "$(AUTO_INSTALL)" = "no" ] || [ "$(AUTO_INSTALL)" = "0" ]; then ans="n"; \
+	else read ans; fi; \
+	case "$$ans" in \
+		y|Y|yes|YES|s|S|sim|SIM) $(MAKE) --no-print-directory install-iso-tool ;; \
+		*) echo "[ SETUP ] skipped ISO tool install"; exit 1 ;; \
+	esac
 iso-root: $(TARGET) iso-check
 	@rm -rf "$(ISO_ROOT_DIR)"
 	@mkdir -p "$(ISO_ROOT_DIR)"
@@ -657,20 +756,20 @@ iso-root: $(TARGET) iso-check
 		if $(MAKE) -s $(TARGET_PACKED) && [ -s "$(TARGET_PACKED)" ]; then \
 			use_packed=1; \
 		else \
-			echo "[iso-root] AVISO: ps2-packer falhou; caindo pro ELF strip simples"; \
-			echo "[iso-root]        (rode 'make packed' isolado pra ver o erro)"; \
+			echo "[ ISO-ROOT ] AVISO: ps2-packer falhou; caindo pro ELF strip simples"; \
+			echo "[ ISO-ROOT ]        (rode 'make packed' isolado pra ver o erro)"; \
 		fi; \
 	fi; \
 	if [ "$$use_packed" = "1" ]; then \
 		cp "$(TARGET_PACKED)" "$(ISO_ROOT_DIR)/$(ISO_BOOT)"; \
-		echo "[iso-root] packed $(ISO_BOOT) ($$(wc -c <"$(ISO_ROOT_DIR)/$(ISO_BOOT)") bytes)"; \
+		echo "[ ISO-ROOT ] packed $(ISO_BOOT) ($$(wc -c <"$(ISO_ROOT_DIR)/$(ISO_BOOT)") bytes)"; \
 	else \
 		cp "$(TARGET)" "$(ISO_ROOT_DIR)/$(ISO_BOOT)"; \
 		if command -v $(EE_STRIP) >/dev/null 2>&1; then \
 			$(EE_STRIP) "$(ISO_ROOT_DIR)/$(ISO_BOOT)"; \
-			echo "[iso-root] stripped $(ISO_BOOT) ($$(wc -c <"$(ISO_ROOT_DIR)/$(ISO_BOOT)") bytes)"; \
+			echo "[ ISO-ROOT ] stripped $(ISO_BOOT) ($$(wc -c <"$(ISO_ROOT_DIR)/$(ISO_BOOT)") bytes)"; \
 		else \
-			echo "[iso-root] copied $(ISO_BOOT) ($$(wc -c <"$(ISO_ROOT_DIR)/$(ISO_BOOT)") bytes, unstripped)"; \
+			echo "[ ISO-ROOT ] copied $(ISO_BOOT) ($$(wc -c <"$(ISO_ROOT_DIR)/$(ISO_BOOT)") bytes, unstripped)"; \
 		fi; \
 	fi
 	@# SYSTEM.CNF must use CRLF line endings: real PS2 BIOS and the
@@ -681,7 +780,7 @@ iso-root: $(TARGET) iso-check
 		"BOOT2 = cdrom0:\\$(ISO_BOOT);1" \
 		"VER = 1.00" \
 		"VMODE = $(ISO_VMODE)" > "$(ISO_ROOT_DIR)/SYSTEM.CNF"
-	@echo "[iso-root] SYSTEM.CNF:"
+	@echo "[ ISO-ROOT ] SYSTEM.CNF:"
 	@cat "$(ISO_ROOT_DIR)/SYSTEM.CNF"
 	@# No loose IRX files are copied into the ISO any more.  The ELF
 	@# embeds every IRX it needs (audsrv, freesd, sio2man, mcman,
@@ -701,13 +800,13 @@ iso-root: $(TARGET) iso-check
 			   -o -iname '*.fig' -o -iname '*.nes' -o -iname '*.fds' \
 			   -o -iname 'disksys.rom' -o -iname '*.zip' -o -iname '*.gz' \) \
 			-exec cp -f --parents {} "$(ISO_ROOT_DIR)/ROMS/" \; ) ; \
-		echo "[iso-root] ROMs copiadas de $(roms)"; \
+		echo "[ ISO-ROOT ] ROMs copied from $(roms)"; \
 	else \
-		echo "[iso-root] Sem ROMs (use roms=<pasta> para incluir)"; \
+		echo "[ ISO-ROOT ] Sem ROMs (use roms=<pasta> para incluir)"; \
 	fi
 	@if [ -d "$(CURDIR)/cdroot" ]; then \
 		cp -a "$(CURDIR)/cdroot/." "$(ISO_ROOT_DIR)/"; \
-		echo "[iso-root] cdroot extras copiados"; \
+		echo "[ ISO-ROOT ] cdroot extras copiados"; \
 	fi
 
 # Probe order is mkisofs -> genisoimage -> xorriso. Real mkisofs and
@@ -729,29 +828,26 @@ iso-root: $(TARGET) iso-check
 #   -sysid/-A/-publisher PLAYSTATION   matches the Sony master disc
 #                  PVD layout. AetherSX2's CDVD detector keys on
 #                  these strings to flag the image as a PS2 game.
-iso: iso-root
-	@mkdir -p "$$(dirname "$(ISO_OUT)")"
-	@if command -v mkisofs >/dev/null 2>&1; then \
-		mkisofs \
-			-iso-level 1 -pad \
-			-V "$(ISO_LABEL)" \
-			-sysid PLAYSTATION \
-			-A PLAYSTATION \
-			-publisher PLAYSTATION \
-			-J -joliet-long \
-			-o "$(ISO_OUT)" \
-			"$(ISO_ROOT_DIR)"; \
-	elif command -v genisoimage >/dev/null 2>&1; then \
-		genisoimage \
-			-iso-level 1 -pad \
-			-V "$(ISO_LABEL)" \
-			-sysid PLAYSTATION \
-			-A PLAYSTATION \
-			-publisher PLAYSTATION \
-			-J -joliet-long \
-			-o "$(ISO_OUT)" \
-			"$(ISO_ROOT_DIR)"; \
-	elif command -v xorriso >/dev/null 2>&1; then \
+iso:
+	+@$(MAKE) --no-print-directory build-begin
+	+@$(MAKE) --no-print-directory check-env
+	+@$(MAKE) --no-print-directory iso-check
+	+@$(MAKE) --no-print-directory iso-root
+	+@$(MAKE) --no-print-directory iso-build-image
+	+@$(MAKE) --no-print-directory build-summary
+
+iso-build-image:
+	@set -e; \
+	mkdir -p "$$(dirname "$(ISO_OUT)")" "$(OBJ_DIR)/.logs"; \
+	log="$(OBJ_DIR)/.logs/iso_$$(basename "$(ISO_OUT)").log"; \
+	name=$$(basename "$(ISO_OUT)"); \
+	start=$$(date +%s%N); \
+	tool=""; \
+	if command -v mkisofs >/dev/null 2>&1; then tool="mkisofs"; \
+	elif command -v genisoimage >/dev/null 2>&1; then tool="genisoimage"; \
+	elif command -v xorriso >/dev/null 2>&1; then tool="xorriso"; \
+	else echo "ERROR: no ISO generator found"; exit 1; fi; \
+	if [ "$$tool" = "xorriso" ]; then \
 		xorriso -as mkisofs \
 			-iso-level 1 -pad \
 			-V "$(ISO_LABEL)" \
@@ -760,48 +856,67 @@ iso: iso-root
 			-publisher PLAYSTATION \
 			-J -joliet-long \
 			-o "$(ISO_OUT)" \
-			"$(ISO_ROOT_DIR)"; \
-	fi
-	@echo "[iso] $(ISO_OUT)"
-	@# Inside the ISO the boot ELF is named `$(ISO_BOOT)` (the PS2
-	@# GAME_ID, no extension) because the real PS2 BIOS / OPL /
-	@# wLaunchELF / NetherSX2 look up the boot file through
-	@# `BOOT2 = cdrom0:\$(ISO_BOOT);1` in SYSTEM.CNF -- they do NOT
-	@# search for `*.elf`.  So if you mount this ISO and see a file
-	@# called `$(ISO_BOOT)` without an extension, that IS the
-	@# SNESticle ELF (ps2-packer'd when PACK=1).
-	@echo "[iso] dentro: $(ISO_BOOT) (ELF) + SYSTEM.CNF"
-	@if [ -n "$(strip $(out))" ]; then \
+			"$(ISO_ROOT_DIR)" > "$$log" 2>&1; \
+	else \
+		"$$tool" \
+			-iso-level 1 -pad \
+			-V "$(ISO_LABEL)" \
+			-sysid PLAYSTATION \
+			-A PLAYSTATION \
+			-publisher PLAYSTATION \
+			-J -joliet-long \
+			-o "$(ISO_OUT)" \
+			"$(ISO_ROOT_DIR)" > "$$log" 2>&1; \
+	fi; \
+	rc=$$?; \
+	end=$$(date +%s%N); \
+	elapsed=$$(awk "BEGIN { printf \"%.2f\", ($$end - $$start) / 1000000000 }"); \
+	reset=""; green=""; red=""; cyan=""; \
+	if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; red="\033[31m"; cyan="\033[36m"; fi; \
+	if [ "$$rc" -ne 0 ]; then \
+		msg=$$(grep -Eim1 "error:|fatal:|failed|cannot|No such file" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-70); \
+		[ -n "$$msg" ] || msg="ISO generation failed"; \
+		printf "$${cyan}[ ISO ]$${reset} %-24s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
+		tail -60 "$$log"; \
+		exit "$$rc"; \
+	fi; \
+	bytes=$$(wc -c <"$(ISO_OUT)" | tr -d " "); \
+	printf "$${cyan}[ ISO ]$${reset} %-24s [ $${green}OK$${reset} -> %ss -> %s bytes ]\n" "$$name" "$$elapsed" "$$bytes"; \
+	printf "%s\n" "$(ISO_OUT)" > "$(BUILD_OUTPUT_FILE)"; \
+	if [ -n "$(strip $(out))" ]; then \
 		mkdir -p "$(out)"; \
 		cp -f "$(ISO_OUT)" "$(out)/"; \
-		echo "[iso] copiada para $(out)/"; \
 		cp -f "$(TARGET)" "$(out)/SNESticle.elf"; \
-		echo "[iso] ELF avulso: $(out)/SNESticle.elf ($$(wc -c <'$(TARGET)') bytes, unpacked)"; \
+		copied="$(out)/$$(basename "$(ISO_OUT)"); $(out)/SNESticle.elf"; \
+		printf "$${green}[ COPY ]$${reset} ISO -> $(out)/$$(basename "$(ISO_OUT)")\n"; \
+		printf "$${green}[ COPY ]$${reset} ELF -> $(out)/SNESticle.elf\n"; \
 		if [ "$(PACK)" = "1" ] && [ -f "$(TARGET_PACKED)" ]; then \
 			cp -f "$(TARGET_PACKED)" "$(out)/SNESticle.packed.elf"; \
-			echo "[iso] ELF avulso: $(out)/SNESticle.packed.elf ($$(wc -c <'$(TARGET_PACKED)') bytes, packed)"; \
+			copied="$$copied; $(out)/SNESticle.packed.elf"; \
+			printf "$${green}[ COPY ]$${reset} PACKED ELF -> $(out)/SNESticle.packed.elf\n"; \
 		fi; \
+		printf "%s\n" "$$copied" > "$(BUILD_COPIED_FILE)"; \
 	fi
+
 # ---- /ISO ----
 
 # GCC 15.2 -O2 corrompe asm 128-bit do _MixChannel (audio direito quebrado).
 # Fix do hugorsgarcia/PS2SNESticle (PORTING.md Bug 7).
 $(OBJ_DIR)/snes/apu/snspcmix.o: src/snes/apu/snspcmix.cpp | $(OBJ_DIR)
-	@mkdir -p "$(dir $@)"
-	@echo "CXX $< (-O1 GCC15 fix)"
-	@$(EE_CXX) $(CXXFLAGS) -O1 $(INCS) -c $< -o $@
-
+	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(CXXFLAGS) $(DEPFLAGS) -O1 $(INCS) -c "$<" -o "$@")
 fast:
-	@echo "[fast] parallel build: JOBS=$(JOBS), LOAD_LIMIT=$(LOAD_LIMIT)"
+	@reset=""; cyan=""; if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; cyan="\033[36m"; fi; printf "$${cyan}[ FAST ]$${reset} build: JOBS=$(JOBS), LOAD_LIMIT=$(LOAD_LIMIT)\n"
+	+@$(MAKE) --no-print-directory build-begin
 	+@$(MAKE) --no-print-directory check-env
 	+@$(MAKE) --no-print-directory $(OUTPUT_SYNC) -j$(JOBS) -l$(LOAD_LIMIT) $(TARGET)
-
+	+@$(MAKE) --no-print-directory copy-output
+	+@$(MAKE) --no-print-directory build-summary
 serial:
-	@echo "[serial] single job build"
+	@reset=""; green=""; if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; fi; printf "$${green}[ SERIAL ]$${reset} single job build\n"
 	+@$(MAKE) --no-print-directory -j1 all
 
 turbo:
-	@echo "[turbo] aggressive parallel build: JOBS=4, LOAD_LIMIT=4"
+	@reset=""; yellow=""; if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; yellow="\033[33m"; fi; printf "$${yellow}[ TURBO ]$${reset} aggressive build: JOBS=4, LOAD_LIMIT=4\n"
 	+@$(MAKE) --no-print-directory check-env
 	+@$(MAKE) --no-print-directory $(OUTPUT_SYNC) -j4 -l4 $(TARGET)
 
@@ -811,26 +926,73 @@ rebuild-fast:
 	+@$(MAKE) --no-print-directory $(OUTPUT_SYNC) -j$(JOBS) -l$(LOAD_LIMIT) $(TARGET)
 
 help:
-	@echo "SNESticleRevive Makefile"
-	@echo ""
-	@echo "Commands:"
-	@echo "  make              Safe parallel build"
-	@echo "  make JOBS=3       Safe parallel build with 3 jobs"
-	@echo "  make serial       Single job build"
-	@echo "  make turbo        Faster build with 4 jobs"
-	@echo "  make rebuild-fast Clean and rebuild with parallel jobs"
-	@echo "  make all          Normal build target"
-	@echo "  make clean        Clean build files"
+	@reset=""; cyan=""; green=""; yellow=""; \
+	if [ "$(COLOR)" = "1" ]; then \
+		reset="\033[0m"; cyan="\033[36m"; green="\033[32m"; yellow="\033[33m"; \
+	fi; \
+	printf "$${cyan}[ HELP ]$${reset} SNESticleRevive Makefile\n"; \
+	printf "\n"; \
+	printf "$${green}Build commands:$${reset}\n"; \
+	printf "  make                         Build ELF, default JOBS=1\n"; \
+	printf "  make JOBS=2                  Build ELF with 2 workers\n"; \
+	printf "  make JOBS=3                  Build ELF with 3 workers\n"; \
+	printf "  make serial                  Build with one worker\n"; \
+	printf "  make turbo                   Build with 4 workers\n"; \
+	printf "  make rebuild-fast            Clean and rebuild\n"; \
+	printf "  make clean                   Delete build folder\n"; \
+	printf "\n"; \
+	printf "$${green}Output commands:$${reset}\n"; \
+	printf "  make OUT=/sdcard             Build and copy SNESticle.elf to OUT\n"; \
+	printf "  make out=/sdcard             Same as OUT=/sdcard\n"; \
+	printf "  make elf OUT=/sdcard         Build ELF/packed ELF and copy to OUT\n"; \
+	printf "  make iso ROMS=/path OUT=/out Build ISO with ROM folder and copy to OUT\n"; \
+	printf "  make iso roms=/path out=/out Same as uppercase variables\n"; \
+	printf "  make iso PACK=0              Build ISO using unpacked ELF\n"; \
+	printf "\n"; \
+	printf "$${green}Info commands:$${reset}\n"; \
+	printf "  make list                    List source files used by build\n"; \
+	printf "  make count                   Count source files\n"; \
+	printf "  make check-env               Check PS2DEV/PS2SDK environment\n"; \
+	printf "\n"; \
+	printf "$${green}PS2DEV commands:$${reset}\n"; \
+	printf "  make install-ps2dev-tar      Download/extract prebuilt PS2DEV\n"; \
+	printf "  make ps2dev-env              Write PS2DEV env file\n"; \
+	printf "\n"; \
+	printf "$${green}Useful variables:$${reset}\n"; \
+	printf "  JOBS=1                       Number of build workers\n"; \
+	printf "  LOAD_LIMIT=$(LOAD_LIMIT)                 Load limit for parallel builds\n"; \
+	printf "  COLOR=0                      Disable colored output\n"; \
+	printf "  SHOW_WARN_LOG=1              Print full warning logs\n"; \
+	printf "  OUT=/path                    Copy final ELF to this folder\n"; \
+	printf "  out=/path                    Same as OUT=/path\n"; \
+	printf "  ROMS=/path                   ROM folder for ISO build\n"; \
+	printf "  roms=/path                   Same as ROMS=/path\n"; \
+	printf "  PACK=1                       Use packed ELF when possible\n"; \
+	printf "  PS2DEV=/path                 Override PS2DEV install path\n"; \
+	printf "  AUTO_INSTALL=ask             Ask before installing missing tools\n"; \
+	printf "  AUTO_INSTALL=yes             Install missing tools without asking\n"; \
+	printf "  AUTO_INSTALL=no              Never install missing tools\n"; \
+	printf "\n"; \
+	printf "$${yellow}Examples:$${reset}\n"; \
+	printf "  make\n"; \
+	printf "  make JOBS=2\n"; \
+	printf "  make OUT=/sdcard\n"; \
+	printf "  make iso ROMS=/sdcard/roms_snes OUT=/sdcard/ps2\n"
 
 ensure-ps2dev:
 	@set -e; \
 	if [ -d "$(PS2SDK)" ] && { [ -x "$(PS2DEV)/ee/bin/ee-gcc" ] || [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc" ] || command -v ee-gcc >/dev/null 2>&1 || command -v mips64r5900el-ps2-elf-gcc >/dev/null 2>&1; }; then \
 		$(MAKE) --no-print-directory ps2dev-env >/dev/null; \
 	else \
-		echo "[ps2dev] missing, installing"; \
-		$(MAKE) --no-print-directory install-ps2dev-tar; \
+		printf "[ SETUP ] PS2DEV/PS2SDK is missing. Install now? [y/N] "; \
+		if [ "$(AUTO_INSTALL)" = "yes" ] || [ "$(AUTO_INSTALL)" = "1" ]; then ans="y"; \
+		elif [ "$(AUTO_INSTALL)" = "no" ] || [ "$(AUTO_INSTALL)" = "0" ]; then ans="n"; \
+		else read ans; fi; \
+		case "$$ans" in \
+			y|Y|yes|YES|s|S|sim|SIM) $(MAKE) --no-print-directory install-ps2dev-tar ;; \
+			*) echo "[ SETUP ] skipped PS2DEV install"; exit 1 ;; \
+		esac; \
 	fi
-
 install-ps2dev-tar:
 	@set -e; \
 	url="$(PS2DEV_URL)"; \
@@ -887,3 +1049,166 @@ ps2dev-env:
 	'export PATH="$$PS2DEV/bin:$$PS2DEV/ee/bin:$$PS2DEV/iop/bin:$$PS2DEV/dvp/bin:$$PS2SDK/bin:$$PATH"' \
 	> "$(PS2DEV_ENV)"
 	@echo "[ps2dev] env file: $(PS2DEV_ENV)"
+
+build-begin:
+	@mkdir -p "$(BUILD_META_DIR)"
+	@: > "$(BUILD_OK_FILE)"
+	@: > "$(BUILD_WARN_FILE)"
+	@: > "$(BUILD_ERROR_FILE)"
+	@rm -f "$(BUILD_COPIED_FILE)" "$(BUILD_OUTPUT_FILE)"
+	@date +%s > "$(BUILD_START_EPOCH)"
+	@date "+%Y-%m-%d %H:%M:%S" > "$(BUILD_START_TEXT)"
+
+copy-output:
+	@if [ -n "$(strip $(out))" ]; then \
+		mkdir -p "$(out)"; \
+		cp -f "$(TARGET)" "$(out)/SNESticle.elf"; \
+		bytes=$$(wc -c <"$(TARGET)"); \
+		reset=""; green=""; \
+		if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; fi; \
+		printf "$${green}[ COPY ]$${reset} SNESticle.elf -> $(out)/ (%s bytes)\n" "$$bytes"; \
+		mkdir -p "$(BUILD_META_DIR)"; \
+		printf "%s\n" "$(out)/SNESticle.elf" > "$(BUILD_COPIED_FILE)"; \
+	fi
+
+build-summary:
+	@set -e; \
+	mkdir -p "$(BUILD_META_DIR)"; \
+	end_epoch=$$(date +%s); \
+	end_text=$$(date "+%Y-%m-%d %H:%M:%S"); \
+	start_epoch=$$(cat "$(BUILD_START_EPOCH)" 2>/dev/null || echo "$$end_epoch"); \
+	start_text=$$(cat "$(BUILD_START_TEXT)" 2>/dev/null || echo "unknown"); \
+	seconds=$$((end_epoch - start_epoch)); \
+	mins=$$((seconds / 60)); \
+	secs=$$((seconds % 60)); \
+	ok=$$(wc -l < "$(BUILD_OK_FILE)" 2>/dev/null || echo 0); \
+	warn=$$(wc -l < "$(BUILD_WARN_FILE)" 2>/dev/null || echo 0); \
+	err=$$(wc -l < "$(BUILD_ERROR_FILE)" 2>/dev/null || echo 0); \
+	total=$$((ok + warn + err)); \
+	copied=$$(cat "$(BUILD_COPIED_FILE)" 2>/dev/null || true); \
+	[ -n "$$copied" ] || copied="no"; \
+	output=$$(cat "$(BUILD_OUTPUT_FILE)" 2>/dev/null || true); \
+	[ -n "$$output" ] || output="$(TARGET)"; \
+	reset=""; cyan=""; green=""; yellow=""; red=""; \
+	if [ "$(COLOR)" = "1" ]; then \
+		reset="\033[0m"; cyan="\033[36m"; green="\033[32m"; yellow="\033[33m"; red="\033[31m"; \
+	fi; \
+	printf "\n$${cyan}[ SUMMARY ]$${reset}\n"; \
+	printf "Started : %s\n" "$$start_text"; \
+	printf "Finished: %s\n" "$$end_text"; \
+	printf "Duration: %02dm %02ds\n" "$$mins" "$$secs"; \
+	printf "Files   : %s compiled\n" "$$total"; \
+	printf "OK      : $${green}%s$${reset}\n" "$$ok"; \
+	printf "WARN    : $${yellow}%s$${reset}\n" "$$warn"; \
+	printf "ERROR   : $${red}%s$${reset}\n" "$$err"; \
+	printf "Jobs    : %s\n" "$(JOBS)"; \
+	printf "Output  : %s\n" "$$output"; \
+	printf "Copied  : %s\n" "$$copied"
+
+
+
+ensure-iso-tool:
+	@set -e; \
+	if command -v mkisofs >/dev/null 2>&1 || command -v genisoimage >/dev/null 2>&1 || command -v xorriso >/dev/null 2>&1; then \
+		exit 0; \
+	fi; \
+	printf "[ SETUP ] ISO tool is missing. Install xorriso now? [y/N] "; \
+	if [ "$(AUTO_INSTALL)" = "yes" ] || [ "$(AUTO_INSTALL)" = "1" ]; then ans="y"; \
+	elif [ "$(AUTO_INSTALL)" = "no" ] || [ "$(AUTO_INSTALL)" = "0" ]; then ans="n"; \
+	else read ans; fi; \
+	case "$$ans" in \
+		y|Y|yes|YES|s|S|sim|SIM) $(MAKE) --no-print-directory install-iso-tool ;; \
+		*) echo "[ SETUP ] skipped ISO tool install"; exit 1 ;; \
+	esac
+install-iso-tool:
+	@set -e; \
+	echo "[ SETUP ] installing xorriso"; \
+	if command -v apt-get >/dev/null 2>&1; then \
+		apt-get update; \
+		apt-get install -y xorriso; \
+	elif command -v pkg >/dev/null 2>&1; then \
+		pkg install -y xorriso; \
+	elif command -v pacman >/dev/null 2>&1; then \
+		pacman -S --needed --noconfirm xorriso; \
+	else \
+		echo "[ SETUP ] no supported package manager found"; \
+		exit 1; \
+	fi
+ensure-ps2-packer:
+	@set -e; \
+	if [ -n "$(PS2_PACKER)" ] && [ -x "$(PS2_PACKER)" ]; then \
+		exit 0; \
+	fi; \
+	printf "[ SETUP ] ps2-packer is missing. Install now? [y/N] "; \
+	if [ "$(AUTO_INSTALL)" = "yes" ] || [ "$(AUTO_INSTALL)" = "1" ]; then ans="y"; \
+	elif [ "$(AUTO_INSTALL)" = "no" ] || [ "$(AUTO_INSTALL)" = "0" ]; then ans="n"; \
+	else read ans; fi; \
+	case "$$ans" in \
+		y|Y|yes|YES|s|S|sim|SIM) $(MAKE) --no-print-directory install-ps2-packer ;; \
+		*) echo "[ SETUP ] skipped ps2-packer install"; exit 1 ;; \
+	esac
+
+install-ps2-packer:
+	@set -e; \
+	echo "[ SETUP ] installing ps2-packer"; \
+	if command -v pacman >/dev/null 2>&1; then \
+		pacman -S --needed --noconfirm ps2-packer; \
+	else \
+		if command -v apt-get >/dev/null 2>&1; then \
+			apt-get update; \
+			apt-get install -y git make gcc g++ zlib1g-dev liblzma-dev liblzo2-dev liblz4-dev; \
+		elif command -v pkg >/dev/null 2>&1; then \
+			pkg install -y git make clang zlib xz lz4; \
+		fi; \
+		test -d "$(PS2SDK)" || (echo "[ SETUP ] PS2SDK missing. Run: make install-ps2dev-tar"; exit 1); \
+		mkdir -p "$(PS2DEV_CACHE_DIR)"; \
+		if [ ! -d "$(PS2_PACKER_SRC_DIR)/.git" ]; then \
+			rm -rf "$(PS2_PACKER_SRC_DIR)"; \
+			git clone --depth=1 "$(PS2_PACKER_REPO)" "$(PS2_PACKER_SRC_DIR)"; \
+		else \
+			git -C "$(PS2_PACKER_SRC_DIR)" pull --ff-only || true; \
+		fi; \
+		$(MAKE) -C "$(PS2_PACKER_SRC_DIR)" clean >/dev/null 2>&1 || true; \
+		$(MAKE) -C "$(PS2_PACKER_SRC_DIR)" install PREFIX="$(PS2DEV)" PS2DEV="$(PS2DEV)" PS2SDK="$(PS2SDK)"; \
+	fi; \
+	if [ -x "$(PS2DEV)/bin/ps2-packer" ] || command -v ps2-packer >/dev/null 2>&1; then \
+		echo "[ SETUP ] ps2-packer installed"; \
+	else \
+		echo "[ SETUP ] ps2-packer install failed"; \
+		exit 1; \
+	fi
+
+ensure-local-ps2-packer:
+	@set -e; \
+	if [ -x "$(PS2_PACKER_LOCAL)" ] && [ -f "$(PS2_PACKER_SRC_DIR)/stub/lzma-1d00-stub" ]; then \
+		exit 0; \
+	fi; \
+	printf "[ SETUP ] ps2-packer/stubs are missing. Build now? [y/N] "; \
+	if [ "$(AUTO_INSTALL)" = "yes" ] || [ "$(AUTO_INSTALL)" = "1" ]; then ans="y"; \
+	elif [ "$(AUTO_INSTALL)" = "no" ] || [ "$(AUTO_INSTALL)" = "0" ]; then ans="n"; \
+	else read ans; fi; \
+	case "$$ans" in \
+		y|Y|yes|YES|s|S|sim|SIM) ;; \
+		*) echo "[ SETUP ] skipped ps2-packer build"; exit 1 ;; \
+	esac; \
+	host_cc=$$(command -v cc 2>/dev/null || command -v gcc 2>/dev/null || command -v clang 2>/dev/null || true); \
+	if [ -z "$$host_cc" ]; then \
+		echo "ERROR: no host C compiler found"; \
+		echo "Install with: apt install build-essential"; \
+		exit 1; \
+	fi; \
+	if ! command -v git >/dev/null 2>&1; then \
+		echo "ERROR: git not found"; \
+		exit 1; \
+	fi; \
+	if [ ! -d "$(PS2_PACKER_SRC_DIR)/.git" ]; then \
+		echo "[ PACK ] fetching ps2-packer source"; \
+		rm -rf "$(PS2_PACKER_SRC_DIR)"; \
+		mkdir -p "$(dir $(PS2_PACKER_SRC_DIR))"; \
+		git clone --depth=1 "$(PS2_PACKER_REPO_URL)" "$(PS2_PACKER_SRC_DIR)"; \
+	fi; \
+	echo "[ PACK ] building ps2-packer with stubs"; \
+	PATH="$(PS2DEV)/bin:$(PS2DEV)/ee/bin:$(PS2DEV)/iop/bin:$(PS2DEV)/dvp/bin:$(PS2SDK)/bin:$$PATH" \
+	$(MAKE) -C "$(PS2_PACKER_SRC_DIR)" all CC="$$host_cc" BIN2C="$(BIN2C)" PS2DEV="$(PS2DEV)" PS2SDK="$(PS2SDK)" >/dev/null; \
+	test -x "$(PS2_PACKER_LOCAL)" || (echo "ERROR: local ps2-packer was not built"; exit 1); \
+	test -f "$(PS2_PACKER_SRC_DIR)/stub/lzma-1d00-stub" || (echo "ERROR: ps2-packer stub was not built"; exit 1)
