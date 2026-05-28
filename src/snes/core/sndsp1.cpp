@@ -1049,13 +1049,6 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
                 m_uDataCounter = 0;
                 m_uFsmState    = FSM_READ_DATA;
                 m_uSR         &= (Uint8)~SR_DRC;
-                // O proximo byte que a CPU escrever e' o MSB da
-                // primeira word de parametro.  DRS=1 indica que o
-                // proximo acesso e' o byte ALTO do DR (MSB-first).
-                // Sem isso os bytes de cada word ficam invertidos
-                // e todos os parametros numericos chegam com
-                // endianness trocado (bug fatal para Mario Kart).
-                m_uSR |= SR_DRS;
                 break;
             }
         }
@@ -1076,10 +1069,6 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
                     m_uDataCounter = 0;
                     m_uDR          = (Uint16)m_OutWords[0];
                     m_uFsmState    = FSM_WRITE_DATA;
-                    // Primeiro byte que a CPU le e' o MSB do primeiro
-                    // resultado.  Garantimos DRS=1 para que ReadData
-                    // devolva DR>>8 (byte alto) primeiro.
-                    m_uSR |= SR_DRS;
                 } else {
                     m_uDR       = 0x0080;
                     m_uFsmState = FSM_WAIT_CMD;
@@ -1106,8 +1095,6 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
                     Execute(m_uCommand);
                     m_uDataCounter = 0;
                     m_uDR = (Uint16)m_OutWords[0];
-                    // Reinicia ciclo de leitura: primeiro byte = MSB
-                    m_uSR |= SR_DRS;
                 } else {
                     m_uDR       = 0x0080;
                     m_uFsmState = FSM_WAIT_CMD;
@@ -1115,8 +1102,6 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
                 }
             } else {
                 m_uDR = (Uint16)m_OutWords[m_uDataCounter];
-                // Proximo word pronto: primeiro byte lido = MSB
-                m_uSR |= SR_DRS;
             }
         }
         break;
