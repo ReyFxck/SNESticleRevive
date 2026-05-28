@@ -1011,20 +1011,33 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
     if (!(m_uSR & SR_RQM)) return;
 
     // bind DR <-> rData segundo DRS (byte alto / byte baixo)
+    //
+    // O DSP-1 real usa MSB-first: o primeiro byte de cada word de
+    // 16-bit e' o byte alto.  Apos o Reset (DRS=0), o PRIMEIRO byte
+    // que a CPU transfere deve ir/vir do byte ALTO do DR.  O toggle
+    // XOR no switch abaixo inverte DRS a cada acesso, entao com
+    // DRS=0 inicial:
+    //   1o byte: DRS=0 -> byte ALTO  (MSB)
+    //   2o byte: DRS=1 -> byte BAIXO (LSB)
+    //
+    // Portanto:  DRS=0 -> MSB,  DRS=1 -> LSB  (invertido do que o
+    // nome "DRS" sugeriria ingenuamente).
     if (bRead) {
-        if (m_uSR & SR_DRS) rData = (Uint8)(m_uDR >> 8);
-        else                rData = (Uint8)(m_uDR & 0xFF);
+        if (m_uSR & SR_DRS) rData = (Uint8)(m_uDR & 0xFF);
+        else                rData = (Uint8)(m_uDR >> 8);
     } else {
         if (m_uSR & SR_DRS) {
-            m_uDR = (Uint16)((m_uDR & 0x00FF) | ((Uint16)rData << 8));
-        } else {
             m_uDR = (Uint16)((m_uDR & 0xFF00) | rData);
+        } else {
+            m_uDR = (Uint16)((m_uDR & 0x00FF) | ((Uint16)rData << 8));
         }
     }
 
     switch (m_uFsmState) {
     case FSM_WAIT_CMD: {
-        m_uCommand = (Uint8)m_uDR;
+        // O opcode e' um byte unico escrito com DRS=0, que agora
+        // vai para o byte ALTO do DR.  Extraimos de la.
+        m_uCommand = (Uint8)(m_uDR >> 8);
         if (!(m_uCommand & 0xC0)) {
             switch (m_uCommand & 0x3F) {
             case 0x1A:
