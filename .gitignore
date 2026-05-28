@@ -10,3 +10,6 @@ build/
 *.elf
 *.log
 *.bak*
+
+# Local PS2DEV environment
+.ps2dev-env
