@@ -1010,15 +1010,38 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
     // espera de RQM
     if (!(m_uSR & SR_RQM)) return;
 
-    // bind DR <-> rData segundo DRS (byte alto / byte baixo)
-    if (bRead) {
-        if (m_uSR & SR_DRS) rData = (Uint8)(m_uDR >> 8);
-        else                rData = (Uint8)(m_uDR & 0xFF);
+    // O DSP-1 tem dois modos de transferencia controlados por DRC:
+    //
+    //   DRC=1 (8-bit)  -> fase de OPCODE: um unico byte, no byte BAIXO
+    //                     do DR.  m_uCommand le o byte baixo.  Manter
+    //                     este caminho intacto e' o que faz o jogo dar
+    //                     boot e passar no self-test do DSP-1.
+    //
+    //   DRC=0 (16-bit) -> fase de DADOS: palavra de 16 bits transferida
+    //                     MSB-first (big-endian).  O 1o acesso (DRS=0)
+    //                     e' o byte ALTO; o 2o acesso (DRS=1) e' o byte
+    //                     BAIXO.
+    //
+    // A versao anterior usava a mesma logica de DRS para os dois modos,
+    // o que mantinha o opcode certo mas TROCAVA os bytes de cada word
+    // de dados (o 1o byte ia para o byte baixo em vez do alto).  Isso
+    // fazia todos os parametros numericos chegarem com endianness
+    // invertido -> Mario Kart com karts fora da tela, pista e mini-mapa
+    // quebrados.  F-Zero (sem DSP-1) nao era afetado.
+    if (m_uSR & SR_DRC) {
+        // ---- 8-bit: opcode no byte baixo ----
+        if (bRead) rData = (Uint8)(m_uDR & 0xFF);
+        else       m_uDR = (Uint16)((m_uDR & 0xFF00) | rData);
     } else {
-        if (m_uSR & SR_DRS) {
-            m_uDR = (Uint16)((m_uDR & 0x00FF) | ((Uint16)rData << 8));
+        // ---- 16-bit: dados MSB-first ----
+        if (bRead) {
+            if (m_uSR & SR_DRS) rData = (Uint8)(m_uDR & 0xFF);   // 2o: LSB
+            else                rData = (Uint8)(m_uDR >> 8);     // 1o: MSB
         } else {
-            m_uDR = (Uint16)((m_uDR & 0xFF00) | rData);
+            if (m_uSR & SR_DRS)
+                m_uDR = (Uint16)((m_uDR & 0xFF00) | rData);              // 2o: LSB
+            else
+                m_uDR = (Uint16)((m_uDR & 0x00FF) | ((Uint16)rData << 8)); // 1o: MSB
         }
     }
 
