@@ -132,5 +132,93 @@ int main() {
         }
     }
 
+    // ========== Range (op 0x18): colisao 3D ==========
+    // out = (X^2+Y^2+Z^2 - R^2) >> 15.  Sinal: <0 dentro, >0 fora.
+    {
+        struct { int16_t X,Y,Z,R; const char* esp; } cs[] = {
+            { 0x100, 0, 0, 0x200, "dentro (<0)" },
+            { 0x300, 0, 0, 0x200, "fora   (>0)" },
+            { 0x200, 0, 0, 0x200, "borda  (~0)" },
+        };
+        printf("\n[Range] (colisao 3D)\n");
+        for (int i=0;i<3;i++){
+            sendByte(dsp,0x18);
+            sendWord(dsp,cs[i].X); sendWord(dsp,cs[i].Y);
+            sendWord(dsp,cs[i].Z); sendWord(dsp,cs[i].R);
+            int16_t r = readWord(dsp);
+            printf("  X=0x%04X R=0x%04X -> %6d  (esperado %s)\n",
+                   (uint16_t)cs[i].X,(uint16_t)cs[i].R, r, cs[i].esp);
+        }
+    }
+
+    // ========== Attitude + Subjective/Objective (orientacao) ==========
+    // Constroi matriz de atitude (rotacao ortonormal * S/2) e verifica
+    // que Objective(Subjective(v)) preserva a DIRECAO de v (matriz
+    // ortonormal => M^T M = (S/2)^2 I).  Se a matriz estiver corrompida
+    // a direcao muda -> fisica do aviao diverge -> "explode".
+    {
+        // Attitude A (op 0x01): S, Rz, Ry, Rx
+        sendByte(dsp, 0x01);
+        sendWord(dsp, 0x7FFF); // S (escala)
+        sendWord(dsp, 0x1000); // Rz (~22 graus)
+        sendWord(dsp, 0x0800); // Ry
+        sendWord(dsp, 0x2000); // Rx (~45 graus)
+        // Attitude nao tem saida (nOut=0)
+
+        int16_t vF=0x4000, vL=0x1000, vU=0x0800;
+        sendByte(dsp, 0x03);   // Subjective: F,L,U -> X,Y,Z
+        sendWord(dsp,vF); sendWord(dsp,vL); sendWord(dsp,vU);
+        int16_t X=readWord(dsp), Y=readWord(dsp), Z=readWord(dsp);
+
+        sendByte(dsp, 0x09);   // Objective: X,Y,Z -> F,L,U
+        sendWord(dsp,X); sendWord(dsp,Y); sendWord(dsp,Z);
+        int16_t F2=readWord(dsp), L2=readWord(dsp), U2=readWord(dsp);
+
+        // razao deve ser ~constante entre os 3 eixos se direcao preservada
+        printf("\n[Attitude] Subjective(0x4000,0x1000,0x0800) -> (%d,%d,%d)\n", X,Y,Z);
+        printf("           Objective(...) -> (%d,%d,%d)  (deve ser ~ k*(0x4000,0x1000,0x0800))\n", F2,L2,U2);
+        double r0 = vF? (double)F2/vF : 0, r1 = vL? (double)L2/vL : 0, r2 = vU? (double)U2/vU : 0;
+        printf("           razoes F/L/U = %.4f / %.4f / %.4f  %s\n", r0, r1, r2,
+               (fabs(r0-r1)<0.05 && fabs(r1-r2)<0.05) ? "OK (direcao preservada)" : "<-- DIVERGE (matriz suspeita)");
+    }
+
+    // ========== Gyrate (op 0x14): integrador de atitude ==========
+    // 6 in (Az,Ax,Ay, U,F,L) -> 3 out (nova atitude).  Com taxa de
+    // rotacao zero (U=F=L=0) a atitude deve voltar INALTERADA.  Se
+    // mudar, o integrador esta bugado -> aviao gira sozinho -> crash.
+    {
+        int16_t Az=0x1000, Ax=0x0800, Ay=0x2000;
+        sendByte(dsp, 0x14);
+        sendWord(dsp, Az); sendWord(dsp, Ax); sendWord(dsp, Ay);
+        sendWord(dsp, 0); sendWord(dsp, 0); sendWord(dsp, 0); // U,F,L = 0
+        int16_t o0=readWord(dsp), o1=readWord(dsp), o2=readWord(dsp);
+        printf("\n[Gyrate] taxa=0  in(Az=0x%04X,Ax=0x%04X,Ay=0x%04X)\n",
+               (uint16_t)Az,(uint16_t)Ax,(uint16_t)Ay);
+        printf("         out(0x%04X,0x%04X,0x%04X)  %s\n",
+               (uint16_t)o0,(uint16_t)o1,(uint16_t)o2,
+               (o0==Az&&o1==Ax&&o2==Ay) ? "OK (inalterada)" : "<-- DIVERGE (gira sozinho!)");
+    }
+
+    // ========== Gyrate com taxa != 0  e  Polar identidade ==========
+    {
+        // Gyrate com taxa pequena: atitude deve mudar POUCO (sanidade)
+        sendByte(dsp, 0x14);
+        sendWord(dsp, 0x1000); sendWord(dsp, 0x0000); sendWord(dsp, 0x0000);
+        sendWord(dsp, 0x0100); sendWord(dsp, 0x0000); sendWord(dsp, 0x0000);
+        int16_t g0=readWord(dsp), g1=readWord(dsp), g2=readWord(dsp);
+        printf("\n[Gyrate] taxa pequena U=0x100 -> (0x%04X,0x%04X,0x%04X)  (Az~0x1000+ small)\n",
+               (uint16_t)g0,(uint16_t)g1,(uint16_t)g2);
+
+        // Polar (op 0x1C): 6 in (Az,Ay,Ax, X,Y,Z) -> 3 out.  Angulos 0
+        // => sem rotacao => saida ~ (X,Y,Z).
+        sendByte(dsp, 0x1C);
+        sendWord(dsp, 0); sendWord(dsp, 0); sendWord(dsp, 0);
+        sendWord(dsp, 0x2000); sendWord(dsp, 0x1000); sendWord(dsp, 0x0800);
+        int16_t px=readWord(dsp), py=readWord(dsp), pz=readWord(dsp);
+        printf("[Polar]  ang=0 (0x2000,0x1000,0x0800) -> (0x%04X,0x%04X,0x%04X)  %s\n",
+               (uint16_t)px,(uint16_t)py,(uint16_t)pz,
+               (abs(px-0x2000)<=8 && abs(py-0x1000)<=8 && abs(pz-0x0800)<=8) ? "OK (~entrada)" : "<-- DIVERGE");
+    }
+
     return 0;
 }
