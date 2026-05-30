@@ -14,7 +14,7 @@ ROOT=../..
 ln -sf "$ROOT/src/snes/core/sndsp1.cpp" sndsp1.cpp
 
 g++ -O0 -g -fsigned-char \
-    -include cstdlib \
+    -include cstdlib -include cmath \
     -I . \
     -I "$ROOT/src/common/base" \
     -I "$ROOT/src/snes/core" \
