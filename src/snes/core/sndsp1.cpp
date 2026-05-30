@@ -888,16 +888,14 @@ void SNDSP1::Execute(Uint8 uCmd)
         // valores >= 31 e' UB em C++ (na EE do PS2 com gcc 3.x devolve
         // 0/lixo).  Aqui saturamos para evitar isso.
         //
-        // IMPORTANTE: refE NAO pode ser sobrescrito aqui!  Ele e'
-        // reusado nas linhas finais "m_E_Les - E2 + refE + E7" para
-        // calcular o expoente das saidas H/V.  Mantemos o "shift"
-        // como variavel local apenas para a logica de saturacao.
-        //
-        // Sequencia conforme documentacao publica do DSP-1:
-        //   aux4 = (C12 << (16 - refE)) >> 1;
-        //   if (aux4 == -1) aux4 = 0;
-        // O ">>1" deve vir ANTES do teste por -1 (caso aux4=-2 vire
-        // -1 apos o shift, o teste deve apanhar essa correcao).
+        // IMPORTANTE: apos o shift de C12, refE e' REPROPOSITADO para
+        // armazenar (16 - refE) -- o novo expoente de referencia usado
+        // no calculo final do expoente de H/V ("m_E_Les - E2 + refE").
+        // O NormalizeDouble devolve expoentes positivos grandes (~19),
+        // entao sem esta reatribuicao o expoente final fica positivo e
+        // o DenormalizeAndClip satura H/V em +-32767 (objetos somem da
+        // tela).  Confirmado via bancada de teste host-side (Project
+        // saturava sem esta linha).
         {
             Int16 shift = (Int16)(16 - refE);
             if (shift >= 0) {
@@ -908,7 +906,7 @@ void SNDSP1::Execute(Uint8 uCmd)
                 if (r >= 31) aux4 = (aux4 < 0) ? -1 : 0;
                 else         aux4 >>= r;
             }
-            // (refE deve permanecer = min(E, E3, E4) original)
+            refE = shift;  // reposiciona refE = 16 - refE (expoente de saida)
         }
         aux4 >>= 1;
         if (aux4 == -1) aux4 = 0;
