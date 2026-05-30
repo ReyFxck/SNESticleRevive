@@ -797,12 +797,18 @@ void SNDSP1::Execute(Uint8 uCmd)
         m_CentreZ_C = C;
         m_CentreZ_E = E;
 
+        // LimAZS: sinaliza que o angulo de zenite foi clampeado.
+        // O algoritmo canonico usa esta flag (e nao "Azs == MaxAZS")
+        // para decidir se aplica a correcao de VOffset abaixo.  Usar
+        // a comparacao direta disparava a correcao em casos errados,
+        // bagunçando a perspectiva da pista (Raster) e da camera.
+        Bool bLimAZS = FALSE;
         Int16 MaxAZS = g_MaxAZS_Exp[-E];
         if (AZS < 0) {
             MaxAZS = (Int16)-MaxAZS;
-            if (AZS < MaxAZS + 1) AZS = (Int16)(MaxAZS + 1);
+            if (AZS < MaxAZS + 1) { AZS = (Int16)(MaxAZS + 1); bLimAZS = TRUE; }
         } else {
-            if (AZS > MaxAZS) AZS = MaxAZS;
+            if (AZS > MaxAZS) { AZS = MaxAZS; bLimAZS = TRUE; }
         }
 
         m_SinAZS = DSP1_Sin(AZS);
@@ -820,7 +826,7 @@ void SNDSP1::Execute(Uint8 uCmd)
         out[3] = m_CentreY;  // Cy
 
         Int16 Vof = 0;
-        if ((Azs != AZS) || (Azs == MaxAZS)) {
+        if ((Azs != AZS) || bLimAZS) {
             if (Azs == -32768) Azs = -32767;
             Int16 c2 = (Int16)(Azs - MaxAZS);
             if (c2 >= 0) c2--;
