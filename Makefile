@@ -43,9 +43,9 @@ TARGET        := $(OBJ_DIR)/SNESticle.elf
 TARGET_PACKED := $(OBJ_DIR)/SNESticle.packed.elf
 BIN2C   ?= $(PS2SDK)/bin/bin2c
 
-EE_CC ?= $(shell command -v ee-gcc 2>/dev/null || command -v mips64r5900el-ps2-elf-gcc 2>/dev/null || test -x $(PS2DEV)/ee/bin/ee-gcc && echo $(PS2DEV)/ee/bin/ee-gcc || test -x $(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc && echo $(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc)
-EE_CXX ?= $(shell command -v ee-g++ 2>/dev/null || command -v mips64r5900el-ps2-elf-g++ 2>/dev/null || test -x $(PS2DEV)/ee/bin/ee-g++ && echo $(PS2DEV)/ee/bin/ee-g++ || test -x $(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++ && echo $(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++)
-EE_STRIP ?= $(shell command -v ee-strip 2>/dev/null || command -v mips64r5900el-ps2-elf-strip 2>/dev/null || test -x $(PS2DEV)/ee/bin/ee-strip && echo $(PS2DEV)/ee/bin/ee-strip || test -x $(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip && echo $(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip)
+EE_CC ?= $(shell if command -v ee-gcc >/dev/null 2>&1; then echo ee-gcc; elif command -v mips64r5900el-ps2-elf-gcc >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-gcc; elif [ -x "$(PS2DEV)/ee/bin/ee-gcc" ]; then echo "$(PS2DEV)/ee/bin/ee-gcc"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc"; fi)
+EE_CXX ?= $(shell if command -v ee-g++ >/dev/null 2>&1; then echo ee-g++; elif command -v mips64r5900el-ps2-elf-g++ >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-g++; elif [ -x "$(PS2DEV)/ee/bin/ee-g++" ]; then echo "$(PS2DEV)/ee/bin/ee-g++"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++"; fi)
+EE_STRIP ?= $(shell if command -v ee-strip >/dev/null 2>&1; then echo ee-strip; elif command -v mips64r5900el-ps2-elf-strip >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-strip; elif [ -x "$(PS2DEV)/ee/bin/ee-strip" ]; then echo "$(PS2DEV)/ee/bin/ee-strip"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip"; fi)
 # ps2-packer is Pixel's LZMA self-extracting ELF packer
 # (https://github.com/ps2dev/ps2-packer, shipped with ps2dev/ps2dev).
 # When present the ISO embeds the packed ELF instead of the stripped
@@ -191,6 +191,7 @@ LIBS := \
 	-ldebug -lkernel -lc -lm -lstdc++ -lgcc
 
 SRCS := \
+    src/platform/ps2/ps2sdk_stubs.c \
 	src/common/media/bmpfile.cpp \
 	src/platform/ps2/cdvd/cd.c \
 	src/modules/cdvd/cdvd_rpc.c \
