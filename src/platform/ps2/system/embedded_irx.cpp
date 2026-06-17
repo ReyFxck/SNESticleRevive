@@ -292,3 +292,70 @@ extern "C" int NetIfLoadEmbeddedIrx(void)
     s_netif_loaded_result = 0;
     return 0;
 }
+
+/* Pad IRX stack bring-up.
+ *
+ * Modern PS2SDK-based controller stack.  Previously the project relied
+ * on the BIOS-resident \"rom0:XSIO2MAN + rom0:XMTAPMAN + rom0:XPADMAN\"
+ * trio loaded from src/platform/ps2/system/mainloop_iop.cpp.  That path
+ * works under PCSX2 / NetherSX2 because their emulated rom0: modules
+ * tolerate co-existing with the modern sio2man.irx we already load for
+ * the memory-card stack.  On a real PS2, however, XSIO2MAN tries to
+ * register the same SIO2 RPC services that the modern sio2man has
+ * already claimed, so XSIO2MAN loads but its RPC server never becomes
+ * usable; XPADMAN then opens but cannot talk to its SIO2 transport,
+ * and the controller silently never reports any data -- which is the
+ * exact symptom users see (\"menu shows up but controller does not
+ * respond on retail PS2 only\").
+ *
+ * The fix is the same pattern picodrive PS2, OPL, uLaunchELF and
+ * hugorsgarcia/PS2SNESticle use: stack the PS2SDK padman.irx
+ * (and optional mtapman.irx for multitap) on top of the modern
+ * sio2man.irx that the memcard bring-up already loaded.  PS2SDK
+ * libpad understands this padman natively and is what the EE-side
+ * input layer (src/platform/ps2/input/input.cpp) talks to via
+ * padInit / padPortOpen / padRead.
+ *
+ * Order:
+ *   1. padman.irx   - SIO2-based controller manager.  REQUIRED.
+ *                     sio2man.irx must already be loaded (by
+ *                     MemCardLoadEmbeddedIrx).
+ *   2. mtapman.irx  - multitap manager.  OPTIONAL.  Lets the player
+ *                     plug 3-5 controllers via a multitap on port 1/2.
+ *                     If it fails to load we still keep going with
+ *                     only the two physical pad slots.
+ *
+ * Returns 0 on success.  Returns -1 if padman failed (fatal -- caller
+ * should not call padInit / InputInit).  mtapman failures map to
+ * still-success because they only disable multitap, not the base pad.
+ * Safe to call multiple times -- subsequent calls return the cached
+ * result.
+ */
+static int s_pad_loaded_result = 1; /* 1 = not yet attempted */
+
+extern "C" int PadLoadEmbeddedIrx(void)
+{
+    int ret;
+
+    if (s_pad_loaded_result != 1) return s_pad_loaded_result;
+
+    ret = EmbeddedIrxLoad(padman_irx, sizeof(padman_irx), 0, NULL);
+    if (ret < 0)
+    {
+        printf("PadLoadEmbeddedIrx: padman.irx failed (%d)\n", ret);
+        s_pad_loaded_result = -1;
+        return s_pad_loaded_result;
+    }
+
+    /* mtapman is best-effort. Failure here just means no multitap
+       support; the base two-controller path keeps working. */
+    ret = EmbeddedIrxLoad(mtapman_irx, sizeof(mtapman_irx), 0, NULL);
+    if (ret < 0)
+    {
+        printf("PadLoadEmbeddedIrx: mtapman.irx failed (%d) "
+               "- multitap disabled, base pads still OK\n", ret);
+    }
+
+    s_pad_loaded_result = 0;
+    return 0;
+}
