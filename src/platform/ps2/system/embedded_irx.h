@@ -30,18 +30,23 @@ int  EmbeddedIrxLoad(const unsigned char *data,
    times -- subsequent calls are no-ops. */
 int  MemCardLoadEmbeddedIrx(void);
 
-/* Loads the network IRX stack (ps2dev9 + netman + smap + ps2ip) onto
-   the IOP from the buffers embedded in this ELF.  Replaces the
-   previous IRX search-path bring-up that tried to load PS2IPS.IRX /
-   PS2IP.IRX / PS2SMAP.IRX from host:, cdrom:, mc0:, etc.
+/* Loads the modern PS2SDK pad stack (padman.irx + mtapman.irx) onto
+   the IOP from the buffers embedded in this ELF.  Designed to stack
+   on top of the modern sio2man.irx already loaded by
+   MemCardLoadEmbeddedIrx() -- DO NOT call this before the memcard
+   bring-up, padman depends on sio2man's SIO2 transport.
+
+   Replaces the previous \"rom0:XSIO2MAN + rom0:XMTAPMAN + rom0:XPADMAN\"
+   BIOS path, which conflicted with the modern sio2man already loaded
+   for the memcard stack and was the root cause of \"controller works
+   in emulator but not on real PS2 hardware\".
 
    Returns 0 on success or a negative module-load error code:
-       -1  ps2dev9.irx failed
-       -2  netman.irx  failed
-       -3  smap.irx    failed
-       -4  ps2ip.irx   failed
-   Safe to call multiple times -- subsequent calls return the cached
-   result of the first attempt. */
+       -1  padman.irx  failed
+       -2  mtapman.irx failed (non-fatal: caller may ignore)
+   Safe to call multiple times -- subsequent calls are no-ops. */
+
+int  PadLoadEmbeddedIrx(void);
 int  NetIfLoadEmbeddedIrx(void);
 
 #ifdef __cplusplus
