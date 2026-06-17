@@ -358,7 +358,8 @@ SDK_EXTRA_IRX := ioptrap.irx poweroff.irx
 # init_ps2_filesystem_driver() brings up the modern cdfs.irx which
 # registers the cdfs: device with iomanX, and the browser / ROM
 # loader reach the disc through plain newlib stdio.
-EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv ps2dev9 netman smap ps2ip
+EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip
+
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
 AUDSRV_IRX_PATH  ?= $(PS2SDK)/iop/irx/audsrv.irx
@@ -366,6 +367,12 @@ FREESD_IRX_PATH  ?= $(PS2SDK)/iop/irx/freesd.irx
 SIO2MAN_IRX_PATH ?= $(PS2SDK)/iop/irx/sio2man.irx
 MCMAN_IRX_PATH   ?= $(PS2SDK)/iop/irx/mcman.irx
 MCSERV_IRX_PATH  ?= $(PS2SDK)/iop/irx/mcserv.irx
+# Modern PS2SDK pad / multitap manager. Stacks on top of the modern
+# sio2man.irx loaded by the memcard bring-up; works on real PS2 *and*
+# emulators, unlike the BIOS-resident rom0:XPADMAN that conflicts with
+# the already-loaded modern sio2man on retail hardware.
+PADMAN_IRX_PATH  ?= $(PS2SDK)/iop/irx/padman.irx
+MTAPMAN_IRX_PATH ?= $(PS2SDK)/iop/irx/mtapman.irx
 PS2DEV9_IRX_PATH ?= $(PS2SDK)/iop/irx/ps2dev9.irx
 NETMAN_IRX_PATH  ?= $(PS2SDK)/iop/irx/netman.irx
 SMAP_IRX_PATH    ?= $(PS2SDK)/iop/irx/smap.irx
@@ -402,6 +409,10 @@ $(EMBED_DIR)/mcman_irx.h: $(MCMAN_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,mcman_irx)
 $(EMBED_DIR)/mcserv_irx.h: $(MCSERV_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,mcserv_irx)
+$(EMBED_DIR)/padman_irx.h: $(PADMAN_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,padman_irx)
+$(EMBED_DIR)/mtapman_irx.h: $(MTAPMAN_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,mtapman_irx)
 $(EMBED_DIR)/ps2dev9_irx.h: $(PS2DEV9_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,ps2dev9_irx)
 $(EMBED_DIR)/netman_irx.h: $(NETMAN_IRX_PATH) | $(EMBED_DIR)
