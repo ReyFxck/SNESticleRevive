@@ -21,6 +21,8 @@
 #include "sio2man_irx.h"
 #include "mcman_irx.h"
 #include "mcserv_irx.h"
+#include "padman_irx.h"
+#include "mtapman_irx.h"
 #include "ps2dev9_irx.h"
 #include "netman_irx.h"
 #include "smap_irx.h"
