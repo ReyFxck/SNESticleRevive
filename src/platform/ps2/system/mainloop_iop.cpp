@@ -264,67 +264,77 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	/* SIO2MAN + MCMAN + MCSERV are loaded by MemCardLoadEmbeddedIrx()
 	   in app/main.cpp before we ever get here. The modern PS2SDK
 	   copies register with iomanX so newlib stdio fopen("mc0:/...")
-	   routes through them.
-
-	   Pad / multitap: previously this code tried to load the
-	   BIOS-resident X-variants (rom0:XSIO2MAN + rom0:XMTAPMAN +
-	   rom0:XPADMAN) and fell back to rom0:PADMAN when XSIO2MAN
-	   failed. That worked in emulators (PCSX2 / NetherSX2 tolerate
-	   the conflict between their emulated XSIO2MAN and the modern
-	   sio2man.irx we already have loaded) but FAILED ON REAL PS2
-	   HARDWARE -- the symptom users saw was "menu shows up but
-	   controller does not respond on retail PS2 only". Root cause:
-	   on real silicon XSIO2MAN tries to register the SIO2 RPC
-	   services that the modern sio2man has already claimed, so
-	   XSIO2MAN loads but its RPC server never becomes usable;
-	   XPADMAN then opens but cannot talk to its SIO2 transport
-	   and silently never reports any data. Custom libxpad
-	   (compiled with NEW_PADMAN) talking to a BIOS XPADMAN built
-	   against the legacy ROM_PADMAN protocol made things worse.
-
-	   Modern fix: stack the PS2SDK padman.irx (and optional
-	   mtapman.irx) on top of the modern sio2man.irx already
-	   running. PS2SDK libpad understands this padman natively
-	   on both real PS2 and emulators -- this is the same pattern
-	   picodrive PS2, OPL, uLaunchELF and hugorsgarcia/PS2SNESticle
-	   use. The libxpad / xpad* / xmtap* code path is no longer
-	   reached; _Input_bXPad stays FALSE and the input layer uses
-	   the standard libpad entry points throughout. */
-	BOOTLOG("[boot] PadLoadEmbeddedIrx: try\n");
-	if (PadLoadEmbeddedIrx() == 0)
+	   routes through them. */
+	/* Controller bring-up.
+	 *
+	 * The controller manager is loaded from the BIOS rom0: device and
+	 * stacked on top of the modern sio2man.irx that
+	 * MemCardLoadEmbeddedIrx() already brought up.  This is the recipe
+	 * used by the official PS2SDK pad sample (rom0:SIO2MAN +
+	 * rom0:PADMAN) and by ReyFxck/InfinityStation (rom0:XSIO2MAN +
+	 * rom0:XPADMAN), both of which boot the controller correctly on
+	 * retail PS2 hardware.  PS2SDK libpad auto-detects the padman
+	 * protocol version, so rom0:PADMAN works regardless of BIOS
+	 * revision.
+	 *
+	 * IMPORTANT: loading rom0:PADMAN does NOT create a second SIO2
+	 * owner -- it is the pad *manager* and simply binds to the
+	 * sio2man.irx already running, so the XSIO2MAN-style RPC clash
+	 * that broke the old code does not apply here.
+	 *
+	 * The previously-embedded padman.irx loaded fine under emulators
+	 * but left the controller dead on real PS2; it is kept only as a
+	 * fallback for the rare IOP image that does not ship rom0:PADMAN.
+	 * Every step is mirrored to the on-screen log via ScrPrintf so it
+	 * can be diagnosed on a real console without an EE SIO cable. */
 	{
-		BOOTLOG("[boot] PadLoadEmbeddedIrx OK -> padInit/InputInit(FALSE)\n");
-		if (padInit(0) != 1)
+		int pad_ok = 0;
+
+		BOOTLOG("[boot] pad: trying rom0:PADMAN\n");
+		ScrPrintf("PAD: trying rom0:PADMAN\n");
+		if (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0)
 		{
-			BOOTLOG("[boot] padInit failed -- controller unavailable\n");
+			/* multitap is best-effort: failure only disables the
+			   3-5 player multitap path, the two physical ports keep
+			   working. */
+			IOPLoadModule("rom0:MTAPMAN", NULL, 0, NULL);
+			pad_ok = 1;
 		}
 		else
 		{
-			InputInit(FALSE);
-			BOOTLOG("[boot] padInit/InputInit done\n");
+			ScrPrintf("PAD: rom0:PADMAN unavailable -> embedded padman.irx\n");
+			if (PadLoadEmbeddedIrx() == 0)
+			{
+				ScrPrintf("PAD: embedded padman.irx loaded\n");
+				pad_ok = 1;
+			}
+			else
+			{
+				ScrPrintf("PAD: embedded padman.irx FAILED\n");
+			}
 		}
-	}
-	else
-	{
-		/* Embedded padman failed to load (e.g. bin2c'd image
-		   refused to start). As a last-resort safety net try
-		   the BIOS rom0:PADMAN -- every retail PS2 BIOS ships
-		   one and PS2SDK libpad auto-detects its protocol
-		   version (ROM_PADMAN vs NEW_PADMAN) so this still
-		   works. */
-		BOOTLOG("[boot] PadLoadEmbeddedIrx failed -> falling back to rom0:PADMAN\n");
-		if (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0)
+
+		if (pad_ok)
 		{
-			BOOTLOG("[boot] padInit/InputInit(FALSE) (rom0 fallback)\n");
-			if (padInit(0) == 1)
+			int pi = padInit(0);
+			BOOTLOG("[boot] padInit=%d (expect 1)\n", pi);
+			ScrPrintf("PAD: padInit=%d (expect 1)\n", pi);
+			if (pi == 1)
 			{
 				InputInit(FALSE);
+				ScrPrintf("PAD: InputInit done\n");
 				BOOTLOG("[boot] padInit/InputInit done\n");
 			}
 			else
 			{
+				ScrPrintf("PAD: padInit FAILED - controller unavailable\n");
 				BOOTLOG("[boot] padInit failed -- controller unavailable\n");
 			}
+		}
+		else
+		{
+			ScrPrintf("PAD: no controller module - controller unavailable\n");
+			BOOTLOG("[boot] no controller module loaded\n");
 		}
 	}
 

@@ -9,6 +9,12 @@
 #include "input.h"
 #include "hw.h"
 
+/* On-screen log (defined in mainloop_ui.cpp, C linkage).  Used so the
+   controller bring-up is visible on a real PS2 where plain printf/DLog
+   output never reaches the screen (DLog goes to the EE SIO FIFO, which
+   needs a serial cable to read). */
+extern "C" void ScrPrintf(const char *pFormat, ...);
+
 static char _Input_PadBuf[INPUT_MAXPADS][256]
     __attribute__((aligned(64)))
     __attribute__((section(".bss")));
@@ -155,6 +161,7 @@ static int _Input_InitPad(int port, int slot, void *buffer)
 
     if (ret == 0)
     {
+        ScrPrintf("Input: FAILED to open pad p=%d s=%d\n", port, slot);
         printf("Input: failed to open pad port=%d slot=%d\n", port, slot);
         return -1;
     }
@@ -213,6 +220,8 @@ static int _Input_InitPad(int port, int slot, void *buffer)
     }
     printf("Input: pad p=%d s=%d opened, mode=0x%X (%s)\n",
            port, slot, mode, mode_name);
+    ScrPrintf("Input: pad p=%d s=%d mode=0x%X (%s)\n",
+              port, slot, mode, mode_name);
 
     return 0;
 }
@@ -442,10 +451,30 @@ void InputPoll(void)
            analog deflection is exposed separately via
            InputGetPadDpadFromAnalog so the menu/UI layer can opt in. */
         _Input_PadData[iPad] = uData;
-        _Input_PadAnalog[iPad] =
-              ((Uint32)padStatus.ljoy_v << 24)
-            | ((Uint32)padStatus.ljoy_h << 16)
-            | ((Uint32)padStatus.rjoy_v << 8)
-            | ((Uint32)padStatus.rjoy_h);
+
+        /* Only trust the analog axes when the pad is actually in an
+           analog mode.  padStatus.mode packs the controller terminal
+           id in its high nibble (0x7 == DualShock 2 / analog).  A
+           digital-only pad -- or a DualShock that has not finished
+           negotiating analog yet -- returns a short report where
+           padRead does NOT fill ljoy_*/rjoy_*, so those bytes stay 0
+           from the memset above.  0 reads as a full UP+LEFT deflection,
+           which used to inject a permanent phantom UP+LEFT into the
+           menu on real PS2 (emulators always present an analog-centred
+           pad, which is exactly why the bug was invisible under
+           emulation).  Centre the axes for non-analog pads so the
+           synthesiser stays neutral. */
+        if ((padStatus.mode >> 4) == 0x7)
+        {
+            _Input_PadAnalog[iPad] =
+                  ((Uint32)padStatus.ljoy_v << 24)
+                | ((Uint32)padStatus.ljoy_h << 16)
+                | ((Uint32)padStatus.rjoy_v << 8)
+                | ((Uint32)padStatus.rjoy_h);
+        }
+        else
+        {
+            _Input_PadAnalog[iPad] = 0x80808080U; /* centred -> no phantom dpad */
+        }
     }
 }
