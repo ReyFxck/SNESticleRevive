@@ -122,6 +122,23 @@ void MainLoopRender()
 		}
 
 
+        /* NES-only: clear the back buffer before blitting the NES
+           frame.  The display is double-buffered and nothing else
+           clears it, so any region the NES quad does not cover (it is
+           drawn at dy=8, and the framebuffer keeps content from 2
+           frames ago) shows stale pixels that, during scrolling, look
+           like a duplicated / ghosted previous frame.  Gated to the
+           NES path so the SNES per-scanline blender output (drawn
+           straight into the framebuffer earlier this frame) is never
+           erased.  Black matches the NES overscan/border. */
+        if (_pSystem == _pNes)
+        {
+            PolyTexture(NULL);
+            PolyBlend(FALSE);
+            PolyColor4f(0.0f, 0.0f, 0.0f, 1.0f);
+            PolyRect(0, 0, MAINLOOP_SCREENWIDTH, MAINLOOP_SCREENHEIGHT);
+        }
+
         PolyBlend(FALSE);
         PolyTexture(&_OutTex);
 //        PolyUV(0,0,256,240);
