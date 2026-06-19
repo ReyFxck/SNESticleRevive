@@ -71,7 +71,17 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
     y1&=0xFFFF;
     x1&=0xFFFF;
 
+	/* Draw the glyph with a light fake-bold: the base sprite plus one
+	   copy 1px to the right and one 1px down (in 256x240 logical units;
+	   FIXED4(1) == 16).  The UI is upscaled to 640x448 by a non-integer
+	   factor (2.5x H, ~1.87x V), which makes 1-texel strokes ragged and
+	   clips the left edge of glyphs like 'F'; widening every stroke to
+	   ~2 texels makes it survive the upscale and reads bolder/clearer.
+	   The font is opaque 1-bit, so overlapping copies just thicken the
+	   stroke without darkening it.  NEAREST is kept so it stays crisp. */
 	GPPrimTexRect(x0, y0, u0, v0, x1, y1, u1, v1, 10, uColor, 1);
+	GPPrimTexRect((x0 + 16) & 0xFFFF, y0, u0, v0, (x1 + 16) & 0xFFFF, y1, u1, v1, 10, uColor, 1);
+	GPPrimTexRect(x0, (y0 + 16) & 0xFFFF, u0, v0, x1, (y1 + 16) & 0xFFFF, u1, v1, 10, uColor, 1);
     return width;
 
 }
@@ -107,18 +117,12 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
     if (!pTexture) return;
 
 
-	// Set texture/clut regs.
-	//
-	// Filter = LINEAR (last arg = 1).  The whole UI is authored in a
-	// 256x240 logical space and scaled to the 640x448 framebuffer by a
-	// NON-integer factor (2.5x horizontal, ~1.87x vertical).  With
-	// NEAREST sampling that uneven ratio duplicates some glyph rows /
-	// columns and drops others, so thin bitmap-font strokes come out
-	// ragged -- the "fonte entrecortada em algumas linhas" users see,
-	// on real PS2 AND on emulators, at any output resolution (the
-	// artifact is baked into the 640x448 surface, not a display-side
-	// effect).  LINEAR interpolates across the scale and removes it.
-	GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth, pTexture->uWidthLog2, pTexture->uHeightLog2, pTexture->eFormat, 0, 0, 0, 1);
+	// Set texture/clut regs.  NEAREST (last arg = 0): keep the text
+	// crisp.  LINEAR was tried to hide the non-integer 256x240->640x448
+	// upscale jaggies but it just blurred the text and made it harder
+	// to read; instead _FontDrawChar draws each glyph with a light
+	// fake-bold so thin strokes survive the upscale (see note there).
+	GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth, pTexture->uWidthLog2, pTexture->uHeightLog2, pTexture->eFormat, 0, 0, 0, 0);
 
 	while (*pStr) 
 	{
