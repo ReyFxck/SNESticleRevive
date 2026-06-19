@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "mainloop_debug.h"
 #include "mainloop_shared.h"
@@ -256,17 +257,41 @@ _SJPCMMix = new SJPCMMixBuffer(32000, TRUE);
     printf("MainLoopInit\n");
 	#endif
 
-	/* The original code does 120 * WaitForNextVRstart(1) here to let
-	   the GS settle. On NetherSX2 VBlank interrupts may or may not
-	   fire depending on what state the GS is in - if they don't, the
-	   120-iter loop becomes an infinite hang. Reduce to 1 iter and
-	   probe before/after so we can tell which side it died on. */
-BOOTLOG("[boot] WaitForNextVRstart begin (120 iters)\n");
+	/* Let the GS/PCRTC settle WITHOUT ever hanging.
+	 *
+	 * The original `while (loop--) WaitForNextVRstart(1);` spins on
+	 * VRcount, which is ONLY advanced by the VBlank INTC handler
+	 * installed in app/main.cpp (hw.s).  If that handler stops
+	 * advancing the counter the loop never returns -- an infinite hang
+	 * on the very first frame.
+	 *
+	 * That is exactly what happens under OPL's GSM (and passive
+	 * PS2toHDMI cables) forcing 480p: GSM takes over the vsync path to
+	 * re-program the PCRTC every field, the app's VRcount stops
+	 * incrementing, and the boot freezes on a black screen full of
+	 * leftover-VRAM colour bars -- the symptom Adriano photographed.
+	 * Without GSM the VBlank fires normally and the old loop completed,
+	 * which is why the bug only showed up with GSM / progressive output.
+	 *
+	 * Fix: use the non-blocking TestVRstart() and cap the wait with a
+	 * usleep-based wall-clock ceiling, so a stalled / hijacked VBlank
+	 * can never freeze the boot.  Same approach already used for the
+	 * pad waits in input.cpp (which were moved off WaitForNextVRstart
+	 * for this very reason).  The ScrPrintf doubles as a diagnostic: if
+	 * "settle done" shows timed_out=1 on a real console, the VBlank was
+	 * indeed stalled (confirms the GSM hang); timed_out=0 means it fired
+	 * normally and any remaining GSM glitch is geometry, not a hang. */
+	BOOTLOG("[boot] GS settle wait (timeout-safe) begin\n");
+	ScrPrintf("VID: GS settle wait...\n");
 	{
-		int loop = 60 * 2;
-		while (loop--)
-			WaitForNextVRstart(1);
+		int base  = TestVRstart();
+		int guard = 1500;            /* 1500 * 1ms = 1.5s hard ceiling */
+		while ((TestVRstart() - base) < 60 && guard-- > 0)
+			usleep(1000);
+		ScrPrintf("VID: GS settle done (vbl=%d timed_out=%d)\n",
+		          TestVRstart() - base, (guard <= 0));
 	}
+	BOOTLOG("[boot] GS settle wait done\n");
 // create textures in main ram
     _fbTexture[0] = new CRenderSurface;
     _fbTexture[1] = new CRenderSurface;
