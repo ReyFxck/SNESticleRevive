@@ -107,8 +107,18 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
     if (!pTexture) return;
 
 
-	// Set texture/clut regs
-	GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth, pTexture->uWidthLog2, pTexture->uHeightLog2, pTexture->eFormat, 0, 0, 0, 0);
+	// Set texture/clut regs.
+	//
+	// Filter = LINEAR (last arg = 1).  The whole UI is authored in a
+	// 256x240 logical space and scaled to the 640x448 framebuffer by a
+	// NON-integer factor (2.5x horizontal, ~1.87x vertical).  With
+	// NEAREST sampling that uneven ratio duplicates some glyph rows /
+	// columns and drops others, so thin bitmap-font strokes come out
+	// ragged -- the "fonte entrecortada em algumas linhas" users see,
+	// on real PS2 AND on emulators, at any output resolution (the
+	// artifact is baked into the 640x448 surface, not a display-side
+	// effect).  LINEAR interpolates across the scale and removes it.
+	GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth, pTexture->uWidthLog2, pTexture->uHeightLog2, pTexture->eFormat, 0, 0, 0, 1);
 
 	while (*pStr) 
 	{
