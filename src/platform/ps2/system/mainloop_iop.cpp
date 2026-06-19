@@ -267,50 +267,44 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   routes through them. */
 	/* Controller bring-up.
 	 *
-	 * The controller manager is loaded from the BIOS rom0: device and
-	 * stacked on top of the modern sio2man.irx that
-	 * MemCardLoadEmbeddedIrx() already brought up.  This is the recipe
-	 * used by the official PS2SDK pad sample (rom0:SIO2MAN +
-	 * rom0:PADMAN) and by ReyFxck/InfinityStation (rom0:XSIO2MAN +
-	 * rom0:XPADMAN), both of which boot the controller correctly on
-	 * retail PS2 hardware.  PS2SDK libpad auto-detects the padman
-	 * protocol version, so rom0:PADMAN works regardless of BIOS
-	 * revision.
+	 * The PS2SDK padman.irx is embedded in the ELF and stacked on top
+	 * of the modern sio2man.irx that MemCardLoadEmbeddedIrx() already
+	 * loaded -- the SAME, single sio2man serves both the memory card
+	 * and the pad.  This is exactly the recipe Open-PS2-Loader uses
+	 * (src/system.c loads embedded sio2man -> mcman -> mcserv ->
+	 * padman, then src/opl.c calls padInit(0); no mtapman, no
+	 * mtapInit), and OPL boots the controller on every retail PS2.
 	 *
-	 * IMPORTANT: loading rom0:PADMAN does NOT create a second SIO2
-	 * owner -- it is the pad *manager* and simply binds to the
-	 * sio2man.irx already running, so the XSIO2MAN-style RPC clash
-	 * that broke the old code does not apply here.
-	 *
-	 * The previously-embedded padman.irx loaded fine under emulators
-	 * but left the controller dead on real PS2; it is kept only as a
-	 * fallback for the rare IOP image that does not ship rom0:PADMAN.
+	 * An earlier revision switched this to rom0:PADMAN, but the OPL /
+	 * picodrive evidence shows the embedded path is correct on real
+	 * hardware -- the dead-controller symptom traced to the EE-side
+	 * analog handling (see input.cpp: the left stick was read even on
+	 * a digital pad, injecting a phantom UP+LEFT), not to the module
+	 * source.  rom0:PADMAN is kept only as a last-resort fallback for
+	 * the rare IOP image whose embedded padman refuses to start.
 	 * Every step is mirrored to the on-screen log via ScrPrintf so it
 	 * can be diagnosed on a real console without an EE SIO cable. */
 	{
 		int pad_ok = 0;
 
-		BOOTLOG("[boot] pad: trying rom0:PADMAN\n");
-		ScrPrintf("PAD: trying rom0:PADMAN\n");
-		if (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0)
+		BOOTLOG("[boot] pad: load embedded padman.irx\n");
+		ScrPrintf("PAD: loading embedded padman.irx\n");
+		if (PadLoadEmbeddedIrx() == 0)
 		{
-			/* multitap is best-effort: failure only disables the
-			   3-5 player multitap path, the two physical ports keep
-			   working. */
-			IOPLoadModule("rom0:MTAPMAN", NULL, 0, NULL);
+			ScrPrintf("PAD: embedded padman.irx loaded\n");
 			pad_ok = 1;
 		}
 		else
 		{
-			ScrPrintf("PAD: rom0:PADMAN unavailable -> embedded padman.irx\n");
-			if (PadLoadEmbeddedIrx() == 0)
+			ScrPrintf("PAD: embedded padman.irx FAILED -> rom0:PADMAN\n");
+			if (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0)
 			{
-				ScrPrintf("PAD: embedded padman.irx loaded\n");
+				ScrPrintf("PAD: rom0:PADMAN loaded\n");
 				pad_ok = 1;
 			}
 			else
 			{
-				ScrPrintf("PAD: embedded padman.irx FAILED\n");
+				ScrPrintf("PAD: rom0:PADMAN FAILED\n");
 			}
 		}
 

@@ -142,7 +142,11 @@ static void _Input_WaitPadReady(int port, int slot)
     do
     {
         ret = _Input_GetPadState(port, slot);
-        if (ret == PAD_STATE_STABLE || ret == PAD_STATE_DISCONN)
+        /* Like OPL's waitPadReady(): FINDCTP1 is a legitimately
+           readable state, not just STABLE.  Treating it as "still
+           busy" made a pad that settles in FINDCTP1 burn the whole
+           5 s timeout on real hardware. */
+        if (ret == PAD_STATE_STABLE || ret == PAD_STATE_FINDCTP1 || ret == PAD_STATE_DISCONN)
             break;
         usleep(100 * 1000);
     } while (--tm > 0);
@@ -179,29 +183,50 @@ static int _Input_InitPad(int port, int slot, void *buffer)
        The previous incantation called xpadExitPressMode before the
        SetMainMode, which is a no-op on a freshly opened pad (press
        mode was never entered) and just slows boot.  Drop it. */
-    if (_Input_bXPad)
-        xpadSetMainMode(port, slot, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK);
-    else
-        padSetMainMode(port, slot, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK);
+    /* Like OPL's initializePad(): only request DualShock if the pad
+       actually advertises it in its mode table.  Digital-only pads
+       (and many third-party pads / guns) have no DualShock entry, so
+       locking DualShock on them just wastes boot time and can leave
+       the pad in a confused state.  PAD_TYPE_DUALSHOCK == 0x7. */
+    {
+        int n_modes = _Input_InfoMode(port, slot, PAD_MODETABLE, -1);
+        int has_ds  = 0;
+        int i;
 
-    /* CRITICAL on real PS2 hardware: padSetMainMode dispatches an RPC
-       to the IOP and returns immediately.  The pad sits in
-       PAD_RSTAT_BUSY for ~1-2 frames while the IOP renegotiates the
-       link, then transitions to COMPLETE (or FAILED for pads that
-       can't go DualShock).  If we proceed without waiting, the second
-       _Input_WaitPadReady below sees the pad still in STABLE (because
-       the busy transition hasn't happened yet) and exits immediately,
-       and _Input_InitPad returns leaving the pad still in digital
-       mode.
+        for (i = 0; i < n_modes; i++)
+        {
+            if (_Input_InfoMode(port, slot, PAD_MODETABLE, i) == PAD_TYPE_DUALSHOCK)
+            {
+                has_ds = 1;
+                break;
+            }
+        }
 
-       PCSX2 / NetherSX2 happen to complete the RPC synchronously so
-       this race never fires under emulation, which is why this bug is
-       invisible until someone tests on actual hardware. */
-    _Input_WaitReqComplete(port, slot);
+        if (has_ds)
+        {
+            if (_Input_bXPad)
+                xpadSetMainMode(port, slot, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK);
+            else
+                padSetMainMode(port, slot, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK);
 
-    /* Now let the post-command state settle back to STABLE before
-       returning. */
-    _Input_WaitPadReady(port, slot);
+            /* CRITICAL on real PS2 hardware: padSetMainMode dispatches
+               an RPC to the IOP and returns immediately.  The pad sits
+               in PAD_RSTAT_BUSY for ~1-2 frames while the IOP
+               renegotiates the link, then transitions to COMPLETE (or
+               FAILED).  If we proceed without waiting, the
+               _Input_WaitPadReady below sees the pad still STABLE
+               (the busy transition hasn't happened yet) and exits
+               immediately, leaving the pad in digital mode.
+
+               PCSX2 / NetherSX2 complete the RPC synchronously so this
+               race never fires under emulation -- invisible until
+               someone tests on actual hardware. */
+            _Input_WaitReqComplete(port, slot);
+
+            /* Let the post-command state settle back to STABLE. */
+            _Input_WaitPadReady(port, slot);
+        }
+    }
 
     /* Surface the negotiated mode in the boot log so users / their
        friends with retail PS2s can confirm at a glance whether we
