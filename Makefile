@@ -202,7 +202,7 @@ SRCS := \
 	src/app/emushell.cpp \
 	src/app/emusys.cpp \
 	src/common/base/file.cpp \
-	src/common/base/font_04b16b.c \
+	src/common/base/font_m6x11.cpp \
 	src/common/base/font.cpp \
 	src/platform/ps2/gs/gpfifo.c \
 	src/platform/ps2/gs/gpprim.c \

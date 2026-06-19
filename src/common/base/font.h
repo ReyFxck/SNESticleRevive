@@ -43,5 +43,19 @@ void FontDelete(FontT *pFont);
 void FontParseChars(FontT *pFont, class CSurface *pSurface, const Char *pCharList);
 void FontMake(FontT *pFont, class CSurface *pSurface, Uint32 uVramAddr, const Char *pCharList);
 
+/* Explicit glyph-map font (e.g. m6x11): each entry maps an ASCII code to
+   a rectangle in the atlas.  Avoids FontParseChars' fragile gap-detection
+   (which would split glyphs that contain a fully-transparent column, like
+   the double-quote) and gives every glyph a uniform height. */
+typedef struct
+{
+    Uint16 c;
+    Uint16 u, v, w, h;
+} FontMapEntryT;
+
+void FontMakeFromMap(FontT *pFont, class CSurface *pSurface, Uint32 uVramAddr,
+                     const FontMapEntryT *pMap, Int32 nCount,
+                     Int32 uSpaceW, Int32 uLineH);
+
 #endif
 
