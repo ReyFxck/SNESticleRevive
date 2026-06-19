@@ -358,6 +358,11 @@ void InfoNES_Wait( void )
 {
 }
 
+/* NES APU output sample rate, captured by InfoNES_SoundOpen (44100 by
+   default in this build).  Used to resample at a constant ratio to the
+   mix buffer's input rate so the pitch is correct. */
+static int s_NesSampleRate = 44100;
+
 void InfoNES_SoundInit( void )
 {
 }
@@ -366,13 +371,12 @@ int InfoNES_SoundOpen( int samples_per_sync, int sample_rate )
 {
     /* The audsrv/SPU2 stream is brought up by the platform at boot
        (SjPCM_Init in mainloop_iop.cpp) and handed to us per-frame as
-       g_pNesMixBuffer, so there is nothing to open here.  InfoNES
-       renders samples_per_sync samples per frame at sample_rate
-       (735 @ 44100 by default); InfoNES_SoundOutput resamples by count
-       to whatever the mix buffer wants, so we don't need to keep
-       these. */
+       g_pNesMixBuffer, so there is nothing to open here.  We DO keep
+       the NES sample rate: InfoNES_SoundOutput needs it to resample at
+       a constant ratio (NES rate -> mix-buffer rate) so the pitch is
+       correct. */
     (void)samples_per_sync;
-    (void)sample_rate;
+    s_NesSampleRate = (sample_rate > 0) ? sample_rate : 44100;
     return 1;
 }
 
@@ -392,10 +396,10 @@ void InfoNES_SoundClose( void )
    per frame (from InfoNES_pAPUVsync).  Mix them down to signed 16-bit
    mono and push them into the SAME CMixBuffer the SNES uses (audsrv
    backend).  Only one system runs at a time, so the SNES audio path is
-   untouched.  InfoNES runs at 44100 Hz while the mix buffer expects its
-   own input rate (32000); resampling by sample COUNT
-   (samples -> GetOutputSamples()) does the rate conversion implicitly
-   and keeps the audsrv ring fed without drift. */
+   untouched.  InfoNES emits a fixed 1/60 s block (samples @ 44100) per
+   frame, so we resample at a CONSTANT ratio to the mix buffer's input
+   rate (32000) to keep the pitch correct; the audsrv backend drops any
+   overflow best-effort, so we don't chase its fill level here. */
 void InfoNES_SoundOutput( int samples, BYTE *wave1, BYTE *wave2,
                           BYTE *wave3, BYTE *wave4, BYTE *wave5 )
 {
@@ -424,8 +428,22 @@ void InfoNES_SoundOutput( int samples, BYTE *wave1, BYTE *wave2,
         s_NesMix[i] = (Int16)s;
     }
 
-    /* 2) Resample by count to what the mix buffer wants this frame. */
-    nOut = pMix->GetOutputSamples();
+    /* 2) Resample at a CONSTANT ratio (NES rate -> mix-buffer input
+          rate) so the pitch is correct and stable.
+          NOTE: do NOT use the mix buffer's GetOutputSamples() here.
+          That returns a buffer-fill-driven, per-frame-varying count;
+          the SNES path can satisfy it because its SPC engine renders
+          an arbitrary number of samples on demand, but InfoNES emits a
+          fixed 1/60 s (samples) per frame.  Resampling that fixed block
+          to a varying count stretches/compresses it every frame and
+          warbles the pitch -- exactly the reported symptom. */
+    {
+        Uint32 mixRate = 32000, mixBits = 16, mixCh = 2;
+        int    nesRate = (s_NesSampleRate > 0) ? s_NesSampleRate : 44100;
+        pMix->GetFormat(&mixRate, &mixBits, &mixCh);
+        if (mixRate == 0) mixRate = 32000;
+        nOut = (Int32)(((long long)samples * (long long)mixRate) / (long long)nesRate);
+    }
     if (nOut <= 0)
         nOut = samples;
     if (nOut > capOut)
