@@ -482,7 +482,7 @@ void InputPoll(void)
            id in its high nibble (0x7 == DualShock 2 / analog).  A
            digital-only pad -- or a DualShock that has not finished
            negotiating analog yet -- returns a short report where
-           padRead does NOT fill ljoy_*/rjoy_*, so those bytes stay 0
+           padRead does NOT fill the ljoy/rjoy bytes, so they stay 0
            from the memset above.  0 reads as a full UP+LEFT deflection,
            which used to inject a permanent phantom UP+LEFT into the
            menu on real PS2 (emulators always present an analog-centred
