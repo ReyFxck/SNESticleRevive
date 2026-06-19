@@ -35,6 +35,7 @@
 #include "emuinput.h"     /* Emu::SysInputT */
 #include "rendersurface.h"
 #include "pixelformat.h"
+#include "mixbuffer.h"    /* CMixBuffer (audsrv-backed audio sink) */
 
 /* SNES bit layout we need to translate FROM.  _MainLoopInput is still
    wired to _MainLoopSnesInput at this point so every connected pad in
@@ -51,6 +52,7 @@
    linkage mismatch on these globals would silently break at link time. */
 extern CRenderSurface       *g_pNesTargetSurface;
 extern Emu::SysInputT       *g_pNesInputState;
+extern CMixBuffer           *g_pNesMixBuffer;
 
 /* SpriteJustHit lives in InfoNES.cpp but isn't externed by InfoNES.h.
    Declare it here so InfoNES_RunOneFrame can mirror the sprite-0 hit
@@ -362,6 +364,13 @@ void InfoNES_SoundInit( void )
 
 int InfoNES_SoundOpen( int samples_per_sync, int sample_rate )
 {
+    /* The audsrv/SPU2 stream is brought up by the platform at boot
+       (SjPCM_Init in mainloop_iop.cpp) and handed to us per-frame as
+       g_pNesMixBuffer, so there is nothing to open here.  InfoNES
+       renders samples_per_sync samples per frame at sample_rate
+       (735 @ 44100 by default); InfoNES_SoundOutput resamples by count
+       to whatever the mix buffer wants, so we don't need to keep
+       these. */
     (void)samples_per_sync;
     (void)sample_rate;
     return 1;
@@ -371,15 +380,82 @@ void InfoNES_SoundClose( void )
 {
 }
 
+/* Channel-mix tuning.  Per-sample byte ranges produced by this InfoNES
+   build: square1/2 0..255, triangle 0..255, noise 0..15, dpcm 0..127
+   (summed ~0..900, unsigned).  We subtract a DC centre and scale into
+   signed 16-bit with clamping.  Adjust if the mix is too quiet / loud
+   or clips. */
+#define NES_MIX_CENTER  280
+#define NES_MIX_SCALE   36
+
+/* InfoNES hands us the five APU channels as separate byte buffers once
+   per frame (from InfoNES_pAPUVsync).  Mix them down to signed 16-bit
+   mono and push them into the SAME CMixBuffer the SNES uses (audsrv
+   backend).  Only one system runs at a time, so the SNES audio path is
+   untouched.  InfoNES runs at 44100 Hz while the mix buffer expects its
+   own input rate (32000); resampling by sample COUNT
+   (samples -> GetOutputSamples()) does the rate conversion implicitly
+   and keeps the audsrv ring fed without drift. */
 void InfoNES_SoundOutput( int samples, BYTE *wave1, BYTE *wave2,
                           BYTE *wave3, BYTE *wave4, BYTE *wave5 )
 {
-    (void)samples;
-    (void)wave1;
-    (void)wave2;
-    (void)wave3;
-    (void)wave4;
-    (void)wave5;
+    CMixBuffer  *pMix = g_pNesMixBuffer;
+    Int32        nOut;
+    int          i;
+    static Int16 s_NesMix[1024];
+    static Int16 s_NesOut[2048];
+    const int    capMix = (int)(sizeof(s_NesMix) / sizeof(s_NesMix[0]));
+    const int    capOut = (int)(sizeof(s_NesOut) / sizeof(s_NesOut[0]));
+
+    if (!pMix || samples <= 0)
+        return;
+
+    if (samples > capMix)
+        samples = capMix;
+
+    /* 1) Mix the five channels -> signed 16-bit mono at the NES rate. */
+    for (i = 0; i < samples; i++)
+    {
+        int s = (int)wave1[i] + (int)wave2[i] + (int)wave3[i]
+              + (int)wave4[i] + (int)wave5[i];
+        s = (s - NES_MIX_CENTER) * NES_MIX_SCALE;
+        if (s >  32767) s =  32767;
+        if (s < -32768) s = -32768;
+        s_NesMix[i] = (Int16)s;
+    }
+
+    /* 2) Resample by count to what the mix buffer wants this frame. */
+    nOut = pMix->GetOutputSamples();
+    if (nOut <= 0)
+        nOut = samples;
+    if (nOut > capOut)
+        nOut = capOut;
+
+    if (nOut == samples)
+    {
+        pMix->OutputSamplesMono(s_NesMix, nOut);
+    }
+    else
+    {
+        /* 16.16 fixed-point linear interpolation. */
+        unsigned int step = ((unsigned int)samples << 16) / (unsigned int)nOut;
+        unsigned int pos  = 0;
+        int j;
+        for (j = 0; j < nOut; j++)
+        {
+            int idx  = (int)(pos >> 16);
+            int frac = (int)(pos & 0xFFFF);
+            int a, b;
+            if (idx >= samples) idx = samples - 1;
+            a = s_NesMix[idx];
+            b = (idx + 1 < samples) ? s_NesMix[idx + 1] : a;
+            s_NesOut[j] = (Int16)(a + (((b - a) * frac) >> 16));
+            pos += step;
+        }
+        pMix->OutputSamplesMono(s_NesOut, nOut);
+    }
+
+    pMix->Flush();
 }
 
 void InfoNES_MessageBox( char *pszMsg, ... )

@@ -47,6 +47,11 @@
    impossible (single-threaded EE side). */
 CRenderSurface       *g_pNesTargetSurface = NULL;
 Emu::SysInputT       *g_pNesInputState    = NULL;
+/* Per-frame audio sink, stashed by ExecuteFrame so the InfoNES sound
+   callback (InfoNES_SoundOutput) can reach it.  Points at the SAME
+   CMixBuffer the SNES uses (audsrv backend); only one system runs at a
+   time, so this never collides with the SNES audio path. */
+CMixBuffer           *g_pNesMixBuffer     = NULL;
 
 /* One-frame runner.  Defined in InfoNES_System_PS2.cpp so it has direct
    access to InfoNES.cpp's globals (PPU_Scanline, SPRRAM, MapperHSync,
@@ -267,12 +272,12 @@ void NesSystem::ExecuteFrame(Emu::SysInputT *pInput,
                              CMixBuffer *pMixBuf,
                              ModeE eMode)
 {
-    (void)pMixBuf;     /* Phase 4 */
     (void)eMode;
 
     /* Stash the per-frame pointers so the C callbacks can find them. */
     g_pNesTargetSurface = pTarget;
     g_pNesInputState    = pInput;
+    g_pNesMixBuffer     = pMixBuf;
 
     if (!m_bRomReady || !pTarget)
     {
@@ -284,6 +289,7 @@ void NesSystem::ExecuteFrame(Emu::SysInputT *pInput,
         if (pTarget) DiagnosticPaint(pTarget);
         g_pNesTargetSurface = NULL;
         g_pNesInputState    = NULL;
+        g_pNesMixBuffer     = NULL;
         m_uFrameTick++;
         m_uFrame++;
         return;
@@ -296,6 +302,7 @@ void NesSystem::ExecuteFrame(Emu::SysInputT *pInput,
 
     g_pNesTargetSurface = NULL;
     g_pNesInputState    = NULL;
+    g_pNesMixBuffer     = NULL;
     m_uFrameTick++;
     m_uFrame++;
 }
