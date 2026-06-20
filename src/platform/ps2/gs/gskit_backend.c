@@ -58,16 +58,18 @@ static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
 /* Video mode + display offset (selectable in the Settings screen).
-   Default is 480i (NTSC 640x448) - the mode emulators and TVs handle
-   well.  240p is the sharpest on a real CRT/PS2 but NetherSX2 renders it
-   stretched/slow, so it stays opt-in.  480p is for GSM/HDMI. */
-int g_GskVideoMode = GSK_VIDMODE_480I;
+   Default is 240p.  Each mode uses a framebuffer whose WIDTH:HEIGHT is
+   ~4:3 so it displays correctly: 240p=320x240, 480i=640x448, 480p=640x480.
+   (The old bug forced 640 width on 240p -> 640x240 = 2.67:1 -> stretched
+   wide on the emulator.) */
+int g_GskVideoMode = GSK_VIDMODE_240P;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
-static int _gsk_vck         = 4;   /* display-offset VCK units            */
-static int _gsk_fb_height   = 448; /* active FB height                    */
-static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
+static int _gsk_vck         = 2;   /* display-offset VCK units            */
+static int _gsk_fb_width    = 320; /* active FB width                     */
+static int _gsk_fb_height   = 240; /* active FB height                    */
+static int _gsk_active_mode = GSK_VIDMODE_240P; /* mode the GS is in now   */
 
 /* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
    overscan/widescreen can be recomputed from a clean baseline. */
@@ -139,6 +141,7 @@ void GSK_Init(int width, int height,
         _pGsGlobal->Mode      = GS_MODE_DTV_480P;
         _pGsGlobal->Interlace = GS_NONINTERLACED;
         _pGsGlobal->Field     = GS_FRAME;
+        _gsk_fb_width         = 640;
         _gsk_fb_height        = 480;
         _gsk_vck              = 2;
         break;
@@ -148,18 +151,20 @@ void GSK_Init(int width, int height,
         _pGsGlobal->Mode      = GS_MODE_NTSC;
         _pGsGlobal->Interlace = GS_INTERLACED;
         _pGsGlobal->Field     = GS_FIELD;
+        _gsk_fb_width         = 640;
         _gsk_fb_height        = 448;
         _gsk_vck              = 4;
         break;
 
     case GSK_VIDMODE_240P:
     default:
-        /* NTSC 640x240 progressive - native SNES/NES, sharpest on a CRT.
-           (Default.)  Note: many HDMI/GSM setups dislike 240p; those
-           users should pick 480p in the Settings screen. */
+        /* NTSC 320x240 progressive (4:3) - native SNES/NES, sharpest on
+           a CRT.  320x240 = 4:3 so it displays correctly (640x240 would
+           be 2.67:1 -> stretched wide). */
         _pGsGlobal->Mode      = GS_MODE_NTSC;
         _pGsGlobal->Interlace = GS_NONINTERLACED;
         _pGsGlobal->Field     = GS_FRAME;
+        _gsk_fb_width         = 320;
         _gsk_fb_height        = 240;
         _gsk_vck              = 2;
         break;
@@ -174,7 +179,7 @@ void GSK_Init(int width, int height,
      * GPPrimSetScale so the existing 256x240 UI layout is preserved. */
     (void)width;
     (void)height;
-    _pGsGlobal->Width  = GSK_FB_WIDTH;
+    _pGsGlobal->Width  = _gsk_fb_width;
     _pGsGlobal->Height = _gsk_fb_height;
     _pGsGlobal->PSM    = psm;
     _pGsGlobal->PSMZ   = psmz;
@@ -249,7 +254,7 @@ void GSK_Init(int width, int height,
      * call site (PolyRect, FontPuts, browser, modals, menu, ...) onto
      * the physical framebuffer.  See the long comment at the top of
      * gpprim.c for the full rationale. */
-    GPPrimSetScale((float)GSK_FB_WIDTH   / (float)GSK_LOGICAL_W,
+    GPPrimSetScale((float)_gsk_fb_width  / (float)GSK_LOGICAL_W,
                    (float)_gsk_fb_height / (float)GSK_LOGICAL_H);
 
     /* PMODE / DISPLAY1 / DISPLAY2 are now left at the values that
