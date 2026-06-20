@@ -19,14 +19,14 @@ extern "C" {
 #define FIXED4(_x) ((Int32)((_x)*16.0f))
 #define FIXED7(_x) ((Int32)((_x)*128.0f))
 
-extern unsigned char       _FontData_m6x11[];
-extern const FontMapEntryT _FontMap_m6x11[];
-extern const int           _FontMap_m6x11_count;
-extern const int           _FontTex_m6x11_w;
-extern const int           _FontTex_m6x11_h;
-extern const int           _Font_m6x11_spacew;
-extern const int           _Font_m6x11_lineh;
-extern const int           _Font_m6x11_maxw;
+extern unsigned char       _FontData_ui[];
+extern const FontMapEntryT _FontMap_ui[];
+extern const int           _FontMap_ui_count;
+extern const int           _FontTex_ui_w;
+extern const int           _FontTex_ui_h;
+extern const int           _Font_ui_spacew;
+extern const int           _Font_ui_lineh;
+extern const int           _Font_ui_maxw;
 
 struct FontStateT
 {
@@ -114,7 +114,7 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
     if (!pTexture) return;
 
 
-	// Set texture/clut regs.  NEAREST keeps the m6x11 bitmap crisp.
+	// Set texture/clut regs.  NEAREST keeps the m5x7 bitmap crisp.
 	GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth, pTexture->uWidthLog2, pTexture->uHeightLog2, pTexture->eFormat, 0, 0, 0, 0);
 
 	while (*pStr) 
@@ -295,19 +295,19 @@ void FontInit(Uint32 uVramAddr)
 {
     CSurface Surface;
 
-    // m6x11 (Daniel Linssen): embedded RGBA8 atlas + explicit glyph map.
-    Surface.Set(_FontData_m6x11, _FontTex_m6x11_w, _FontTex_m6x11_h,
-                _FontTex_m6x11_w * 4, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+    // UI font (m5x7, Daniel Linssen): embedded RGBA8 atlas + explicit map.
+    Surface.Set(_FontData_ui, _FontTex_ui_w, _FontTex_ui_h,
+                _FontTex_ui_w * 4, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
 
     FontMakeFromMap(&_Font_Default, &Surface, uVramAddr,
-                    _FontMap_m6x11, _FontMap_m6x11_count,
-                    _Font_m6x11_spacew, _Font_m6x11_lineh);
+                    _FontMap_ui, _FontMap_ui_count,
+                    _Font_ui_spacew, _Font_ui_lineh);
 
     FontMakeFromMap(&_Font_Fixed, &Surface, uVramAddr,
-                    _FontMap_m6x11, _FontMap_m6x11_count,
-                    _Font_m6x11_spacew, _Font_m6x11_lineh);
+                    _FontMap_ui, _FontMap_ui_count,
+                    _Font_ui_spacew, _Font_ui_lineh);
     /* monospace cell = widest glyph so nothing overlaps in fixed mode */
-    _Font_Fixed.uFixedWidth = _Font_m6x11_maxw;
+    _Font_Fixed.uFixedWidth = _Font_ui_maxw;
 
     FontSetFont(0, &_Font_Default);
     FontSetFont(1, &_Font_Fixed);
