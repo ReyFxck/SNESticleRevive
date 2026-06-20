@@ -86,10 +86,15 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
     width  = pFontChar->u1 - pFontChar->u0;
     height = pFontChar->v1 - pFontChar->v0;
 
-	u0 = (pFontChar->u0 << 4) + 8;
-	v0 = (pFontChar->v0 << 4) + 8;
-	u1 = (pFontChar->u1 << 4) + 8;
-	v1 = (pFontChar->v1 << 4) + 8;
+	/* No half-texel bias here.  The old +8 (0.5 texel) offset was for the
+	   fractional NEAREST scale; with the exact integer 2x draw it shifts
+	   sampling half a texel right and clips the LEFT edge of every glyph.
+	   Sampling from the texel edge (offset 0) pixel-doubles cleanly and
+	   never reads the 1px transparent gap around each glyph. */
+	u0 = (pFontChar->u0 << 4);
+	v0 = (pFontChar->v0 << 4);
+	u1 = (pFontChar->u1 << 4);
+	v1 = (pFontChar->v1 << 4);
 
     sx = GPPrimGetScaleX(); if (sx <= 0.0f) sx = 1.0f;
     sy = GPPrimGetScaleY(); if (sy <= 0.0f) sy = 1.0f;
