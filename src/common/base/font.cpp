@@ -267,6 +267,15 @@ void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
 {
     Uint32 uR, uG, uB, uA;
 
+    /* Tint all "white" text amber/gold (user preference).  Any request
+       for pure white (1,1,1) is remapped to a warm gold; every other
+       colour (cyan headers, green, red, ...) passes through untouched.
+       Centralising it here recolours white text on ALL screens at once. */
+    if (r >= 1.0f && g >= 1.0f && b >= 1.0f)
+    {
+        r = 1.00f; g = 0.84f; b = 0.30f;
+    }
+
     uR = FIXED7(r);
     uG = FIXED7(g);
     uB = FIXED7(b);

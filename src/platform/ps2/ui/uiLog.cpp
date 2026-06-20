@@ -68,7 +68,7 @@ void CLogScreen::Draw()
 	_MenuHeader(vy, "Message Log");
 	vy+=FontGetHeight() * 2;
 
-	FontColor4f(0.5, 0.5f, 0.5f, 1.0f);
+	FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);   // -> amber via FontColor4f remap
 
 	if (m_iScroll >= (m_nMessages - m_nDisplayLines))
 		m_iScroll = (m_nMessages - m_nDisplayLines);
