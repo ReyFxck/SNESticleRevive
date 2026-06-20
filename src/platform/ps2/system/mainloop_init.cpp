@@ -256,7 +256,7 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
        480i before the card was available.  Default (480i) users take the
        else branch and the GS is left exactly as it was. */
     VideoSettingsLoad();
-    if (g_GskVideoMode != GSK_VIDMODE_480I)
+    if (g_GskVideoMode != GSK_GetActiveVideoMode())
     {
         GSK_ReinitVideo();
         FontInit(FONT_TEX);

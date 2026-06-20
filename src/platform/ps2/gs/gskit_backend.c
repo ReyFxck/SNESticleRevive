@@ -58,12 +58,14 @@ static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
 /* Video mode + display offset (selectable in the Settings screen).
-   Defaults reproduce the legacy 480i behaviour exactly. */
-int g_GskVideoMode = GSK_VIDMODE_480I;
+   Default is 240p (NTSC progressive) - sharpest on a CRT and the native
+   SNES/NES resolution.  480i/480p/PAL are opt-in via the Settings screen. */
+int g_GskVideoMode = GSK_VIDMODE_240P;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
-static int _gsk_vck       = 4;             /* display-offset VCK units      */
-static int _gsk_fb_height = GSK_FB_HEIGHT; /* active FB height (448 or 480)  */
+static int _gsk_vck         = 2;   /* display-offset VCK units            */
+static int _gsk_fb_height   = 240; /* active FB height                    */
+static int _gsk_active_mode = GSK_VIDMODE_240P; /* mode the GS is in now   */
 
 /* Saved GSK_Init arguments so GSK_ReinitVideo() can replay them. */
 static int _gsk_arg_w, _gsk_arg_h, _gsk_arg_dispx, _gsk_arg_dispy;
@@ -120,27 +122,58 @@ void GSK_Init(int width, int height,
      * natively, every PS2toHDMI cable expects it as the primary input,
      * and GSM's adaptation tables target it directly. */
     (void)interlace;
-    if (g_GskVideoMode == GSK_VIDMODE_480P)
+    switch (g_GskVideoMode)
     {
-        /* DTV 480p progressive.  This is what OPL GSM / PS2toHDMI expect
-           natively, so the PCRTC does no interlace conversion and the
-           red/green stripe artefact goes away.  Same setup FCEUmm-PS2
-           uses for its progressive "DTV 720x480" mode. */
+    case GSK_VIDMODE_480P:
+        /* DTV 480p progressive: what OPL GSM / PS2toHDMI expect natively,
+           so the PCRTC does no interlace conversion (no RGB stripes). */
         _pGsGlobal->Mode      = GS_MODE_DTV_480P;
         _pGsGlobal->Interlace = GS_NONINTERLACED;
         _pGsGlobal->Field     = GS_FRAME;
         _gsk_fb_height        = 480;
         _gsk_vck              = 2;
-    }
-    else
-    {
-        /* Default: NTSC/PAL 640x448 interlaced (480i) - legacy path,
-           byte-for-byte the same as before. */
+        break;
+
+    case GSK_VIDMODE_480I:
+        /* NTSC 640x448 interlaced (the previous default). */
+        _pGsGlobal->Mode      = GS_MODE_NTSC;
         _pGsGlobal->Interlace = GS_INTERLACED;
         _pGsGlobal->Field     = GS_FIELD;
-        _gsk_fb_height        = GSK_FB_HEIGHT;
+        _gsk_fb_height        = 448;
         _gsk_vck              = 4;
+        break;
+
+    case GSK_VIDMODE_576I:
+        /* PAL 640x512 interlaced. */
+        _pGsGlobal->Mode      = GS_MODE_PAL;
+        _pGsGlobal->Interlace = GS_INTERLACED;
+        _pGsGlobal->Field     = GS_FIELD;
+        _gsk_fb_height        = 512;
+        _gsk_vck              = 4;
+        break;
+
+    case GSK_VIDMODE_288P:
+        /* PAL 640x256 progressive. */
+        _pGsGlobal->Mode      = GS_MODE_PAL;
+        _pGsGlobal->Interlace = GS_NONINTERLACED;
+        _pGsGlobal->Field     = GS_FRAME;
+        _gsk_fb_height        = 256;
+        _gsk_vck              = 2;
+        break;
+
+    case GSK_VIDMODE_240P:
+    default:
+        /* NTSC 640x240 progressive - native SNES/NES, sharpest on a CRT.
+           (Default.)  Note: many HDMI/GSM setups dislike 240p; those
+           users should pick 480p in the Settings screen. */
+        _pGsGlobal->Mode      = GS_MODE_NTSC;
+        _pGsGlobal->Interlace = GS_NONINTERLACED;
+        _pGsGlobal->Field     = GS_FRAME;
+        _gsk_fb_height        = 240;
+        _gsk_vck              = 2;
+        break;
     }
+    _gsk_active_mode = g_GskVideoMode;
 
     /* Force the framebuffer dimensions to 640x448 regardless of what
      * the caller passed.  See the GSK_FB_WIDTH/HEIGHT defines above and
@@ -295,6 +328,11 @@ void GSK_ReinitVideo(void)
     _gsk_initialised = 0;
     GSK_Init(_gsk_arg_w, _gsk_arg_h, _gsk_arg_dispx, _gsk_arg_dispy,
              _gsk_arg_psm, _gsk_arg_psmz, _gsk_arg_mode, _gsk_arg_interlace);
+}
+
+int GSK_GetActiveVideoMode(void)
+{
+    return _gsk_active_mode;
 }
 
 Uint32 GSK_VramAllocTBP(Uint32 nBytes)

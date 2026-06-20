@@ -65,7 +65,7 @@ void VideoSettingsLoad(void)
 	if (MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg)) &&
 	    cfg.magic == VIDEOCFG_MAGIC)
 	{
-		if (cfg.mode == GSK_VIDMODE_480P || cfg.mode == GSK_VIDMODE_480I)
+		if (cfg.mode >= 0 && cfg.mode < GSK_VIDMODE_COUNT)
 			g_GskVideoMode = cfg.mode;
 
 		if (cfg.offx >= -64 && cfg.offx <= 64) g_GskDispOffX = cfg.offx;
@@ -116,10 +116,14 @@ static void _VideoHeader(int vy, const char *pStr)
 
 void CVideoScreen::Draw()
 {
+	static const char *names[GSK_VIDMODE_COUNT] = {
+		"240p (default)", "480i", "480p (GSM/HDMI)", "576i (PAL)", "288p (PAL)"
+	};
 	Int32 vy = 15;
 	char  buf[16];
-	const char *pMode = (g_GskVideoMode == GSK_VIDMODE_480P)
-	                  ? "480p (GSM/HDMI)" : "480i (default)";
+	int   m = (g_GskVideoMode >= 0 && g_GskVideoMode < GSK_VIDMODE_COUNT)
+	        ? g_GskVideoMode : 0;
+	const char *pMode = names[m];
 
 	FontSelect(0);
 
@@ -143,10 +147,10 @@ void CVideoScreen::Draw()
 	_VideoCenter(128, vy, "Up/Down: select   Left/Right: change"); vy += 11;
 	_VideoCenter(128, vy, "X: save     Square: reset offset");     vy += 11;
 
-	if (g_GskVideoMode == GSK_VIDMODE_480P)
+	if (g_GskVideoMode != GSK_GetActiveVideoMode())
 	{
 		FontColor4f(1.0f, 0.88f, 0.46f, 1.0f);
-		_VideoCenter(128, vy, "480p applies after reboot");
+		_VideoCenter(128, vy, "mode applies after reboot");
 	}
 }
 
@@ -165,8 +169,9 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 		switch (m_iSelect)
 		{
 		case 0: /* video mode (applied on reboot) */
-			g_GskVideoMode = (g_GskVideoMode == GSK_VIDMODE_480P)
-			               ? GSK_VIDMODE_480I : GSK_VIDMODE_480P;
+			g_GskVideoMode += dir;
+			if (g_GskVideoMode < 0)                  g_GskVideoMode = GSK_VIDMODE_COUNT - 1;
+			if (g_GskVideoMode >= GSK_VIDMODE_COUNT)  g_GskVideoMode = 0;
 			break;
 
 		case 1: /* offset X (live) */
