@@ -22,7 +22,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 1
+#define VIDEOCFG_VERSION 2
 
 typedef struct
 {
@@ -67,7 +67,7 @@ void VideoSettingsLoad(void)
 	_VideoCfgPath(path);
 
 	if (MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg)) &&
-	    cfg.magic == VIDEOCFG_MAGIC)
+	    cfg.magic == VIDEOCFG_MAGIC && cfg.version == VIDEOCFG_VERSION)
 	{
 		if (cfg.mode >= 0 && cfg.mode < GSK_VIDMODE_COUNT)
 			g_GskVideoMode = cfg.mode;

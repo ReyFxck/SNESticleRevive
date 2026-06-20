@@ -58,15 +58,16 @@ static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
 /* Video mode + display offset (selectable in the Settings screen).
-   Default is 240p (NTSC progressive, 640x240) - native SNES/NES, sharpest
-   on a CRT.  480i/480p are opt-in via the Settings screen. */
-int g_GskVideoMode = GSK_VIDMODE_240P;
+   Default is 480i (NTSC 640x448) - the mode emulators and TVs handle
+   well.  240p is the sharpest on a real CRT/PS2 but NetherSX2 renders it
+   stretched/slow, so it stays opt-in.  480p is for GSM/HDMI. */
+int g_GskVideoMode = GSK_VIDMODE_480I;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
-static int _gsk_vck         = 2;   /* display-offset VCK units            */
-static int _gsk_fb_height   = 240; /* active FB height                    */
-static int _gsk_active_mode = GSK_VIDMODE_240P; /* mode the GS is in now   */
+static int _gsk_vck         = 4;   /* display-offset VCK units            */
+static int _gsk_fb_height   = 448; /* active FB height                    */
+static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
 
 /* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
    overscan/widescreen can be recomputed from a clean baseline. */
