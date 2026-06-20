@@ -21,6 +21,18 @@ void GPPrimUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfmt, void 
  * rationale. */
 void GPPrimSetScale(float sx, float sy);
 
+/* Read back the current logical->physical scale (set by GPPrimSetScale).
+ * The font path uses these to pixel-double the glyph atlas at an exact
+ * integer scale instead of the non-integer 2.5x/1.867x NEAREST stretch. */
+float GPPrimGetScaleX(void);
+float GPPrimGetScaleY(void);
+
+/* Like GPPrimTexRect but x/y are PHYSICAL framebuffer coordinates: the
+ * logical->physical position scale is NOT applied (UVs are never scaled,
+ * same as GPPrimTexRect).  Used by the font to draw glyphs at an exact
+ * integer multiple of the atlas for crisp, uniform letters. */
+void GPPrimTexRectAbs(u32 x1, u32 y1, u32 u1, u32 v1, u32 x2, u32 y2, u32 u2, u32 v2, u32 z, u32 colour, unsigned abe);
+
 #endif
 
 

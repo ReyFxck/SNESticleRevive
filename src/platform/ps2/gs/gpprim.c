@@ -196,6 +196,51 @@ void GPPrimTexRect(u32 x1, u32 y1, u32 u1, u32 v1,
                                  rgba32_to_rgbaq64(colour));
 }
 
+float GPPrimGetScaleX(void) { return _gpprim_scale_x; }
+float GPPrimGetScaleY(void) { return _gpprim_scale_y; }
+
+/* Same as GPPrimTexRect but positions are taken as PHYSICAL framebuffer
+   coordinates (no logical->physical scale applied).  UVs are unscaled,
+   exactly like GPPrimTexRect.  The font uses this to draw each glyph at
+   an exact integer 2x of the atlas, which NEAREST samples as a clean
+   pixel-double -- so every glyph is identical and crisp, instead of the
+   uneven result you get sampling the atlas across the non-integer
+   2.5x/1.867x logical scale. */
+void GPPrimTexRectAbs(u32 x1, u32 y1, u32 u1, u32 v1,
+                      u32 x2, u32 y2, u32 u2, u32 v2,
+                      u32 z, u32 colour, unsigned abe)
+{
+    GSGLOBAL *gs = GSK_GetGlobal();
+    if (!gs || !_gpprim_curTexValid) {
+        return;
+    }
+
+    if (abe) {
+        gs->PrimAlphaEnable = GS_SETTING_ON;
+    } else {
+        gs->PrimAlphaEnable = GS_SETTING_OFF;
+    }
+
+    if (GSK_TakeInvalidatePending()) {
+        u64 *p = (u64 *)gsKit_heap_alloc(gs, 1, 16, GIF_AD);
+        if (p) {
+            *p++ = GIF_TAG_AD(1);
+            *p++ = GIF_AD;
+            *p++ = 0;
+            *p++ = GS_REG_TEXFLUSH;
+        }
+    }
+
+    gsKit_prim_sprite_texture_3d(gs, &_gpprim_curTex,
+                                 fx4_to_float(x1), fx4_to_float(y1),
+                                 (int)z,
+                                 fx4_to_float(u1), fx4_to_float(v1),
+                                 fx4_to_float(x2), fx4_to_float(y2),
+                                 (int)z,
+                                 fx4_to_float(u2), fx4_to_float(v2),
+                                 rgba32_to_rgbaq64(colour));
+}
+
 void GPPrimSetTex(u32 tbp, u32 tbw, u32 texwidthlog2, u32 texheightlog2,
                   u32 tpsm, u32 cbp, u32 cbw, u32 cpsm, int filter)
 {

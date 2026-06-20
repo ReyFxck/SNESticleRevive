@@ -33,6 +33,28 @@ extern "C" {
  * truncating and clamp to >=1 so 1px glyphs (like '.') never vanish. */
 #define FONT_SQX(_w) ((_w) <= 0 ? 0 : (((_w) * 4 + 2) / 5 < 1 ? 1 : ((_w) * 4 + 2) / 5))
 
+/* Integer pixel-doubling for crisp text.
+ *
+ * The UI logical->physical scale is 2.5x (H) / 1.867x (V) -- non-integer.
+ * Sampling the glyph atlas with NEAREST across those ratios rounds
+ * differently for every glyph (and every screen position), so each
+ * letter ends up a slightly different width/shape: the "entrecortada"
+ * look.  Instead we draw each glyph at an EXACT integer 2x of its atlas
+ * texels, in physical framebuffer space (GPPrimTexRectAbs).  The GS then
+ * pixel-doubles cleanly -> every glyph identical and sharp.
+ *
+ * Layout still lives in the 256x240 logical space, so advances and
+ * FontGetStrWidth convert the physical glyph size back to logical with
+ * the SAME helper (_FontAdvLogical) -> centering/columns stay aligned. */
+#define FONT_DRAW_SCALE 2
+
+static inline Int32 _FontAdvLogical(Int32 physW)
+{
+    float sx = GPPrimGetScaleX();
+    if (sx <= 0.0f) sx = 1.0f;
+    return (Int32)(((float)physW) / sx + 0.5f);
+}
+
 extern unsigned char       _FontData_ui[];
 extern const FontMapEntryT _FontMap_ui[];
 extern const int           _FontMap_ui_count;
@@ -58,43 +80,36 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
 {
 	Uint32 u0,v0,u1,v1;
     Uint32 x0,y0,x1,y1;
-    Int32 width, dispw;
+    Int32 width, height;
+    float sx, sy, px0, py0, px1, py1;
 
-    width = pFontChar->u1 - pFontChar->u0;
-    dispw = FONT_SQX(width);   // 0.8 horizontal un-stretch (see FONT_SQX)
+    width  = pFontChar->u1 - pFontChar->u0;
+    height = pFontChar->v1 - pFontChar->v0;
 
-/*
-	u0 = FIXED4(pFontChar->u0);
-	v0 = FIXED4(pFontChar->v0);
-	u1 = FIXED4(pFontChar->u1);
-	v1 = FIXED4(pFontChar->v1);
-  */
-	u0 = pFontChar->u0 << 4;
-	v0 = pFontChar->v0 << 4;
-	u1 = pFontChar->u1 << 4;
-	v1 = pFontChar->v1 << 4;
+	u0 = (pFontChar->u0 << 4) + 8;
+	v0 = (pFontChar->v0 << 4) + 8;
+	u1 = (pFontChar->u1 << 4) + 8;
+	v1 = (pFontChar->v1 << 4) + 8;
 
-    u0 += 8;
-    v0 += 8;
-    u1 += 8;
-    v1 += 8;
+    sx = GPPrimGetScaleX(); if (sx <= 0.0f) sx = 1.0f;
+    sy = GPPrimGetScaleY(); if (sy <= 0.0f) sy = 1.0f;
 
-    x0 = FIXED4(fX);
-    y0 = FIXED4(fY);
+    /* Position via the logical->physical scale, but size the glyph at an
+       EXACT integer 2x of the atlas texels (clean pixel-double). */
+    px0 = fX * sx;
+    py0 = fY * sy;
+    px1 = px0 + (float)(width  * FONT_DRAW_SCALE);
+    py1 = py0 + (float)(height * FONT_DRAW_SCALE);
 
-    fX += dispw;
-    fY += pFontChar->v1 - pFontChar->v0 ;
+    x0 = ((Uint32)FIXED4(px0)) & 0xFFFF;
+    y0 = ((Uint32)FIXED4(py0)) & 0xFFFF;
+    x1 = ((Uint32)FIXED4(px1)) & 0xFFFF;
+    y1 = ((Uint32)FIXED4(py1)) & 0xFFFF;
 
-    x1 = FIXED4(fX);
-    y1 = FIXED4(fY);
+	GPPrimTexRectAbs(x0, y0, u0, v0, x1, y1, u1, v1, 10, uColor, 1);
 
-    x0&=0xFFFF;
-    y0&=0xFFFF;
-    y1&=0xFFFF;
-    x1&=0xFFFF;
-
-	GPPrimTexRect(x0, y0, u0, v0, x1, y1, u1, v1, 10, uColor, 1);
-    return dispw;
+    /* advance in LOGICAL units: physical glyph width + 2px gap */
+    return _FontAdvLogical(width * FONT_DRAW_SCALE + 2);
 
 }
 
@@ -110,11 +125,11 @@ Int32 FontGetStrWidth(const Char *pStr)
 		if (*pStr != ' ') 
 		{
             FontCharT *pFontChar = &pFont->CharMap[(unsigned char)*pStr];
-			iWidth += FONT_SQX(pFontChar->u1 - pFontChar->u0) + 1;
+			iWidth += _FontAdvLogical((pFontChar->u1 - pFontChar->u0) * FONT_DRAW_SCALE + 2);
 		} else
         {
-            // swa
-		    iWidth += FONT_SQX(pFont->uCharX);
+            // space
+		    iWidth += _FontAdvLogical(pFont->uCharX * FONT_DRAW_SCALE);
         }
 
         pStr++;
@@ -141,14 +156,14 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
                 FontCharT *pFontChar = &pFont->CharMap[(unsigned char)*pStr];
                 Int32 iWidth;
 
-                iWidth =_FontDrawChar(  pFontChar, vx, vy, vz, uColor,	*pStr) + 1;
+                iWidth =_FontDrawChar(  pFontChar, vx, vy, vz, uColor,	*pStr);
 
-                if (pFont->uFixedWidth) iWidth = FONT_SQX((Int32)pFont->uFixedWidth);
+                if (pFont->uFixedWidth) iWidth = _FontAdvLogical((Int32)pFont->uFixedWidth * FONT_DRAW_SCALE);
 			    vx += iWidth;
             }
 		} else
         {
-		    vx += FONT_SQX(pFont->uCharX);
+		    vx += _FontAdvLogical(pFont->uCharX * FONT_DRAW_SCALE);
         }
 		pStr++;
 	}
