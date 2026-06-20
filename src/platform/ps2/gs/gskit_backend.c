@@ -58,17 +58,15 @@ static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
 /* Video mode + display offset (selectable in the Settings screen).
-   Default is 480i (the confirmed-working NTSC 640x448).  240p/480p and
-   the PAL modes are opt-in via the Settings screen; the low-line
-   progressive modes (240p/288p) still need real-hardware tuning. */
-int g_GskVideoMode = GSK_VIDMODE_480I;
+   Default is 240p (NTSC progressive, 640x240) - native SNES/NES, sharpest
+   on a CRT.  480i/480p are opt-in via the Settings screen. */
+int g_GskVideoMode = GSK_VIDMODE_240P;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
-int g_GskWidescreen = 0;  /* 0 = 4:3, 1 = 16:9 stretch */
-static int _gsk_vck         = 4;   /* display-offset VCK units            */
-static int _gsk_fb_height   = 448; /* active FB height                    */
-static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
+static int _gsk_vck         = 2;   /* display-offset VCK units            */
+static int _gsk_fb_height   = 240; /* active FB height                    */
+static int _gsk_active_mode = GSK_VIDMODE_240P; /* mode the GS is in now   */
 
 /* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
    overscan/widescreen can be recomputed from a clean baseline. */
@@ -332,14 +330,6 @@ static void _GskApplyDisplay(void)
         starty = _gsk_base_starty + sy;
     }
 
-    /* Widescreen: stretch the horizontal active area 4:3 -> 16:9. */
-    if (g_GskWidescreen)
-    {
-        int wdw = (dw * 4) / 3;
-        startx -= (wdw - dw) / 2;
-        dw      = wdw;
-    }
-
     gs->DW     = dw;
     gs->DH     = dh;
     gs->MagH   = magh;
@@ -363,12 +353,6 @@ void GSK_SetOverscan(int percent)
     if (percent < 0)   percent = 0;
     if (percent > 100) percent = 100;
     g_GskOverscan = percent;
-    _GskApplyDisplay();
-}
-
-void GSK_SetWidescreen(int on)
-{
-    g_GskWidescreen = on ? 1 : 0;
     _GskApplyDisplay();
 }
 

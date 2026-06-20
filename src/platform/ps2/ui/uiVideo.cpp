@@ -52,7 +52,7 @@ void VideoSettingsSave(void)
 	cfg.offx    = g_GskDispOffX;
 	cfg.offy    = g_GskDispOffY;
 	cfg.overscan   = g_GskOverscan;
-	cfg.widescreen = g_GskWidescreen;
+	cfg.widescreen = 0;   /* widescreen removed; keep field for layout */
 
 	_VideoCfgPath(path);
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -75,7 +75,6 @@ void VideoSettingsLoad(void)
 		if (cfg.offx >= -64 && cfg.offx <= 64) g_GskDispOffX = cfg.offx;
 		if (cfg.offy >= -64 && cfg.offy <= 64) g_GskDispOffY = cfg.offy;
 		if (cfg.overscan >= 0 && cfg.overscan <= 100) g_GskOverscan = cfg.overscan;
-		g_GskWidescreen = cfg.widescreen ? 1 : 0;
 	}
 }
 
@@ -141,17 +140,14 @@ void CVideoScreen::Draw()
 
 	_VideoRow(vy, 0, m_iSelect, "Video Mode", pMode);  vy += 12;
 
-	_VideoRow(vy, 1, m_iSelect, "Widescreen",
-	          g_GskWidescreen ? "On (16:9)" : "Off (4:3)"); vy += 12;
-
 	snprintf(buf, sizeof(buf), "%d", g_GskOverscan);
-	_VideoRow(vy, 2, m_iSelect, "Overscan", buf);      vy += 12;
+	_VideoRow(vy, 1, m_iSelect, "Overscan", buf);      vy += 12;
 
 	snprintf(buf, sizeof(buf), "%d", g_GskDispOffX);
-	_VideoRow(vy, 3, m_iSelect, "Offset X", buf);      vy += 12;
+	_VideoRow(vy, 2, m_iSelect, "Offset X", buf);      vy += 12;
 
 	snprintf(buf, sizeof(buf), "%d", g_GskDispOffY);
-	_VideoRow(vy, 4, m_iSelect, "Offset Y", buf);
+	_VideoRow(vy, 3, m_iSelect, "Offset Y", buf);
 
 	/* controls / hints, in the empty middle (clear of the vy=215 footer) */
 	vy = 120;
@@ -170,8 +166,8 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 4; }
-	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 4) m_iSelect = 0; }
+	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 3; }
+	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 3) m_iSelect = 0; }
 
 	if (trigger & PAD_LEFT)  dir = -1;
 	if (trigger & PAD_RIGHT) dir = +1;
@@ -186,25 +182,21 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			if (g_GskVideoMode >= GSK_VIDMODE_COUNT)  g_GskVideoMode = 0;
 			break;
 
-		case 1: /* widescreen on/off (live) */
-			GSK_SetWidescreen(!g_GskWidescreen);
-			break;
-
-		case 2: /* overscan 0..100 (live, step 5) */
+		case 1: /* overscan 0..100 (live, step 5) */
 			g_GskOverscan += dir * 5;
 			if (g_GskOverscan < 0)   g_GskOverscan = 0;
 			if (g_GskOverscan > 100) g_GskOverscan = 100;
 			GSK_SetOverscan(g_GskOverscan);
 			break;
 
-		case 3: /* offset X (live) */
+		case 2: /* offset X (live) */
 			g_GskDispOffX += dir;
 			if (g_GskDispOffX < -64) g_GskDispOffX = -64;
 			if (g_GskDispOffX >  64) g_GskDispOffX =  64;
 			GSK_SetDisplayOffset(g_GskDispOffX, g_GskDispOffY);
 			break;
 
-		case 4: /* offset Y (live) */
+		case 3: /* offset Y (live) */
 			g_GskDispOffY += dir;
 			if (g_GskDispOffY < -64) g_GskDispOffY = -64;
 			if (g_GskDispOffY >  64) g_GskDispOffY =  64;

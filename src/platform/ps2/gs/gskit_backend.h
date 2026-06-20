@@ -47,16 +47,14 @@ extern int g_GskVideoMode;    /* one of GSK_VIDMODE_*    */
 extern int g_GskDispOffX;     /* horizontal display offset (0 = centred) */
 extern int g_GskDispOffY;     /* vertical display offset   (0 = centred) */
 extern int g_GskOverscan;     /* 0..100 shrink of the display area (0 = none) */
-extern int g_GskWidescreen;   /* 0 = 4:3, 1 = stretch to 16:9 */
 
 /* Set the display offset live (no VRAM realloc) and remember it for the
    next GSK_Init. X is in VCK units, matching FCEUmm-PS2. */
 void GSK_SetDisplayOffset(int x, int y);
 
-/* Apply overscan (0..100) / widescreen (0/1) live by re-emitting the GS
-   DISPLAY register.  0 / off reproduce gsKit's normal output exactly. */
+/* Apply overscan (0..100) live by re-emitting the GS DISPLAY register.
+   0 reproduces gsKit's normal output exactly. */
 void GSK_SetOverscan(int percent);
-void GSK_SetWidescreen(int on);
 
 /* Tear down and rebuild the GS for the current g_GskVideoMode. The caller
    MUST re-upload any textures it owns afterwards (e.g. FontInit). Intended
