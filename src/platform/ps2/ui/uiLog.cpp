@@ -61,6 +61,17 @@ void CLogScreen::Draw()
 	Int32 nLines;
 	Int32 vx=128, vy = 20;
 
+	/* DIAGNOSTIC: paint the whole Message Log background a solid blue
+	   every frame.  If a horizontal band/line still shows over this
+	   solid fill, the artifact is NOT stale double-buffer content (the
+	   per-frame clear would have covered that) -- it's coming from the
+	   display/interlace scanout or a specific draw.  If the blue is
+	   perfectly uniform, the band was stale buffer.  Remove later. */
+	PolyTexture(NULL);
+	PolyBlend(FALSE);
+	PolyColor4f(0.0f, 0.15f, 0.55f, 1.0f);
+	PolyRect(0, 0, 256, 240);
+
 	FontSelect(0);
 	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
 
