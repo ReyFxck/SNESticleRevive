@@ -106,38 +106,47 @@ static void _VideoRow(int vy, int idx, int sel, const char *pLabel, const char *
 	FontPuts(150, vy, pValue);
 }
 
-void CVideoScreen::Draw()
+static void _VideoHeader(int vy, const char *pStr)
 {
-	Int32 vy = 40;
-	char  buf[16];
-	const char *pMode = (g_GskVideoMode == GSK_VIDMODE_480P)
-	                  ? "480p (GSM/HDMI)" : "480i (padrao)";
-
-	FontSelect(0);
-
-	/* header */
 	PolyColor4f(0.0f, 0.2f, 0.2f, 0.5f);
 	PolyRect(32, vy, 256 - 64, 9);
 	FontColor4f(0.0f, 0.8f, 0.8f, 1.0f);
-	_VideoCenter(128, vy, "Configuracoes de Video");
+	_VideoCenter(128, vy, pStr);
+}
+
+void CVideoScreen::Draw()
+{
+	Int32 vy = 15;
+	char  buf[16];
+	const char *pMode = (g_GskVideoMode == GSK_VIDMODE_480P)
+	                  ? "480p (GSM/HDMI)" : "480i (default)";
+
+	FontSelect(0);
+
+	_VideoHeader(vy, "Video Config");
 	vy += 26;
 
-	_VideoRow(vy, 0, m_iSelect, "Modo video", pMode);  vy += 16;
+	_VideoHeader(vy, "Screen");
+	vy += 14;
+
+	_VideoRow(vy, 0, m_iSelect, "Video Mode", pMode);  vy += 12;
 
 	snprintf(buf, sizeof(buf), "%d", g_GskDispOffX);
-	_VideoRow(vy, 1, m_iSelect, "Offset X", buf);      vy += 16;
+	_VideoRow(vy, 1, m_iSelect, "Offset X", buf);      vy += 12;
 
 	snprintf(buf, sizeof(buf), "%d", g_GskDispOffY);
-	_VideoRow(vy, 2, m_iSelect, "Offset Y", buf);      vy += 22;
+	_VideoRow(vy, 2, m_iSelect, "Offset Y", buf);
 
+	/* controls / hints, near the bottom */
+	vy = 200;
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
-	_VideoCenter(128, vy, "Cima/Baixo: escolher  Esq/Dir: mudar"); vy += 12;
-	_VideoCenter(128, vy, "X: salvar   Quadrado: zerar offset");   vy += 16;
+	_VideoCenter(128, vy, "Up/Down: select   Left/Right: change"); vy += 11;
+	_VideoCenter(128, vy, "X: save     Square: reset offset");     vy += 11;
 
 	if (g_GskVideoMode == GSK_VIDMODE_480P)
 	{
 		FontColor4f(1.0f, 0.88f, 0.46f, 1.0f);
-		_VideoCenter(128, vy, "480p aplica ao reiniciar");
+		_VideoCenter(128, vy, "480p applies after reboot");
 	}
 }
 
