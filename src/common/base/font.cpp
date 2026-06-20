@@ -273,7 +273,7 @@ void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
        Centralising it here recolours white text on ALL screens at once. */
     if (r >= 1.0f && g >= 1.0f && b >= 1.0f)
     {
-        r = 1.00f; g = 0.84f; b = 0.30f;
+        r = 1.00f; g = 0.88f; b = 0.46f;
     }
 
     uR = FIXED7(r);
