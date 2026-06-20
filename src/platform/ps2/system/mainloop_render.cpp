@@ -82,6 +82,25 @@ void MainLoopRender()
     // render frame
     GPPrimDisableZBuf();
 
+    /* Per-frame full-screen clear to black.
+     *
+     * MainLoopRender historically NEVER cleared the framebuffer: it
+     * relied on the full-screen _OutTex blit below to repaint every
+     * pixel.  But that blit is (a) skipped entirely when
+     * _MainLoop_BlackScreen is set (boot log + menus) and (b) even when
+     * drawn it starts at dy=8, so the top rows are never touched.  With
+     * DoubleBuffering=ON each draw goes to the alternate buffer, so any
+     * row we don't repaint shows stale content from two frames ago --
+     * which appears as a fixed-position horizontal "faixa"/stripe
+     * through the text (worst in the log and menus, where nothing
+     * covers the background).  Clearing to black first costs a single
+     * sprite and removes the band entirely.  Same fix used in
+     * InfinityStation (ps2_video_clear_bands / per-frame draw_clear). */
+    PolyTexture(NULL);
+    PolyBlend(FALSE);
+    PolyColor4f(0.0f, 0.0f, 0.0f, 1.0f);
+    PolyRect(0, 0, MAINLOOP_SCREENWIDTH, MAINLOOP_SCREENHEIGHT);
+
 #if MAINLOOP_DEBUG_GS_TEST
     PolyTexture(NULL);
     PolyBlend(FALSE);
