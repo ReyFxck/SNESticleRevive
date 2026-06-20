@@ -63,9 +63,18 @@ static int       _gsk_invalidate_pending = 0;
 int g_GskVideoMode = GSK_VIDMODE_240P;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
+int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
+int g_GskWidescreen = 0;  /* 0 = 4:3, 1 = 16:9 stretch */
 static int _gsk_vck         = 2;   /* display-offset VCK units            */
 static int _gsk_fb_height   = 240; /* active FB height                    */
 static int _gsk_active_mode = GSK_VIDMODE_240P; /* mode the GS is in now   */
+
+/* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
+   overscan/widescreen can be recomputed from a clean baseline. */
+static int _gsk_base_dw, _gsk_base_dh, _gsk_base_magh, _gsk_base_magv;
+static int _gsk_base_startx, _gsk_base_starty;
+
+static void _GskApplyDisplay(void);   /* offset + overscan + widescreen */
 
 /* Saved GSK_Init arguments so GSK_ReinitVideo() can replay them. */
 static int _gsk_arg_w, _gsk_arg_h, _gsk_arg_dispx, _gsk_arg_dispy;
@@ -242,10 +251,17 @@ void GSK_Init(int width, int height,
 
     gsKit_init_screen(_pGsGlobal);
 
-    /* Apply the saved display offset (0,0 = gsKit's default centring).
-       X is in VCK units, like FCEUmm-PS2.  This is the live alignment
-       knob for GSM / HDMI adapters that push the picture off-centre. */
-    gsKit_set_display_offset(_pGsGlobal, g_GskDispOffX * _gsk_vck, g_GskDispOffY);
+    /* Capture gsKit's computed DISPLAY params as the baseline for the
+       overscan / widescreen transform. */
+    _gsk_base_dw     = _pGsGlobal->DW;
+    _gsk_base_dh     = _pGsGlobal->DH;
+    _gsk_base_magh   = _pGsGlobal->MagH;
+    _gsk_base_magv   = _pGsGlobal->MagV;
+    _gsk_base_startx = _pGsGlobal->StartX;
+    _gsk_base_starty = _pGsGlobal->StartY;
+
+    /* Apply offset + overscan + widescreen (0/off = gsKit's defaults). */
+    _GskApplyDisplay();
 
     /* Map the legacy 256x240 logical coordinate space used by every UI
      * call site (PolyRect, FontPuts, browser, modals, menu, ...) onto
@@ -306,14 +322,71 @@ void GSK_Init(int width, int height,
     _gsk_initialised = 1;
 }
 
+static void _GskApplyDisplay(void)
+{
+    GSGLOBAL *gs = _pGsGlobal;
+    int dw, dh, magh, startx, starty;
+
+    if (!_gsk_initialised || !gs) {
+        return;
+    }
+
+    dw     = _gsk_base_dw;
+    dh     = _gsk_base_dh;
+    magh   = _gsk_base_magh;
+    startx = _gsk_base_startx;
+    starty = _gsk_base_starty;
+
+    /* Overscan: shrink the active area and recentre (adds a border to
+       compensate TVs that crop the edges). */
+    if (g_GskOverscan > 0)
+    {
+        int sx = (_gsk_base_dw * g_GskOverscan) / 1300;
+        int sy = (_gsk_base_dh * g_GskOverscan) / 1300;
+        dw     = _gsk_base_dw - sx * 2;
+        dh     = _gsk_base_dh - sy * 2;
+        startx = _gsk_base_startx + sx;
+        starty = _gsk_base_starty + sy;
+    }
+
+    /* Widescreen: stretch the horizontal active area 4:3 -> 16:9. */
+    if (g_GskWidescreen)
+    {
+        int wdw = (dw * 4) / 3;
+        startx -= (wdw - dw) / 2;
+        dw      = wdw;
+    }
+
+    gs->DW     = dw;
+    gs->DH     = dh;
+    gs->MagH   = magh;
+    gs->MagV   = _gsk_base_magv;
+    gs->StartX = startx;
+    gs->StartY = starty;
+
+    /* Re-emit DISPLAY1/2 (also folds in the user X/Y offset). */
+    gsKit_set_display_offset(gs, g_GskDispOffX * _gsk_vck, g_GskDispOffY);
+}
+
 void GSK_SetDisplayOffset(int x, int y)
 {
     g_GskDispOffX = x;
     g_GskDispOffY = y;
-    if (_gsk_initialised && _pGsGlobal)
-    {
-        gsKit_set_display_offset(_pGsGlobal, x * _gsk_vck, y);
-    }
+    _GskApplyDisplay();
+}
+
+void GSK_SetOverscan(int percent)
+{
+    if (percent < 0)   percent = 0;
+    if (percent > 100) percent = 100;
+    g_GskOverscan = percent;
+    _GskApplyDisplay();
+}
+
+void GSK_SetWidescreen(int on)
+{
+    g_GskWidescreen = on ? 1 : 0;
+    _GskApplyDisplay();
 }
 
 void GSK_ReinitVideo(void)
