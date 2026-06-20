@@ -3,6 +3,7 @@ FONT="/projects/sandbox/_fontwork/m5x7.ttf"; SIZE=16; NAME="ui"; ATLAS_W=256; GA
 charset=list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
 charset+=list("({[<!@#$%^&*?_+-=;,")+['"']+list("/~>]}).:'")+['\\','|']
 f=ImageFont.truetype(FONT,SIZE); asc,desc=f.getmetrics(); canvasH=asc+desc+4
+
 glyphs={}; gMinY,gMaxY=999,-1
 for ch in charset:
     im=Image.new("L",(SIZE*2,canvasH),0); ImageDraw.Draw(im).text((0,0),ch,fill=255,font=f); px=im.load(); W,H=im.size
@@ -10,24 +11,49 @@ for ch in charset:
     for y in range(H):
         for x in range(W):
             if px[x,y]>=128: mnx=min(mnx,x);mxx=max(mxx,x);mny=min(mny,y);mxy=max(mxy,y)
-    glyphs[ch]=(im,mnx,mny,mxx,mxy)
+    glyphs[ch]=(px,mnx,mny,mxx,mxy)
     if mxx>=0: gMinY=min(gMinY,mny);gMaxY=max(gMaxY,mxy)
 bandH=gMaxY-gMinY+1; print("band",gMinY,gMaxY,"bandH",bandH)
-entries=[];x=GAP;y=GAP
-place={}
+
+# Build a per-glyph 0/1 matrix over the shared band, then enforce a
+# minimum 2px ink size.  At SIZE=16 the punctuation '.' ':' ''' '!' '|'
+# render as 1px hairlines that disappear under the 2.5x/1.867x UI scale
+# and 480i interlace.  Dilating ONLY those (letters are already >=2px)
+# keeps them visible without bolding the rest of the font.
+mats={}
 for ch in charset:
-    im,mnx,mny,mxx,mxy=glyphs[ch]; w=(mxx-mnx+1) if mxx>=0 else 3
+    px,mnx,mny,mxx,mxy=glyphs[ch]
+    if mxx<0:
+        mats[ch]=[[0,0,0] for _ in range(bandH)]; continue
+    w=mxx-mnx+1
+    mat=[[1 if px[mnx+xx,gMinY+yy]>=128 else 0 for xx in range(w)] for yy in range(bandH)]
+    # horizontal dilation: widen 1px-wide ink to 2px (duplicate the column)
+    if w==1:
+        mat=[[row[0],row[0]] for row in mat]; w=2
+    # vertical dilation: a glyph with a single inked row ('.') -> 2px tall
+    inked=[yy for yy in range(bandH) if any(mat[yy])]
+    if len(inked)==1 and inked[0]-1>=0:
+        r=inked[0]
+        for xx in range(w):
+            if mat[r][xx]: mat[r-1][xx]=1
+    mats[ch]=mat
+
+entries=[];x=GAP;y=GAP
+for ch in charset:
+    mat=mats[ch]; w=len(mat[0])
     if x+w+GAP>ATLAS_W: x=GAP;y+=bandH+GAP
-    entries.append((ch,x,y,w,bandH)); place[ch]=(im,mnx,w); x+=w+GAP
+    entries.append((ch,x,y,w,bandH)); x+=w+GAP
 used=y+bandH+GAP; H=16
 while H<used:H*=2
 print("atlas",ATLAS_W,"x",H,"used",used,"glyphs",len(entries))
+
 atlas=Image.new("RGBA",(ATLAS_W,H),(0,0,0,0)); ap=atlas.load()
 for (ch,u,v,w,h) in entries:
-    im,mnx,_=place[ch]; sp=im.load()
+    mat=mats[ch]
     for yy in range(h):
         for xx in range(w):
-            if sp[mnx+xx,gMinY+yy]>=128: ap[u+xx,v+yy]=(255,255,255,255)
+            if mat[yy][xx]: ap[u+xx,v+yy]=(255,255,255,255)
+
 spacew=max(3,int(f.getlength(" "))); maxw=max(e[3] for e in entries)
 emap={e[0]:e for e in entries}
 def ds(s):
@@ -41,12 +67,14 @@ def ds(s):
         for i in range(bandH):
             rows[i]+=''.join('#' if ap[u+xx,v+i][3] else '.' for xx in range(w))+'.'
     return rows
-print("=== verify 'Final Fight 3 ABCxyz' ===")
-for r in ds("Final Fight 3 ABCxyz"): print(r)
+print("=== verify 'Hi. A:b! v0.3' ===")
+for r in ds("Hi. A:b! v0.3"): print(r)
+
 data=atlas.tobytes()
 with open("/projects/sandbox/_fontwork/font_%s.cpp"%NAME,"w") as o:
     o.write("/* UI font atlas - generated from m5x7 (Daniel Linssen, CC0) @ size %d.\n"%SIZE)
-    o.write("   Atlas %dx%d RGBA8 + explicit glyph map. Regenerate via tools/font_gen_ui.py. */\n"%(ATLAS_W,H))
+    o.write("   Atlas %dx%d RGBA8 + explicit glyph map. 1px punctuation ('.'/':'/etc)\n"%(ATLAS_W,H))
+    o.write("   dilated to 2px so it survives UI scale + 480i. Regen via tools/font_gen_ui.py. */\n")
     o.write('#include "types.h"\n#include "font.h"\n\n')
     o.write("unsigned char _FontData_%s[%d] _ALIGN(16) = {\n"%(NAME,ATLAS_W*H*4))
     for i in range(0,len(data),16): o.write("    "+",".join("0x%02X"%b for b in data[i:i+16])+",\n")

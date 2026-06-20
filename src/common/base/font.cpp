@@ -29,8 +29,9 @@ extern "C" {
  * their designed proportions.  Vertical (line height) is left untouched.
  *
  * Integer 4/5 is used in BOTH the draw advance and FontGetStrWidth so
- * centered/right-aligned text stays aligned. */
-#define FONT_SQX(_w) (((_w) * 4) / 5)
+ * centered/right-aligned text stays aligned.  We round (+2) instead of
+ * truncating and clamp to >=1 so 1px glyphs (like '.') never vanish. */
+#define FONT_SQX(_w) ((_w) <= 0 ? 0 : (((_w) * 4 + 2) / 5 < 1 ? 1 : ((_w) * 4 + 2) / 5))
 
 extern unsigned char       _FontData_ui[];
 extern const FontMapEntryT _FontMap_ui[];
