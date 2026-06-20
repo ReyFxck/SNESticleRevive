@@ -38,12 +38,10 @@ void GSK_Init(int width, int height,
  * 480i is the default and keeps the exact legacy behaviour; 480p is the
  * progressive mode OPL GSM / HDMI adapters expect natively (no interlace
  * conversion -> no red/green stripe artefact). */
-#define GSK_VIDMODE_240P  0   /* NTSC 640x240 progressive (default, CRT-sharp) */
-#define GSK_VIDMODE_480I  1   /* NTSC 640x448 interlaced                       */
+#define GSK_VIDMODE_240P  0   /* NTSC 640x240 progressive (CRT, experimental)  */
+#define GSK_VIDMODE_480I  1   /* NTSC 640x448 interlaced (default)             */
 #define GSK_VIDMODE_480P  2   /* DTV  640x480 progressive (GSM / HDMI)         */
-#define GSK_VIDMODE_576I  3   /* PAL  640x512 interlaced                       */
-#define GSK_VIDMODE_288P  4   /* PAL  640x256 progressive                      */
-#define GSK_VIDMODE_COUNT 5
+#define GSK_VIDMODE_COUNT 3
 
 extern int g_GskVideoMode;    /* one of GSK_VIDMODE_*    */
 extern int g_GskDispOffX;     /* horizontal display offset (0 = centred) */

@@ -123,7 +123,7 @@ static void _VideoHeader(int vy, const char *pStr)
 void CVideoScreen::Draw()
 {
 	static const char *names[GSK_VIDMODE_COUNT] = {
-		"240p (CRT, exp)", "480i (default)", "480p (GSM/HDMI)", "576i (PAL)", "288p (PAL exp)"
+		"240p (CRT, exp)", "480i (default)", "480p (GSM/HDMI)"
 	};
 	Int32 vy = 15;
 	char  buf[16];

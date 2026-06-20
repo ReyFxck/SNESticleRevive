@@ -153,24 +153,6 @@ void GSK_Init(int width, int height,
         _gsk_vck              = 4;
         break;
 
-    case GSK_VIDMODE_576I:
-        /* PAL 640x512 interlaced. */
-        _pGsGlobal->Mode      = GS_MODE_PAL;
-        _pGsGlobal->Interlace = GS_INTERLACED;
-        _pGsGlobal->Field     = GS_FIELD;
-        _gsk_fb_height        = 512;
-        _gsk_vck              = 4;
-        break;
-
-    case GSK_VIDMODE_288P:
-        /* PAL 640x256 progressive. */
-        _pGsGlobal->Mode      = GS_MODE_PAL;
-        _pGsGlobal->Interlace = GS_NONINTERLACED;
-        _pGsGlobal->Field     = GS_FRAME;
-        _gsk_fb_height        = 256;
-        _gsk_vck              = 2;
-        break;
-
     case GSK_VIDMODE_240P:
     default:
         /* NTSC 640x240 progressive - native SNES/NES, sharpest on a CRT.
