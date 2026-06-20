@@ -19,6 +19,19 @@ extern "C" {
 #define FIXED4(_x) ((Int32)((_x)*16.0f))
 #define FIXED7(_x) ((Int32)((_x)*128.0f))
 
+/* Horizontal un-stretch for the bitmap font.
+ *
+ * The whole UI is authored in a 256x240 logical space (gpprim.c) that is
+ * mapped to the 640x448 framebuffer with sx=2.5, sy=1.867 and then shown
+ * on a 4:3 screen.  That makes every glyph ~25% wider than it was drawn,
+ * so a square-pixel font looks stretched sideways.  The exact correction
+ * is 768/960 = 0.8: squeeze glyph width + advance by 4/5 so letters keep
+ * their designed proportions.  Vertical (line height) is left untouched.
+ *
+ * Integer 4/5 is used in BOTH the draw advance and FontGetStrWidth so
+ * centered/right-aligned text stays aligned. */
+#define FONT_SQX(_w) (((_w) * 4) / 5)
+
 extern unsigned char       _FontData_ui[];
 extern const FontMapEntryT _FontMap_ui[];
 extern const int           _FontMap_ui_count;
@@ -44,9 +57,10 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
 {
 	Uint32 u0,v0,u1,v1;
     Uint32 x0,y0,x1,y1;
-    Int32 width;
+    Int32 width, dispw;
 
     width = pFontChar->u1 - pFontChar->u0;
+    dispw = FONT_SQX(width);   // 0.8 horizontal un-stretch (see FONT_SQX)
 
 /*
 	u0 = FIXED4(pFontChar->u0);
@@ -67,7 +81,7 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
     x0 = FIXED4(fX);
     y0 = FIXED4(fY);
 
-    fX += width;
+    fX += dispw;
     fY += pFontChar->v1 - pFontChar->v0 ;
 
     x1 = FIXED4(fX);
@@ -79,7 +93,7 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
     x1&=0xFFFF;
 
 	GPPrimTexRect(x0, y0, u0, v0, x1, y1, u1, v1, 10, uColor, 1);
-    return width;
+    return dispw;
 
 }
 
@@ -95,11 +109,11 @@ Int32 FontGetStrWidth(const Char *pStr)
 		if (*pStr != ' ') 
 		{
             FontCharT *pFontChar = &pFont->CharMap[(unsigned char)*pStr];
-			iWidth += (pFontChar->u1 - pFontChar->u0) + 1;
+			iWidth += FONT_SQX(pFontChar->u1 - pFontChar->u0) + 1;
 		} else
         {
             // swa
-		    iWidth += pFont->uCharX;
+		    iWidth += FONT_SQX(pFont->uCharX);
         }
 
         pStr++;
@@ -128,12 +142,12 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
 
                 iWidth =_FontDrawChar(  pFontChar, vx, vy, vz, uColor,	*pStr) + 1;
 
-                if (pFont->uFixedWidth) iWidth = (Int32)pFont->uFixedWidth;
+                if (pFont->uFixedWidth) iWidth = FONT_SQX((Int32)pFont->uFixedWidth);
 			    vx += iWidth;
             }
 		} else
         {
-		    vx+=pFont->uCharX;
+		    vx += FONT_SQX(pFont->uCharX);
         }
 		pStr++;
 	}
