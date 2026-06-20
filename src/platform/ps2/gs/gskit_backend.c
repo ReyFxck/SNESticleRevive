@@ -158,12 +158,14 @@ void GSK_Init(int width, int height,
 
     case GSK_VIDMODE_240P:
     default:
-        /* NTSC 320x240 progressive (4:3) - native SNES/NES, sharpest on
-           a CRT.  320x240 = 4:3 so it displays correctly (640x240 would
-           be 2.67:1 -> stretched wide). */
+        /* NTSC 320x240 progressive (4:3), 60Hz - native SNES/NES.
+           GS_FIELD (not GS_FRAME): on NTSC, FRAME mode runs at the 30Hz
+           frame rate while FIELD runs at the 60Hz field rate, so 240p
+           must use FIELD to get 60fps. (480p/DTV is a dedicated 60Hz
+           progressive mode, so it keeps GS_FRAME.) */
         _pGsGlobal->Mode      = GS_MODE_NTSC;
         _pGsGlobal->Interlace = GS_NONINTERLACED;
-        _pGsGlobal->Field     = GS_FRAME;
+        _pGsGlobal->Field     = GS_FIELD;
         _gsk_fb_width         = 320;
         _gsk_fb_height        = 240;
         _gsk_vck              = 2;
