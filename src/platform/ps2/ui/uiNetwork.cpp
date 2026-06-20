@@ -39,25 +39,28 @@ void CNetworkScreen::Input(Uint32 buttons, Uint32 trigger)
         if (trigger & PAD_LEFT)
         {
             m_iDigitIP--;
-            if (m_iDigitIP < 0) m_iDigitIP = 11;
+            if (m_iDigitIP < 0) m_iDigitIP = 3;
         }
 
         if (trigger & PAD_RIGHT)
         {
             m_iDigitIP++;
-            if (m_iDigitIP > 11) m_iDigitIP = 0;
+            if (m_iDigitIP > 3) m_iDigitIP = 0;
         }
 
-        if (trigger & PAD_UP)
+        /* Edit the selected octet as a whole 0..255 value (an IP octet),
+           not digit-by-digit.  UP/DOWN wrap around: 255 -> 0 and 0 -> 255. */
+        if (trigger & (PAD_UP | PAD_DOWN))
         {
-            m_NetworkIP[m_iDigitIP] ++;
-            if (m_NetworkIP[m_iDigitIP] >9) m_NetworkIP[m_iDigitIP] = 0;
-        }
+            int b   = m_iDigitIP * 3;
+            int oct = m_NetworkIP[b] * 100 + m_NetworkIP[b + 1] * 10 + m_NetworkIP[b + 2];
 
-        if (trigger & PAD_DOWN)
-        {
-            m_NetworkIP[m_iDigitIP] --;
-            if (m_NetworkIP[m_iDigitIP] <0) m_NetworkIP[m_iDigitIP] = 9;
+            if (trigger & PAD_UP)   oct = (oct + 1)   % 256;
+            if (trigger & PAD_DOWN) oct = (oct + 255) % 256;
+
+            m_NetworkIP[b]     = (oct / 100) % 10;
+            m_NetworkIP[b + 1] = (oct / 10)  % 10;
+            m_NetworkIP[b + 2] = (oct / 1)   % 10;
         }
 
 
@@ -297,7 +300,8 @@ void _MenuDrawEditIP(int x, int y, Int8 *pIP, int iDigit)
             idrawdigit = *pFormat - 'a';
             str[0] = pIP[idrawdigit] + '0';
 
-            _MenuPrintAlignLeft(x,y,str, idrawdigit == iDigit);
+            // highlight the whole octet (3 digits) that is selected
+            _MenuPrintAlignLeft(x,y,str, (idrawdigit / 3) == iDigit);
         }
         pFormat++;
         x+=6;
@@ -372,8 +376,12 @@ void CNetworkScreen::Draw()
             _MenuPrintIP(vx + 10,vy + 40, config->gw.s_addr);
         	FontSelect(2);
 
+            vy+=55;   // reserve space for the 5-line config block
         }
-        vy+=55;
+        else
+        {
+            vy+=4;    // no adapter info to show -> don't leave a big empty gap
+        }
 
 
         _MenuHeader(vy, "Network Status");
