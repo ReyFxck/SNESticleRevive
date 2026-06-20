@@ -281,30 +281,36 @@ void _MenuHeader(int vy, const char *str)
 }
 
 
-void _MenuDrawEditIP(int x, int y, Int8 *pIP, int iDigit)
+void _MenuDrawEditIP(int xcenter, int y, Int8 *pIP, int iDigit)
 {
-    int o;
+    char octs[4][8];
+    int  o, total, x;
+    int  dotw = FontGetStrWidth((char *)".") + 1;
 
-    /* Show each octet as its plain value (no leading zeros): 0, 55, 255.
+    /* Build each octet as its plain value (no leading zeros), measure
+       the whole 'a.b.c.d' string, then start so it is centred on xcenter.
        iDigit is the selected OCTET index (0..3); -1 = not editing. */
+    total = dotw * 3;
     for (o = 0; o < 4; o++)
     {
-        char str[8];
-        int  n   = 0;
-        int  val = pIP[o*3 + 0] * 100 + pIP[o*3 + 1] * 10 + pIP[o*3 + 2];
+        int n   = 0;
+        int val = pIP[o*3 + 0] * 100 + pIP[o*3 + 1] * 10 + pIP[o*3 + 2];
+        if (val >= 100) octs[o][n++] = '0' + (val / 100) % 10;
+        if (val >= 10)  octs[o][n++] = '0' + (val / 10)  % 10;
+        octs[o][n++] = '0' + val % 10;
+        octs[o][n]   = 0;
+        total += FontGetStrWidth(octs[o]) + 1;
+    }
 
-        if (val >= 100) str[n++] = '0' + (val / 100) % 10;
-        if (val >= 10)  str[n++] = '0' + (val / 10)  % 10;
-        str[n++] = '0' + val % 10;
-        str[n]   = 0;
-
-        _MenuPrintAlignLeft(x, y, str, o == iDigit);
-        x += FontGetStrWidth(str) + 1;
-
+    x = xcenter - total / 2;
+    for (o = 0; o < 4; o++)
+    {
+        _MenuPrintAlignLeft(x, y, octs[o], o == iDigit);
+        x += FontGetStrWidth(octs[o]) + 1;
         if (o < 3)
         {
             _MenuPrintAlignLeft(x, y, (char *)".", FALSE);
-            x += FontGetStrWidth((char *)".") + 1;
+            x += dotw;
         }
     }
 }
@@ -341,7 +347,7 @@ void CNetworkScreen::Draw()
 	    FontSelect(2);
 
         vx = 105;
-        vy = config ? 15 : 50;
+        vy = 15;
 
         _MenuHeader(vy, "Network Config");
         vy+=12;
@@ -390,7 +396,7 @@ void CNetworkScreen::Draw()
 
         FontColor4f(0.5, 0.5f, 0.5f, 1.0f);
         FontSelect(2);
-        _MenuPrintAlignRight(vx, vy + 0, "Server:");
+        _MenuPrintAlignLeft(70, vy + 0, "Server:");
 
         FontColor4f(1.0, 1.0f, 1.0f, 1.0f);
         FontPuts(vx + 10,vy + 0, m_NetplayServerStatusStr[status.eServerStatus]);
@@ -399,7 +405,7 @@ void CNetworkScreen::Draw()
 
         FontColor4f(0.5, 0.5f, 0.5f, 1.0f);
         FontSelect(2);
-        _MenuPrintAlignRight(vx, vy + 0, "Client:");
+        _MenuPrintAlignLeft(70, vy + 0, "Client:");
         FontColor4f(1.0, 1.0f, 1.0f, 1.0f);
         FontPuts(vx + 10,vy + 0, m_NetplayClientStatusStr[status.eClientStatus]);
         vy+=10;
@@ -471,7 +477,7 @@ void CNetworkScreen::Draw()
 
 
 
-        _MenuDrawEditIP(86, vy, m_NetworkIP, m_iDigitIP);
+        _MenuDrawEditIP(128, vy, m_NetworkIP, m_iDigitIP);
 
 //        _MenuPrintAlignRight(vx - 10, vy + 0, "Connect:");
 //        _MenuPrintIP(vx, vy, 0x12345678);
