@@ -15,11 +15,10 @@ for ch in charset:
     if mxx>=0: gMinY=min(gMinY,mny);gMaxY=max(gMaxY,mxy)
 bandH=gMaxY-gMinY+1; print("band",gMinY,gMaxY,"bandH",bandH)
 
-# Build a per-glyph 0/1 matrix over the shared band, then enforce a
-# minimum 2px ink size.  At SIZE=16 the punctuation '.' ':' ''' '!' '|'
-# render as 1px hairlines that disappear under the 2.5x/1.867x UI scale
-# and 480i interlace.  Dilating ONLY those (letters are already >=2px)
-# keeps them visible without bolding the rest of the font.
+# Build a per-glyph 0/1 matrix over the shared band, at its NATURAL size.
+# No dilation: the integer 2x draw (font.cpp) already turns a 1px atlas
+# pixel into a crisp 2px on screen, so punctuation ('.' ':' ''' '-') stays
+# thin instead of bold.
 mats={}
 for ch in charset:
     px,mnx,mny,mxx,mxy=glyphs[ch]
@@ -27,15 +26,6 @@ for ch in charset:
         mats[ch]=[[0,0,0] for _ in range(bandH)]; continue
     w=mxx-mnx+1
     mat=[[1 if px[mnx+xx,gMinY+yy]>=128 else 0 for xx in range(w)] for yy in range(bandH)]
-    # horizontal dilation: widen 1px-wide ink to 2px (duplicate the column)
-    if w==1:
-        mat=[[row[0],row[0]] for row in mat]; w=2
-    # vertical dilation: a glyph with a single inked row ('.') -> 2px tall
-    inked=[yy for yy in range(bandH) if any(mat[yy])]
-    if len(inked)==1 and inked[0]-1>=0:
-        r=inked[0]
-        for xx in range(w):
-            if mat[r][xx]: mat[r-1][xx]=1
     mats[ch]=mat
 
 entries=[];x=GAP;y=GAP
@@ -73,8 +63,8 @@ for r in ds("Hi. A:b! v0.3"): print(r)
 data=atlas.tobytes()
 with open("/projects/sandbox/_fontwork/font_%s.cpp"%NAME,"w") as o:
     o.write("/* UI font atlas - generated from m5x7 (Daniel Linssen, CC0) @ size %d.\n"%SIZE)
-    o.write("   Atlas %dx%d RGBA8 + explicit glyph map. 1px punctuation ('.'/':'/etc)\n"%(ATLAS_W,H))
-    o.write("   dilated to 2px so it survives UI scale + 480i. Regen via tools/font_gen_ui.py. */\n")
+    o.write("   Atlas %dx%d RGBA8 + explicit glyph map. Natural (un-dilated) glyphs;\n"%(ATLAS_W,H))
+    o.write("   the 2x integer draw makes 1px ink crisp on screen. Regen via tools/font_gen_ui.py. */\n")
     o.write('#include "types.h"\n#include "font.h"\n\n')
     o.write("unsigned char _FontData_%s[%d] _ALIGN(16) = {\n"%(NAME,ATLAS_W*H*4))
     for i in range(0,len(data),16): o.write("    "+",".join("0x%02X"%b for b in data[i:i+16])+",\n")
