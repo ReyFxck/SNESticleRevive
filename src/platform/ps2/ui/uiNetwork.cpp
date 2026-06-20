@@ -387,7 +387,7 @@ void CNetworkScreen::Draw()
         }
         else
         {
-            vy+=4;    // no adapter info to show -> don't leave a big empty gap
+            vy+=31;   // no adapter block: drop Status..IP down to screen centre
         }
 
 
