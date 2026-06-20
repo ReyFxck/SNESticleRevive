@@ -32,6 +32,28 @@ void GSK_Init(int width, int height,
               int psm, int psmz,
               int mode, int interlace);
 
+/* ---- Video mode + display offset (selectable in the Settings screen) ----
+ *
+ * g_GskVideoMode selects the output the GS is programmed for at GSK_Init.
+ * 480i is the default and keeps the exact legacy behaviour; 480p is the
+ * progressive mode OPL GSM / HDMI adapters expect natively (no interlace
+ * conversion -> no red/green stripe artefact). */
+#define GSK_VIDMODE_480I  0   /* NTSC/PAL 640x448 interlaced (default)   */
+#define GSK_VIDMODE_480P  1   /* DTV      640x480 progressive (GSM/HDMI) */
+
+extern int g_GskVideoMode;    /* one of GSK_VIDMODE_*    */
+extern int g_GskDispOffX;     /* horizontal display offset (0 = centred) */
+extern int g_GskDispOffY;     /* vertical display offset   (0 = centred) */
+
+/* Set the display offset live (no VRAM realloc) and remember it for the
+   next GSK_Init. X is in VCK units, matching FCEUmm-PS2. */
+void GSK_SetDisplayOffset(int x, int y);
+
+/* Tear down and rebuild the GS for the current g_GskVideoMode. The caller
+   MUST re-upload any textures it owns afterwards (e.g. FontInit). Intended
+   to run once at boot after the saved settings are read from the card. */
+void GSK_ReinitVideo(void);
+
 /* Returns the active gsKit global, or NULL if GSK_Init has not run. */
 struct gsGlobal *GSK_GetGlobal(void);
 

@@ -46,6 +46,7 @@ CBrowserScreen *_MainLoop_pBrowserScreen;
 CNetworkScreen *_MainLoop_pNetworkScreen;
 CMenuScreen    *_MainLoop_pMenuScreen;
 CLogScreen     *_MainLoop_pLogScreen;
+CVideoScreen   *_MainLoop_pVideoScreen;
 CScreen        *_MainLoop_pScreen = NULL;
 
 

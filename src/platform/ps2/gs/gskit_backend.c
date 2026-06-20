@@ -57,6 +57,18 @@ static GSGLOBAL *_pGsGlobal = NULL;
 static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
+/* Video mode + display offset (selectable in the Settings screen).
+   Defaults reproduce the legacy 480i behaviour exactly. */
+int g_GskVideoMode = GSK_VIDMODE_480I;
+int g_GskDispOffX  = 0;
+int g_GskDispOffY  = 0;
+static int _gsk_vck       = 4;             /* display-offset VCK units      */
+static int _gsk_fb_height = GSK_FB_HEIGHT; /* active FB height (448 or 480)  */
+
+/* Saved GSK_Init arguments so GSK_ReinitVideo() can replay them. */
+static int _gsk_arg_w, _gsk_arg_h, _gsk_arg_dispx, _gsk_arg_dispy;
+static int _gsk_arg_psm, _gsk_arg_psmz, _gsk_arg_mode, _gsk_arg_interlace;
+
 GSGLOBAL *GSK_GetGlobal(void)
 {
     return _pGsGlobal;
@@ -70,6 +82,11 @@ void GSK_Init(int width, int height,
     if (_gsk_initialised) {
         return;
     }
+
+    _gsk_arg_w     = width;  _gsk_arg_h        = height;
+    _gsk_arg_dispx = dispx;  _gsk_arg_dispy    = dispy;
+    _gsk_arg_psm   = psm;    _gsk_arg_psmz     = psmz;
+    _gsk_arg_mode  = mode;   _gsk_arg_interlace = interlace;
 
     _pGsGlobal = gsKit_init_global();
     if (!_pGsGlobal) {
@@ -103,8 +120,27 @@ void GSK_Init(int width, int height,
      * natively, every PS2toHDMI cable expects it as the primary input,
      * and GSM's adaptation tables target it directly. */
     (void)interlace;
-    _pGsGlobal->Interlace = GS_INTERLACED;
-    _pGsGlobal->Field     = GS_FIELD;
+    if (g_GskVideoMode == GSK_VIDMODE_480P)
+    {
+        /* DTV 480p progressive.  This is what OPL GSM / PS2toHDMI expect
+           natively, so the PCRTC does no interlace conversion and the
+           red/green stripe artefact goes away.  Same setup FCEUmm-PS2
+           uses for its progressive "DTV 720x480" mode. */
+        _pGsGlobal->Mode      = GS_MODE_DTV_480P;
+        _pGsGlobal->Interlace = GS_NONINTERLACED;
+        _pGsGlobal->Field     = GS_FRAME;
+        _gsk_fb_height        = 480;
+        _gsk_vck              = 2;
+    }
+    else
+    {
+        /* Default: NTSC/PAL 640x448 interlaced (480i) - legacy path,
+           byte-for-byte the same as before. */
+        _pGsGlobal->Interlace = GS_INTERLACED;
+        _pGsGlobal->Field     = GS_FIELD;
+        _gsk_fb_height        = GSK_FB_HEIGHT;
+        _gsk_vck              = 4;
+    }
 
     /* Force the framebuffer dimensions to 640x448 regardless of what
      * the caller passed.  See the GSK_FB_WIDTH/HEIGHT defines above and
@@ -115,7 +151,7 @@ void GSK_Init(int width, int height,
     (void)width;
     (void)height;
     _pGsGlobal->Width  = GSK_FB_WIDTH;
-    _pGsGlobal->Height = GSK_FB_HEIGHT;
+    _pGsGlobal->Height = _gsk_fb_height;
     _pGsGlobal->PSM    = psm;
     _pGsGlobal->PSMZ   = psmz;
 
@@ -173,12 +209,17 @@ void GSK_Init(int width, int height,
 
     gsKit_init_screen(_pGsGlobal);
 
+    /* Apply the saved display offset (0,0 = gsKit's default centring).
+       X is in VCK units, like FCEUmm-PS2.  This is the live alignment
+       knob for GSM / HDMI adapters that push the picture off-centre. */
+    gsKit_set_display_offset(_pGsGlobal, g_GskDispOffX * _gsk_vck, g_GskDispOffY);
+
     /* Map the legacy 256x240 logical coordinate space used by every UI
      * call site (PolyRect, FontPuts, browser, modals, menu, ...) onto
-     * the physical 640x448 framebuffer.  See the long comment at the
-     * top of gpprim.c for the full rationale. */
-    GPPrimSetScale((float)GSK_FB_WIDTH  / (float)GSK_LOGICAL_W,
-                   (float)GSK_FB_HEIGHT / (float)GSK_LOGICAL_H);
+     * the physical framebuffer.  See the long comment at the top of
+     * gpprim.c for the full rationale. */
+    GPPrimSetScale((float)GSK_FB_WIDTH   / (float)GSK_LOGICAL_W,
+                   (float)_gsk_fb_height / (float)GSK_LOGICAL_H);
 
     /* PMODE / DISPLAY1 / DISPLAY2 are now left at the values that
        gsKit_init_screen programmed (PMODE=0x8046 with CRTMD=1,
@@ -230,6 +271,30 @@ void GSK_Init(int width, int height,
     gsKit_sync_flip(_pGsGlobal);
 
     _gsk_initialised = 1;
+}
+
+void GSK_SetDisplayOffset(int x, int y)
+{
+    g_GskDispOffX = x;
+    g_GskDispOffY = y;
+    if (_gsk_initialised && _pGsGlobal)
+    {
+        gsKit_set_display_offset(_pGsGlobal, x * _gsk_vck, y);
+    }
+}
+
+void GSK_ReinitVideo(void)
+{
+    if (!_gsk_initialised) {
+        return;
+    }
+    /* Allow GSK_Init to run again; it re-programs the PCRTC and
+       reallocates VRAM for the (possibly new) g_GskVideoMode.  The
+       caller is responsible for re-uploading its textures (FontInit)
+       since the VRAM allocator is reset. */
+    _gsk_initialised = 0;
+    GSK_Init(_gsk_arg_w, _gsk_arg_h, _gsk_arg_dispx, _gsk_arg_dispy,
+             _gsk_arg_psm, _gsk_arg_psmz, _gsk_arg_mode, _gsk_arg_interlace);
 }
 
 Uint32 GSK_VramAllocTBP(Uint32 nBytes)
