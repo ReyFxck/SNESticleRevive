@@ -283,28 +283,29 @@ void _MenuHeader(int vy, const char *str)
 
 void _MenuDrawEditIP(int x, int y, Int8 *pIP, int iDigit)
 {
-    const char *pFormat = "abc.def.ghi.jkl";
-    char str[2];
+    int o;
 
-    str[1] = 0;
-
-    while (*pFormat)
+    /* Show each octet as its plain value (no leading zeros): 0, 55, 255.
+       iDigit is the selected OCTET index (0..3); -1 = not editing. */
+    for (o = 0; o < 4; o++)
     {
-        int idrawdigit;
-        str[0] = *pFormat;
-        if (*pFormat=='.')
-        {
-            _MenuPrintAlignLeft(x,y,str, 0);
-        } else
-        {
-            idrawdigit = *pFormat - 'a';
-            str[0] = pIP[idrawdigit] + '0';
+        char str[8];
+        int  n   = 0;
+        int  val = pIP[o*3 + 0] * 100 + pIP[o*3 + 1] * 10 + pIP[o*3 + 2];
 
-            // highlight the whole octet (3 digits) that is selected
-            _MenuPrintAlignLeft(x,y,str, (idrawdigit / 3) == iDigit);
+        if (val >= 100) str[n++] = '0' + (val / 100) % 10;
+        if (val >= 10)  str[n++] = '0' + (val / 10)  % 10;
+        str[n++] = '0' + val % 10;
+        str[n]   = 0;
+
+        _MenuPrintAlignLeft(x, y, str, o == iDigit);
+        x += FontGetStrWidth(str) + 1;
+
+        if (o < 3)
+        {
+            _MenuPrintAlignLeft(x, y, (char *)".", FALSE);
+            x += FontGetStrWidth((char *)".") + 1;
         }
-        pFormat++;
-        x+=6;
     }
 }
 
@@ -340,7 +341,7 @@ void CNetworkScreen::Draw()
 	    FontSelect(2);
 
         vx = 105;
-        vy=15;
+        vy = config ? 15 : 50;
 
         _MenuHeader(vy, "Network Config");
         vy+=12;
