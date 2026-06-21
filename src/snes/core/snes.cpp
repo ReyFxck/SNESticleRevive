@@ -657,7 +657,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 			Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
 #if SNDBG_LOG
 			if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-			{ ConDebug("DSP RD DR  [%06X]=%02X (f%d l%d)\n", uAddr, d, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
+			{ DLog("[snes-m7] DSP RD DR [%06X]=%02X (f%d l%d)", uAddr, d, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
 #endif
 			return d;
 		}
@@ -668,7 +668,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 			Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
 #if SNDBG_LOG
 			if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-			{ ConDebug("DSP RD SR  [%06X]=%02X\n", uAddr, s); g_SnesDbgDspN++; }
+			{ DLog("[snes-m7] DSP RD SR [%06X]=%02X", uAddr, s); g_SnesDbgDspN++; }
 #endif
 			return s;
 		}
@@ -692,7 +692,7 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	case 0xA000:
 #if SNDBG_LOG
 		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-		{ ConDebug("DSP WR DR  [%06X]=%02X (f%d l%d)\n", uAddr, uData, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
+		{ DLog("[snes-m7] DSP WR DR [%06X]=%02X (f%d l%d)", uAddr, uData, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
 #endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
 		break;
@@ -1022,7 +1022,7 @@ void SnesSystem::ExecuteLine()
 		case 8: case 60: case 110: case 160: case 200:
 			{
 			const SnesPPURegsT *r = m_PPU.GetRegs();
-			ConDebug("M7 l%3d  A=%04X B=%04X C=%04X D=%04X  X=%04X Y=%04X sel=%02X\n",
+			DLog("[snes-m7] M7 l%3d A=%04X B=%04X C=%04X D=%04X X=%04X Y=%04X sel=%02X",
 				(int)m_uLine,
 				r->m7a.w, r->m7b.w, r->m7c.w, r->m7d.w,
 				r->m7x.w, r->m7y.w, r->m7sel);
@@ -1051,7 +1051,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	g_SnesDbgFrame = (int)m_uFrame;
 	g_SnesDbgLine  = 0;
 	g_SnesDbgDspN  = 0;
-	SNDBG("==== SNDBG frame %d ==== (mode7? bgmode=%02X)\n",
+	SNDBG("[snes-m7] ==== frame %d ==== (bgmode=%02X)",
 		g_SnesDbgFrame, m_PPU.GetRegs()->bgmode);
 
 	m_IO.LatchInput(pInput);

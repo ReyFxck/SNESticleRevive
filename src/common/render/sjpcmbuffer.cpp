@@ -40,10 +40,6 @@ Int32 SJPCMMixBuffer::GetOutputSamples()
 
     if (!SjPCM_IsInitialized())
     {
-        static int __gos_ni = 0;
-        if ((__gos_ni & 0x3F) == 0)
-            DLog("[snes-aud] gos: not-init #%d", __gos_ni);
-        __gos_ni++;
         return 0;
     }
 
@@ -76,15 +72,6 @@ Int32 SJPCMMixBuffer::GetOutputSamples()
         case 32000: nSamples = (nRaw / 6) * 4;      break;
         case 24000: nSamples = (nRaw / 8) * 4;      break;
         default:    nSamples = 0;                   break;
-    }
-
-    {
-        static int __gos = 0;
-        if ((__gos & 0x3F) == 0)
-            DLog("[snes-aud] gos f=%d sr=%u avail=%d out=%d async=%d",
-                 __gos, (unsigned)m_uSampleRate,
-                 (int)nRaw, (int)nSamples, (int)m_bAsync);
-        __gos++;
     }
 
     PROF_LEAVE("SjPCM_Available");
@@ -220,15 +207,6 @@ void SJPCMMixBuffer::OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSampl
             break;
     }
 
-    {
-        static int __oss = 0;
-        if ((__oss & 0x3F) == 0)
-            DLog("[snes-aud] oss f=%d in=%d est=%d acc=%d max=%d",
-                 __oss, (int)nSamples, (int)nOutSamples,
-                 (int)m_nOutSamples, (int)SJPCMMIXBUFFER_MAXENQUEUE);
-        __oss++;
-    }
-
     // check for buffer overflow 
     if ((m_nOutSamples + nOutSamples) > SJPCMMIXBUFFER_MAXENQUEUE)
     {
@@ -261,16 +239,6 @@ void SJPCMMixBuffer::Flush()
     Int32 nOutSamples;
 
     nOutSamples = m_nOutSamples;
-
-    {
-        static int __fc = 0;
-        if ((__fc & 0x3F) == 0)
-        {
-            DLog("[snes-aud] flush f=%d nout=%d async=%d",
-                 __fc, (int)nOutSamples, (int)m_bAsync);
-        }
-        __fc++;
-    }
 
     if (nOutSamples > 0)
     {

@@ -54,24 +54,6 @@ static Uint32 _iframetex=0;
 
 Bool MainLoopProcess()
 {
-    /* Frame-level audio-path probe. Print the gate state every 60
-       frames (~1 s) so we can tell whether the SNES is actually
-       being executed (and therefore whether SJPCMMixBuffer::Flush /
-       SjPCM_Enqueue should be running). */
-    {
-        static int __frame = 0;
-        if ((__frame & 0x3F) == 0)
-        {
-            DLog("[snes-aud] proc f=%d menu=%d blk=%d sys=%p mix=%p ready=%d",
-                 __frame,
-                 (int)_bMenu,
-                 (int)_MainLoop_BlackScreen,
-                 (void*)_pSystem,
-                 (void*)_SJPCMMix,
-                 (int)_MainLoop_bSjPCMReady);
-        }
-        __frame++;
-    }
     NetPlayRPCInputT NetInput;
 
     PROF_ENTER("Frame");
@@ -231,17 +213,6 @@ Bool MainLoopProcess()
             }
 
             GPPrimDisableZBuf();
-            {
-                static int __ec = 0;
-                if ((__ec & 0x3F) == 0)
-                {
-                    DLog("[mainloop] exec f=%d gs=%d mix=%p sys=%s",
-                         __ec, (int)NetInput.eGameState, (void*)pMixBuffer,
-                         (_pSystem == _pNes) ? "nes" :
-                         (_pSystem == _pSnes) ? "snes" : "?");
-                }
-                __ec++;
-            }
 
             /* Phase 2 of the NES integration: dispatch ExecuteFrame
                through the polymorphic Emu::System* when the loaded

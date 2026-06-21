@@ -300,8 +300,6 @@ void SjPCM_Enqueue(short *left, short *right, int size, int wait)
 {
     int i;
     int bytes;
-    int ret;
-    static int call_count = 0;
 
     if (!sjpcm_inited) return;
     if (size <= 0) return;
@@ -320,20 +318,7 @@ void SjPCM_Enqueue(short *left, short *right, int size, int wait)
         audsrv_wait_audio(bytes);
     }
 
-    ret = audsrv_play_audio((const char *)_interleave_buf, bytes);
-
-    /* DLog only goes through SIO so we can spam it at a few-Hz cadence
-       without tanking the framerate (sio_putsn is a few hundred MMIO
-       writes, no GS render). Print every 64th call (~1 s of audio at
-       60 Hz) so we can see the queued/available counters move. */
-    if ((call_count & 0x3F) == 0)
-    {
-        int q = audsrv_queued();
-        int a = audsrv_available();
-        DLog("[snes-aud] enq#%d size=%d bytes=%d ret=%d queued=%d avail=%d",
-             call_count, size, bytes, ret, q, a);
-    }
-    call_count++;
+    audsrv_play_audio((const char *)_interleave_buf, bytes);
 }
 
 

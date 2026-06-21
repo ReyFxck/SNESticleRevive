@@ -5,7 +5,9 @@
  *  Objetivo: descobrir POR QUE a pista do Super Mario Kart aparece
  *  achatada (matriz Mode-7 constante por scanline).
  *
- *  Saida via ConDebug (=printf), capturada no logs.txt do NetherSX2.
+ *  Saida via DLog() (EE SIO) - o MESMO canal usado pelos logs [snes-aud],
+ *  que aparece no logs.txt do NetherSX2.  Cada linha leva o prefixo
+ *  "[snes-m7] " para facilitar o grep.
  *
  *  Throttle: imprime apenas 1 "snapshot" a cada SNDBG_FRAME_PERIOD
  *  frames (~5s @60fps) e limita o volume do dump do DSP por frame,
@@ -17,7 +19,6 @@
 #define _SNDBGLOG_H
 
 #include "types.h"
-#include "console.h"
 
 // liga/desliga toda a instrumentacao de uma vez
 #define SNDBG_LOG 1
@@ -26,6 +27,16 @@
 #define SNDBG_FRAME_PERIOD 300
 // quantos acessos ao DSP logar por frame de snapshot (cap)
 #define SNDBG_DSP_MAXLOG   80
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+// DLog: definido em src/modules/sjpcm/sjpcm_rpc.c (escreve no EE SIO ->
+// cai no logs.txt do emulador, igual aos logs [snes-aud]).
+void DLog(const char *fmt, ...);
+#ifdef __cplusplus
+}
+#endif
 
 #if SNDBG_LOG
 
@@ -40,7 +51,8 @@ static inline int SnesDbgWin(void)
 	return (g_SnesDbgFrame >= 0) && ((g_SnesDbgFrame % SNDBG_FRAME_PERIOD) == 0);
 }
 
-#define SNDBG(...)        do { if (SnesDbgWin()) ConDebug(__VA_ARGS__); } while (0)
+// log no canal do logs.txt (mesmo que [snes-aud]), so no frame de snapshot
+#define SNDBG(...)        do { if (SnesDbgWin()) DLog(__VA_ARGS__); } while (0)
 
 #else
 

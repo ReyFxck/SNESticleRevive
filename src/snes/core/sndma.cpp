@@ -540,7 +540,7 @@ void SnesDMAC::BeginHDMA()
 #if SNDBG_LOG
 	if (SnesDbgWin())
 	{
-		ConDebug("HDMA enable=%02X\n", m_HDMAEnable);
+		DLog("[snes-m7] HDMA enable=%02X", m_HDMAEnable);
 		for (Uint32 c=0; c < SNESDMAC_CHANNEL_NUM; c++)
 		{
 			if (!(m_HDMAEnable & (1<<c))) continue;
@@ -552,7 +552,7 @@ void SnesDMAC::BeginHDMA()
 			// destaca canais que escrevem na matriz Mode-7 (M7A..M7D = $211B..$211E)
 			const char *tag = (p->bbadx >= 0x1B && p->bbadx <= 0x1E) ? "  <== MODE7 M7A-D" :
 			                  (p->bbadx >= 0x1F && p->bbadx <= 0x20) ? "  <== MODE7 M7X/Y" : "";
-			ConDebug("  HDMA%d dmap=%02X mode=%d indir=%d dir=%d Bbus=%04X table=%02X:%04X iBank=%02X%s\n",
+			DLog("[snes-m7]   HDMA%d dmap=%02X mode=%d indir=%d dir=%d Bbus=%04X table=%02X:%04X iBank=%02X%s",
 				(int)c, p->dmapx, mode, indirect, dir, bbus,
 				p->a1bx, p->a1tx, p->dasbx, tag);
 		}
