@@ -1020,30 +1020,31 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
     //                     boot e passar no self-test do DSP-1.
     //
     //   DRC=0 (16-bit) -> fase de DADOS: palavra de 16 bits transferida
-    //                     MSB-first (big-endian).  O 1o acesso (DRS=0)
-    //                     e' o byte ALTO; o 2o acesso (DRS=1) e' o byte
-    //                     BAIXO.
+    //                     LSB-first.  O 1o acesso (DRS=0) e' o byte
+    //                     BAIXO; o 2o acesso (DRS=1) e' o byte ALTO.
+    //                     Esta e' a ordem do hardware real / bsnes.
     //
-    // A versao anterior usava a mesma logica de DRS para os dois modos,
-    // o que mantinha o opcode certo mas TROCAVA os bytes de cada word
-    // de dados (o 1o byte ia para o byte baixo em vez do alto).  Isso
-    // fazia todos os parametros numericos chegarem com endianness
-    // invertido -> Mario Kart com karts fora da tela, pista e mini-mapa
-    // quebrados.  F-Zero (sem DSP-1) nao era afetado.
+    // IMPORTANTE: uma versao anterior usou MSB-first aqui achando que
+    // consertava "karts fora da tela", mas o bsnes (preciso ao hardware)
+    // usa LSB-first e roda karts E pista certos.  O MSB-first deixava o
+    // HDMA ler a matriz Mode-7 do DSP com os bytes trocados e escrever
+    // nos registradores M7A-D (que sao LSB-first) invertidos -> a pista
+    // ficava achatada (matriz lixo) enquanto a CPU, simetrica, ainda
+    // funcionava.  F-Zero (sem DSP-1) nunca foi afetado.
     if (m_uSR & SR_DRC) {
         // ---- 8-bit: opcode no byte baixo ----
         if (bRead) rData = (Uint8)(m_uDR & 0xFF);
         else       m_uDR = (Uint16)((m_uDR & 0xFF00) | rData);
     } else {
-        // ---- 16-bit: dados MSB-first ----
+        // ---- 16-bit: dados LSB-first (igual bsnes/hardware real) ----
         if (bRead) {
-            if (m_uSR & SR_DRS) rData = (Uint8)(m_uDR & 0xFF);   // 2o: LSB
-            else                rData = (Uint8)(m_uDR >> 8);     // 1o: MSB
+            if (m_uSR & SR_DRS) rData = (Uint8)(m_uDR >> 8);     // 2o: MSB
+            else                rData = (Uint8)(m_uDR & 0xFF);   // 1o: LSB
         } else {
             if (m_uSR & SR_DRS)
-                m_uDR = (Uint16)((m_uDR & 0xFF00) | rData);              // 2o: LSB
+                m_uDR = (Uint16)((m_uDR & 0x00FF) | ((Uint16)rData << 8)); // 2o: MSB
             else
-                m_uDR = (Uint16)((m_uDR & 0x00FF) | ((Uint16)rData << 8)); // 1o: MSB
+                m_uDR = (Uint16)((m_uDR & 0xFF00) | rData);                // 1o: LSB
         }
     }
 

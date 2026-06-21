@@ -8,8 +8,8 @@
 #include <cstdint>
 
 static void wbyte(SNDSP1 &d, uint8_t b){ d.WriteData(0,b); }
-static void wword(SNDSP1 &d, int16_t w){ d.WriteData(0,(uint8_t)((uint16_t)w>>8)); d.WriteData(0,(uint8_t)((uint16_t)w&0xFF)); }
-static int16_t rword(SNDSP1 &d){ uint8_t hi=d.ReadData(0), lo=d.ReadData(0); return (int16_t)(((uint16_t)hi<<8)|lo); }
+static void wword(SNDSP1 &d, int16_t w){ d.WriteData(0,(uint8_t)((uint16_t)w&0xFF)); d.WriteData(0,(uint8_t)((uint16_t)w>>8)); }
+static int16_t rword(SNDSP1 &d){ uint8_t lo=d.ReadData(0), hi=d.ReadData(0); return (int16_t)(((uint16_t)hi<<8)|lo); }
 
 static void doParameter(SNDSP1 &d){
     wbyte(d,0x02);
