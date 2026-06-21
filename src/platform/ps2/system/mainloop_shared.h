@@ -116,7 +116,7 @@ extern Bool            _MainLoop_bDiskInserted;
 
 /* ---- ROM / framebuffer / audio buffers ---------------------------- */
 
-extern Uint8           _RomData[4 * 1024 * 1024 + 1024];
+extern Uint8           _RomData[8 * 1024 * 1024 + 1024];
 extern CRenderSurface *_fbTexture[2];
 extern TextureT        _OutTex;
 extern SJPCMMixBuffer *_SJPCMMix;

@@ -111,6 +111,7 @@ private:
 	void	MapHiRom();
 	void	MapMem(struct SnesMemMapT *pMemMap);
 	void	MapMem(SNRomMappingE eRomMapping, Uint32 uFlags);
+	void	MapMemExLoRom(void);
 	void	DumpMemMap();
 
 	void	SetFastRom();

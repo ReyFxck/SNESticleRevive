@@ -92,7 +92,10 @@ Uint32 _MainLoop_uBlenderTBP = 0;
 CWavFile _WavFile;
 #endif
 
-Uint8 _RomData[4 * 1024 * 1024 + 1024] __attribute__((aligned(64))) __attribute__ ((section (".bss")));
+/* 8MB+1KB: cobre LoROM/HiROM ate 4MB E ExLoROM (Jumbo) ate 8MB/64Mbit,
+   usado por hacks grandes de SMW expandidas pelo Lunar Magic. Cabe folgado
+   nos 32MB da PS2. */
+Uint8 _RomData[8 * 1024 * 1024 + 1024] __attribute__((aligned(64))) __attribute__ ((section (".bss")));
 
 SnesStateT		_SnesState;
 NesStateT		_NesState;

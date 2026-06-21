@@ -247,6 +247,71 @@ void SnesSystem::DumpMemMap()
 }
 #endif
 
+/* Areas de sistema (SRAM/WRAM/LoRAM/PPU) do ExLoROM - iguais ao LoROM.
+   Aplicadas DEPOIS do mapeamento de ROM para sobrepor (WRAM em $7E-$7F
+   tem que vencer a ROM que a regiao $40-$7F mapeia ali). */
+static SnesMemMapT _SnesMemMap_ExLoRom_Sys[]=
+{
+	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
+	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x00, 0x3F, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0x80, 0xBF, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x80, 0xBF, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x80, 0xBF, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
+};
+
+/* Mapeia uma faixa de bancos no estilo LoROM (32KB por banco). Se
+   fullBank, a metade baixa ($0000-7FFF) espelha a alta ($8000-FFFF) do
+   mesmo chunk. Replica o map_lorom_offset do snes9x. */
+static void _MapExLoRomRegion(SNCpuT *pCpu, Uint8 *pRom, Uint32 romBytes,
+                              Uint32 bankS, Uint32 bankE, Bool fullBank,
+                              Uint32 baseOffset)
+{
+	Uint32 c;
+	if (romBytes == 0) return;
+	for (c = bankS; c <= bankE; c++)
+	{
+		Uint32 chunk = baseOffset + ((c - bankS) * 0x8000);
+		Uint8 *pMem;
+		Uint32 bankAddr;
+		if (chunk >= romBytes) chunk %= romBytes;   // espelha dentro da ROM
+		pMem     = pRom + chunk;
+		bankAddr = c << 16;
+
+		SNCPUSetMemSpeed(pCpu, bankAddr | 0x8000, 0x8000, SNCPU_CYCLE_SLOW);
+		SNCPUSetBank    (pCpu, bankAddr | 0x8000, 0x8000, pMem, FALSE);
+		if (fullBank)
+		{
+			SNCPUSetMemSpeed(pCpu, bankAddr | 0x0000, 0x8000, SNCPU_CYCLE_SLOW);
+			SNCPUSetBank    (pCpu, bankAddr | 0x0000, 0x8000, pMem, FALSE);
+		}
+	}
+}
+
+void SnesSystem::MapMemExLoRom(void)
+{
+	SNCpuT *pCpu     = &m_Cpu;
+	Uint8  *pRom     = m_pRom->GetData();
+	Uint32  romBytes = m_pRom->GetBytes();
+
+	// Bancos de ROM (replica snes9x Map_JumboLoROMMap, com as metades ja
+	// normalizadas no loader: metade-com-header em 0x400000, 4MB em 0):
+	//   $00-$3F:8000 -> 0x400000  (metade com header/vetores -> $00 le aqui)
+	//   $40-$7F:0000 -> 0x600000  (full bank; em geral fora de range)
+	//   $80-$BF:8000 -> 0x000000  (4MB principal, parte 1)
+	//   $C0-$FF:0000 -> 0x200000  (4MB principal, parte 2; full bank)
+	_MapExLoRomRegion(pCpu, pRom, romBytes, 0x00, 0x3F, FALSE, 0x400000);
+	_MapExLoRomRegion(pCpu, pRom, romBytes, 0x40, 0x7F, TRUE,  0x600000);
+	_MapExLoRomRegion(pCpu, pRom, romBytes, 0x80, 0xBF, FALSE, 0x000000);
+	_MapExLoRomRegion(pCpu, pRom, romBytes, 0xC0, 0xFF, TRUE,  0x200000);
+
+	// areas de sistema por cima
+	MapMem(_SnesMemMap_ExLoRom_Sys);
+}
+
 void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 {
 	// set default traps
@@ -277,6 +342,11 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 				m_pDsp = &m_DSP1;;
 			}
 #endif
+			break;
+
+		// LoROM > 4MB (Jumbo / ExLoROM, ate 8MB)
+		case SNROM_MAPPING_EXLOROM:
+			MapMemExLoRom();
 			break;
 	}
 

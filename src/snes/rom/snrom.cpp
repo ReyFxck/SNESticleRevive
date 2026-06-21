@@ -1,9 +1,40 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "types.h"
 #include "snrom.h"
 #include "dataio.h"
+
+/* Pontua um header LoROM candidato em 'base' (deslocamento do $FFC0 da
+   metade). Usado para descobrir QUAL metade de uma ROM ExLoROM contem o
+   header/vetores reais, para normalizar a ordem (igual ao scoring do
+   snes9x, porem simplificado). */
+static int _ExLoRomHeaderScore(const Uint8 *pRom, Uint32 base, Uint32 romBytes)
+{
+	if ((base + 0x40) > romBytes) return -1000;
+
+	int score = 0;
+
+	// reset vector ($FFFC) deve apontar para a area de ROM (>= $8000)
+	Uint16 reset = (Uint16)(pRom[base + 0x3C] | (pRom[base + 0x3D] << 8));
+	if (reset >= 0x8000) score += 8; else score -= 8;
+
+	// checksum + complemento == 0xFFFF
+	Uint16 cmp = (Uint16)(pRom[base + 0x1C] | (pRom[base + 0x1D] << 8));
+	Uint16 chk = (Uint16)(pRom[base + 0x1E] | (pRom[base + 0x1F] << 8));
+	if (chk != 0 && (Uint16)(chk + cmp) == 0xFFFF) score += 8;
+
+	// titulo em ASCII imprimivel
+	int printable = 0;
+	for (int i = 0; i < 21; i++) {
+		Uint8 c = pRom[base + i];
+		if (c >= 0x20 && c < 0x7F) printable++;
+	}
+	if (printable >= 16) score += 4;
+
+	return score;
+}
 
 
 //
@@ -536,6 +567,36 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 	}
 
 	SetCartInfo(pCartInfo);
+
+	// ---- ExLoROM (Jumbo LoROM): LoROM maior que 4MB ----
+	// Hacks grandes (ex.: SMW expandida pelo Lunar Magic) usam ExLoROM:
+	// a metade de cima dos bancos ($80-$FF) deixa de ser espelho e passa a
+	// conter dados extras, chegando a 8MB. Seguimos o snes9x
+	// (Map_JumboLoROMMap): a ROM e' normalizada para que a metade que tem o
+	// header/vetores fique em offset 0x400000 (mapeada em $00-$3F, de onde a
+	// CPU le os vetores) e os outros 4MB em offset 0 ($80-$FF).
+	if (m_eMapping == SNROM_MAPPING_LOROM && m_uRomBytes > 0x400000)
+	{
+		int score0  = _ExLoRomHeaderScore(m_pRomData, 0x007FC0, m_uRomBytes);
+		int score4M = _ExLoRomHeaderScore(m_pRomData, 0x407FC0, m_uRomBytes);
+
+		// header na frente do arquivo -> trocar as metades para coloca-lo
+		// em 0x400000 (caso "SMALLFIRST" do snes9x).
+		if (score0 > score4M)
+		{
+			Uint32 smallBytes = m_uRomBytes - 0x400000;
+			Uint8 *pTmp = (Uint8 *)malloc(smallBytes);
+			if (pTmp)
+			{
+				memcpy (pTmp, m_pRomData, smallBytes);                     // metade da frente (com header)
+				memmove(m_pRomData, m_pRomData + smallBytes, 0x400000);    // 4MB de tras -> frente
+				memcpy (m_pRomData + 0x400000, pTmp, smallBytes);          // header -> 0x400000
+				free(pTmp);
+			}
+		}
+
+		m_eMapping = SNROM_MAPPING_EXLOROM;
+	}
 
 	m_bLoaded   = true;
 	return LOADERROR_NONE;
