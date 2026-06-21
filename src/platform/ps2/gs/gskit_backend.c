@@ -61,7 +61,7 @@ static int       _gsk_invalidate_pending = 0;
    Default is 480i (interlaced 60Hz) - the mode that ran at 60fps.
    240p is 60fps on real PS2/CRT but the emulator presents it at 30Hz.
    Pick the mode you want in the Video Config screen (it persists). */
-int g_GskVideoMode = GSK_VIDMODE_480I;
+int g_GskVideoMode = GSK_VIDMODE_240P;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
