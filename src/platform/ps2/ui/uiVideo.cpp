@@ -22,7 +22,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 5
+#define VIDEOCFG_VERSION 6
 
 typedef struct
 {
@@ -122,7 +122,7 @@ static void _VideoHeader(int vy, const char *pStr)
 void CVideoScreen::Draw()
 {
 	static const char *names[GSK_VIDMODE_COUNT] = {
-		"240p (default)", "480i", "480p (GSM/HDMI)"
+		"240p (real PS2)", "480i (default)", "480p (GSM/HDMI)"
 	};
 	Int32 vy = 15;
 	char  buf[16];
