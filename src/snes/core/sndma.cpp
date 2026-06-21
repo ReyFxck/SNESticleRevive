@@ -11,7 +11,6 @@ extern "C" {
 };
 #include "sndma.h"
 #include "snppu.h"
-#include "sndbglog.h"
 
 #define SNESDMA_DEBUG 0
 
@@ -536,28 +535,6 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 void SnesDMAC::BeginHDMA()
 {
 	Uint8 uEnabled = m_HDMAEnable;
-
-#if SNDBG_LOG
-	if (SnesDbgWin())
-	{
-		DLog("[snes-m7] HDMA enable=%02X", m_HDMAEnable);
-		for (Uint32 c=0; c < SNESDMAC_CHANNEL_NUM; c++)
-		{
-			if (!(m_HDMAEnable & (1<<c))) continue;
-			SnesDMAChT *p = &m_Channels[c];
-			Uint8 mode    = p->dmapx & 7;
-			Uint8 indirect= (p->dmapx & 0x40) ? 1 : 0;
-			Uint8 dir     = (p->dmapx & 0x80) ? 1 : 0; // 1 = B->A (read from PPU)
-			Uint32 bbus   = 0x2100 + p->bbadx;
-			// destaca canais que escrevem na matriz Mode-7 (M7A..M7D = $211B..$211E)
-			const char *tag = (p->bbadx >= 0x1B && p->bbadx <= 0x1E) ? "  <== MODE7 M7A-D" :
-			                  (p->bbadx >= 0x1F && p->bbadx <= 0x20) ? "  <== MODE7 M7X/Y" : "";
-			DLog("[snes-m7]   HDMA%d dmap=%02X mode=%d indir=%d dir=%d Bbus=%04X table=%02X:%04X iBank=%02X%s",
-				(int)c, p->dmapx, mode, indirect, dir, bbus,
-				p->a1bx, p->a1tx, p->dasbx, tag);
-		}
-	}
-#endif
 
 	for (Uint32 uChan=0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{

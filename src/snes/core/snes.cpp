@@ -11,10 +11,17 @@
 #include "sndebug.h"
 #include "sndbglog.h"
 
-// --- diagnostico DSP-1 -> HDMA -> Mode-7 (ver sndbglog.h) ---
-int g_SnesDbgFrame = -1;
-int g_SnesDbgLine  = 0;
-int g_SnesDbgDspN  = 0;
+// --- diagnostico de TIMING (ver sndbglog.h) ---
+#if SNDBG_LOG
+static Uint32 g_TmgFrameStart = 0;   // COP0 cycle no inicio do frame
+static Uint32 g_TmgWinFrames  = 0;   // frames acumulados na janela
+static Uint32 g_TmgWinSumCyc  = 0;   // soma de ciclos/frame na janela
+static Uint32 g_TmgWinMaxCyc  = 0;   // pior frame (ciclos) na janela
+static Int32  g_TmgIrqLineMin = 9999;
+static Int32  g_TmgIrqLineMax = -1;
+static Uint32 g_TmgIrqCount   = 0;   // total de H-IRQs na janela
+static Uint32 g_TmgFrameNo    = 0;
+#endif
 
 
 #define SNES_SYNCPPUEVERYLINE (CODE_DEBUG && 0) 
@@ -666,23 +673,9 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 
 	if (_SnesDsp1IsStatus(uAddr))
-	{
-		Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
-#if SNDBG_LOG
-		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-		{ DLog("[snes-m7] DSP RD SR [%06X]=%02X", uAddr, s); g_SnesDbgDspN++; }
-#endif
-		return s;
-	}
+		return pSnes->m_pDsp->ReadStatus(uAddr);
 	else
-	{
-		Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
-#if SNDBG_LOG
-		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-		{ DLog("[snes-m7] DSP RD DR [%06X]=%02X (f%d l%d)", uAddr, d, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
-#endif
-		return d;
-	}
+		return pSnes->m_pDsp->ReadData(uAddr);
 }
 
 
@@ -690,16 +683,9 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 
-	// Escritas vao para o DR; o SR e' somente leitura (escritas nele sao
-	// ignoradas, como no hardware real).
+	// Escritas vao para o DR; o SR e' somente leitura.
 	if (!_SnesDsp1IsStatus(uAddr))
-	{
-#if SNDBG_LOG
-		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-		{ DLog("[snes-m7] DSP WR DR [%06X]=%02X (f%d l%d)", uAddr, uData, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
-#endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
-	}
 }
 
 #endif
@@ -960,7 +946,6 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
-	g_SnesDbgLine = (int)m_uLine;
 
     // don't trigger IRQ by default
     int nHIRQCycles = -1;
@@ -990,6 +975,18 @@ void SnesSystem::ExecuteLine()
 		nHIRQCycles = m_IO.m_Regs.htime.w * 4;
 	}
 
+#if SNDBG_LOG
+	// rastreia a scanline em que um H-IRQ esta agendado (divisao de tela).
+	// Se min..max variam muito frame a frame, a divisao "treme".
+	if (nHIRQCycles >= 0)
+	{
+		Int32 ln = (Int32)m_uLine;
+		if (ln < g_TmgIrqLineMin) g_TmgIrqLineMin = ln;
+		if (ln > g_TmgIrqLineMax) g_TmgIrqLineMax = ln;
+		g_TmgIrqCount++;
+	}
+#endif
+
 	PROF_ENTER("ExecLine");
 
 	SNCPUConsumeCycles(&m_Cpu, SNES_LINECYCLEDELAY);
@@ -1007,26 +1004,6 @@ void SnesSystem::ExecuteLine()
         m_DMAC.ProcessHDMA();
     }
 
-#if SNDBG_LOG
-	// captura a matriz Mode-7 em scanlines selecionadas: se A/B/C/D NAO
-	// variam ao longo das linhas, a pista esta achatada (matriz constante).
-	if (SnesDbgWin())
-	{
-		switch (m_uLine)
-		{
-		case 8: case 60: case 110: case 160: case 200:
-			{
-			const SnesPPURegsT *r = m_PPU.GetRegs();
-			DLog("[snes-m7] M7 l%3d A=%04X B=%04X C=%04X D=%04X X=%04X Y=%04X sel=%02X",
-				(int)m_uLine,
-				r->m7a.w, r->m7b.w, r->m7c.w, r->m7d.w,
-				r->m7x.w, r->m7y.w, r->m7sel);
-			}
-			break;
-		}
-	}
-#endif
-
     // execute CPU during h-blank
     ExecuteWithIRQ(SNES_HBLANKCYCLES, nHIRQCycles);
 
@@ -1042,12 +1019,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 {
     m_uLine = 0;
 
-	// --- diagnostico Mode-7 ---
-	g_SnesDbgFrame = (int)m_uFrame;
-	g_SnesDbgLine  = 0;
-	g_SnesDbgDspN  = 0;
-	SNDBG("[snes-m7] ==== frame %d ==== (bgmode=%02X)",
-		g_SnesDbgFrame, m_PPU.GetRegs()->bgmode);
+#if SNDBG_LOG
+	// --- timing: marca inicio do frame (COP0 cycle counter da EE) ---
+	g_TmgFrameStart  = ProfCtrGetCycle();
+#endif
 
 	m_IO.LatchInput(pInput);
 
@@ -1163,6 +1138,35 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			m_SpcDsp.UpdateFlags(&m_SpcDspSilentMixer);
 			break;
 	}
+
+#if SNDBG_LOG
+	// --- timing: fecha o frame e resume a janela ---
+	{
+		Uint32 cyc = ProfCtrGetCycle() - g_TmgFrameStart;  // ciclos de emulacao deste frame
+		g_TmgWinSumCyc += cyc;
+		if (cyc > g_TmgWinMaxCyc) g_TmgWinMaxCyc = cyc;
+		g_TmgWinFrames++;
+		g_TmgFrameNo++;
+		if (g_TmgWinFrames >= SNDBG_FRAME_PERIOD)
+		{
+			Uint32 avg   = g_TmgWinSumCyc / g_TmgWinFrames;
+			Uint32 ratio = avg ? (g_TmgWinMaxCyc * 100u / avg) : 0;
+			// ratio ~100-130 = frames consistentes; >150 = picos (engasgo de emulacao).
+			// splitIRQ min..max iguais = divisao estavel; diferentes = treme.
+			DLog("[snes-tmg] f%u emuCyc avg=%u max=%u (max=%u%%ofavg) splitIRQ=%d..%d irq/win=%u",
+				(unsigned)g_TmgFrameNo,
+				(unsigned)avg, (unsigned)g_TmgWinMaxCyc, (unsigned)ratio,
+				(int)g_TmgIrqLineMin, (int)g_TmgIrqLineMax,
+				(unsigned)g_TmgIrqCount);
+			g_TmgWinFrames  = 0;
+			g_TmgWinSumCyc  = 0;
+			g_TmgWinMaxCyc  = 0;
+			g_TmgIrqCount   = 0;
+			g_TmgIrqLineMin = 9999;
+			g_TmgIrqLineMax = -1;
+		}
+	}
+#endif
 
 	m_uFrame++;
 }
