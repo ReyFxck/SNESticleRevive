@@ -17,9 +17,14 @@ static SnesMemMapT	_SnesMemMap_LoRom[]=
 	// espelhando certo)
 	{0x80, 0xFF, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
 
-	// mirror rom in lower 32k (?)
-	{0x40, 0x6F, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
-	{0xC0, 0xEF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
+	// mirror rom in lower 32k: a metade baixa ($0000-7FFF) de cada banco
+	// espelha a metade ALTA ($8000-FFFF) do MESMO banco (LoROM). O offset
+	// inicial 0x200000 faz o banco $40/$C0 casar com o offset da metade
+	// alta (0x40*0x8000 = 0x200000). Sem isso, ROMs grandes (>~2MB) liam
+	// dados do offset 0 -> graficos/niveis embaralhados (ex.: SMW 4MB
+	// "12 Magic Orbs"). Em ROMs pequenas o wrap escondia o bug.
+	{0x40, 0x6F, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM, 0x200000},
+	{0xC0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM, 0x200000},
 
 	// map sram areas
 	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
