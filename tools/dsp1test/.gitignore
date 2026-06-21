@@ -1,3 +1,5 @@
-# binario compilado e symlink gerado pelo build.sh
+# binarios compilados e symlink gerado pelo build.sh
 dsp1_test
+raster_test
+stop_test
 sndsp1.cpp

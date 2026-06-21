@@ -1098,12 +1098,16 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
             ++m_uDataCounter;
             Uint16 nOut = g_CmdTable[m_uCommand & 0x3F].nOut;
             if (m_uDataCounter >= nOut) {
-                // Op0A em modo continuo: re-executa com Vs incrementado
-                // e enfileira proximo conjunto de saidas.  A interrupcao
-                // do stream e' tratada em WriteData(): qualquer escrita
-                // da CPU enquanto estamos aqui forca volta a WAIT_CMD.
+                // Op0A (Raster) em modo continuo: re-executa com Vs
+                // incrementado e enfileira o proximo conjunto de saidas.
+                // O jogo PARA o stream escrevendo 0x8000 no DR: quando a
+                // palavra que acabou de fechar e' 0x8000, encerramos e
+                // voltamos a WAIT_CMD (mesmo criterio do bsnes/Overload).
+                // O metodo anterior (atalho em WriteData) interpretava o
+                // LSB 0x00 do 0x8000 como o comando 0x00 (Multiply) e
+                // dessincronizava todo o resto -> pista achatada / travas.
                 Uint8 cmd = (Uint8)(m_uCommand & 0x3F);
-                if (cmd == 0x0A) {
+                if (cmd == 0x0A && m_uDR != 0x8000) {
                     m_InWords[0]++;
                     Execute(m_uCommand);
                     m_uDataCounter = 0;
@@ -1126,14 +1130,10 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
 
 void SNDSP1::WriteData(Uint32 /*uAddr*/, Uint8 uData)
 {
-    // Stream-break para Op0A em modo continuo: qualquer escrita
-    // enquanto o DSP esta entregando matrizes Mode-7 e' interpretada
-    // como pedido de novo opcode pelo jogo.  Sem esse atalho o DSP
-    // ficaria preso emitindo An/Bn/Cn/Dn ad infinitum.
-    if (m_uFsmState == FSM_WRITE_DATA && (m_uCommand & 0x3F) == 0x0A) {
-        m_uFsmState = FSM_WAIT_CMD;
-        m_uSR      |= SR_DRC;
-    }
+    // O break do stream do Raster e' tratado dentro do FSM (criterio
+    // m_uDR == 0x8000 em FSM_WRITE_DATA), igual ao bsnes.  Nao ha mais
+    // atalho aqui: escrever durante o stream apenas alimenta o DR pela
+    // via normal, e a palavra 0x8000 encerra a sequencia.
     Uint8 d = uData;
     FsmStep(false, d);
 }
