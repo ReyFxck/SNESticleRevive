@@ -58,17 +58,17 @@ static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
 /* Video mode + display offset (selectable in the Settings screen).
-   Default is 480i (interlaced) - the only mode NetherSX2 runs at 60fps
-   (it runs progressive NTSC / 240p at 30Hz).  240p is 60fps on real
-   PS2/CRT but 30fps on the emulator, so it stays opt-in. */
-int g_GskVideoMode = GSK_VIDMODE_480I;
+   Default is 240p (NTSC progressive 320x240, 4:3), using GS_FIELD so it
+   runs at 60Hz - exactly how the original iaddis SNESticle set it up
+   (sceSetGSCrt with field mode 0).  480i/480p are opt-in. */
+int g_GskVideoMode = GSK_VIDMODE_240P;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
-static int _gsk_vck         = 4;   /* display-offset VCK units            */
-static int _gsk_fb_width    = 640; /* active FB width                     */
-static int _gsk_fb_height   = 448; /* active FB height                    */
-static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
+static int _gsk_vck         = 2;   /* display-offset VCK units            */
+static int _gsk_fb_width    = 320; /* active FB width                     */
+static int _gsk_fb_height   = 240; /* active FB height                    */
+static int _gsk_active_mode = GSK_VIDMODE_240P; /* mode the GS is in now   */
 
 /* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
    overscan/widescreen can be recomputed from a clean baseline. */
