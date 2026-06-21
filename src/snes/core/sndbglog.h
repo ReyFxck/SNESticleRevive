@@ -21,7 +21,10 @@
 #include "types.h"
 
 // liga/desliga toda a instrumentacao de uma vez
-#define SNDBG_LOG 1
+// (1 = liga os logs [snes-m7] de diagnostico; 0 = desliga tudo, sem
+//  nenhuma escrita no SIO -> zero overhead. Religue para depurar o
+//  caminho DSP-1 -> HDMA -> Mode-7 em outros jogos.)
+#define SNDBG_LOG 0
 
 // 1 snapshot a cada N frames (300 = ~5 segundos)
 #define SNDBG_FRAME_PERIOD 300
