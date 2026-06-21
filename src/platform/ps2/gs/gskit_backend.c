@@ -65,6 +65,7 @@ int g_GskVideoMode = GSK_VIDMODE_240P;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
+int g_GskWidescreen = 0;  /* 0 = 4:3, 1 = 16:9 anamorphic stretch */
 static int _gsk_vck         = 4;   /* display-offset VCK units            */
 static int _gsk_fb_width    = 640; /* active FB width                     */
 static int _gsk_fb_height   = 448; /* active FB height                    */
@@ -337,6 +338,33 @@ static void _GskApplyDisplay(void)
         starty = _gsk_base_starty + sy;
     }
 
+    /* Widescreen: stretch the picture horizontally to ~16:9 by raising
+       the horizontal magnification (MAGH) and the display width (DW)
+       together, while still reading the SAME framebuffer pixels.  This
+       is the anamorphic path -- on a 16:9 TV the wider picture fills the
+       screen; on a 4:3 TV it overscans the left/right edges.
+
+       NOTE: the previous build only widened DW, which just added a blank
+       margin instead of stretching.  The fix is to scale MAGH too: the
+       picture occupies (DW+1) VCK and reads (DW+1)/(MAGH+1) source
+       pixels, so scaling both by the same factor keeps the source count
+       constant (no garbage) but spreads it wider = a real stretch. */
+    if (g_GskWidescreen)
+    {
+        int magh1  = magh + 1;
+        int srcpix = magh1 ? (dw + 1) / magh1 : (dw + 1);
+        int new_magh1 = (magh1 * 4 + 1) / 3;   /* ~ x1.333 (4:3 -> 16:9) */
+        int new_dw1;
+
+        if (new_magh1 > 16) new_magh1 = 16;    /* MAGH is a 4-bit field  */
+        if (new_magh1 < 1)  new_magh1 = 1;
+        new_dw1 = new_magh1 * srcpix;
+
+        startx -= (new_dw1 - (dw + 1)) / 2;    /* keep the picture centred */
+        dw   = new_dw1 - 1;
+        magh = new_magh1 - 1;
+    }
+
     gs->DW     = dw;
     gs->DH     = dh;
     gs->MagH   = magh;
@@ -360,6 +388,12 @@ void GSK_SetOverscan(int percent)
     if (percent < 0)   percent = 0;
     if (percent > 100) percent = 100;
     g_GskOverscan = percent;
+    _GskApplyDisplay();
+}
+
+void GSK_SetWidescreen(int on)
+{
+    g_GskWidescreen = on ? 1 : 0;
     _GskApplyDisplay();
 }
 
