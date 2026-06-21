@@ -9,6 +9,12 @@
 #include "prof.h"
 #include "sntiming.h"
 #include "sndebug.h"
+#include "sndbglog.h"
+
+// --- diagnostico DSP-1 -> HDMA -> Mode-7 (ver sndbglog.h) ---
+int g_SnesDbgFrame = -1;
+int g_SnesDbgLine  = 0;
+int g_SnesDbgDspN  = 0;
 
 
 #define SNES_SYNCPPUEVERYLINE (CODE_DEBUG && 0) 
@@ -647,11 +653,25 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	case 0x6000:
 	case 0x8000:
 	case 0xA000:
-		return pSnes->m_pDsp->ReadData(uAddr);
+		{
+			Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
+#if SNDBG_LOG
+			if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
+			{ ConDebug("DSP RD DR  [%06X]=%02X (f%d l%d)\n", uAddr, d, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
+#endif
+			return d;
+		}
 	case 0x7000:
 	case 0xC000:
 	case 0xE000:
-		return pSnes->m_pDsp->ReadStatus(uAddr);
+		{
+			Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
+#if SNDBG_LOG
+			if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
+			{ ConDebug("DSP RD SR  [%06X]=%02X\n", uAddr, s); g_SnesDbgDspN++; }
+#endif
+			return s;
+		}
 	}
 #if SNES_DEBUG
     if (Snes_bDebugUnhandledIO)
@@ -670,6 +690,10 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	case 0x6000:
 	case 0x8000:
 	case 0xA000:
+#if SNDBG_LOG
+		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
+		{ ConDebug("DSP WR DR  [%06X]=%02X (f%d l%d)\n", uAddr, uData, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
+#endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
 		break;
 	default:
@@ -941,6 +965,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+	g_SnesDbgLine = (int)m_uLine;
 
     // don't trigger IRQ by default
     int nHIRQCycles = -1;
@@ -987,6 +1012,26 @@ void SnesSystem::ExecuteLine()
         m_DMAC.ProcessHDMA();
     }
 
+#if SNDBG_LOG
+	// captura a matriz Mode-7 em scanlines selecionadas: se A/B/C/D NAO
+	// variam ao longo das linhas, a pista esta achatada (matriz constante).
+	if (SnesDbgWin())
+	{
+		switch (m_uLine)
+		{
+		case 8: case 60: case 110: case 160: case 200:
+			{
+			const SnesPPURegsT *r = m_PPU.GetRegs();
+			ConDebug("M7 l%3d  A=%04X B=%04X C=%04X D=%04X  X=%04X Y=%04X sel=%02X\n",
+				(int)m_uLine,
+				r->m7a.w, r->m7b.w, r->m7c.w, r->m7d.w,
+				r->m7x.w, r->m7y.w, r->m7sel);
+			}
+			break;
+		}
+	}
+#endif
+
     // execute CPU during h-blank
     ExecuteWithIRQ(SNES_HBLANKCYCLES, nHIRQCycles);
 
@@ -1001,6 +1046,13 @@ void SnesSystem::ExecuteLine()
 void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, CMixBuffer *pSound, ModeE eMode)
 {
     m_uLine = 0;
+
+	// --- diagnostico Mode-7 ---
+	g_SnesDbgFrame = (int)m_uFrame;
+	g_SnesDbgLine  = 0;
+	g_SnesDbgDspN  = 0;
+	SNDBG("==== SNDBG frame %d ==== (mode7? bgmode=%02X)\n",
+		g_SnesDbgFrame, m_PPU.GetRegs()->bgmode);
 
 	m_IO.LatchInput(pInput);
 
