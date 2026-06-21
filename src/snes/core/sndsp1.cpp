@@ -303,11 +303,10 @@ static Int16 DSP1_Sin(Int16 iAngle)
 static Int16 DSP1_Cos(Int16 iAngle)
 {
     if (iAngle < 0) {
-        // cos(-180) = cos(180) = -1.  Em Q15, -1 deve ser -32767
-        // (0x8001), nao -32768 (0x8000).  Usar -32768 estoura
-        // multiplicacoes (Int32)X * (-32768) e produz saturacao
-        // assimetrica com sinal incorreto.
-        if (iAngle == -32768) return -32767;
+        // cos(-32768) = -1.  O DSP-1 real (e o bsnes) devolvem 0x8000
+        // (-32768) aqui.  Multiplicacoes (Int32)X * (-32768) >> 15 nao
+        // estouram em Int32, entao seguimos a referencia exatamente.
+        if (iAngle == -32768) return -32768;
         iAngle = -iAngle;
     }
     Int32 s = g_SinTable[0x40 + (iAngle >> 8)]
@@ -907,8 +906,8 @@ void SNDSP1::Execute(Uint8 uCmd)
             }
             refE = shift;  // reposiciona refE = 16 - refE (expoente de saida)
         }
+        if (aux4 == -1) aux4 = 0;   // ordem identica ao bsnes: zera ANTES do shift
         aux4 >>= 1;
-        if (aux4 == -1) aux4 = 0;
 
         Int32 aux = (Uint16)m_Les + aux4;
         DSP1_NormalizeDouble(aux, C10, E2);
