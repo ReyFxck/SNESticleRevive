@@ -9,11 +9,13 @@
 
 static SnesMemMapT	_SnesMemMap_LoRom[]=
 {
-	// map slow rom
-	{0x00, 0x6F, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
+	// map slow rom (estendido $00-$7D para cobrir 4MB; $7E-$7F e' WRAM)
+	{0x00, 0x7D, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
 
-	// map fast rom
-	{0x80, 0xEF, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
+	// map fast rom (estendido $80-$FF: cobre os 4MB inteiros via FastROM;
+	// o wrap usa o tamanho real da ROM, entao ROMs menores continuam
+	// espelhando certo)
+	{0x80, 0xFF, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
 
 	// mirror rom in lower 32k (?)
 	{0x40, 0x6F, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
