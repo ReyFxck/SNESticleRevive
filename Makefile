@@ -279,7 +279,6 @@ SRCS := \
 	src/platform/ps2/ui/uiLog.cpp \
 	src/platform/ps2/ui/uiMenu.cpp \
 	src/platform/ps2/ui/uiNetwork.cpp \
-	src/platform/ps2/ui/uiVideo.cpp \
 	src/platform/ps2/system/version.cpp \
 	src/common/render/wavfile.cpp \
 	src/common/debug/dbgterm.cpp \

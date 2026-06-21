@@ -29,7 +29,6 @@
 #include "uiNetwork.h"
 #include "uiMenu.h"
 #include "uiLog.h"
-#include "uiVideo.h"
 #include "uiScreen.h"
 
 
@@ -142,7 +141,6 @@ extern CBrowserScreen *_MainLoop_pBrowserScreen;
 extern CNetworkScreen *_MainLoop_pNetworkScreen;
 extern CMenuScreen    *_MainLoop_pMenuScreen;
 extern CLogScreen     *_MainLoop_pLogScreen;
-extern CVideoScreen   *_MainLoop_pVideoScreen;
 extern CScreen        *_MainLoop_pScreen;
 
 /* ---- Flags / counters --------------------------------------------- */

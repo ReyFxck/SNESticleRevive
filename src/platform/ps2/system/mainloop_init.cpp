@@ -248,23 +248,6 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
 	// set boot dir
 	strcpy(_MainLoop_BootDir, MainGetBootDir());
     _MainLoopLoadModules(_MainLoop_IOPModulePaths);
-
-    /* Video settings live on the memory card, which only comes up inside
-       _MainLoopLoadModules.  Load them now and apply: the display offset
-       is live (no realloc); a non-default video mode needs a one-shot GS
-       re-init + font re-upload, since the first GSK_Init already ran at
-       480i before the card was available.  Default (480i) users take the
-       else branch and the GS is left exactly as it was. */
-    VideoSettingsLoad();
-    if (g_GskVideoMode != GSK_GetActiveVideoMode())
-    {
-        GSK_ReinitVideo();
-        FontInit(FONT_TEX);
-    }
-    else
-    {
-        GSK_SetDisplayOffset(g_GskDispOffX, g_GskDispOffY);
-    }
 	/* The legacy VramInit() bumped a software VRAM watermark used by
 	   the now-deleted VramAlloc helper. gsKit owns the GS-side VRAM
 	   allocator (gskit_backend.c::GSK_VramAllocTBP) so there is
@@ -380,8 +363,6 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 	_MainLoop_pNetworkScreen = new CNetworkScreen();
 	_MainLoop_pNetworkScreen->SetMsgFunc(_MainLoopNetworkEvent);
 	_MainLoop_pNetworkScreen->SetPort(MAINLOOP_NETPORT);
-
-	_MainLoop_pVideoScreen = new CVideoScreen();
 
 	_MainLoop_pMenuScreen = new CMenuScreen();
 	_MainLoop_pMenuScreen->SetMsgFunc(_MainLoopMenuEvent);

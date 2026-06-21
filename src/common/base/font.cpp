@@ -45,17 +45,8 @@ extern "C" {
  *
  * Layout still lives in the 256x240 logical space, so advances and
  * FontGetStrWidth convert the physical glyph size back to logical with
- * the SAME helper (_FontAdvLogical) -> centering/columns stay aligned.
- *
- * The factor now adapts to the video mode (round of the vertical
- * logical->physical scale): 240p -> 1x, 480i/480p/576i -> 2x.  Without
- * this the 2x glyphs would overlap the lines at 240p. */
-static inline Int32 _FontDrawScale(void)
-{
-    int n = (int)(GPPrimGetScaleY() + 0.5f);
-    return (n < 1) ? 1 : n;
-}
-#define FONT_DRAW_SCALE (_FontDrawScale())
+ * the SAME helper (_FontAdvLogical) -> centering/columns stay aligned. */
+#define FONT_DRAW_SCALE 2
 
 static inline Int32 _FontAdvLogical(Int32 physW)
 {

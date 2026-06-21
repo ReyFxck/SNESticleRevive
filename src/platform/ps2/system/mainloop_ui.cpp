@@ -64,19 +64,17 @@ static int _UIGetIdx(void)
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pNetworkScreen) return 1;
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pMenuScreen)    return 2;
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 3;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pVideoScreen)   return 4;
     return 0;
 }
 
 static CScreen* _UIByIdx(int idx)
 {
-    switch (idx % 5)
+    switch (idx & 3)
     {
         case 0: return (CScreen*)_MainLoop_pBrowserScreen;
         case 1: return (CScreen*)_MainLoop_pNetworkScreen;
         case 2: return (CScreen*)_MainLoop_pMenuScreen;
         case 3: return (CScreen*)_MainLoop_pLogScreen;
-        case 4: return (CScreen*)_MainLoop_pVideoScreen;
     }
     return (CScreen*)_MainLoop_pBrowserScreen;
 }
@@ -84,9 +82,9 @@ static CScreen* _UIByIdx(int idx)
 void _UICycle(int dir)
 {
     int idx = _UIGetIdx();
-    for (int n = 0; n < 5; n++)
+    for (int n = 0; n < 4; n++)
     {
-        idx = (idx + dir + 5) % 5;
+        idx = (idx + dir + 4) & 3;
         CScreen *scr = _UIByIdx(idx);
         if (scr)
         {
@@ -104,19 +102,17 @@ static int _MainLoopGetScreenIndex(void)
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pNetworkScreen) return 1;
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pMenuScreen)    return 2;
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 3;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pVideoScreen)   return 4;
     return 0;
 }
 
 static CScreen* _MainLoopGetScreenByIndex(int idx)
 {
-    switch (idx % 5)
+    switch (idx & 3)
     {
         case 0: return (CScreen*)_MainLoop_pBrowserScreen;
         case 1: return (CScreen*)_MainLoop_pNetworkScreen;
         case 2: return (CScreen*)_MainLoop_pMenuScreen;
         case 3: return (CScreen*)_MainLoop_pLogScreen;
-        case 4: return (CScreen*)_MainLoop_pVideoScreen;
     }
     return (CScreen*)_MainLoop_pBrowserScreen;
 }
@@ -124,9 +120,9 @@ static CScreen* _MainLoopGetScreenByIndex(int idx)
 void _MainLoopCycleScreen(int dir)
 {
     int idx = _MainLoopGetScreenIndex();
-    for (int n = 0; n < 5; n++)
+    for (int n = 0; n < 4; n++)
     {
-        idx = (idx + dir + 5) % 5;
+        idx = (idx + dir + 4) & 3;
         CScreen *scr = _MainLoopGetScreenByIndex(idx);
         if (scr)
         {
