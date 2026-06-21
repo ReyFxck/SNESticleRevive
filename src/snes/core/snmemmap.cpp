@@ -89,10 +89,18 @@ static SnesMemMapT	_SnesMemMap_HiRom_DSP1[]=
 static SnesMemMapT _SnesMemMap_LoRom_DSP1[]={
     {0x20,0x3F,0x8000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
     {0xA0,0xBF,0x8000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
-    /* SR (Status Register): $20-$3F:C000-FFFF + mirror $A0-$BF
+    /* DR mirror $C0-$CF (regiao FastROM): jogos como Super Mario Kart
+       apontam o HDMA do Mode-7 para o espelho do DSP em $C0-$CF.
+       Sem isto o HDMA le ROM em vez do registrador de dados do DSP e a
+       matriz Mode-7 vira lixo -> pista achatada (mas a CPU, que usa
+       $30-$3F, funciona, por isso o jogo "roda" mesmo assim). Veja o
+       mapa de memoria do DSP-1 LoROM ($30-$3F / $C0-$CF). */
+    {0xC0,0xCF,0x8000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    /* SR (Status Register): $20-$3F:C000-FFFF + mirror $A0-$BF + $C0-$CF
        Sem isto a CPU le ROM em vez do status e o DSP-1 trava */
     {0x20,0x3F,0xC000,0xFFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
     {0xA0,0xBF,0xC000,0xFFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0xC0,0xCF,0xC000,0xFFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
     {0,0,0,0,SNESMEM_TYPE_NONE}
 };
 #endif
