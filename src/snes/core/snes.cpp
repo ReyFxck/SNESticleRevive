@@ -644,40 +644,45 @@ void SNCPU_TRAPFUNC SnesSystem::WriteSRAM(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 #ifdef SNES_DSP1
 
+// Decodifica se o endereco do DSP-1 e' o Status Register (SR) ou o Data
+// Register (DR).  O bit de selecao DR/SR DEPENDE do mapeamento:
+//   - HiROM/$6000:  DR=$6000-$6FFF, SR=$7000-$7FFF  (bit 0x1000)
+//   - LoROM/$8000:  DR=$8000-$BFFF, SR=$C000-$FFFF  (bit 0x4000)
+// O decode antigo usava (uAddr & 0xE000), que mascara o bit 0x1000 e
+// portanto fazia $7000 (SR) cair no caso do DR -> as leituras de status
+// do jogo eram servidas como DADOS e AVANCAVAM a FSM do DSP, perdendo
+// sincronia (matriz Mode-7 lixo / pista achatada).
+static inline Bool _SnesDsp1IsStatus(Uint32 uAddr)
+{
+	Uint16 a = (Uint16)(uAddr & 0xFFFF);
+	if (a < 0x8000)
+		return (a & 0x1000) ? TRUE : FALSE;   // $6000=DR  $7000=SR
+	else
+		return (a & 0x4000) ? TRUE : FALSE;   // $8000=DR  $C000=SR
+}
+
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 
-	switch (uAddr & 0xE000)
+	if (_SnesDsp1IsStatus(uAddr))
 	{
-	case 0x6000:
-	case 0x8000:
-	case 0xA000:
-		{
-			Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
+		Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
 #if SNDBG_LOG
-			if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-			{ DLog("[snes-m7] DSP RD DR [%06X]=%02X (f%d l%d)", uAddr, d, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
+		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
+		{ DLog("[snes-m7] DSP RD SR [%06X]=%02X", uAddr, s); g_SnesDbgDspN++; }
 #endif
-			return d;
-		}
-	case 0x7000:
-	case 0xC000:
-	case 0xE000:
-		{
-			Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
-#if SNDBG_LOG
-			if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
-			{ DLog("[snes-m7] DSP RD SR [%06X]=%02X", uAddr, s); g_SnesDbgDspN++; }
-#endif
-			return s;
-		}
+		return s;
 	}
-#if SNES_DEBUG
-    if (Snes_bDebugUnhandledIO)
-        SnesDebugRead(uAddr);
+	else
+	{
+		Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
+#if SNDBG_LOG
+		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
+		{ DLog("[snes-m7] DSP RD DR [%06X]=%02X (f%d l%d)", uAddr, d, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
 #endif
-	return uAddr >> 8;
+		return d;
+	}
 }
 
 
@@ -685,26 +690,16 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 
-	switch (uAddr & 0xE000)
+	// Escritas vao para o DR; o SR e' somente leitura (escritas nele sao
+	// ignoradas, como no hardware real).
+	if (!_SnesDsp1IsStatus(uAddr))
 	{
-	case 0x6000:
-	case 0x8000:
-	case 0xA000:
 #if SNDBG_LOG
 		if (SnesDbgWin() && g_SnesDbgDspN < SNDBG_DSP_MAXLOG)
 		{ DLog("[snes-m7] DSP WR DR [%06X]=%02X (f%d l%d)", uAddr, uData, g_SnesDbgFrame, g_SnesDbgLine); g_SnesDbgDspN++; }
 #endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
-		break;
-	default:
-		// ??
-		#if SNES_DEBUG
-        if (Snes_bDebugUnhandledIO)
-            SnesDebugWrite(uAddr, uData);
-		#endif
-		break;
 	}
-
 }
 
 #endif
