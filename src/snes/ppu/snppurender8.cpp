@@ -1206,24 +1206,29 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 			iDeltaX = 8;
 		}
 
-		uTile = pObj->uTile;
-		uTile+= (ObjY>>3) << 4;
-
-		// calculate tile address
-		uTileAddr = uBaseAddr + uTile * 16;
-		if (uTile & 0x100)
+		// SNES OBJ: dentro de um sprite, a COLUNA (nibble baixo) e a LINHA
+		// (nibble alto) do numero do tile avancam SEPARADAMENTE, com wrap
+		// dentro da pagina de 256 tiles (o bit de pagina 0x100 fica fixo).
+		// Ex.: um 16x16 no tile $0F usa $0F,$00,$1F,$10. O codigo antigo
+		// somava linear (+chry*0x10 e pTile4++), estourando os nibbles e
+		// embaralhando sprites grandes que cruzam essas fronteiras (bug
+		// classico em Final Fight 2 e afins).
 		{
-			// apply name select
-			uTileAddr += uNameSelect;
-		}
-
-		// get pointer to tile data (y flipped)
-		pTile4 = (SnesPPUTile4T *)(pVram + (uTileAddr & 0x7FFF) + (ObjY & 7));
+		Uint32 uPage = pObj->uTile & 0x100;
+		Uint32 uRow  = ((pObj->uTile >> 4) + (ObjY >> 3)) & 0x0F;
+		Uint32 uCol0 = pObj->uTile & 0x0F;
+		Uint32 uYoff = ObjY & 7;
+		Int32  iCol  = 0;
 
 		while (uSize > 0)
 		{
 			if (ObjX >= -8 && ObjX < 256)
 			{
+				uTile = uPage | (uRow << 4) | ((uCol0 + iCol) & 0x0F);
+				uTileAddr = uBaseAddr + uTile * 16;
+				if (uTile & 0x100)
+					uTileAddr += uNameSelect;
+				pTile4 = (SnesPPUTile4T *)(pVram + ((uTileAddr & 0x7FFF) + uYoff));
 				// get palette bits
 				uTile0  = 
 					uTile1  = _SnesPPU_Obj4PalLookup[pObj->uPal];
@@ -1263,8 +1268,8 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 
 			ObjX += iDeltaX;
 			uSize -= 8;
-
-			pTile4++;
+			iCol++;
+		}
 		}
 
 		// next obj
