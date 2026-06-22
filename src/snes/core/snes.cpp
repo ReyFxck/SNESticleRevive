@@ -865,7 +865,11 @@ void SnesSystem::Reset()
 
 	m_SDD1.Reset();
 
-	m_SRTC.Reset();
+	// So' o cartucho com S-RTC deve tocar o relogio do host (time/gmtime).
+	// Antes isso rodava no boot de TODO jogo -> se time()/gmtime() falhar no
+	// PS2 real, quebraria o boot de qualquer jogo.
+	if (m_bSRTC)
+		m_SRTC.Reset();
 
 #if CODE_DEBUG
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));
