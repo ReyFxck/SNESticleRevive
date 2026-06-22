@@ -364,7 +364,8 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			break;
 		}
 #if SNDBG_LOG
-		DLog("[snes-dsp] ROM makeup=%02X type=%02X size=%02X sram=%02X",
+		DLog("[snes-dsp] ROM '%.16s' makeup=%02X type=%02X size=%02X sram=%02X",
+			(const char*)pCartInfo->Title,
 			pCartInfo->RomMakeup, pCartInfo->RomType, pCartInfo->RomSize, pCartInfo->SRAMSize);
 #endif
 		switch (pCartInfo->RomType)
@@ -397,6 +398,28 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 		case 246:
 			m_Flags		 = SNROM_FLAG_ROM | SNROM_FLAG_DSP2;
 			break;
+		}
+
+		// O byte RomType nao distingue a variante do DSP (1/2/3/4): todos
+		// os jogos de DSP reportam 0x03/0x04/0x05. O Dungeon Master e' o
+		// UNICO jogo DSP-2, entao detecta-se pelo titulo do cabecalho e
+		// troca o flag de DSP-1 para DSP-2.
+		if (m_Flags & SNROM_FLAG_DSP1)
+		{
+			char t[8];
+			int k;
+			for (k = 0; k < 7; k++)
+			{
+				char c = (char)pCartInfo->Title[k];
+				if (c >= 'a' && c <= 'z') c -= 32;   // upper
+				t[k] = c;
+			}
+			t[7] = 0;
+			if (!strncmp(t, "DUNGEON", 7))
+			{
+				m_Flags &= ~SNROM_FLAG_DSP1;
+				m_Flags |=  SNROM_FLAG_DSP2;
+			}
 		}
 	} else
 	{
