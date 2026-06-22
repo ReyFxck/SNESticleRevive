@@ -421,6 +421,26 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 				m_Flags |=  SNROM_FLAG_DSP2;
 			}
 		}
+
+		// OBC1 (Metal Combat: Falcon's Revenge): o cartucho reporta
+		// RomType 0x13, que cairia no case de SuperFX. E' o unico jogo
+		// OBC1 -> detecta pelo titulo e corrige o flag.
+		{
+			char t[13];
+			int k;
+			for (k = 0; k < 12; k++)
+			{
+				char c = (char)pCartInfo->Title[k];
+				if (c >= 'a' && c <= 'z') c -= 32;
+				t[k] = c;
+			}
+			t[12] = 0;
+			if (!strncmp(t, "METAL COMBAT", 12))
+			{
+				m_Flags &= ~SNROM_FLAG_SUPERFX;
+				m_Flags |=  SNROM_FLAG_OBC1;
+			}
+		}
 	} else
 	{
 		m_eVideoType = SNROM_VIDEO_NTSC;

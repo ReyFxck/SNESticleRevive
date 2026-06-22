@@ -715,6 +715,19 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 #endif
 
 
+Uint8 SNCPU_TRAPFUNC SnesSystem::ReadOBC1(SNCpuT *pCpu, Uint32 uAddr)
+{
+	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	return pSnes->m_OBC1.Read(uAddr & 0xFFFF);
+}
+
+void SNCPU_TRAPFUNC SnesSystem::WriteOBC1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
+{
+	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	pSnes->m_OBC1.Write(uAddr & 0xFFFF, uData);
+}
+
+
 //
 //
 //
@@ -795,6 +808,8 @@ void SnesSystem::Reset()
 		m_pDsp->Reset();
 	}
 #endif 
+
+	m_OBC1.Reset();
 
 #if CODE_DEBUG
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));

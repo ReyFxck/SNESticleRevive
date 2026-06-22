@@ -251,6 +251,7 @@ SRCS := \
 	src/snes/core/snes.cpp \
 	src/snes/core/sndsp1.cpp \
 	src/snes/core/sndsp2.cpp \
+	src/snes/core/snobc1.cpp \
 	src/snes/core/snesreg.cpp \
 	src/snes/core/snio.cpp \
 	src/snes/core/snmask128.cpp \
