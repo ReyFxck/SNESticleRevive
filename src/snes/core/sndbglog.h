@@ -16,7 +16,7 @@
 
 #include "types.h"
 
-#define SNDBG_LOG 1
+#define SNDBG_LOG 0
 
 // resume a cada N frames (60 = ~1 s)
 #define SNDBG_FRAME_PERIOD 60
