@@ -158,14 +158,16 @@ void GSK_Init(int width, int height,
 
     case GSK_VIDMODE_240P:
     default:
-        /* NTSC 320x240 progressive (4:3), 60Hz - native SNES/NES.
-           GS_FIELD (not GS_FRAME): on NTSC, FRAME mode runs at the 30Hz
-           frame rate while FIELD runs at the 60Hz field rate, so 240p
-           must use FIELD to get 60fps. (480p/DTV is a dedicated 60Hz
-           progressive mode, so it keeps GS_FRAME.) */
+        /* NTSC 320x240 progressivo (4:3), 60Hz - nativo SNES/NES.
+           240p e' PROGRESSIVO, igual ao 480p: precisa de GS_FRAME (FFMD=1)
+           para o PCRTC ler TODA linha do framebuffer numa varredura unica.
+           Com GS_FIELD (FFMD=0) o PCRTC le linha-sim/linha-nao (modo de
+           campo, so' faz sentido em entrelacado), resultando em sinal
+           quebrado / sem lock / imagem pela metade no PS2 real. Nao-
+           entrelacado ja' roda a 60Hz independente do FFMD. */
         _pGsGlobal->Mode      = GS_MODE_NTSC;
         _pGsGlobal->Interlace = GS_NONINTERLACED;
-        _pGsGlobal->Field     = GS_FIELD;
+        _pGsGlobal->Field     = GS_FRAME;
         _gsk_fb_width         = 320;
         _gsk_fb_height        = 240;
         _gsk_vck              = 2;
