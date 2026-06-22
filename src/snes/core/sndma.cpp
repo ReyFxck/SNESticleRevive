@@ -12,6 +12,7 @@ extern "C" {
 #include "sndma.h"
 #include "snppu.h"
 #include "snsdd1.h"
+#include "sndbglog.h"
 
 #define SNESDMA_DEBUG 0
 
@@ -466,7 +467,31 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 			pIn += srcAddr;
 			m_pSDD1->Decompress(s_DecodeBuf, pIn, (Int32)pChan->dasx);
 			TransferData(pChan, s_DecodeBuf, count);
+#if SNDBG_LOG
+			{
+				static int n = 0;
+				if (n < 120) {
+					DLog("[sdd1] dma ch=%d src=%06X cnt=%d bbad=%02X mode=%d hdr=%02X out=%02X%02X%02X%02X",
+						(int)uChan, (unsigned)srcAddr, (int)count,
+						(int)pChan->bbadx, (int)(pChan->dmapx & 7),
+						(int)pIn[0], (int)s_DecodeBuf[0], (int)s_DecodeBuf[1],
+						(int)s_DecodeBuf[2], (int)s_DecodeBuf[3]);
+					n++;
+				}
+			}
+#endif
 		}
+#if SNDBG_LOG
+		else
+		{
+			static int nn = 0;
+			if (nn < 40) {
+				DLog("[sdd1] dma ch=%d src=%06X SEM PONTEIRO (banco nao mapeado!)",
+					(int)uChan, (unsigned)srcAddr);
+				nn++;
+			}
+		}
+#endif
 
 		m_pSDD1->ClearDmaEnable();
 		pChan->dasx = 0;

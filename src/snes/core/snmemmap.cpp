@@ -437,6 +437,13 @@ void SnesSystem::RemapSDD1(void)
 		SNCPUSetMemSpeed(&m_Cpu, uBankBase, 0x100000, SNCPU_CYCLE_SLOW);
 		SNCPUSetBank    (&m_Cpu, uBankBase, 0x100000, pRomData + uRomOff, FALSE);
 	}
+
+#if SNDBG_LOG
+	DLog("[sdd1] remap seg=%d,%d,%d,%d romBytes=%06X",
+		(int)m_SDD1.BankSegment(0), (int)m_SDD1.BankSegment(1),
+		(int)m_SDD1.BankSegment(2), (int)m_SDD1.BankSegment(3),
+		(unsigned)uRomBytes);
+#endif
 }
 
 
