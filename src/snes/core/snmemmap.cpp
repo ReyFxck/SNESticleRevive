@@ -6,6 +6,7 @@
 #include "console.h"
 #include "snmemmap.h"
 #include "sndebug.h"
+#include "sndbglog.h"
 
 static SnesMemMapT	_SnesMemMap_LoRom[]=
 {
@@ -319,6 +320,13 @@ void SnesSystem::MapMemExLoRom(void)
 
 void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 {
+#if SNDBG_LOG
+	DLog("[snes-dsp] MapMem mode=%d flags=%02X DSP1=%d DSP2=%d",
+		(int)eRomMapping, (unsigned)uFlags,
+		(uFlags & SNROM_FLAG_DSP1) ? 1 : 0,
+		(uFlags & SNROM_FLAG_DSP2) ? 1 : 0);
+#endif
+
 	// set default traps
 	SNCPUSetTrap(&m_Cpu,     0, SNCPU_MEM_SIZE, ReadMem, WriteMem);
 	SNCPUSetMemSpeed(&m_Cpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_SLOW);

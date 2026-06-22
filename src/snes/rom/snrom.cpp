@@ -5,6 +5,7 @@
 #include "types.h"
 #include "snrom.h"
 #include "dataio.h"
+#include "sndbglog.h"
 
 /* Pontua um header LoROM candidato em 'base' (deslocamento do $FFC0 da
    metade). Usado para descobrir QUAL metade de uma ROM ExLoROM contem o
@@ -362,6 +363,10 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			m_uSRAMSize = 64;
 			break;
 		}
+#if SNDBG_LOG
+		DLog("[snes-dsp] ROM makeup=%02X type=%02X size=%02X sram=%02X",
+			pCartInfo->RomMakeup, pCartInfo->RomType, pCartInfo->RomSize, pCartInfo->SRAMSize);
+#endif
 		switch (pCartInfo->RomType)
 		{
 		case 0:

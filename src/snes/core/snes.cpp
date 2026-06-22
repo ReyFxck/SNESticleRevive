@@ -26,6 +26,8 @@ static Uint32 g_TmgFrameNo    = 0;
 // acumuladores por frame (externados, alimentados em snppurender8.cpp)
 Uint32 g_TmgCycM7  = 0;
 Uint32 g_TmgCycObj = 0;
+// contador para log capado de acessos ao DSP (diagnostico DSP-2)
+static int g_DspLogN = 0;
 #endif
 
 
@@ -678,9 +680,21 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 
 	if (_SnesDsp1IsStatus(uAddr))
-		return pSnes->m_pDsp->ReadStatus(uAddr);
+	{
+		Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
+#if SNDBG_LOG
+		if (g_DspLogN < 150) { DLog("[snes-dsp] RD SR [%06X]=%02X", uAddr, s); g_DspLogN++; }
+#endif
+		return s;
+	}
 	else
-		return pSnes->m_pDsp->ReadData(uAddr);
+	{
+		Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
+#if SNDBG_LOG
+		if (g_DspLogN < 150) { DLog("[snes-dsp] RD DR [%06X]=%02X", uAddr, d); g_DspLogN++; }
+#endif
+		return d;
+	}
 }
 
 
@@ -690,7 +704,12 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	// Escritas vao para o DR; o SR e' somente leitura.
 	if (!_SnesDsp1IsStatus(uAddr))
+	{
+#if SNDBG_LOG
+		if (g_DspLogN < 150) { DLog("[snes-dsp] WR DR [%06X]=%02X", uAddr, uData); g_DspLogN++; }
+#endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
+	}
 }
 
 #endif
