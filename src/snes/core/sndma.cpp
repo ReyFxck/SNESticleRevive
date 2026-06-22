@@ -450,10 +450,10 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 		return ProcessMDMAChRead(uChan);
 	}
 
-	// S-DD1: canal habilitado em $4801 -> descomprime os dados da ROM e
-	// despeja no B-bus (VRAM). Os graficos comprimidos de Star Ocean / SF
-	// Alpha 2 chegam por aqui.
-	if (m_pSDD1 && m_pSDD1->DmaEnabled(uChan))
+	// S-DD1: descomprime quando o DMA tem endereco-A fixo (dmapx bit 0x08) e
+	// $4801 != 0 (mesma condicao do snes9x). Antes eu so' checava o bit do
+	// canal em $4801, o que podia disparar num DMA normal por engano.
+	if (m_pSDD1 && (pChan->dmapx & 0x08) && m_pSDD1->DmaActive())
 	{
 		static Uint8 s_DecodeBuf[0x10000];
 		Int32  count   = pChan->dasx ? pChan->dasx : 0x10000;

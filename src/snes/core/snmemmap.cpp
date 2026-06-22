@@ -439,10 +439,20 @@ void SnesSystem::RemapSDD1(void)
 	}
 
 #if SNDBG_LOG
-	DLog("[sdd1] remap seg=%d,%d,%d,%d romBytes=%06X",
-		(int)m_SDD1.BankSegment(0), (int)m_SDD1.BankSegment(1),
-		(int)m_SDD1.BankSegment(2), (int)m_SDD1.BankSegment(3),
-		(unsigned)uRomBytes);
+	{
+		// loga so' quando a config de segmentos muda (evita flood)
+		static Uint32 uLast = 0xFFFFFFFF;
+		Uint32 uCur = (Uint32)(m_SDD1.BankSegment(0) | (m_SDD1.BankSegment(1) << 8)
+		            | (m_SDD1.BankSegment(2) << 16) | (m_SDD1.BankSegment(3) << 24));
+		if (uCur != uLast)
+		{
+			uLast = uCur;
+			DLog("[sdd1] remap seg=%d,%d,%d,%d romBytes=%06X",
+				(int)m_SDD1.BankSegment(0), (int)m_SDD1.BankSegment(1),
+				(int)m_SDD1.BankSegment(2), (int)m_SDD1.BankSegment(3),
+				(unsigned)uRomBytes);
+		}
+	}
 #endif
 }
 

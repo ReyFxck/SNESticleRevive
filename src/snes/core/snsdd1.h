@@ -42,7 +42,9 @@ public:
     Uint8 ReadReg(Uint32 uAddr);
     void  WriteReg(Uint32 uAddr, Uint8 uData);
 
-    // disparo de DMA: $4801 tem o bit do canal setado?
+    // disparo de DMA: o S-DD1 descomprime quando ha' um DMA com endereco-A
+    // fixo e $4801 != 0 (mesma condicao do snes9x). $4801 e' limpo apos o uso.
+    Bool  DmaActive() const { return m_Reg[1] != 0; }
     Bool  DmaEnabled(Uint32 uChan) const { return (m_Reg[1] >> uChan) & 1; }
     void  ClearDmaEnable() { m_Reg[1] = 0; }
 
