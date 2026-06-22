@@ -26,8 +26,9 @@ static Uint32 g_TmgFrameNo    = 0;
 // acumuladores por frame (externados, alimentados em snppurender8.cpp)
 Uint32 g_TmgCycM7  = 0;
 Uint32 g_TmgCycObj = 0;
-// contador para log capado de acessos ao DSP (diagnostico DSP-2)
-static int g_DspLogN = 0;
+// contagem de acessos ao DSP por janela (diagnostico de carga)
+static Uint32 g_TmgDspRd = 0;
+static Uint32 g_TmgDspWr = 0;
 #endif
 
 
@@ -683,7 +684,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	{
 		Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
 #if SNDBG_LOG
-		if (g_DspLogN < 150) { DLog("[snes-dsp] RD SR [%06X]=%02X", uAddr, s); g_DspLogN++; }
+		g_TmgDspRd++;
 #endif
 		return s;
 	}
@@ -691,7 +692,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	{
 		Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
 #if SNDBG_LOG
-		if (g_DspLogN < 150) { DLog("[snes-dsp] RD DR [%06X]=%02X", uAddr, d); g_DspLogN++; }
+		g_TmgDspRd++;
 #endif
 		return d;
 	}
@@ -706,7 +707,7 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	if (!_SnesDsp1IsStatus(uAddr))
 	{
 #if SNDBG_LOG
-		if (g_DspLogN < 150) { DLog("[snes-dsp] WR DR [%06X]=%02X", uAddr, uData); g_DspLogN++; }
+		g_TmgDspWr++;
 #endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
 	}
@@ -1222,10 +1223,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			Uint32 pOth  = (pM7 + pObj < 100u) ? (100u - pM7 - pObj) : 0u;
 			// M7%/OBJ%/other% = fatia do tempo de emulacao gasto em Mode-7 /
 			// sprites / resto (CPU+SPC+BG+composite). ratio>150 = picos.
-			DLog("[snes-tmg] f%u emu avg=%u max=%u%% | Mode7=%u%% OBJ=%u%% other=%u%% | splitIRQ=%d..%d irq=%u",
+			DLog("[snes-tmg] f%u emu avg=%u max=%u%% | Mode7=%u%% OBJ=%u%% other=%u%% | dspRd=%u dspWr=%u | splitIRQ=%d..%d irq=%u",
 				(unsigned)g_TmgFrameNo,
 				(unsigned)avg, (unsigned)ratio,
 				(unsigned)pM7, (unsigned)pObj, (unsigned)pOth,
+				(unsigned)g_TmgDspRd, (unsigned)g_TmgDspWr,
 				(int)g_TmgIrqLineMin, (int)g_TmgIrqLineMax,
 				(unsigned)g_TmgIrqCount);
 			g_TmgWinFrames  = 0;
@@ -1233,6 +1235,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			g_TmgWinMaxCyc  = 0;
 			g_TmgWinSumM7   = 0;
 			g_TmgWinSumObj  = 0;
+			g_TmgDspRd      = 0;
+			g_TmgDspWr      = 0;
 			g_TmgIrqCount   = 0;
 			g_TmgIrqLineMin = 9999;
 			g_TmgIrqLineMax = -1;
