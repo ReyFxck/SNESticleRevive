@@ -21,6 +21,7 @@ extern "C" {
 #include "sndebug.h"
 
 #include "sndsp1.h"
+#include "sndsp2.h"
 
 #define SNES_RAMSIZE  0x20000
 #define SNES_SRAMSIZE (256 * 1024)
@@ -75,6 +76,7 @@ private:
 
 #if SNES_DSP1
 	SNDSP1		m_DSP1;
+	SNDSP2		m_DSP2;
 #endif
 
 	SnesRom		*m_pRom;

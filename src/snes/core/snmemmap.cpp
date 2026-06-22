@@ -333,6 +333,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 
 #if SNES_DSP1
 			if (uFlags & SNROM_FLAG_DSP1) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP1; }
+			if (uFlags & SNROM_FLAG_DSP2) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP2; }
 #endif
 			break;
 
@@ -345,6 +346,11 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 			{
 				MapMem(_SnesMemMap_HiRom_DSP1);
 				m_pDsp = &m_DSP1;;
+			}
+			if (uFlags & SNROM_FLAG_DSP2)
+			{
+				MapMem(_SnesMemMap_HiRom_DSP1);
+				m_pDsp = &m_DSP2;
 			}
 #endif
 			break;
