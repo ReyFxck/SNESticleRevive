@@ -11,6 +11,7 @@ extern "C" {
 };
 #include "sndma.h"
 #include "snppu.h"
+#include "snsdd1.h"
 
 #define SNESDMA_DEBUG 0
 
@@ -448,6 +449,30 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 		return ProcessMDMAChRead(uChan);
 	}
 
+	// S-DD1: canal habilitado em $4801 -> descomprime os dados da ROM e
+	// despeja no B-bus (VRAM). Os graficos comprimidos de Star Ocean / SF
+	// Alpha 2 chegam por aqui.
+	if (m_pSDD1 && m_pSDD1->DmaEnabled(uChan))
+	{
+		static Uint8 s_DecodeBuf[0x10000];
+		Int32  count   = pChan->dasx ? pChan->dasx : 0x10000;
+		Uint32 srcAddr = ((Uint32)pChan->a1bx << 16) | pChan->a1tx;
+		Uint8 *pIn     = m_pCPU->Bank[srcAddr >> SNCPU_BANK_SHIFT].pMem;
+
+		if (pIn)
+		{
+			// pMem ja' inclui (-base do banco), entao soma-se o endereco
+			// completo (mesma convencao de SNCPUPeek8: pMem[Addr]).
+			pIn += srcAddr;
+			m_pSDD1->Decompress(s_DecodeBuf, pIn, (Int32)pChan->dasx);
+			TransferData(pChan, s_DecodeBuf, count);
+		}
+
+		m_pSDD1->ClearDmaEnable();
+		pChan->dasx = 0;
+		m_MDMAEnable &= ~(1 << uChan);
+		return;
+	}
 
     do
 	{

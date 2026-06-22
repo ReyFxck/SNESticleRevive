@@ -362,6 +362,11 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 		// read from DMA controller
 		return pSnes->m_DMAC.Read8((uAddr>>4) & 7, uAddr & 0xF);
 	} else
+	if (pSnes->m_bSDD1 && uAddr >= 0x4800 && uAddr <= 0x4807)
+	{
+		// S-DD1 registradores
+		return pSnes->m_SDD1.ReadReg(uAddr);
+	} else
 	switch (uAddr)
 	{
     //
@@ -476,6 +481,16 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	{
 		// write to DMA controller
 		pSnes->m_DMAC.Write8((uAddr>>4) & 7, uAddr & 0xF, uData);
+	} else
+	if (pSnes->m_bSDD1 && uAddr >= 0x4800 && uAddr <= 0x4807)
+	{
+		// S-DD1 registradores; $4804-$4807 mudam o mapa de bancos $C0-$FF
+		pSnes->m_SDD1.WriteReg(uAddr, uData);
+		if (pSnes->m_SDD1.MapDirty())
+		{
+			pSnes->RemapSDD1();
+			pSnes->m_SDD1.ClearMapDirty();
+		}
 	} else
 	{
 		SnesIO *pIO = &pSnes->m_IO;
@@ -791,6 +806,9 @@ SnesSystem::SnesSystem()
 	// setup dma controller
 	m_DMAC.SetCPU(&m_Cpu);
 	m_DMAC.SetPPU(&m_PPU);
+	m_DMAC.SetSDD1(&m_SDD1);
+
+	m_bSDD1 = FALSE;
 
 	// setup ppu
 	m_PPURender.SetPPU(&m_PPU);
@@ -833,6 +851,8 @@ void SnesSystem::Reset()
 	m_OBC1.Reset();
 
 	m_CX4.Reset();
+
+	m_SDD1.Reset();
 
 #if CODE_DEBUG
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));

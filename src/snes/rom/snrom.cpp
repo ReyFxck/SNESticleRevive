@@ -462,6 +462,29 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 				m_Flags = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_CX4;
 			}
 		}
+
+		// S-DD1 (Star Ocean, Street Fighter Alpha 2 / Zero 2): descompressor
+		// de graficos. Mapeamento base LoROM + janela $C0-$FF remapeavel.
+		// Detectado pelo titulo; forca LoROM (mesmo Star Ocean, 48Mbit, que
+		// acessa o >4MB pela troca de segmento do S-DD1, nao por ExLoROM).
+		{
+			char t[22];
+			int k;
+			for (k = 0; k < 21; k++)
+			{
+				char c = (char)pCartInfo->Title[k];
+				if (c >= 'a' && c <= 'z') c -= 32;
+				t[k] = c;
+			}
+			t[21] = 0;
+			if (!strncmp(t, "STAR OCEAN", 10) ||
+			    !strncmp(t, "STREET FIGHTER ALPHA", 20) ||
+			    !strncmp(t, "STREET FIGHTER ZERO", 19))
+			{
+				m_eMapping = SNROM_MAPPING_LOROM;
+				m_Flags    = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_SDD1;
+			}
+		}
 	} else
 	{
 		m_eVideoType = SNROM_VIDEO_NTSC;
@@ -644,7 +667,11 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 	// (Map_JumboLoROMMap): a ROM e' normalizada para que a metade que tem o
 	// header/vetores fique em offset 0x400000 (mapeada em $00-$3F, de onde a
 	// CPU le os vetores) e os outros 4MB em offset 0 ($80-$FF).
-	if (m_eMapping == SNROM_MAPPING_LOROM && m_uRomBytes > 0x400000)
+	// S-DD1 (Star Ocean tem 48Mbit): NAO e' ExLoROM. O >4MB e' acessado
+	// pela troca de segmento de 1MB do S-DD1 na janela $C0-$FF, com a ROM
+	// no formato linear original (sem rearranjo).
+	if (m_eMapping == SNROM_MAPPING_LOROM && m_uRomBytes > 0x400000
+	    && !(m_Flags & SNROM_FLAG_SDD1))
 	{
 		int score0  = _ExLoRomHeaderScore(m_pRomData, 0x007FC0, m_uRomBytes);
 		int score4M = _ExLoRomHeaderScore(m_pRomData, 0x407FC0, m_uRomBytes);

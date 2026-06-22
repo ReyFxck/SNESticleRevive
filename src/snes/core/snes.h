@@ -24,6 +24,7 @@ extern "C" {
 #include "sndsp2.h"
 #include "snobc1.h"
 #include "sncx4.h"
+#include "snsdd1.h"
 
 #define SNES_RAMSIZE  0x20000
 #define SNES_SRAMSIZE (256 * 1024)
@@ -85,6 +86,9 @@ private:
 
 	SNCX4		m_CX4;
 
+	SNSDD1		m_SDD1;
+	Bool		m_bSDD1;
+
 	SnesRom		*m_pRom;
 
 	SnesPPURender	m_PPURender;
@@ -125,6 +129,7 @@ private:
 	void	MapMem(struct SnesMemMapT *pMemMap);
 	void	MapMem(SNRomMappingE eRomMapping, Uint32 uFlags);
 	void	MapMemExLoRom(void);
+	void	RemapSDD1(void);   // (re)mapeia $C0-$FF conforme $4804-$4807
 	void	DumpMemMap();
 
 	void	SetFastRom();

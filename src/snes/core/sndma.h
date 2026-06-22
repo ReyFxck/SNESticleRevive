@@ -4,6 +4,7 @@
 
 struct SNCpu_t;
 class SnesPPU;
+class SNSDD1;
 
 #define SNESDMAC_CHANNEL_NUM 8
 
@@ -25,6 +26,7 @@ class SnesDMAC
 public:
 	void                        SetCPU(SNCpu_t *pCPU) {m_pCPU = pCPU;}
 	void                        SetPPU(SnesPPU *pPPU) {m_pPPU = pPPU;}
+	void                        SetSDD1(SNSDD1 *pSDD1) {m_pSDD1 = pSDD1;}
 
 	void                        Reset();
 	void                        SaveState(struct SNStateDMACT *pState);
@@ -48,6 +50,7 @@ private:
 
 	SNCpu_t	*                   m_pCPU;
 	SnesPPU	*                   m_pPPU;
+	SNSDD1  *                   m_pSDD1;
 
 	void                        TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes);
 	void                        ProcessMDMAChRead(Uint32 uChan);

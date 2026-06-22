@@ -354,6 +354,8 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 	SNCPUSetTrap(&m_Cpu,     0, SNCPU_MEM_SIZE, ReadMem, WriteMem);
 	SNCPUSetMemSpeed(&m_Cpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_SLOW);
 
+	m_bSDD1 = FALSE;
+
 	switch (eRomMapping)
 	{
 		default:
@@ -371,6 +373,11 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 			{
 				MapMem(_SnesMemMap_CX4);
 				m_CX4.SetMemReader(CX4ReadMem, &m_Cpu);
+			}
+			if (uFlags & SNROM_FLAG_SDD1)
+			{
+				m_bSDD1 = TRUE;
+				RemapSDD1();   // sobrepoe $C0-$FF com os 4 segmentos
 			}
 			break;
 
@@ -405,6 +412,31 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 //	DumpMemMap();
 #endif
 
+}
+
+
+// (Re)mapeia os bancos $C0-$FF conforme os registradores de segmento do
+// S-DD1 ($4804-$4807). Cada registrador escolhe um segmento de 1MB da ROM
+// para um grupo de 16 bancos: $4804->$C0-$CF, $4805->$D0-$DF, $4806->$E0-$EF,
+// $4807->$F0-$FF. Star Ocean troca esses segmentos para enxergar seus 6MB.
+void SnesSystem::RemapSDD1(void)
+{
+	Uint8 *pRomData  = m_pRom->GetData();
+	Uint32 uRomBytes = m_pRom->GetBytes();
+	Uint32 g;
+
+	if (!pRomData || uRomBytes == 0)
+		return;
+
+	for (g = 0; g < 4; g++)
+	{
+		Uint32 uSeg     = m_SDD1.BankSegment(g);
+		Uint32 uRomOff  = (uSeg * 0x100000) % uRomBytes;
+		Uint32 uBankBase = (0xC0 + g * 0x10) << 16;   // $C00000 / $D00000 / ...
+
+		SNCPUSetMemSpeed(&m_Cpu, uBankBase, 0x100000, SNCPU_CYCLE_SLOW);
+		SNCPUSetBank    (&m_Cpu, uBankBase, 0x100000, pRomData + uRomOff, FALSE);
+	}
 }
 
 
