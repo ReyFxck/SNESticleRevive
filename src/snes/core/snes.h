@@ -23,6 +23,7 @@ extern "C" {
 #include "sndsp1.h"
 #include "sndsp2.h"
 #include "snobc1.h"
+#include "sncx4.h"
 
 #define SNES_RAMSIZE  0x20000
 #define SNES_SRAMSIZE (256 * 1024)
@@ -82,6 +83,8 @@ private:
 
 	SNOBC1		m_OBC1;
 
+	SNCX4		m_CX4;
+
 	SnesRom		*m_pRom;
 
 	SnesPPURender	m_PPURender;
@@ -106,6 +109,9 @@ private:
 	static void SNCPU_TRAPFUNC  WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
 	static Uint8 SNCPU_TRAPFUNC ReadOBC1(SNCpuT *pCpu, Uint32 uAddr);
 	static void SNCPU_TRAPFUNC  WriteOBC1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
+	static Uint8 SNCPU_TRAPFUNC ReadCX4(SNCpuT *pCpu, Uint32 uAddr);
+	static void SNCPU_TRAPFUNC  WriteCX4(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
+	static Uint8 CX4ReadMem(void *pCtx, Uint32 uAddr);
 
     static Uint8 SNCPU_TRAPFUNC Read2000Debug(SNCpuT *pCpu, Uint32 uAddr);
     static Uint8 SNCPU_TRAPFUNC Read4000Debug(SNCpuT *pCpu, Uint32 uAddr);

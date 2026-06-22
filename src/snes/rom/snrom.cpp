@@ -441,6 +441,27 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 				m_Flags |=  SNROM_FLAG_OBC1;
 			}
 		}
+
+		// CX4 (Mega Man X2/X3, Rockman X2/X3): o cartucho reporta RomType
+		// 0xF3, que nao cai em nenhum case do switch acima (m_Flags ficaria
+		// indefinido). E' detectado pelo titulo. Mega Man X1 e' "MEGAMAN X "
+		// (com espaco), entao casar 10 chars de "MEGAMAN X2"/"X3" nao pega o X1.
+		{
+			char t[11];
+			int k;
+			for (k = 0; k < 10; k++)
+			{
+				char c = (char)pCartInfo->Title[k];
+				if (c >= 'a' && c <= 'z') c -= 32;
+				t[k] = c;
+			}
+			t[10] = 0;
+			if (!strncmp(t, "MEGAMAN X2", 10) || !strncmp(t, "MEGAMAN X3", 10) ||
+			    !strncmp(t, "ROCKMAN X2", 10) || !strncmp(t, "ROCKMAN X3", 10))
+			{
+				m_Flags = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_CX4;
+			}
+		}
 	} else
 	{
 		m_eVideoType = SNROM_VIDEO_NTSC;

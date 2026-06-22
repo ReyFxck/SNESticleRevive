@@ -728,6 +728,26 @@ void SNCPU_TRAPFUNC SnesSystem::WriteOBC1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 }
 
 
+// CX4 (Mega Man X2/X3). O chip le dados direto da ROM (vertices, sprites,
+// blocos de DMA); o callback resolve um endereco SNES de 24 bits via a CPU.
+Uint8 SnesSystem::CX4ReadMem(void *pCtx, Uint32 uAddr)
+{
+	return SNCPUPeek8((SNCpuT *)pCtx, uAddr);
+}
+
+Uint8 SNCPU_TRAPFUNC SnesSystem::ReadCX4(SNCpuT *pCpu, Uint32 uAddr)
+{
+	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	return pSnes->m_CX4.Read(uAddr & 0xFFFF);
+}
+
+void SNCPU_TRAPFUNC SnesSystem::WriteCX4(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
+{
+	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	pSnes->m_CX4.Write(uAddr & 0xFFFF, uData);
+}
+
+
 //
 //
 //
@@ -810,6 +830,8 @@ void SnesSystem::Reset()
 #endif 
 
 	m_OBC1.Reset();
+
+	m_CX4.Reset();
 
 #if CODE_DEBUG
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));

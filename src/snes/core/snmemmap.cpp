@@ -122,6 +122,14 @@ static SnesMemMapT _SnesMemMap_OBC1[]={
     {0,0,0,0,SNESMEM_TYPE_NONE}
 };
 
+// CX4 (Mega Man X2/X3): C4RAM + registradores em $6000-$7FFF, nos bancos
+// LoROM $00-$3F e espelho FastROM $80-$BF.
+static SnesMemMapT _SnesMemMap_CX4[]={
+    {0x00,0x3F,0x6000,0x7FFF,SNCPU_CYCLE_SLOW,SNESMEM_TYPE_CX4},
+    {0x80,0xBF,0x6000,0x7FFF,SNCPU_CYCLE_SLOW,SNESMEM_TYPE_CX4},
+    {0,0,0,0,SNESMEM_TYPE_NONE}
+};
+
 void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 {
 	SNCpuT *pCpu = &m_Cpu;
@@ -233,6 +241,9 @@ void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 					break;
 				case SNESMEM_TYPE_OBC1:
 					SNCPUSetTrap(&m_Cpu, uStartAddr, nBytes, ReadOBC1, WriteOBC1);
+					break;
+				case SNESMEM_TYPE_CX4:
+					SNCPUSetTrap(&m_Cpu, uStartAddr, nBytes, ReadCX4, WriteCX4);
 					break;
 				default:
 					break;
@@ -356,6 +367,11 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 			if (uFlags & SNROM_FLAG_DSP2) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP2; }
 #endif
 			if (uFlags & SNROM_FLAG_OBC1) { MapMem(_SnesMemMap_OBC1); }
+			if (uFlags & SNROM_FLAG_CX4)
+			{
+				MapMem(_SnesMemMap_CX4);
+				m_CX4.SetMemReader(CX4ReadMem, &m_Cpu);
+			}
 			break;
 
 		// mode 21h
