@@ -29,4 +29,11 @@ void DLog(const char *fmt, ...);   // definido em src/modules/sjpcm/sjpcm_rpc.c
 }
 #endif
 
+#if SNDBG_LOG
+// acumuladores de ciclos por frame das secoes quentes do render.
+// Definidos em snes.cpp, alimentados em snppurender8.cpp (RenderLine8).
+extern Uint32 g_TmgCycM7;    // ciclos no _FetchMode7 (Mode-7)
+extern Uint32 g_TmgCycObj;   // ciclos em FetchOBJ + RenderOBJ8 (sprites)
+#endif
+
 #endif // _SNDBGLOG_H

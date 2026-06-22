@@ -11,6 +11,7 @@
 #include "rendersurface.h"
 #include "snmask.h"
 #include "prof.h"
+#include "sndbglog.h"
 //#include "ps2mem.h"
 
 #define SNPPU_BGPLANE_SIZE 48
@@ -1462,7 +1463,13 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 
 	// fetch obj chr for visible objs
 	PROF_ENTER("FetchOBJ");
+#if SNDBG_LOG
+	Uint32 _tObjA = ProfCtrGetCycle();
+#endif
 	nObjLine = _FetchOBJ(m_Objs, m_ObjLine[iLine], m_nObjLine[iLine], ObjLine, SNPPU_MAXOBJCHR, iLine, (pRegs->obsel & 3) << 13, ((pRegs->obsel>>3) & 3) << 12, m_pPPU->GetVramPtr(0));
+#if SNDBG_LOG
+	g_TmgCycObj += ProfCtrGetCycle() - _tObjA;
+#endif
 	PROF_LEAVE("FetchOBJ");
 
 	if ((pRegs->bgmode&7)!=7)
@@ -1531,7 +1538,13 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	{
 		// mode 7
 		PROF_ENTER("BGMODE7");
+#if SNDBG_LOG
+		Uint32 _tM7 = ProfCtrGetCycle();
+#endif
 		_FetchMode7((Uint8 *)pRenderInfo->BGPlanes[0], m_pPPU, iLine, &pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_PRI], &pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_OPAQUE]);
+#if SNDBG_LOG
+		g_TmgCycM7 += ProfCtrGetCycle() - _tM7;
+#endif
 		PROF_LEAVE("BGMODE7");
 
 		// only draw BG 1
@@ -1579,8 +1592,14 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		_ClearLinePlanar((SNMaskT *)pMain8, 8);
 	if (tm & SNESPPU_MASK_OBJ)
 	{
+#if SNDBG_LOG
+		Uint32 _tObjB = ProfCtrGetCycle();
+#endif
 		_RenderOBJ8(pMain8, pMain, ObjLine, nObjLine,  (tmw&SNESPPU_MASK_OBJ) ? &pBGWindow[4] : NULL, bBG3Pri ? &BG3Pri : NULL, 
 			pMainAddSubMask, (cgadsub & 0x10) ? 1 : 0);
+#if SNDBG_LOG
+		g_TmgCycObj += ProfCtrGetCycle() - _tObjB;
+#endif
 	}
 
 	if (pRegs->cgwsel & 0x02)
@@ -1616,8 +1635,14 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		_ClearLinePlanar((SNMaskT *)pSub8, 8);
 	if (ts & SNESPPU_MASK_OBJ)
 	{
+#if SNDBG_LOG
+		Uint32 _tObjC = ProfCtrGetCycle();
+#endif
 		_RenderOBJ8(pSub8, pSub, ObjLine, nObjLine,  (tsw&SNESPPU_MASK_OBJ) ? &pBGWindow[4] : NULL, bBG3Pri ? &BG3Pri : NULL, 
 			pSubAddSubMask, 4|1);
+#if SNDBG_LOG
+		g_TmgCycObj += ProfCtrGetCycle() - _tObjC;
+#endif
 	}
 
 	PROF_LEAVE("RenderBG");

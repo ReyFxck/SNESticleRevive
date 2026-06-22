@@ -17,10 +17,15 @@ static Uint32 g_TmgFrameStart = 0;   // COP0 cycle no inicio do frame
 static Uint32 g_TmgWinFrames  = 0;   // frames acumulados na janela
 static Uint32 g_TmgWinSumCyc  = 0;   // soma de ciclos/frame na janela
 static Uint32 g_TmgWinMaxCyc  = 0;   // pior frame (ciclos) na janela
+static Uint32 g_TmgWinSumM7   = 0;   // soma de ciclos do Mode-7 na janela
+static Uint32 g_TmgWinSumObj  = 0;   // soma de ciclos de sprites na janela
 static Int32  g_TmgIrqLineMin = 9999;
 static Int32  g_TmgIrqLineMax = -1;
 static Uint32 g_TmgIrqCount   = 0;   // total de H-IRQs na janela
 static Uint32 g_TmgFrameNo    = 0;
+// acumuladores por frame (externados, alimentados em snppurender8.cpp)
+Uint32 g_TmgCycM7  = 0;
+Uint32 g_TmgCycObj = 0;
 #endif
 
 
@@ -1022,6 +1027,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 	// --- timing: marca inicio do frame (COP0 cycle counter da EE) ---
 	g_TmgFrameStart  = ProfCtrGetCycle();
+	g_TmgCycM7  = 0;
+	g_TmgCycObj = 0;
 #endif
 
 	m_IO.LatchInput(pInput);
@@ -1144,23 +1151,32 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	{
 		Uint32 cyc = ProfCtrGetCycle() - g_TmgFrameStart;  // ciclos de emulacao deste frame
 		g_TmgWinSumCyc += cyc;
+		g_TmgWinSumM7  += g_TmgCycM7;
+		g_TmgWinSumObj += g_TmgCycObj;
 		if (cyc > g_TmgWinMaxCyc) g_TmgWinMaxCyc = cyc;
 		g_TmgWinFrames++;
 		g_TmgFrameNo++;
 		if (g_TmgWinFrames >= SNDBG_FRAME_PERIOD)
 		{
+			Uint32 sum   = g_TmgWinSumCyc ? g_TmgWinSumCyc : 1;
 			Uint32 avg   = g_TmgWinSumCyc / g_TmgWinFrames;
 			Uint32 ratio = avg ? (g_TmgWinMaxCyc * 100u / avg) : 0;
-			// ratio ~100-130 = frames consistentes; >150 = picos (engasgo de emulacao).
-			// splitIRQ min..max iguais = divisao estavel; diferentes = treme.
-			DLog("[snes-tmg] f%u emuCyc avg=%u max=%u (max=%u%%ofavg) splitIRQ=%d..%d irq/win=%u",
+			Uint32 pM7   = (Uint32)(((Uint64)g_TmgWinSumM7  * 100u) / sum);
+			Uint32 pObj  = (Uint32)(((Uint64)g_TmgWinSumObj * 100u) / sum);
+			Uint32 pOth  = (pM7 + pObj < 100u) ? (100u - pM7 - pObj) : 0u;
+			// M7%/OBJ%/other% = fatia do tempo de emulacao gasto em Mode-7 /
+			// sprites / resto (CPU+SPC+BG+composite). ratio>150 = picos.
+			DLog("[snes-tmg] f%u emu avg=%u max=%u%% | Mode7=%u%% OBJ=%u%% other=%u%% | splitIRQ=%d..%d irq=%u",
 				(unsigned)g_TmgFrameNo,
-				(unsigned)avg, (unsigned)g_TmgWinMaxCyc, (unsigned)ratio,
+				(unsigned)avg, (unsigned)ratio,
+				(unsigned)pM7, (unsigned)pObj, (unsigned)pOth,
 				(int)g_TmgIrqLineMin, (int)g_TmgIrqLineMax,
 				(unsigned)g_TmgIrqCount);
 			g_TmgWinFrames  = 0;
 			g_TmgWinSumCyc  = 0;
 			g_TmgWinMaxCyc  = 0;
+			g_TmgWinSumM7   = 0;
+			g_TmgWinSumObj  = 0;
 			g_TmgIrqCount   = 0;
 			g_TmgIrqLineMin = 9999;
 			g_TmgIrqLineMax = -1;
