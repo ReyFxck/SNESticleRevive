@@ -463,23 +463,31 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			}
 		}
 
-		// S-DD1 (Star Ocean, Street Fighter Alpha 2 / Zero 2): descompressor
-		// de graficos. Mapeamento base LoROM + janela $C0-$FF remapeavel.
-		// Detectado pelo titulo; forca LoROM (mesmo Star Ocean, 48Mbit, que
-		// acessa o >4MB pela troca de segmento do S-DD1, nao por ExLoROM).
+		// S-DD1 (Star Ocean, Street Fighter Alpha 2 / Zero 2): detectado pelo
+		// nibble alto do byte de tipo do cartucho (0x4x = coprocessador S-DD1;
+		// 0x43 = sem save, 0x45 = com bateria). Isso e' confiavel mesmo quando
+		// o titulo esta adulterado (ex.: watermark "Vimm's Lair: ..."). O
+		// titulo serve so de reserva. makeup 0x32 = LoROM; o >4MB (Star Ocean,
+		// 48Mbit) e' acessado pela troca de segmento do S-DD1, nao por ExLoROM.
 		{
-			char t[22];
-			int k;
-			for (k = 0; k < 21; k++)
+			Bool bSDD1 = ((pCartInfo->RomType & 0xF0) == 0x40);
+			if (!bSDD1)
 			{
-				char c = (char)pCartInfo->Title[k];
-				if (c >= 'a' && c <= 'z') c -= 32;
-				t[k] = c;
+				char t[22];
+				int k;
+				for (k = 0; k < 21; k++)
+				{
+					char c = (char)pCartInfo->Title[k];
+					if (c >= 'a' && c <= 'z') c -= 32;
+					t[k] = c;
+				}
+				t[21] = 0;
+				if (!strncmp(t, "STAR OCEAN", 10) ||
+				    !strncmp(t, "STREET FIGHTER ALPHA", 20) ||
+				    !strncmp(t, "STREET FIGHTER ZERO", 19))
+					bSDD1 = TRUE;
 			}
-			t[21] = 0;
-			if (!strncmp(t, "STAR OCEAN", 10) ||
-			    !strncmp(t, "STREET FIGHTER ALPHA", 20) ||
-			    !strncmp(t, "STREET FIGHTER ZERO", 19))
+			if (bSDD1)
 			{
 				m_eMapping = SNROM_MAPPING_LOROM;
 				m_Flags    = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_SDD1;
