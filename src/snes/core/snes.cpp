@@ -144,6 +144,10 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 
 	uAddr &= 0xFFFF;
 
+	// S-RTC: relogio em $2800 (leitura)
+	if (pSnes->m_bSRTC && uAddr == 0x2800)
+		return pSnes->m_SRTC.ReadReg();
+
 /*	if (uAddr < 0x2140)
 	{
 		// ppu read
@@ -257,6 +261,13 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 
 	uAddr &= 0xFFFF;
+
+	// S-RTC: relogio em $2801 (escrita)
+	if (pSnes->m_bSRTC && uAddr == 0x2801)
+	{
+		pSnes->m_SRTC.WriteReg(uData);
+		return;
+	}
 
 	if (uAddr < 0x2140)
 	{
@@ -853,6 +864,8 @@ void SnesSystem::Reset()
 	m_CX4.Reset();
 
 	m_SDD1.Reset();
+
+	m_SRTC.Reset();
 
 #if CODE_DEBUG
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));

@@ -493,6 +493,15 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 				m_Flags    = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_SDD1;
 			}
 		}
+
+		// S-RTC (Daikaijuu Monogatari II): relogio de tempo real. Detectado
+		// pelo nibble alto do tipo de cartucho (0x5x = S-RTC). E' um jogo
+		// HiROM com bateria.
+		if ((pCartInfo->RomType & 0xF0) == 0x50)
+		{
+			m_eMapping = SNROM_MAPPING_HIROM;
+			m_Flags    = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_SRTC;
+		}
 	} else
 	{
 		m_eVideoType = SNROM_VIDEO_NTSC;

@@ -355,6 +355,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 	SNCPUSetMemSpeed(&m_Cpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_SLOW);
 
 	m_bSDD1 = FALSE;
+	m_bSRTC = (uFlags & SNROM_FLAG_SRTC) ? TRUE : FALSE;
 
 	switch (eRomMapping)
 	{

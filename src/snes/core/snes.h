@@ -25,6 +25,7 @@ extern "C" {
 #include "snobc1.h"
 #include "sncx4.h"
 #include "snsdd1.h"
+#include "snsrtc.h"
 
 #define SNES_RAMSIZE  0x20000
 #define SNES_SRAMSIZE (256 * 1024)
@@ -88,6 +89,9 @@ private:
 
 	SNSDD1		m_SDD1;
 	Bool		m_bSDD1;
+
+	SNSRTC		m_SRTC;
+	Bool		m_bSRTC;
 
 	SnesRom		*m_pRom;
 
