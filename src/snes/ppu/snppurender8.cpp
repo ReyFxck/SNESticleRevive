@@ -1187,11 +1187,19 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 #if SNDBG_LOG
 		{
 			static int _objn = 0;
-			if (_objn < 48)
+			// so' loga sprites "de verdade" na tela (pula os estacionados:
+			// tile 0 / fora da tela), pra capturar os personagens/inimigos.
+			// Loga tambem o conteudo do VRAM no tile-base do sprite: se vier
+			// lixo, o problema e' o DMA/VRAM dos tiles, nao o enderecamento.
+			if (_objn < 64 && pObj->uTile != 0 && ObjX > -32 && ObjX < 256)
 			{
-				DLog("[snes-obj] spr sz=%d tile=%03X x=%d y=%d vxor=%d base=%04X nsel=%04X",
-					(int)uSize, (int)pObj->uTile, (int)ObjX, (int)pObj->uPosY,
-					(int)pObj->uVXOR, (unsigned)uBaseAddr, (unsigned)uNameSelect);
+				Uint32 _tn = pObj->uTile;
+				Uint32 _ta = (uBaseAddr + _tn * 16 + ((_tn & 0x100) ? uNameSelect : 0)) & 0x7FFF;
+				DLog("[snes-obj] sz=%d tile=%03X x=%d y=%d vxor=%d hf=%d | vram[%04X]=%04X %04X %04X",
+					(int)uSize, (int)_tn, (int)ObjX, (int)pObj->uPosY,
+					(int)pObj->uVXOR, (int)pObj->bHFlip,
+					(unsigned)_ta, (unsigned)pVram[_ta], (unsigned)pVram[(_ta + 1) & 0x7FFF],
+					(unsigned)pVram[(_ta + 8) & 0x7FFF]);
 				_objn++;
 			}
 		}
