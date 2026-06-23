@@ -1195,11 +1195,16 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 			{
 				Uint32 _tn = pObj->uTile;
 				Uint32 _ta = (uBaseAddr + _tn * 16 + ((_tn & 0x100) ? uNameSelect : 0)) & 0x7FFF;
-				DLog("[snes-obj] sz=%d tile=%03X x=%d y=%d vxor=%d hf=%d | vram[%04X]=%04X %04X %04X",
+				Uint32 _or = 0;
+				Int32  _k;
+				// OR de ~0x200 words (regiao do tile do sprite): se der 0, os
+				// dados do sprite NAO estao na VRAM (bug de upload/DMA); se der
+				// != 0, os dados existem e o bug e' no render/arranjo.
+				for (_k = 0; _k < 0x200; _k++)
+					_or |= pVram[(_ta + _k) & 0x7FFF];
+				DLog("[snes-obj] sz=%d tile=%03X x=%d y=%d | ta=%04X first=%04X regionOR=%04X",
 					(int)uSize, (int)_tn, (int)ObjX, (int)pObj->uPosY,
-					(int)pObj->uVXOR, (int)pObj->bHFlip,
-					(unsigned)_ta, (unsigned)pVram[_ta], (unsigned)pVram[(_ta + 1) & 0x7FFF],
-					(unsigned)pVram[(_ta + 8) & 0x7FFF]);
+					(unsigned)_ta, (unsigned)pVram[_ta], (unsigned)_or);
 			}
 		}
 #endif
