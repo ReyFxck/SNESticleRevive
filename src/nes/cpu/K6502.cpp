@@ -14,6 +14,23 @@
 #include "InfoNES_System.h"
 
 /*-------------------------------------------------------------------*/
+/*  I/O Operation prototypes (definidas em K6502_rw.h, incluido no    */
+/*  fim deste arquivo, e ReadAbsX/Y/IY definidas mais abaixo). Ficam  */
+/*  aqui porque sao usadas antes de definidas dentro deste TU; estavam*/
+/*  no K6502.h mas la' poluiam todo TU que incluia o header.          */
+/*-------------------------------------------------------------------*/
+static inline BYTE K6502_Read( WORD wAddr );
+static inline WORD K6502_ReadW( WORD wAddr );
+static inline WORD K6502_ReadW2( WORD wAddr );
+static inline BYTE K6502_ReadZp( BYTE byAddr );
+static inline WORD K6502_ReadZpW( BYTE byAddr );
+static inline BYTE K6502_ReadAbsX();
+static inline BYTE K6502_ReadAbsY();
+static inline BYTE K6502_ReadIY();
+static inline void K6502_Write( WORD wAddr, BYTE byData );
+static inline void K6502_WriteW( WORD wAddr, WORD wData );
+
+/*-------------------------------------------------------------------*/
 /*  Operation Macros                                                 */
 /*-------------------------------------------------------------------*/
 
@@ -33,9 +50,9 @@
 // Zero Page,Y
 #define AA_ZPY   (BYTE)( K6502_Read( PC++ ) + Y )
 // Absolute
-#define AA_ABS   ( K6502_Read( PC++ ) | (WORD)K6502_Read( PC++ ) << 8 )
+#define AA_ABS   K6502_FetchW()
 // Absolute2 ( PC-- )
-#define AA_ABS2  ( K6502_Read( PC++ ) | (WORD)K6502_Read( PC ) << 8 )
+#define AA_ABS2  K6502_FetchW2()
 // Absolute,X
 #define AA_ABSX  AA_ABS + X
 // Absolute,Y
@@ -342,6 +359,31 @@ void K6502_Set_Int_Wiring( BYTE byNMI_Wiring, BYTE byIRQ_Wiring )
 
   NMI_Wiring = byNMI_Wiring;
   IRQ_Wiring = byIRQ_Wiring;
+}
+
+/*-------------------------------------------------------------------*/
+/*  Leitura little-endian de um operando de 16 bits (modo Absoluto).  */
+/*                                                                    */
+/*  Substitui as macros antigas que faziam dois 'PC++' na MESMA       */
+/*  expressao (K6502_Read(PC++) | K6502_Read(PC++)<<8). Isso e'        */
+/*  comportamento indefinido em C/C++ (sem ponto de sequencia entre   */
+/*  os dois efeitos colaterais sobre PC) -- a ordem de leitura dos     */
+/*  bytes ficava por conta do compilador. Aqui low->high e' explicito */
+/*  e garantido, batendo com o 6502 real.                             */
+/*-------------------------------------------------------------------*/
+static inline WORD K6502_FetchW( void )
+{
+  BYTE byLo = K6502_Read( PC++ );
+  BYTE byHi = K6502_Read( PC++ );
+  return (WORD)byLo | ( (WORD)byHi << 8 );
+}
+
+/* Igual, mas o byte alto NAO incrementa PC (usado por JSR via AA_ABS2). */
+static inline WORD K6502_FetchW2( void )
+{
+  BYTE byLo = K6502_Read( PC++ );
+  BYTE byHi = K6502_Read( PC );
+  return (WORD)byLo | ( (WORD)byHi << 8 );
 }
 
 /*===================================================================*/

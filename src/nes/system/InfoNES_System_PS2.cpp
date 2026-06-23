@@ -162,7 +162,7 @@ void InfoNES_RunOneFrame(void)
         {
             FrameStep %= STEP_PER_FRAME;
             IRQ_REQ;
-            APU_Reg[0x4015] |= 0x40;
+            APU_Reg[0x15] |= 0x40;
         }
 
         /* Per-mapper hsync callback. */
@@ -476,7 +476,7 @@ void InfoNES_SoundOutput( int samples, BYTE *wave1, BYTE *wave2,
     pMix->Flush();
 }
 
-void InfoNES_MessageBox( char *pszMsg, ... )
+void InfoNES_MessageBox( const char *pszMsg, ... )
 {
     va_list ap;
     char Buf[1024];

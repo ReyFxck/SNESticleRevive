@@ -56,18 +56,12 @@ void K6502_Reset();
 void K6502_Set_Int_Wiring( BYTE byNMI_Wiring, BYTE byIRQ_Wiring );
 void K6502_Step( WORD wClocks );
 
-// I/O Operation (User definition)
-static inline BYTE K6502_Read( WORD wAddr);
-static inline WORD K6502_ReadW( WORD wAddr );
-static inline WORD K6502_ReadW2( WORD wAddr );
-static inline BYTE K6502_ReadZp( BYTE byAddr );
-static inline WORD K6502_ReadZpW( BYTE byAddr );
-static inline BYTE K6502_ReadAbsX();
-static inline BYTE K6502_ReadAbsY();
-static inline BYTE K6502_ReadIY();
-
-static inline void K6502_Write( WORD wAddr, BYTE byData );
-static inline void K6502_WriteW( WORD wAddr, WORD wData );
+// I/O Operation: os prototipos das funcoes static inline de leitura/
+// escrita (K6502_Read, K6502_Write, ...) vivem agora no proprio
+// K6502.cpp, que e' quem as usa (definidas em K6502_rw.h, incluido no
+// fim daquele arquivo). Mante-los neste header publico gerava
+// "declared static but never defined" em todo TU que inclui K6502.h
+// sem incluir K6502_rw.h (InfoNES.cpp, mappers, nessystem, etc.).
 
 // The state of the IRQ pin
 extern BYTE IRQ_State;

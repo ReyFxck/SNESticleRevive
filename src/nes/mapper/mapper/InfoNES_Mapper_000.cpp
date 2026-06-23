@@ -144,7 +144,7 @@ void Map0_HSync()
   {
     FrameStep %= STEP_PER_FRAME;
     IRQ_REQ;
-    APU_Reg[ 0x4015 ] |= 0x40;
+    APU_Reg[ 0x15 ] |= 0x40;
   }
 #endif
 }
