@@ -158,17 +158,28 @@ void GSK_Init(int width, int height,
 
     case GSK_VIDMODE_240P:
     default:
-        /* NTSC 320x240 progressivo (4:3), 60Hz - nativo SNES/NES.
+        /* NTSC 640x240 progressivo (4:3), 60Hz - nativo SNES/NES.
            240p e' PROGRESSIVO, igual ao 480p: precisa de GS_FRAME (FFMD=1)
            para o PCRTC ler TODA linha do framebuffer numa varredura unica.
            Com GS_FIELD (FFMD=0) o PCRTC le linha-sim/linha-nao (modo de
            campo, so' faz sentido em entrelacado), resultando em sinal
            quebrado / sem lock / imagem pela metade no PS2 real. Nao-
-           entrelacado ja' roda a 60Hz independente do FFMD. */
+           entrelacado ja' roda a 60Hz independente do FFMD.
+
+           LARGURA = 640 (NAO 320).  Esta e' a mesma razao documentada no
+           topo de gpprim.c: quando o GS e' forcado a um modo mais alto
+           -- exatamente o que um adaptador PS2->HDMI passivo faz ao cravar
+           480p -- o PCRTC passa a ler 640 pixels visiveis por linha.  Um
+           framebuffer mais estreito que isso faz o PCRTC ler alem da borda,
+           caindo na linha vizinha da VRAM = listras verticais coloridas
+           espremidas no canto (o print do Adriano).  640 de largura cobre
+           NTSC nativo E o 480p do adaptador, lendo so' o que desenhamos.
+           Bonus: mantem GPPrimSetScale em 640/256 = 2.5, a mesma proporcao
+           que a UI/fonte foram desenhadas (320 dava 1.25 = UI deformada). */
         _pGsGlobal->Mode      = GS_MODE_NTSC;
         _pGsGlobal->Interlace = GS_NONINTERLACED;
         _pGsGlobal->Field     = GS_FRAME;
-        _gsk_fb_width         = 320;
+        _gsk_fb_width         = 640;
         _gsk_fb_height        = 240;
         _gsk_vck              = 2;
         break;
