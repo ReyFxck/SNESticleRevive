@@ -12,7 +12,13 @@ BUILD_WARN_FILE ?= $(BUILD_META_DIR)/warn.list
 BUILD_OK_FILE ?= $(BUILD_META_DIR)/ok.list
 BUILD_META_DIR ?= $(OBJ_DIR)/.meta
 BUILD_TOTAL ?= $(words $(OBJS))
-SHOW_WARN_LOG ?= 0
+# VERBOSE=1 mostra a mensagem de warning/erro COMPLETA (sem o corte de
+# 58 colunas do resumo) e despeja o log inteiro do compilador em
+# warnings (erros ja' fazem 'cat' do log sempre). Ex.: make VERBOSE=1
+VERBOSE ?= 0
+SHOW_WARN_LOG ?= $(VERBOSE)
+# Largura do resumo de 1 linha; VERBOSE solta o limite (mostra tudo).
+MSG_WIDTH ?= $(if $(filter 1,$(VERBOSE)),100000,58)
 COLOR ?= 1
 PS2DEV_CACHE_DIR ?= $(shell if [ -n "$$XDG_CACHE_HOME" ]; then printf "%s/ps2dev" "$$XDG_CACHE_HOME"; else printf "%s/.cache/ps2dev" "$$HOME"; fi)
 PS2DEV_URL_ARM ?= https://github.com/ps2dev/ps2dev/releases/download/latest/ps2dev-ubuntu-22.04-arm.tar.gz
@@ -442,7 +448,7 @@ define RUN_BIN2C
 	reset=""; green=""; red=""; \
 	if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; red="\033[31m"; fi; \
 	if [ "$$rc" -ne 0 ]; then \
-		msg=$$(head -n1 "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		msg=$$(head -n1 "$$log" | sed "s/^[[:space:]]*//" | cut -c1-$(MSG_WIDTH)); \
 		[ -n "$$msg" ] || msg="bin2c failed"; \
 		printf "[ BIN2C ] %-23s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
 		cat "$$log"; \
@@ -463,13 +469,13 @@ define RUN_LINK
 	reset=""; green=""; yellow=""; red=""; \
 	if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; yellow="\033[33m"; red="\033[31m"; fi; \
 	if [ "$$rc" -ne 0 ]; then \
-		msg=$$(grep -Eim1 "error:|fatal:|undefined reference|cannot find|No such file" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		msg=$$(grep -Eim1 "error:|fatal:|undefined reference|cannot find|No such file" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-$(MSG_WIDTH)); \
 		[ -n "$$msg" ] || msg="link failed"; \
 		printf "[ LD    ] %-23s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
 		cat "$$log"; \
 		exit "$$rc"; \
 	elif grep -Eiq "warning:" "$$log"; then \
-		msg=$$(grep -Eim1 "warning:" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		msg=$$(grep -Eim1 "warning:" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-$(MSG_WIDTH)); \
 		printf "[ LD    ] %-23s [ $${yellow}WARN$${reset} -> %ss -> %s ]\n" "$$name" "$$elapsed" "$$msg"; \
 	else \
 		printf "[ LD    ] %-23s [ $${green}OK$${reset} -> %ss ]\n" "$$name" "$$elapsed"; \
@@ -496,14 +502,14 @@ define RUN_COMPILE
 		reset="\033[0m"; green="\033[32m"; yellow="\033[33m"; red="\033[31m"; \
 	fi; \
 	if [ "$$rc" -ne 0 ]; then \
-		msg=$$(grep -Eim1 "error:|fatal:|undefined reference|No such file" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-58); \
+		msg=$$(grep -Eim1 "error:|fatal:|undefined reference|No such file" "$$log" | sed "s/^[[:space:]]*//" | cut -c1-$(MSG_WIDTH)); \
 		[ -n "$$msg" ] || msg="compiler failed"; \
 		printf "%s\n" "$$src_name" >> "$(BUILD_ERROR_FILE)"; \
 		printf "[ %s%% ] %-3s %-*s [ $${red}ERROR$${reset} -> %ss -> %s ]\n" "$$percent" "$(1)" "$$name_width" "$$src_name" "$$elapsed" "$$msg"; \
 		cat "$$log"; \
 		exit "$$rc"; \
 	elif grep -Eiq "warning:" "$$log"; then \
-		msg=$$(grep -Eim1 "warning:" "$$log" | sed "s|.*/||; s/^[[:space:]]*//" | cut -c1-58); \
+		msg=$$(grep -Eim1 "warning:" "$$log" | sed "s|.*/||; s/^[[:space:]]*//" | cut -c1-$(MSG_WIDTH)); \
 		printf "%s\n" "$$src_name" >> "$(BUILD_WARN_FILE)"; \
 		printf "[ %s%% ] %-3s %-*s [ $${yellow}WARN$${reset} -> %ss -> %s ]\n" "$$percent" "$(1)" "$$name_width" "$$src_name" "$$elapsed" "$$msg"; \
 		if [ "$(SHOW_WARN_LOG)" = "1" ]; then cat "$$log"; fi; \
@@ -847,9 +853,11 @@ iso-root: $(TARGET) iso-check
 #                  PVD layout. AetherSX2's CDVD detector keys on
 #                  these strings to flag the image as a PS2 game.
 iso:
+	@reset=""; cyan=""; if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; cyan="\033[36m"; fi; printf "$${cyan}[ ISO ]$${reset} build: JOBS=$(JOBS), LOAD_LIMIT=$(LOAD_LIMIT)\n"
 	+@$(MAKE) --no-print-directory build-begin
 	+@$(MAKE) --no-print-directory check-env
 	+@$(MAKE) --no-print-directory iso-check
+	+@$(MAKE) --no-print-directory $(OUTPUT_SYNC) -j$(JOBS) -l$(LOAD_LIMIT) $(TARGET)
 	+@$(MAKE) --no-print-directory iso-root
 	+@$(MAKE) --no-print-directory iso-build-image
 	+@$(MAKE) --no-print-directory build-summary
@@ -965,6 +973,7 @@ help:
 	printf "  make elf OUT=/sdcard         Build ELF/packed ELF and copy to OUT\n"; \
 	printf "  make iso ROMS=/path OUT=/out Build ISO with ROM folder and copy to OUT\n"; \
 	printf "  make iso roms=/path out=/out Same as uppercase variables\n"; \
+	printf "  make iso ROMS=/p OUT=/o JOBS=3  Parallel ISO build (now honors JOBS)\n"; \
 	printf "  make iso PACK=0              Build ISO using unpacked ELF\n"; \
 	printf "\n"; \
 	printf "$${green}Info commands:$${reset}\n"; \
@@ -981,6 +990,7 @@ help:
 	printf "  LOAD_LIMIT=$(LOAD_LIMIT)                 Load limit for parallel builds\n"; \
 	printf "  COLOR=0                      Disable colored output\n"; \
 	printf "  SHOW_WARN_LOG=1              Print full warning logs\n"; \
+	printf "  VERBOSE=1                    Show full warning AND error text (no truncation)\n"; \
 	printf "  OUT=/path                    Copy final ELF to this folder\n"; \
 	printf "  out=/path                    Same as OUT=/path\n"; \
 	printf "  ROMS=/path                   ROM folder for ISO build\n"; \
