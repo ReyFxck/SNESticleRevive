@@ -7,6 +7,7 @@
 #include "prof.h"
 #include "sntiming.h"
 #include "sndebug.h"
+#include "sndbglog.h"
 
 #define SNPPU_VERSION_5C77 (0x01)
 #define SNPPU_VERSION_5C78 (0x01)
@@ -291,6 +292,10 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		{
 			m_Regs.obsel = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);
+#if SNDBG_LOG
+			DLog("[snes-obj] OBSEL=%02X base=%d nameSel=%d baseSize=%d",
+				(int)uData, (int)(uData & 7), (int)((uData >> 3) & 3), (int)((uData >> 5) & 7));
+#endif
 		}
 		break;
 

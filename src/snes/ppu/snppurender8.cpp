@@ -1184,6 +1184,19 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 		ObjY^= pObj->uVXOR;
 		ObjY&= pObj->uSize - 1;
 
+#if SNDBG_LOG
+		{
+			static int _objn = 0;
+			if (_objn < 48)
+			{
+				DLog("[snes-obj] spr sz=%d tile=%03X x=%d y=%d vxor=%d base=%04X nsel=%04X",
+					(int)uSize, (int)pObj->uTile, (int)ObjX, (int)pObj->uPosY,
+					(int)pObj->uVXOR, (unsigned)uBaseAddr, (unsigned)uNameSelect);
+				_objn++;
+			}
+		}
+#endif
+
 		SnesPPUTile4T *pTile4;
 		Uint32 uTileAddr;
 		Uint32 uPlane0, uPlane1, uPlane2, uPlane3;
