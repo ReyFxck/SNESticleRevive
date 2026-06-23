@@ -54,7 +54,7 @@ typedef unsigned char  BYTE;
 void K6502_Init();
 void K6502_Reset();
 void K6502_Set_Int_Wiring( BYTE byNMI_Wiring, BYTE byIRQ_Wiring );
-void K6502_Step( register WORD wClocks );
+void K6502_Step( WORD wClocks );
 
 // I/O Operation (User definition)
 static inline BYTE K6502_Read( WORD wAddr);

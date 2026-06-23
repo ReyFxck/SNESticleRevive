@@ -71,7 +71,11 @@ int _MainLoopReadGZData(Uint8 *pBuffer, Int32 nBufferBytes, const char *pRomFile
 static int _MainLoopZipNameIsRom(const char *pName)
 {
         PathExtTypeE eType;
-        return PathExtResolve(pName, &eType, FALSE) ? 1 : 0;
+        /* PathExtResolve so' escreve em pPath quando bTruncatePath=TRUE;
+           passamos FALSE, entao o cast que descarta o const e' seguro.
+           (O callback do MinizReadZipFirstMatch exige int(*)(const char*),
+            por isso pName e' const e nao da' pra mudar a assinatura.) */
+        return PathExtResolve((char *)pName, &eType, FALSE) ? 1 : 0;
 }
 
 int _MainLoopReadZipData(Uint8 *pBuffer, Int32 nBufferBytes, const char *pZipFile, char *pFileName)
