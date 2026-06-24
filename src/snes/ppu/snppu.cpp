@@ -293,8 +293,8 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 			m_Regs.obsel = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);
 #if SNDBG_LOG
-			DLog("[snes-obj] OBSEL=%02X base=%d nameSel=%d baseSize=%d",
-				(int)uData, (int)(uData & 7), (int)((uData >> 3) & 3), (int)((uData >> 5) & 7));
+			// DLog("[snes-obj] OBSEL=%02X base=%d nameSel=%d baseSize=%d",
+			// 	(int)uData, (int)(uData & 7), (int)((uData >> 3) & 3), (int)((uData >> 5) & 7));
 #endif
 		}
 		break;

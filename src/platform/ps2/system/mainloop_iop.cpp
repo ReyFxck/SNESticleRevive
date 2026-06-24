@@ -287,7 +287,7 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	{
 		int pad_ok = 0;
 
-		BOOTLOG("[boot] pad: load embedded padman.irx\n");
+		// BOOTLOG("[boot] pad: load embedded padman.irx\n");
 		ScrPrintf("PAD: loading embedded padman.irx\n");
 		if (PadLoadEmbeddedIrx() == 0)
 		{
@@ -311,40 +311,40 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 		if (pad_ok)
 		{
 			int pi = padInit(0);
-			BOOTLOG("[boot] padInit=%d (expect 1)\n", pi);
+			// BOOTLOG("[boot] padInit=%d (expect 1)\n", pi);
 			ScrPrintf("PAD: padInit=%d (expect 1)\n", pi);
 			if (pi == 1)
 			{
 				InputInit(FALSE);
 				ScrPrintf("PAD: InputInit done\n");
-				BOOTLOG("[boot] padInit/InputInit done\n");
+				// BOOTLOG("[boot] padInit/InputInit done\n");
 			}
 			else
 			{
 				ScrPrintf("PAD: padInit FAILED - controller unavailable\n");
-				BOOTLOG("[boot] padInit failed -- controller unavailable\n");
+				// BOOTLOG("[boot] padInit failed -- controller unavailable\n");
 			}
 		}
 		else
 		{
 			ScrPrintf("PAD: no controller module - controller unavailable\n");
-			BOOTLOG("[boot] no controller module loaded\n");
+			// BOOTLOG("[boot] no controller module loaded\n");
 		}
 	}
 
 	/* libmc finalise. mcInit() picks up whichever MCMAN/MCSERV pair
 	   is currently loaded - the modern PS2DEV ones registered by
 	   init_memcard_driver() in main.cpp are detected automatically. */
-	BOOTLOG("[boot] MemCardInit (ps2_drivers mcman/mcserv)\n");
+	// BOOTLOG("[boot] MemCardInit (ps2_drivers mcman/mcserv)\n");
 	MemCardInit();
-	BOOTLOG("[boot] MemCardInit done\n");
+	// BOOTLOG("[boot] MemCardInit done\n");
 	#if MAINLOOP_MEMCARD
 	MemCardCreateSave(_SramPath, _MainLoop_SaveTitle, TRUE);
 	#endif
 
-	BOOTLOG("[boot] InitNetwork: enter\n");
+	// BOOTLOG("[boot] InitNetwork: enter\n");
 	bLoadedNetwork = _MainLoopInitNetwork(ppSearchPaths);
-	BOOTLOG("[boot] InitNetwork: leave (loaded=%d)\n", (int)bLoadedNetwork);
+	// BOOTLOG("[boot] InitNetwork: leave (loaded=%d)\n", (int)bLoadedNetwork);
 
 	// configure network if we started it ourselves
 	if (bLoadedNetwork)
@@ -397,7 +397,7 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   Keep rom0:LIBSD as a last-resort fallback (for the rare case
 	   where freesd somehow refuses to load -- in practice the embedded
 	   copy always loads). */
-	BOOTLOG("[boot] FREESD/LIBSD: try load\n");
+	// BOOTLOG("[boot] FREESD/LIBSD: try load\n");
 	ScrPrintf("FREESD: try load\n");
 	if (IOPLoadModule("FREESD.IRX", ppSearchPaths, 0, NULL) < 0)
 	{
@@ -405,12 +405,12 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 		if (IOPLoadModule("rom0:LIBSD", NULL, 0, NULL) < 0)
 		{
 			ScrPrintf("FREESD/LIBSD: both failed - audio will be silent\n");
-			BOOTLOG("[boot] FREESD/LIBSD: both failed - audio will be silent\n");
+			// BOOTLOG("[boot] FREESD/LIBSD: both failed - audio will be silent\n");
 		}
 	}
-	BOOTLOG("[boot] FREESD/LIBSD done\n");
+	// BOOTLOG("[boot] FREESD/LIBSD done\n");
 
-	BOOTLOG("[boot] AUDSRV.IRX: try load\n");
+	// BOOTLOG("[boot] AUDSRV.IRX: try load\n");
 	if (IOPLoadModule("AUDSRV.IRX", ppSearchPaths, 0, NULL) >= 0)
 	{
 		/* Mirror to screen so the user can see progression even when
@@ -419,20 +419,20 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 		   (audsrv RPC server never registered, likely sceSd init bug
 		   in whichever SPU2 driver we ended up with). */
 		ScrPrintf("AUDSRV: SjPCM_Init starting...\n");
-		BOOTLOG("[boot] SjPCM_Init() (audsrv backend)\n");
+		// BOOTLOG("[boot] SjPCM_Init() (audsrv backend)\n");
 		if (SjPCM_Init(0, 960*25, SJPCMMIXBUFFER_MAXENQUEUE) >= 0)
 		{
 			_MainLoop_bSjPCMReady = TRUE;
-			BOOTLOG("[boot] SjPCM_Init done\n");
+			// BOOTLOG("[boot] SjPCM_Init done\n");
 		}
 		else
 		{
-			BOOTLOG("[boot] SjPCM_Init failed\n");
+			// BOOTLOG("[boot] SjPCM_Init failed\n");
 		}
 	}
 	else
 	{
-		BOOTLOG("[boot] AUDSRV.IRX skipped (not available)\n");
+		// BOOTLOG("[boot] AUDSRV.IRX skipped (not available)\n");
 		ScrPrintf("AUDSRV: skipped (no IRX)\n");
 	}
 

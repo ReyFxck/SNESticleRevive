@@ -180,10 +180,10 @@ int main(int argc, char **argv)
 
 	MainSetBootDir(_Main_pBootPath);
 
-	DLog("[boot] main: enter, bootpath=%s", _Main_pBootPath ? _Main_pBootPath : "(null)");
+	// DLog("[boot] main: enter, bootpath=%s", _Main_pBootPath ? _Main_pBootPath : "(null)");
 
 	SifInitRpc(0);
-	DLog("[boot] SifInitRpc done");
+	// DLog("[boot] SifInitRpc done");
 
 	/* Reset the IOP so the BIOS-resident modules (sceCdvdfsv, sceSio2man,
 	   sceMcMan, sceMcServ, etc.) are unloaded before ps2_drivers tries
@@ -193,11 +193,11 @@ int main(int argc, char **argv)
 	   poweroff hand-off - hangs silently after dev9 init prints its
 	   banner.  This is exactly the sequence picodrive's plat.c follows
 	   in platform/ps2/plat.c::reset_IOP. */
-	DLog("[boot] SifIopReset: enter");
+	// DLog("[boot] SifIopReset: enter");
 	while (!SifIopReset(NULL, 0)) {}
 	while (!SifIopSync()) {}
 	SifInitRpc(0);
-	DLog("[boot] SifIopReset done");
+	// DLog("[boot] SifIopReset done");
 
 	/* Patch the rom0:LOADFILE service so SifExecModuleBuffer (used by
 	   our embedded-IRX loader in src/platform/ps2/system/embedded_irx.cpp)
@@ -212,7 +212,7 @@ int main(int argc, char **argv)
 	   reloads rom0:LOADFILE in its pristine, unpatched state. */
 	sbv_patch_enable_lmb();
 	sbv_patch_disable_prefix_check();
-	DLog("[boot] sbv patches applied");
+	// DLog("[boot] sbv patches applied");
 
 	/* Bring up the modern PS2DEV filesystem stack: iomanX, fileXio,
 	   poweroff, mcman/mcserv, cdfs, usb.  Once this is done, newlib
@@ -239,13 +239,13 @@ int main(int argc, char **argv)
 	   and most retail PS2s.  Inlining the bring-up here lets us bracket
 	   every step with a DLog so the next hang, if any, can be pinpointed
 	   directly from the EE_SIO emulator log. */
-	DLog("[boot] init_poweroff_driver: enter");
+	// DLog("[boot] init_poweroff_driver: enter");
 	init_poweroff_driver();
-	DLog("[boot] init_poweroff_driver: done");
+	// DLog("[boot] init_poweroff_driver: done");
 
-	DLog("[boot] init_fileXio_driver: enter");
+	// DLog("[boot] init_fileXio_driver: enter");
 	init_fileXio_driver();
-	DLog("[boot] init_fileXio_driver: done");
+	// DLog("[boot] init_fileXio_driver: done");
 
 	/* Route newlib stdio (fopen / opendir / stat / mkdir / ...) through
 	   fileXio -> iomanX instead of the legacy fio backend.  Must come
@@ -285,19 +285,20 @@ int main(int argc, char **argv)
 	   pins the IRX versions to whatever the in-tree PS2SDK supplies,
 	   makes the load order visible in source, and matches the pattern
 	   used by picodrive / OPL / hugorsgarcia/PS2SNESticle. */
-	DLog("[boot] MemCardLoadEmbeddedIrx: enter");
+	// DLog("[boot] MemCardLoadEmbeddedIrx: enter");
 	{
 		int mcret = MemCardLoadEmbeddedIrx();
-		DLog("[boot] MemCardLoadEmbeddedIrx: done (ret=%d)", mcret);
+		// DLog("[boot] MemCardLoadEmbeddedIrx: done (ret=%d)", mcret);
+		(void)mcret;
 	}
 
-	DLog("[boot] init_usb_driver: enter");
+	// DLog("[boot] init_usb_driver: enter");
 	init_usb_driver_compat();
-	DLog("[boot] init_usb_driver: done");
+	// DLog("[boot] init_usb_driver: done");
 
-	DLog("[boot] init_cdfs_driver: enter");
+	// DLog("[boot] init_cdfs_driver: enter");
 	init_cdfs_driver();
-	DLog("[boot] init_cdfs_driver: done");
+	// DLog("[boot] init_cdfs_driver: done");
 
 	/* Kick the IOP-side cdvdman so sceCdGetDiskType returns the real
 	   disc type instead of SCECdNODISC.  Without this cdfs.irx's
@@ -306,41 +307,42 @@ int main(int argc, char **argv)
 	   "browser shows no files" symptom.  Same call the working
 	   InfinityStation project uses in
 	   ps2boot/storage/disc.c::ps2_disc_init_once. */
-	DLog("[boot] sceCdInit: enter");
+	// DLog("[boot] sceCdInit: enter");
 	sceCdInit(SCECdINIT);
-	DLog("[boot] sceCdInit: done (diskType=%d)", sceCdGetDiskType());
+	// DLog("[boot] sceCdInit: done (diskType=%d)", sceCdGetDiskType());
 
 	/* Runtime FS probe: log opendir/stat for every top-level mount so
 	   the next boot tells us exactly where the browser breaks. The
 	   browser uses printf which never reaches the SIO log; this dup
 	   via DLog does. */
-	DLog("[probe] fs probe begin");
+	// DLog("[probe] fs probe begin");
 	{
 		const char *paths[] = { "cdfs:/", "cdfs:", "mc0:/", "mc0:", "mass:/", "host:/" };
 		int i;
 		for (i = 0; i < (int)(sizeof(paths) / sizeof(paths[0])); i++) {
 			DIR *d; struct stat st; int rc;
 			errno = 0; rc = stat(paths[i], &st);
-			DLog("[probe] stat('%s') -> %d (errno=%d, mode=0%o)",
-			     paths[i], rc, errno, rc == 0 ? (unsigned)st.st_mode : 0);
+			// DLog("[probe] stat('%s') -> %d (errno=%d, mode=0%o)",
+			//      paths[i], rc, errno, rc == 0 ? (unsigned)st.st_mode : 0);
+			(void)rc;
 			errno = 0; d = opendir(paths[i]);
-			DLog("[probe] opendir('%s') -> %p (errno=%d)", paths[i], (void *)d, errno);
+			// DLog("[probe] opendir('%s') -> %p (errno=%d)", paths[i], (void *)d, errno);
 			if (d) {
 				struct dirent *de; int n = 0;
 				while ((de = readdir(d)) != NULL && n < 8) {
-					DLog("[probe]   readdir[%d] = '%s'", n, de->d_name); n++;
+					/* DLog("[probe]   readdir[%d] = '%s'", n, de->d_name); */ n++;
 				}
-				DLog("[probe]   total entries listed = %d", n);
+				// DLog("[probe]   total entries listed = %d", n);
 				closedir(d);
 			}
 		}
 	}
-	DLog("[probe] fs probe end");
+	// DLog("[probe] fs probe end");
 
 	/* Direct fileXio probe: bypass newlib entirely. If these work
 	   where opendir() above does not, the EE newlib<->iomanX glue
 	   is the issue and the browser should call fileXio* directly. */
-	DLog("[fxprobe] direct fileXio probe begin");
+	// DLog("[fxprobe] direct fileXio probe begin");
 	{
 		const char *paths[] = { "cdfs:/", "cdfs:", "mc0:/", "mass:/", "host:/" };
 		int i;
@@ -348,22 +350,23 @@ int main(int argc, char **argv)
 		iox_stat_t st;
 		for (i = 0; i < (int)(sizeof(paths) / sizeof(paths[0])); i++) {
 			int sr = fileXioGetStat(paths[i], &st);
-			DLog("[fxprobe] fileXioGetStat('%s') -> %d (mode=0x%x)",
-			     paths[i], sr, sr == 0 ? (unsigned)st.mode : 0);
+			// DLog("[fxprobe] fileXioGetStat('%s') -> %d (mode=0x%x)",
+			//      paths[i], sr, sr == 0 ? (unsigned)st.mode : 0);
+			(void)sr;
 			int d = fileXioDopen(paths[i]);
-			DLog("[fxprobe] fileXioDopen('%s') -> %d", paths[i], d);
+			// DLog("[fxprobe] fileXioDopen('%s') -> %d", paths[i], d);
 			if (d >= 0) {
 				int n = 0;
 				while (fileXioDread(d, &de) > 0 && n < 8) {
-					DLog("[fxprobe]   dread[%d] = '%s' (mode=0x%x)", n, de.name, (unsigned)de.stat.mode);
+					// DLog("[fxprobe]   dread[%d] = '%s' (mode=0x%x)", n, de.name, (unsigned)de.stat.mode);
 					n++;
 				}
-				DLog("[fxprobe]   total entries listed = %d", n);
+				// DLog("[fxprobe]   total entries listed = %d", n);
 				fileXioDclose(d);
 			}
 		}
 	}
-	DLog("[fxprobe] direct fileXio probe end");
+	// DLog("[fxprobe] direct fileXio probe end");
 
 	if (_Main_pBootPath[0]=='m' && _Main_pBootPath[1]=='c')
 	{
@@ -371,9 +374,9 @@ int main(int argc, char **argv)
 		   We do this AFTER the filesystem stack is up because full_reset
 		   needs fopen("rom0:EELOADCNF") to work, and rom0: is only
 		   routed to newlib stdio once iomanX has been brought up. */
-		DLog("[boot] booted from mc -> full_reset");
+		// DLog("[boot] booted from mc -> full_reset");
 		full_reset();
-		DLog("[boot] full_reset done -> re-init filesystem");
+		// DLog("[boot] full_reset done -> re-init filesystem");
 		init_poweroff_driver();
 		init_fileXio_driver();
 		__fileXioOpsInitializeImpl();
@@ -381,7 +384,7 @@ int main(int argc, char **argv)
 		MemCardLoadEmbeddedIrx();
 		init_usb_driver_compat();
 		init_cdfs_driver();
-		DLog("[boot] filesystem re-init done");
+		// DLog("[boot] filesystem re-init done");
 	}
 
 	/* cdvdInit(CDVD_INIT_NOWAIT) used to live here.  It is intentionally
@@ -398,21 +401,21 @@ int main(int argc, char **argv)
 
     for (iArg=0; iArg < argc; iArg++)
     {
-        DLog("[boot] argv[%d] = %s", iArg, argv[iArg] ? argv[iArg] : "(null)");
+        // DLog("[boot] argv[%d] = %s", iArg, argv[iArg] ? argv[iArg] : "(null)");
     }
 
 	DmaReset();
-	DLog("[boot] DmaReset done");
+	// DLog("[boot] DmaReset done");
 
     install_VRstart_handler();
-    DLog("[boot] install_VRstart_handler done");
+    // DLog("[boot] install_VRstart_handler done");
 
 	ConInit();
-	DLog("[boot] ConInit done -> MainLoopInit");
+	// DLog("[boot] ConInit done -> MainLoopInit");
 
 	if (MainLoopInit())
 	{
-		DLog("[boot] MainLoopInit OK -> entering MainLoopProcess loop");
+		// DLog("[boot] MainLoopInit OK -> entering MainLoopProcess loop");
 		while (MainLoopProcess())
 		{
 		}
@@ -421,7 +424,7 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-		DLog("[boot] MainLoopInit FAILED");
+		// DLog("[boot] MainLoopInit FAILED");
 	}
 
 	ConShutdown();

@@ -1260,13 +1260,13 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			Uint32 pOth  = (pM7 + pObj < 100u) ? (100u - pM7 - pObj) : 0u;
 			// M7%/OBJ%/other% = fatia do tempo de emulacao gasto em Mode-7 /
 			// sprites / resto (CPU+SPC+BG+composite). ratio>150 = picos.
-			DLog("[snes-tmg] f%u emu avg=%u max=%u%% | Mode7=%u%% OBJ=%u%% other=%u%% | dspRd=%u dspWr=%u | splitIRQ=%d..%d irq=%u",
-				(unsigned)g_TmgFrameNo,
-				(unsigned)avg, (unsigned)ratio,
-				(unsigned)pM7, (unsigned)pObj, (unsigned)pOth,
-				(unsigned)g_TmgDspRd, (unsigned)g_TmgDspWr,
-				(int)g_TmgIrqLineMin, (int)g_TmgIrqLineMax,
-				(unsigned)g_TmgIrqCount);
+			// DLog("[snes-tmg] f%u emu avg=%u max=%u%% | Mode7=%u%% OBJ=%u%% other=%u%% | dspRd=%u dspWr=%u | splitIRQ=%d..%d irq=%u",
+			// 	(unsigned)g_TmgFrameNo,
+			// 	(unsigned)avg, (unsigned)ratio,
+			// 	(unsigned)pM7, (unsigned)pObj, (unsigned)pOth,
+			// 	(unsigned)g_TmgDspRd, (unsigned)g_TmgDspWr,
+			// 	(int)g_TmgIrqLineMin, (int)g_TmgIrqLineMax,
+			// 	(unsigned)g_TmgIrqCount);
 			g_TmgWinFrames  = 0;
 			g_TmgWinSumCyc  = 0;
 			g_TmgWinMaxCyc  = 0;

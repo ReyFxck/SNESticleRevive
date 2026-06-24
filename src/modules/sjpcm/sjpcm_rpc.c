@@ -111,7 +111,7 @@ void DLog(const char *fmt, ...)
         }
         {
             extern void scr_printf(const char *fmt, ...);
-            scr_printf("%s", _dlog_buf);
+            // scr_printf("%s", _dlog_buf);
         }
     }
 #endif
@@ -166,14 +166,14 @@ int SjPCM_Init(int sync, int numsamples, int maxenqueuesamples)
        the user will see "audsrv_init..." on screen as the last line
        and we know exactly which step deadlocked. */
     ScrPrintf("audsrv_init...\n");
-    DLog("[snes-aud] audsrv_init() ...");
+    // DLog("[snes-aud] audsrv_init() ...");
     ret = audsrv_init();
-    DLog("[snes-aud] audsrv_init() = %d", ret);
+    // DLog("[snes-aud] audsrv_init() = %d", ret);
     ScrPrintf("audsrv_init = %d\n", ret);
     if (ret != 0)
     {
-        DLog("[snes-aud] init FAILED %d (%s)",
-             ret, audsrv_get_error_string());
+        // DLog("[snes-aud] init FAILED %d (%s)",
+        //      ret, audsrv_get_error_string());
         ScrPrintf("audsrv_init FAILED %d - continuing silent\n", ret);
         return -1;
     }
@@ -183,12 +183,12 @@ int SjPCM_Init(int sync, int numsamples, int maxenqueuesamples)
     fmt.channels = SJPCM_AUDSRV_CHANNELS;
 
     ret = audsrv_set_format(&fmt);
-    DLog("[snes-aud] set_format(48000,16,2) = %d", ret);
+    // DLog("[snes-aud] set_format(48000,16,2) = %d", ret);
     ScrPrintf("audsrv set_format = %d\n", ret);
     if (ret != 0)
     {
-        DLog("[snes-aud] set_format FAILED %d (%s)",
-             ret, audsrv_get_error_string());
+        // DLog("[snes-aud] set_format FAILED %d (%s)",
+        //      ret, audsrv_get_error_string());
         ScrPrintf("audsrv set_format FAILED %d\n", ret);
         audsrv_quit();
         return -1;
@@ -196,7 +196,7 @@ int SjPCM_Init(int sync, int numsamples, int maxenqueuesamples)
 
     /* Default to full volume. SjPCM_Setvol() may override. */
     ret = audsrv_set_volume(MAX_VOLUME);
-    DLog("[snes-aud] set_volume(%d) = %d", MAX_VOLUME, ret);
+    // DLog("[snes-aud] set_volume(%d) = %d", MAX_VOLUME, ret);
     ScrPrintf("audsrv set_volume = %d\n", ret);
 
     sjpcm_inited = 1;

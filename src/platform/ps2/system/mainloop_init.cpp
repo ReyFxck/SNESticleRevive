@@ -182,13 +182,13 @@ Bool MainLoopInit()
     #if PROF_ENABLED
     ProfInit(128 * 1024);
     #endif
-	BOOTLOG("[boot] GS_InitGraph()\n");
+	// BOOTLOG("[boot] GS_InitGraph()\n");
 	GS_InitGraph(GS_NTSC,GS_NONINTERLACE);
 dispx = MAINLOOP_DISPX;
 	dispy = MAINLOOP_DISPY;
-	BOOTLOG("[boot] GS_SetDispMode()\n");
+	// BOOTLOG("[boot] GS_SetDispMode()\n");
 	GS_SetDispMode(dispx,dispy, MAINLOOP_SCREENWIDTH, MAINLOOP_SCREENHEIGHT);
-BOOTLOG("[boot] GS_SetEnv()\n");
+// BOOTLOG("[boot] GS_SetEnv()\n");
 	GS_SetEnv(MAINLOOP_SCREENWIDTH, MAINLOOP_SCREENHEIGHT, FB0, FB1, GS_PSMCT32, Z0, GS_PSMZ16S);
 
 	/* Use the legacy hard-coded VRAM layout that matches the iaddis
@@ -208,8 +208,8 @@ BOOTLOG("[boot] GS_SetEnv()\n");
 	   working layout. */
 	_MainLoop_uOutTexTBP  = TEXADDR;
 	_MainLoop_uBlenderTBP = 0x3C00;
-	printf("[boot] _OutTex TBP=0x%04X, Blender TBP=0x%04X (legacy layout)\n",
-		(unsigned)_MainLoop_uOutTexTBP, (unsigned)_MainLoop_uBlenderTBP);
+	// printf("[boot] _OutTex TBP=0x%04X, Blender TBP=0x%04X (legacy layout)\n",
+	// 	(unsigned)_MainLoop_uOutTexTBP, (unsigned)_MainLoop_uBlenderTBP);
 
 GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
     PolyInit();
@@ -298,7 +298,7 @@ _SJPCMMix = new SJPCMMixBuffer(32000, TRUE);
 	 * "settle done" shows timed_out=1 on a real console, the VBlank was
 	 * indeed stalled (confirms the GSM hang); timed_out=0 means it fired
 	 * normally and any remaining GSM glitch is geometry, not a hang. */
-	BOOTLOG("[boot] GS settle wait (timeout-safe) begin\n");
+	// BOOTLOG("[boot] GS settle wait (timeout-safe) begin\n");
 	ScrPrintf("VID: GS settle wait...\n");
 	{
 		int base  = TestVRstart();
@@ -308,7 +308,7 @@ _SJPCMMix = new SJPCMMixBuffer(32000, TRUE);
 		ScrPrintf("VID: GS settle done (vbl=%d timed_out=%d)\n",
 		          TestVRstart() - base, (guard <= 0));
 	}
-	BOOTLOG("[boot] GS settle wait done\n");
+	// BOOTLOG("[boot] GS settle wait done\n");
 // create textures in main ram
     _fbTexture[0] = new CRenderSurface;
     _fbTexture[1] = new CRenderSurface;
@@ -317,7 +317,7 @@ _SJPCMMix = new SJPCMMixBuffer(32000, TRUE);
     _fbTexture[1]->Alloc(256, 256,  PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
     _fbTexture[0]->Clear();
     _fbTexture[1]->Clear();
-	BOOTLOG("[boot] TextureNew(_OutTex)\n");
+	// BOOTLOG("[boot] TextureNew(_OutTex)\n");
     TextureNew(&_OutTex, 256, 256, GS_PSMCT32);
     TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
 TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
@@ -404,8 +404,8 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
             SjPCM_Clearbuff();
             SjPCM_Play();
         }
-	BOOTLOG("[boot] MainLoopInit: leave (bMenu=%d, sjpcm=%d, mcsave=%d)\n",
-		(int)_bMenu, (int)_MainLoop_bSjPCMReady, (int)_MainLoop_bMCSaveReady);
+	// BOOTLOG("[boot] MainLoopInit: leave (bMenu=%d, sjpcm=%d, mcsave=%d)\n",
+	// 	(int)_bMenu, (int)_MainLoop_bSjPCMReady, (int)_MainLoop_bMCSaveReady);
 
 /*
     if (!_WavFile.Open(_pSnesWavFileName, 32000, 16, 2))

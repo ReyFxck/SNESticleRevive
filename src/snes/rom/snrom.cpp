@@ -364,9 +364,9 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			break;
 		}
 #if SNDBG_LOG
-		DLog("[snes-dsp] ROM '%.16s' makeup=%02X type=%02X size=%02X sram=%02X",
-			(const char*)pCartInfo->Title,
-			pCartInfo->RomMakeup, pCartInfo->RomType, pCartInfo->RomSize, pCartInfo->SRAMSize);
+		// DLog("[snes-dsp] ROM '%.16s' makeup=%02X type=%02X size=%02X sram=%02X",
+		// 	(const char*)pCartInfo->Title,
+		// 	pCartInfo->RomMakeup, pCartInfo->RomType, pCartInfo->RomSize, pCartInfo->SRAMSize);
 #endif
 		switch (pCartInfo->RomType)
 		{

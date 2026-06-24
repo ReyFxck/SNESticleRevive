@@ -210,7 +210,7 @@ Bool _MainLoopInitNetwork(Char **ppSearchPaths)
     ret = NetIfLoadEmbeddedIrx();
     if (ret < 0)
     {
-        printf("[boot] NetIfLoadEmbeddedIrx failed (%d) - no network\n", ret);
+        // printf("[boot] NetIfLoadEmbeddedIrx failed (%d) - no network\n", ret);
         return FALSE;
     }
 
@@ -228,9 +228,9 @@ Bool _MainLoopInitNetwork(Char **ppSearchPaths)
     ip4_addr_set_zero(&NM);
     ip4_addr_set_zero(&GW);
 
-    printf("[boot] ps2ipInit\n");
+    // printf("[boot] ps2ipInit\n");
     ps2ipInit(&IP, &NM, &GW);
-    printf("[boot] ps2ipInit done\n");
+    // printf("[boot] ps2ipInit done\n");
 
     return TRUE;
 }

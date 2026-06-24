@@ -1008,7 +1008,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 {
     DIR *dir;
 
-    DLog("[ui] MenuDir: '%s'", pDir);
+    // DLog("[ui] MenuDir: '%s'", pDir);
 
 	ResetEntries();
 
@@ -1025,7 +1025,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	if (strlen(pDir) > 0)
 	{
 		dir = opendir(pDir);
-		DLog("[ui] opendir('%s') -> %p (errno=%d)", pDir, (void *)dir, dir ? 0 : errno);
+		// DLog("[ui] opendir('%s') -> %p (errno=%d)", pDir, (void *)dir, dir ? 0 : errno);
 		if (dir != NULL)
 		{
 			struct dirent *de;
@@ -1096,7 +1096,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 
 	SortEntries();
 
-    DLog("[ui] BrowserEntries: %d (dir='%s')", m_nEntries, m_Dir);
+    // DLog("[ui] BrowserEntries: %d (dir='%s')", m_nEntries, m_Dir);
 }
 
 void CBrowserScreen::Chdir(const Char *pSubDir)

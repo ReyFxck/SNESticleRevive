@@ -1202,9 +1202,9 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 				// != 0, os dados existem e o bug e' no render/arranjo.
 				for (_k = 0; _k < 0x200; _k++)
 					_or |= pVram[(_ta + _k) & 0x7FFF];
-				DLog("[snes-obj] sz=%d tile=%03X x=%d y=%d | ta=%04X first=%04X regionOR=%04X",
-					(int)uSize, (int)_tn, (int)ObjX, (int)pObj->uPosY,
-					(unsigned)_ta, (unsigned)pVram[_ta], (unsigned)_or);
+				// DLog("[snes-obj] sz=%d tile=%03X x=%d y=%d | ta=%04X first=%04X regionOR=%04X",
+				// 	(int)uSize, (int)_tn, (int)ObjX, (int)pObj->uPosY,
+				// 	(unsigned)_ta, (unsigned)pVram[_ta], (unsigned)_or);
 			}
 		}
 #endif

@@ -46,8 +46,10 @@ extern "C" void ScrPrintf(const Char *pFormat, ...)
 	va_end(argptr);
 
 //	scr_printf("%s", str);
-	if (_MainLoop_pLogScreen)
-		_MainLoop_pLogScreen->AddMessage(str);
+	// ScrPrintf/scr_printf output desativado (reative descomentando o bloco abaixo)
+	// if (_MainLoop_pLogScreen)
+	// 	_MainLoop_pLogScreen->AddMessage(str);
+	(void)str;
 
 	// render frame to display text
 	MainLoopRender();

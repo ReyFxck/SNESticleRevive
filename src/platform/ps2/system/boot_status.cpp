@@ -31,17 +31,18 @@ extern "C" void BootStatusLog(const char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
+    (void)buf;
 
-    scr_printf(buf);
-    scr_printf("%c", 10);
+    // scr_printf(buf);
+    // scr_printf("%c", 10);
     _BootStatus_LineCount++;
 
     if (_BootStatus_LineCount >= 25) {
         scr_clear();
-        scr_printf("[continued...]");
-        scr_printf("%c", 10);
-        scr_printf(buf);
-        scr_printf("%c", 10);
+        // scr_printf("[continued...]");
+        // scr_printf("%c", 10);
+        // scr_printf(buf);
+        // scr_printf("%c", 10);
         _BootStatus_LineCount = 2;
     }
 }
@@ -49,9 +50,10 @@ extern "C" void BootStatusLog(const char *fmt, ...)
 extern "C" void BootProbeReclaim(const char *label)
 {
     init_scr();
-    scr_printf("[probe] ");
-    scr_printf(label ? label : "(null)");
-    scr_printf("%c", 10);
+    // scr_printf("[probe] ");
+    // scr_printf(label ? label : "(null)");
+    // scr_printf("%c", 10);
+    (void)label;
 }
 
 #else
@@ -63,7 +65,8 @@ extern "C" void BootStatusLog(const char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    printf("[boot] %s", buf);
+    // printf("[boot] %s", buf);
+    (void)buf;
     printf("%c", 10);
 }
 

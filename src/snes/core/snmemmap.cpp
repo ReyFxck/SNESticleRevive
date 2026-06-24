@@ -344,10 +344,10 @@ void SnesSystem::MapMemExLoRom(void)
 void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 {
 #if SNDBG_LOG
-	DLog("[snes-dsp] MapMem mode=%d flags=%02X DSP1=%d DSP2=%d",
-		(int)eRomMapping, (unsigned)uFlags,
-		(uFlags & SNROM_FLAG_DSP1) ? 1 : 0,
-		(uFlags & SNROM_FLAG_DSP2) ? 1 : 0);
+	// DLog("[snes-dsp] MapMem mode=%d flags=%02X DSP1=%d DSP2=%d",
+	// 	(int)eRomMapping, (unsigned)uFlags,
+	// 	(uFlags & SNROM_FLAG_DSP1) ? 1 : 0,
+	// 	(uFlags & SNROM_FLAG_DSP2) ? 1 : 0);
 #endif
 
 	// set default traps
