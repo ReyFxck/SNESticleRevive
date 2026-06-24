@@ -58,10 +58,18 @@ static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
 /* Video mode + display offset (selectable in the Settings screen).
-   Default is 480i (interlaced 60Hz) - the mode that ran at 60fps.
-   240p is 60fps on real PS2/CRT but the emulator presents it at 30Hz.
+   Default is 480i (interlaced 60Hz) - the universally-compatible mode
+   that every TV / PS2toHDMI adapter locks onto, and that ran at 60fps.
+
+   IMPORTANT: 240p is NOT a standard HDMI/DTV mode. On a CRT it's perfect,
+   but passive PS2->HDMI adapters and most modern TVs REFUSE to lock onto
+   240p (no signal) -- which is why Adriano only got an image by forcing
+   480p via OPL's GSM. So the safe DEFAULT must be 480i; 240p stays
+   available in the Video Config screen for CRT users. (Commit 05ad652
+   had flipped the default to 240p, contradicting this very comment and
+   breaking image on HDMI setups.)
    Pick the mode you want in the Video Config screen (it persists). */
-int g_GskVideoMode = GSK_VIDMODE_240P;
+int g_GskVideoMode = GSK_VIDMODE_480I;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
