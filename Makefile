@@ -123,6 +123,15 @@ ifeq ($(INIT_USB_TAKES_BOOL),1)
   CFLAGS   += -DINIT_USB_DRIVER_TAKES_BOOL
   CXXFLAGS += -DINIT_USB_DRIVER_TAKES_BOOL
 endif
+
+# PROFILE=1 liga o profiler embutido (define CODE_PROFILE=1). No jogo,
+# aperte R3 para capturar 1 frame; o resumo por secao (NesExecuteFrame,
+# Frame, etc.) aparece no console NA TELA via ConPrint -- tire um print.
+PROFILE ?= 0
+ifeq ($(PROFILE),1)
+  CFLAGS   += -DCODE_PROFILE=1
+  CXXFLAGS += -DCODE_PROFILE=1
+endif
 # ----------------------------------------------------------------------
 
 INCS := \
@@ -991,6 +1000,7 @@ help:
 	printf "  COLOR=0                      Disable colored output\n"; \
 	printf "  SHOW_WARN_LOG=1              Print full warning logs\n"; \
 	printf "  VERBOSE=1                    Show full warning AND error text (no truncation)\n"; \
+	printf "  PROFILE=1                    Enable on-screen profiler (press R3 in-game)\n"; \
 	printf "  OUT=/path                    Copy final ELF to this folder\n"; \
 	printf "  out=/path                    Same as OUT=/path\n"; \
 	printf "  ROMS=/path                   ROM folder for ISO build\n"; \
