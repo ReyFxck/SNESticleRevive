@@ -95,6 +95,24 @@ GSGLOBAL *GSK_GetGlobal(void)
     return _pGsGlobal;
 }
 
+/* Detect the console's TV region from the BIOS ROMVER region byte.
+ *
+ * This is the well-known, public technique used by uLaunchELF / OPL /
+ * Libito (LbFn): the character at BIOS address 0x1FC7FF52 is the region
+ * letter of the ROMVER string -- 'E' on European consoles (PAL) and
+ * J/A/C/H/K on the NTSC ones (Japan/USA/China/HongKong/Korea).
+ *
+ * Returns GS_MODE_PAL only when the byte is unambiguously 'E'; anything
+ * else (including a BIOS that doesn't expose it) falls back to the safe
+ * 60Hz GS_MODE_NTSC.  NTSC consoles therefore keep the EXACT behaviour
+ * they had before this was added -- only PAL consoles take the new path.
+ */
+static int _gsk_DetectTvMode(void)
+{
+    volatile char region = *(volatile char *)0x1FC7FF52;
+    return (region == 'E') ? GS_MODE_PAL : GS_MODE_NTSC;
+}
+
 void GSK_Init(int width, int height,
               int dispx, int dispy,
               int psm, int psmz,
@@ -155,8 +173,10 @@ void GSK_Init(int width, int height,
         break;
 
     case GSK_VIDMODE_480I:
-        /* NTSC 640x448 interlaced (the previous default). */
-        _pGsGlobal->Mode      = GS_MODE_NTSC;
+        /* 480i interlaced. NTSC = 640x448@60i; em consoles PAL, troca
+           sozinho para 576i@50i (mesma geometria de FB, alinhado ao topo
+           -- seguro, sem realocar). Comportamento NTSC inalterado. */
+        _pGsGlobal->Mode      = _gsk_DetectTvMode();
         _pGsGlobal->Interlace = GS_INTERLACED;
         _pGsGlobal->Field     = GS_FIELD;
         _gsk_fb_width         = 640;
@@ -184,7 +204,7 @@ void GSK_Init(int width, int height,
            NTSC nativo E o 480p do adaptador, lendo so' o que desenhamos.
            Bonus: mantem GPPrimSetScale em 640/256 = 2.5, a mesma proporcao
            que a UI/fonte foram desenhadas (320 dava 1.25 = UI deformada). */
-        _pGsGlobal->Mode      = GS_MODE_NTSC;
+        _pGsGlobal->Mode      = _gsk_DetectTvMode();  /* NTSC 240p / PAL 288p (50Hz) */
         _pGsGlobal->Interlace = GS_NONINTERLACED;
         _pGsGlobal->Field     = GS_FRAME;
         _gsk_fb_width         = 640;
