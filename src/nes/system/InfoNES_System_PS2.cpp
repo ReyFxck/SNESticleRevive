@@ -118,6 +118,13 @@ void InfoNES_RunOneFrame(void)
     /* One NES frame.  PPU_Scanline wraps from SCAN_VBLANK_END (262)
        back to 0 inside InfoNES_HSync; we just need to step enough
        scanlines that we land back at the start of the next frame. */
+    /* Render direto: aponta o WorkFrame para a surface de saida, entao
+       o InfoNES_DrawLine escreve RGBA8 direto na textura (sem passada de
+       conversao separada). Surface e' 256-wide RGBA8, pitch = 256*4, logo
+       WorkFrame[y*256 + x] mapeia exatamente o pixel (x,y). */
+    if (g_pNesTargetSurface)
+        WorkFrame = (unsigned int *)g_pNesTargetSurface->GetLinePtr(0);
+
     for (int sl = 0; sl < 263; sl++)
     {
         int nStep;
@@ -196,46 +203,10 @@ void InfoNES_LoadFrame(void)
 
     PROF_ENTER("NesLoadFrame");
 
-    /* Convert the 240 NES lines into the top 240 rows of the texture.
-       One Uint32 store per pixel; the 5->8 channel expansion is done
-       inline in registers (see the note below -- the old LUT was the
-       bottleneck on the EE). */
-    for (Uint32 iY = 0; iY < NES_DISP_HEIGHT; iY++)
-    {
-        Uint8 *pDstBytes = pTarget->GetLinePtr((Int32)iY);
-        if (!pDstBytes) continue;
-
-        Uint32 *pDst = (Uint32 *)pDstBytes;
-        const WORD *pSrc = &WorkFrame[iY * NES_DISP_WIDTH];
-
-        for (Uint32 iX = 0; iX < NES_DISP_WIDTH; iX++)
-        {
-            WORD w = pSrc[iX];
-
-            /* RGB555 -> RGBA8 (R = lowest byte, A = highest byte in the
-               little-endian Uint32, matching the SNES PPU's writes).
-
-               Expansion 5->8 feita por ARITMETICA, nao por LUT.  O
-               profiler do PS2 real mostrou a conversao gastando ~27
-               ciclos/pixel (1.67M ciclos/frame) -- o gargalo eram os 3
-               loads dependentes da Lut5to8: a latencia load-use do EE
-               e' alta, entao 3 leituras em serie por pixel custam mais
-               que (v<<3)|(v>>2) em registrador.  Aritmetica pura tira
-               esses ~5.7ms e poe o NES de volta nos 60fps. */
-            Uint32 r5 = (w >> 10) & 0x1F;
-            Uint32 g5 = (w >>  5) & 0x1F;
-            Uint32 b5 =  w        & 0x1F;
-            Uint32 r8 = (r5 << 3) | (r5 >> 2);
-            Uint32 g8 = (g5 << 3) | (g5 >> 2);
-            Uint32 b8 = (b5 << 3) | (b5 >> 2);
-
-            pDst[iX] = 0xFF000000u | (b8 << 16) | (g8 << 8) | r8;
-        }
-    }
-
-    /* Black out the 16 padding rows below the NES image (texture is
-       256 high, NES is 240).  Without this they'd hold stale pixels
-       from whatever ran last (SNES PPU, menu surface, etc.). */
+    /* InfoNES_DrawLine ja' escreveu RGBA8 direto nas linhas 0..239 desta
+       surface (WorkFrame aponta pra ela) -- entao NAO ha' mais passada de
+       conversao (era o custo de ~1.7M ciclos que removemos). So' apagamos
+       as linhas de padding abaixo da imagem de 240 linhas do NES. */
     for (Uint32 iY = NES_DISP_HEIGHT; iY < uHeight; iY++)
     {
         Uint8 *pDst = pTarget->GetLinePtr((Int32)iY);

@@ -195,14 +195,14 @@ extern WORD DoubleFrame[ 2 ][ NES_DISP_WIDTH * NES_DISP_HEIGHT ];
 extern WORD *WorkFrame;
 extern WORD WorkFrameIdx;
 #else
-extern WORD WorkFrame[ NES_DISP_WIDTH * NES_DISP_HEIGHT ];
+extern unsigned int *WorkFrame;   /* aponta direto para a surface RGBA8 (render direto) */
 #endif
 
 extern BYTE ChrBuf[];
 
 extern BYTE ChrBufUpdate;
 
-extern WORD PalTable[];
+extern unsigned int PalTable[];
 
 /*-------------------------------------------------------------------*/
 /*  APU and Pad resources                                            */

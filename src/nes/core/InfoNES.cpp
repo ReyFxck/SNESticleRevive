@@ -159,7 +159,7 @@ WORD DoubleFrame[ 2 ][ NES_DISP_WIDTH * NES_DISP_HEIGHT ];
 WORD *WorkFrame;
 WORD WorkFrameIdx;
 #else
-WORD WorkFrame[ NES_DISP_WIDTH * NES_DISP_HEIGHT ];
+unsigned int *WorkFrame = 0;   /* 32-bit (unsigned int): DWORD=unsigned long e' 64-bit no EE! aponta na surface RGBA8 */
 #endif
 
 /* Character Buffer */
@@ -169,7 +169,7 @@ BYTE ChrBuf[ 256 * 2 * 8 * 8 ];
 BYTE ChrBufUpdate;
 
 /* Palette Table */
-WORD PalTable[ 32 ];
+unsigned int PalTable[ 32 ];
 
 /* Table for Mirroring */
 BYTE PPU_MirrorTable[][ 4 ] =
@@ -768,9 +768,9 @@ void InfoNES_DrawLine()
   int nY;
   int nY4;
   int nYBit;
-  WORD *pPalTbl;
+  unsigned int *pPalTbl;
   BYTE *pAttrBase;
-  WORD *pPoint;
+  unsigned int *pPoint;
   int nNameTable;
   BYTE *pbyNameTable;
   BYTE *pbyChrData;
@@ -795,7 +795,7 @@ void InfoNES_DrawLine()
   // Clear a scanline if screen is off
   if ( !( PPU_R1 & R1_SHOW_SCR ) )
   {
-    InfoNES_MemorySet( pPoint, 0, NES_DISP_WIDTH << 1 );
+    InfoNES_MemorySet( pPoint, 0, NES_DISP_WIDTH << 2 );
   }
   else
   {
@@ -918,10 +918,10 @@ void InfoNES_DrawLine()
     /*-------------------------------------------------------------------*/
     if ( !( PPU_R1 & R1_CLIP_BG ) )
     {
-      WORD *pPointTop;
+      unsigned int *pPointTop;
 
       pPointTop = &WorkFrame[ PPU_Scanline * NES_DISP_WIDTH ];
-      InfoNES_MemorySet( pPointTop, 0, 8 << 1 );
+      InfoNES_MemorySet( pPointTop, 0, 8 << 2 );
     }
 
     /*-------------------------------------------------------------------*/
@@ -930,10 +930,10 @@ void InfoNES_DrawLine()
     if ( PPU_UpDown_Clip && 
        ( SCAN_ON_SCREEN_START > PPU_Scanline || PPU_Scanline > SCAN_BOTTOM_OFF_SCREEN_START ) )
     {
-      WORD *pPointTop;
+      unsigned int *pPointTop;
 
       pPointTop = &WorkFrame[ PPU_Scanline * NES_DISP_WIDTH ];
-      InfoNES_MemorySet( pPointTop, 0, NES_DISP_WIDTH << 1 );
+      InfoNES_MemorySet( pPointTop, 0, NES_DISP_WIDTH << 2 );
     }  
   }
 
@@ -1040,7 +1040,7 @@ void InfoNES_DrawLine()
     for ( nX = 0; nX < NES_DISP_WIDTH; ++nX )
     {
       nSprData = pSprBuf[ nX ];
-      if ( nSprData  && ( nSprData & 0x80 || pPoint[ nX ] & 0x8000 ) )
+      if ( nSprData  && ( nSprData & 0x80 || pPoint[ nX ] & 1 ) )
       {
         pPoint[ nX ] = PalTable[ ( nSprData & 0xf ) + 0x10 ];
       }
@@ -1051,10 +1051,10 @@ void InfoNES_DrawLine()
     /*-------------------------------------------------------------------*/
     if ( !( PPU_R1 & R1_CLIP_SP ) )
     {
-      WORD *pPointTop;
+      unsigned int *pPointTop;
 
       pPointTop = &WorkFrame[ PPU_Scanline * NES_DISP_WIDTH ];
-      InfoNES_MemorySet( pPointTop, 0, 8 << 1 );
+      InfoNES_MemorySet( pPointTop, 0, 8 << 2 );
     }
 
     if ( nSprCnt >= 8 )

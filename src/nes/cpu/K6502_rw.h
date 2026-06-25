@@ -23,6 +23,23 @@
 /*            K6502_ReadZp() : Reading from the zero page            */
 /*                                                                   */
 /*===================================================================*/
+/* RGB555 (NesPalette) -> RGBA8 [R][G][B][A], A=0xFF. Bit 0 (LSB do R) e'
+   reservado como flag de transparencia de BG (setado nas entradas de
+   backdrop), entao e' forcado a 0 aqui. Substitui o esquema antigo de
+   RGB555 16-bit + 0x8000: agora WorkFrame/PalTable sao 32-bit e o
+   InfoNES_DrawLine escreve RGBA8 direto na surface (sem passada de
+   conversao). */
+static inline unsigned int _NesRGBA8( WORD rgb555 )
+{
+  unsigned int r5 = ( rgb555 >> 10 ) & 0x1F;
+  unsigned int g5 = ( rgb555 >>  5 ) & 0x1F;
+  unsigned int b5 =   rgb555         & 0x1F;
+  unsigned int r8 = ( r5 << 3 ) | ( r5 >> 2 );
+  unsigned int g8 = ( g5 << 3 ) | ( g5 >> 2 );
+  unsigned int b8 = ( b5 << 3 ) | ( b5 >> 2 );
+  return 0xFF000000u | ( b8 << 16 ) | ( g8 << 8 ) | ( r8 & 0xFEu );
+}
+
 static inline BYTE K6502_ReadZp( BYTE byAddr )
 {
 /*
@@ -343,14 +360,14 @@ static inline void K6502_Write( WORD wAddr, BYTE byData )
               PPURAM[ 0x3f10 ] = PPURAM[ 0x3f14 ] = PPURAM[ 0x3f18 ] = PPURAM[ 0x3f1c ] = 
               PPURAM[ 0x3f00 ] = PPURAM[ 0x3f04 ] = PPURAM[ 0x3f08 ] = PPURAM[ 0x3f0c ] = byData;
               PalTable[ 0x00 ] = PalTable[ 0x04 ] = PalTable[ 0x08 ] = PalTable[ 0x0c ] =
-              PalTable[ 0x10 ] = PalTable[ 0x14 ] = PalTable[ 0x18 ] = PalTable[ 0x1c ] = NesPalette[ byData ] | 0x8000;
+              PalTable[ 0x10 ] = PalTable[ 0x14 ] = PalTable[ 0x18 ] = PalTable[ 0x1c ] = _NesRGBA8( NesPalette[ byData ] ) | 1;
             }
             else
 	    if ( addr & 3 )
             {
               // Palette
               PPURAM[ addr ] = byData;
-              PalTable[ addr & 0x1f ] = NesPalette[ byData ];
+              PalTable[ addr & 0x1f ] = _NesRGBA8( NesPalette[ byData ] );
             }
           }
           break;
