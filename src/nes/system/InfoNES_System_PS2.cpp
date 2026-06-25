@@ -88,24 +88,11 @@ WORD NesPalette[ 64 ] =
 };
 
 
-/* ---- 5-bit -> 8-bit expansion LUT --------------------------------- *
- *
- * The RGB555 -> RGBA8 conversion in InfoNES_LoadFrame needs to expand
- * each 5-bit channel to 8 bits.  The mathematically-correct formula is
- * (v << 3) | (v >> 2), which evaluates 0x1F -> 0xFF and 0 -> 0.  Doing
- * that math inline runs ~245k arithmetic ops per frame (256*240*3 +
- * the OR), which on the EE is enough latency to matter at 60 fps.
- *
- * Precomputing the 32 outputs once and indexing them by the 5-bit
- * channel removes those shifts from the hot path and lets the compiler
- * fold the inner loop into a few loads + a single SW (store-word). */
-static Uint8 Lut5to8[ 32 ];
-
-static void _InitLut5to8(void)
-{
-    for (int i = 0; i < 32; i++)
-        Lut5to8[i] = (Uint8)((i << 3) | (i >> 2));
-}
+/* (A 5-bit->8-bit expansion LUT used to live here. The PS2 profiler
+ * showed the LUT was actually the bottleneck -- 3 dependent byte loads
+ * per pixel stall on the EE's load-use latency -- so InfoNES_LoadFrame
+ * now expands inline with (v<<3)|(v>>2), which is cheaper. LUT removed.)
+ */
 
 
 /* ------------------------------------------------------------------ *
@@ -207,19 +194,12 @@ void InfoNES_LoadFrame(void)
     Uint32 uHeight = pTarget->GetHeight();
     if (uWidth < NES_DISP_WIDTH || uHeight < NES_DISP_HEIGHT) return;
 
-    /* One-time init of the 5->8 expansion LUT. Cheap to re-check. */
-    static int s_bLutReady = 0;
-    if (!s_bLutReady) { _InitLut5to8(); s_bLutReady = 1; }
-
-    const Uint8 *pLut = Lut5to8;
-
     PROF_ENTER("NesLoadFrame");
 
-    /* Convert 240 NES lines into the top 240 rows of the texture.
-       The inner loop writes one Uint32 per pixel (single SW on EE)
-       and pulls the 5->8 expansion out into a 32-entry LUT so the
-       only arithmetic per pixel is three shifts + one OR + one
-       table-indexed load per channel. */
+    /* Convert the 240 NES lines into the top 240 rows of the texture.
+       One Uint32 store per pixel; the 5->8 channel expansion is done
+       inline in registers (see the note below -- the old LUT was the
+       bottleneck on the EE). */
     for (Uint32 iY = 0; iY < NES_DISP_HEIGHT; iY++)
     {
         Uint8 *pDstBytes = pTarget->GetLinePtr((Int32)iY);
@@ -232,12 +212,22 @@ void InfoNES_LoadFrame(void)
         {
             WORD w = pSrc[iX];
 
-            /* RGB555 -> RGBA8 (R = lowest byte, A = highest byte
-               in the Uint32 little-endian word, matching what the
-               SNES PPU writes to the same surface). */
-            Uint32 r8 = pLut[(w >> 10) & 0x1F];
-            Uint32 g8 = pLut[(w >>  5) & 0x1F];
-            Uint32 b8 = pLut[ w        & 0x1F];
+            /* RGB555 -> RGBA8 (R = lowest byte, A = highest byte in the
+               little-endian Uint32, matching the SNES PPU's writes).
+
+               Expansion 5->8 feita por ARITMETICA, nao por LUT.  O
+               profiler do PS2 real mostrou a conversao gastando ~27
+               ciclos/pixel (1.67M ciclos/frame) -- o gargalo eram os 3
+               loads dependentes da Lut5to8: a latencia load-use do EE
+               e' alta, entao 3 leituras em serie por pixel custam mais
+               que (v<<3)|(v>>2) em registrador.  Aritmetica pura tira
+               esses ~5.7ms e poe o NES de volta nos 60fps. */
+            Uint32 r5 = (w >> 10) & 0x1F;
+            Uint32 g5 = (w >>  5) & 0x1F;
+            Uint32 b5 =  w        & 0x1F;
+            Uint32 r8 = (r5 << 3) | (r5 >> 2);
+            Uint32 g8 = (g5 << 3) | (g5 >> 2);
+            Uint32 b8 = (b5 << 3) | (b5 >> 2);
 
             pDst[iX] = 0xFF000000u | (b8 << 16) | (g8 << 8) | r8;
         }
