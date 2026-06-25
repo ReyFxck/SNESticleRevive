@@ -1,72 +1,174 @@
 # SNESticle Revived
 
-Revived source code of **SNESticle**, the long-rumored **Super Nintendo Entertainment System emulator** created by **Icer Addis**.
+Revived and actively-maintained source of **SNESticle**, the long-rumored
+**Super Nintendo (SNES) emulator** written by **Icer Addis (iaddis)**.
 
-This project focuses on restoring and cleaning up a **circa-2004** build of SNESticle.  
-The emulator later became known for being hidden inside the **GameCube** version of **Electronic Arts' Fight Night Round 2 (2005)**, where it was used to run **Super Punch-Out!!**.  
-Years later, that buried build was reverse engineered and extracted by the community in **2022**, which helped preserve an important piece of emulation history.
+SNESticle was famously hidden inside the **GameCube** version of EA's
+**Fight Night Round 2 (2005)**, where it ran **Super Punch-Out!!**. The
+community reverse‑engineered and extracted that build in **2022**, and Sardu
+released the source under the **MIT license**. This repository keeps that code
+alive: reorganized into logical directories, fixed, extended, and made easy to
+build and study today.
 
-This repository is an attempt to keep that code alive, reorganize it, fix broken parts, and make it easier to build and study today.
+On top of the SNES core, the project now also integrates **InfoNES** to bring
+**NES** emulation to the **PlayStation 2**.
 
-In addition to SNES, the project now also integrates **InfoNES** to provide **NES** emulation support on the PlayStation 2.
+> Primary target: **PlayStation 2** (EE/IOP, gsKit). Development is done on
+> Debian via Termux — no full desktop required.
 
-## Current State
+---
 
-- Many files from the recovered codebase were missing, incomplete, or corrupted.
-- Because of that, some features are still broken or may not behave correctly yet.
-- The original source layout was messy, so this repository reorganizes the project into more logical directories.
-- Right now, the main focus is **PlayStation 2** support.
-- NES support is provided via **InfoNES** (see `src/nes/`).
-- Development is currently being done in a **Debian environment running through Termux**, without access to a full desktop setup.
+## Features
 
-## PlayStation 2 Build
+**Systems**
+- **SNES** — the original SNESticle core (65816 ASM CPU, SPC700, PPU).
+- **NES** — via **InfoNES** (`src/nes/`), with audio wired to the PS2 audio path.
 
-You need **PS2SDK** installed first.  
-Follow the installation instructions from the [ps2dev repository](https://github.com/ps2dev/ps2dev.git).
+**SNES special chips (coprocessors)** — clean‑room reimplementations, MIT‑safe:
+- **DSP‑1 / DSP‑1B** — Pilotwings, Super Mario Kart, etc. (`sndsp1`)
+- **DSP‑2** — Dungeon Master (`sndsp2`)
+- **CX4** — Mega Man X2 / X3 (`sncx4`)
+- **OBC1** — Metal Combat (`snobc1`)
+- **S‑DD1** — Star Ocean, Street Fighter Alpha 2 (`snsdd1`)
+- **S‑RTC** — Daikaijuu Monogatari II (`snsrtc`)
 
-> **Warning:** use the latest available PS2SDK version.
+**PlayStation 2 platform**
+- gsKit‑based video backend with a **Video Config** screen.
+- Multiple video modes: **480i** (default, universally compatible), **480p**
+  (GSM / HDMI), **240p / 288p** (CRT), plus screen offset and widescreen.
+- Audio via SjPCM / audsrv.
+- Controller / memory‑card / IRX bring‑up aligned to **Open‑PS2‑Loader** style.
+- Netplay code (`src/modules/netplay/`).
 
-After that, go to the project directory and build it:
+---
+
+## Building (PlayStation 2)
+
+You need **PS2SDK** installed. Follow the
+[ps2dev](https://github.com/ps2dev/ps2dev.git) instructions and use the
+**latest** PS2SDK.
 
 ```bash
 cd ~/SNESticleRevive
-make
-```
 
-This should generate:
+# Just build the ELF
+make                 # single worker
+make JOBS=3          # parallel build (3 workers)
 
-```
-SNESticle.elf
-```
+# Build a bootable ISO with a ROM folder and copy everything out
+make iso ROMS=/path/to/roms OUT=/path/to/output JOBS=3
 
-To remove previous build files before rebuilding:
+# See every option
+make help
 
-```bash
+# Clean build folder
 make clean
 ```
 
+Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
+
+### Handy build flags
+
+| Flag | What it does |
+|------|--------------|
+| `JOBS=N` | Number of parallel compile workers (also honored by `make iso`). |
+| `VERBOSE=1` | Show the **full** warning/error text (no truncation). |
+| `PROFILE=1` | Compile the on‑screen profiler in — press **R3** in‑game to capture one frame's per‑section timing. |
+| `OUT=/path` | Copy the final ELF/ISO to this folder. |
+| `ROMS=/path` | ROM folder to embed when building an ISO. |
+| `PACK=0` | Build the ISO using the unpacked ELF. |
+
+> Note: changing a flag like `PROFILE=1` does **not** force a recompile on its
+> own (make only tracks file timestamps). Run `make clean` first when toggling
+> compile flags.
+
+---
+
+## What's been done recently
+
+- **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
+  written clean‑room and verified bit‑exact host‑side against public references
+  before being committed (no GPL/Snes9x code in this MIT repo).
+- **NES (InfoNES) integration**: full PS2 platform layer (render, input, audio,
+  one‑frame stepper), with the InfoNES core kept 1:1 with upstream.
+- **Video**: gsKit migration, the Video Config screen, multiple modes, and a
+  **safe 480i default** (240p stays available for CRT users).
+- **Boot / input**: controller and IRX bring‑up reworked to behave on real
+  hardware, not just emulators.
+- **Build system**: parallel jobs, `VERBOSE`, `PROFILE`, friendlier `make help`,
+  and ISO builds that honor `JOBS`.
+- **Bug fixes**: C++17 / build warnings cleaned up, plus three real
+  out‑of‑bounds bugs fixed in the InfoNES core (`APU_Reg`, mapper 19 & 45 arrays)
+  and a sequence‑point UB fixed in the 6502 core.
+
+---
+
+## Known issues / still missing
+
+**SNES**
+- **Final Fight 2** — large (32×32) / page‑1 object sprites render garbled. The
+  OBJ fetch/render path has been verified correct against hardware references
+  (bsnes/Anomie) and host‑side; the cause is suspected to be the VRAM
+  data/upload feeding it. **Under investigation.**
+- Some large / special‑chip titles may still freeze or misbehave.
+- **Missing chips**: SA‑1 and SuperFX (GSU) are not implemented.
+
+**NES (InfoNES)**
+- **Performance**: heavy scenes can push a frame over the 16.6 ms budget, which
+  vsync then locks to **30 fps**; this also knocks audio and per‑scanline
+  effects out of sync. (Use `PROFILE=1` + R3 to locate hotspots.)
+- **Super Mario Bros 3** — the MMC3 status‑bar split can glitch when scrolling
+  (InfoNES uses a scanline‑approximated MMC3 IRQ, not A12‑accurate).
+- Audio timing can be off until the game settles (related to the 30 fps issue).
+
+**Video**
+- **240p is not a standard HDMI/DTV mode** — passive PS2→HDMI adapters and most
+  modern TVs will not lock onto it (no signal). The default is **480i**; pick
+  240p in the Video Config screen only on a CRT or a 240p‑capable scaler.
+
+> Some bugs only reproduce on **real PS2 hardware** (emulators like NetherSX2 /
+> PCSX2 are more forgiving), which makes them harder to track down.
+
+---
+
+## Project layout
+
+```
+src/snes/      SNES core (cpu, spc, ppu, coprocessors)
+src/nes/       NES core (InfoNES: core, cpu, apu, mappers, system)
+src/platform/  PlayStation 2 platform (gs, system, input, ui)
+src/modules/   shared modules (audio, netplay, ...)
+src/common/    shared helpers (render, base, io, debug)
+tools/         host‑side test harnesses (chip + OBJ verification)
+```
+
+---
+
 ## Credits
 
-[iaddis/SNESticle](https://github.com/iaddis/SNESticle) — original project
+- **[iaddis/SNESticle](https://github.com/iaddis/SNESticle)** — Icer Addis, the original emulator.
+- **[tmaul/SNESticle](https://github.com/tmaul/SNESticle)** — many later improvements.
+- **[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle)** — fork used as one of the bases for this repository.
+- **Sardu** — for releasing the recovered source under the MIT license (2022).
+- **[jay-kumogata/InfoNES](https://github.com/jay-kumogata/InfoNES)** — the NES core integrated here.
+- **[hugorsgarcia/PS2SNESticle](https://github.com/hugorsgarcia/PS2SNESticle)** — **Hugo Garcia**, whose PS2 work was the reference for the controller / memory‑card / IRX bring‑up and the netplay module.
+- **Open‑PS2‑Loader**, **picodrive‑PS2** and **uLaunchELF** — references for correct PS2 boot, IOP and video behavior.
+- **ReyFxck** — this revival/fork and ongoing development.
+- **Adriano Oliveira** — real‑hardware testing.
 
-[tmaul/SNESticle](https://github.com/tmaul/SNESticle) — many later improvements
+---
 
-[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle) — improved fork used as one of the bases for this repository
+## License
 
-[InfoNES](https://github.com/jay-kumogata/InfoNES) — NES emulator integrated into this project
+MIT — see [`LICENSE`](LICENSE).
 
+## TODO
 
-TODO
+- [ ] **[PS2]** Replace precompiled IRX modules with PS2DEV‑generated ones. *(hard)*
+- [ ] **[PS2]** Replace libcdvd with the latest PS2DEV libcdvd. *(medium)*
+- [x] **[PS2]** Update the Makefile for newer PS2SDK versions.
+- [ ] **[PS2]** Finish moving custom GS code to gsKit where possible. *(ongoing)*
+- [ ] **[NES]** Profile and bring heavy scenes back to a stable 60 fps.
+- [ ] **[SNES]** Track down the Final Fight 2 sprite data/upload bug.
 
-[PS2] Remove precompiled IRX modules and replace them with PS2DEV-generated ones. [Hard]
-
-[PS2] Replace libcdvd with the latest PS2DEV libcdvd implementation. [Medium]
-
-[PS2] Update the Makefile for newer PS2SDK versions. [Medium] (Done)
-
-[PS2] Remove some custom GS implementations and switch to gsKit where possible. [Medium]
-
-[PS2] Port the codebase to C89. [Ongoing]
-
-
-# Yes, we have a lot of free time :)
+<sub>Yes, we still have a lot of free time :)</sub>
