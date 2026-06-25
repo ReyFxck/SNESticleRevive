@@ -99,11 +99,19 @@ static void _ProfLogSection(Bool bPrint, Int32 nTabs, char *pSectionName, ProfLo
 }
 
 
+/* Profiler output also goes to DLog (EE SIO -> NetherSX2 logs.txt), the
+   reliable channel: ConPrint's on-screen console is disabled in this
+   build, so DLog is the only way the summary actually reaches the user.
+   Grep the log for "[prof]". */
+extern void DLog(const char *fmt, ...);
+
 static void _ProfLogPrintSummary(ProfLogSectionT *pSection, Int32 nSections)
 {
 	Int32 iSection;
 	ConPrint("\n");
 	ConPrint("Section summary: \n");
+
+	DLog("[prof] ==== section summary (cyc = EE cycles this frame) ====");
 
 	for (iSection=0; iSection < nSections; iSection++)
 	{
@@ -119,9 +127,17 @@ static void _ProfLogPrintSummary(ProfLogSectionT *pSection, Int32 nSections)
                 pSection->Count[PROF_COUNTER_COUNTER1] / pSection->nEntry,
                 pSection->Count[PROF_COUNTER_CYCLE] / pSection->nEntry
                 );
+
+			DLog("[prof] %-22s n=%4d cyc=%9d avg=%8d",
+			     pSection->pName,
+			     (int)pSection->nEntry,
+			     (int)pSection->Count[PROF_COUNTER_CYCLE],
+			     (int)(pSection->Count[PROF_COUNTER_CYCLE] / pSection->nEntry));
 		}
 		pSection++;
 	}
+
+	DLog("[prof] ==== end (EE ~294912 cyc = 1 scanline; ~16.6ms frame budget) ====");
 }
 
 
