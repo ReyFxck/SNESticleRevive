@@ -412,6 +412,22 @@ const char *NesSystem::GetString(StringE eString)
 
 Uint32 NesSystem::GetSampleRate()
 {
-    /* InfoNES_pAPU mixes at 22050 Hz on the existing ports. */
-    return 22050;
+    /* IMPORTANTE: este valor configura a TAXA DE ENTRADA do
+       SJPCMMixBuffer (via _MainLoopSetSampleRate -> SetSampleRate).
+       O backend SjPCM/SPU2 toca SEMPRE a 48000 Hz, e o mix buffer so'
+       sabe converter de {48000 (passthrough), 32000 (upsample cubico
+       2:3), 24000 (1:2)} para 48000.  Qualquer outra taxa cai no
+       'default' do switch em OutputSamplesStereo() e as amostras sao
+       copiadas COMO SE fossem 48000 (sem resample) -> tocam ~2.2x mais
+       rapido (pitch alto, "chipmunk") e o buffer esvazia (estalos).
+
+       Por isso devolvemos 32000 -- a MESMA taxa que o SNES usa, que
+       passa pelo resampler cubico ja' testado.  O InfoNES roda o pAPU
+       a 44100 Hz (pAPU_QUALITY=3, 735 amostras/frame) e o
+       InfoNES_SoundOutput reamostra 44100->32000 (=533 amostras) a uma
+       razao constante; o mix buffer faz 32000->48000 (=800 amostras =
+       1/60 s).  Resultado: pitch e duracao corretos.
+
+       NAO devolver 44100 aqui: 44100 tambem nao esta no switch. */
+    return 32000;
 }
