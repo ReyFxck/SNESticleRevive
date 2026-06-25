@@ -42,6 +42,7 @@
    SysInputT.uPad[i] uses these bits regardless of which emulator is
    running. Phase 4 will route per-system. */
 #include "snio.h"
+#include "prof.h"   /* PROF_ENTER/LEAVE (no-ops unless PROFILE=1) */
 
 
 /* Per-frame state owned by nessystem.cpp; we just read it.
@@ -212,6 +213,8 @@ void InfoNES_LoadFrame(void)
 
     const Uint8 *pLut = Lut5to8;
 
+    PROF_ENTER("NesLoadFrame");
+
     /* Convert 240 NES lines into the top 240 rows of the texture.
        The inner loop writes one Uint32 per pixel (single SW on EE)
        and pulls the 5->8 expansion out into a 32-entry LUT so the
@@ -248,6 +251,8 @@ void InfoNES_LoadFrame(void)
         Uint8 *pDst = pTarget->GetLinePtr((Int32)iY);
         if (pDst) memset(pDst, 0, uWidth * 4);
     }
+
+    PROF_LEAVE("NesLoadFrame");
 }
 
 

@@ -223,8 +223,12 @@ Bool MainLoopProcess()
                upload to the EE texture from here. */
             if (_pSystem == _pNes)
             {
+                PROF_ENTER("NesExecuteFrame");
                 _pNes->ExecuteFrame(&Input, pSurface, pMixBuffer, eMode);
+                PROF_LEAVE("NesExecuteFrame");
+                PROF_ENTER("NesTexUpload");
                 TextureUpload(&_OutTex, pSurface->GetLinePtr(0));
+                PROF_LEAVE("NesTexUpload");
             }
             else
             {
