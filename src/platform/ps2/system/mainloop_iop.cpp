@@ -336,15 +336,39 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   is currently loaded - the modern PS2DEV ones registered by
 	   init_memcard_driver() in main.cpp are detected automatically. */
 	// BOOTLOG("[boot] MemCardInit (ps2_drivers mcman/mcserv)\n");
+	ScrPrintf("MC: MemCardInit...\n");
 	MemCardInit();
+	ScrPrintf("MC: MemCardInit done\n");
 	// BOOTLOG("[boot] MemCardInit done\n");
 	#if MAINLOOP_MEMCARD
 	MemCardCreateSave(_SramPath, _MainLoop_SaveTitle, TRUE);
 	#endif
 
-	// BOOTLOG("[boot] InitNetwork: enter\n");
-	bLoadedNetwork = _MainLoopInitNetwork(ppSearchPaths);
-	// BOOTLOG("[boot] InitNetwork: leave (loaded=%d)\n", (int)bLoadedNetwork);
+	/* NETWORK IS NO LONGER BROUGHT UP AT BOOT.
+	 *
+	 * This was the prime suspect for "boots on NetherSX2, freezes on a
+	 * real PS2": bringing up ps2dev9 / netman / smap / ps2ip and then
+	 * running DHCP (dhcp_enabled=1) right here, in the boot critical
+	 * path, BEFORE audio.  On a real console the DEV9/SMAP IRX load
+	 * succeeds and the EE then waits on a network link / DHCP lease
+	 * that never arrives (no cable, no DHCP server) -> boot freezes on
+	 * a black 480i screen with the controller dead.  NetherSX2 does NOT
+	 * emulate DEV9, so NetIfLoadEmbeddedIrx() fails early, the whole
+	 * branch is skipped, and it boots fine there -- which is exactly
+	 * the asymmetry the user observed.
+	 *
+	 * OPL / uLaunchELF never init the network at boot: it is opt-in,
+	 * only brought up when the user actually enters a network feature.
+	 * We follow that pattern.  Single-player never touches the net
+	 * stack, so the boot can no longer hang here.
+	 *
+	 * Netplay must therefore bring the stack up ON DEMAND when its
+	 * screen is entered (call _MainLoopInitNetwork() +
+	 * _MainLoopConfigureNetwork() + NetPlayInit() there).  Tracked as a
+	 * follow-up; it was almost certainly never reachable on real
+	 * hardware anyway while the boot was hanging here. */
+	ScrPrintf("NET: skipped at boot (on-demand, OPL-style)\n");
+	bLoadedNetwork = FALSE;
 
 	// configure network if we started it ourselves
 	if (bLoadedNetwork)
