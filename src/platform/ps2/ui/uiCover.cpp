@@ -55,6 +55,13 @@ extern "C" {
 
 extern "C" void DLog(const char *fmt, ...);
 
+/* Force the GS texture cache to be flushed before the next textured
+   primitive. Defined in gskit_backend.c. We call it right before the
+   cover draw so a freshly re-uploaded cover (same VRAM address as the
+   previous one) is never served stale texels by the GS - the classic
+   "first texture shows, later ones don't" PS2 bug. */
+extern "C" void GSK_InvalidateTextureCache(void);
+
 /* Fixed cover texture size (power-of-two for the GS sampler). 256 keeps
    it close to 1:1 with the on-screen panel so it is not blocky; bilinear
    filtering (set in CoverInit) smooths the rest. */
@@ -584,6 +591,12 @@ void CoverDraw(Float32 bx, Float32 by, Float32 bw, Float32 bh)
 	else             { dh = bh; dw = bh * ar; }
 	dx = bx + (bw - dw) * 0.5f;
 	dy = by + (bh - dh) * 0.5f;
+
+	/* Invalidate the GS texture cache so the cover we just (re)uploaded
+	   to the shared VRAM slot is read fresh, not served stale from a
+	   previous cover at the same address. GPPrimTexRect (reached via
+	   PolyRect below) consumes this and emits the TEXFLUSH. */
+	GSK_InvalidateTextureCache();
 
 	PolyTexture(&s_Tex);
 	PolyUV(0, 0, s_dispW, s_dispH);
