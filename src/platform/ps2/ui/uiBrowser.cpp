@@ -65,6 +65,14 @@ static const char *_MenuEntries[]=
 #define BROWSER_COVER_W   (92)
 #define BROWSER_COVER_H   (132)
 
+/* Frames the selection must sit still before we go probe the disk for
+   its cover. Probing up to 4 candidate PNG paths means up to 4 fopen()
+   calls, and a *failed* fopen on cdfs/USB costs real time (CD seek), so
+   doing it on every d-pad step makes scrolling crawl - even on an ISO
+   with zero PNGs. ~12 frames (~0.2s @ 60Hz) means fast scrolling never
+   touches the disk; the cover only loads once you pause on an entry. */
+#define BROWSER_COVER_LOAD_DELAY (12)
+
 /* Marquee tuning (frame counts at the browser's 60 Hz draw rate):
      - DELAY_FRAMES: how long the name sits with a static ellipsis on
        the selected row before it starts scrolling. ~0.3 s is enough
@@ -787,24 +795,52 @@ void CBrowserScreen::Draw()
 
 	(void)_BrowserSpaceWidth; /* helper kept for future per-gap pixel tuning */
 
-	/* Cover art: keep the right-side cover in sync with the selected
-	   entry. CoverLoadForRomPath() dedupes on the path string, so this
-	   is cheap every frame and only touches the filesystem when the
-	   selection actually changes. Directories / drives clear it. */
+	/* Cover art: only hit the filesystem once the selection has been
+	   still for BROWSER_COVER_LOAD_DELAY frames. Each probe is up to 4
+	   fopen() attempts and a failed open on cdfs/USB is slow, so doing
+	   it per d-pad step made fast scrolling crawl (even with no PNGs at
+	   all). While scrolling, the selection keeps changing and resets the
+	   settle counter, so zero disk IO happens until you pause. The last
+	   loaded cover stays on screen meanwhile (no flicker). */
 	if (CoverIsEnabled())
 	{
-		if (m_iSelect >= 0 && m_iSelect < m_nEntries &&
-		    m_pDirEntries[m_iSelect].eType == BROWSER_ENTRYTYPE_EXECUTABLE)
+		static Int32  s_cov_sel  = -1;
+		static Char   s_cov_dir[sizeof(m_Dir)] = "";
+		static Uint32 s_cov_settle = 0;
+		static Bool   s_cov_done   = FALSE;
+
+		if (m_iSelect != s_cov_sel || strcmp(m_Dir, s_cov_dir) != 0)
 		{
-			char rompath[1024];
-			if (GetEntryPath(rompath, sizeof(rompath)) != 0)
-				CoverLoadForRomPath(rompath);
-			else
-				CoverClearCurrent();
+			/* selection / directory changed: restart the settle timer */
+			s_cov_sel = m_iSelect;
+			snprintf(s_cov_dir, sizeof(s_cov_dir), "%s", m_Dir);
+			s_cov_settle = 0;
+			s_cov_done   = FALSE;
 		}
-		else
+		else if (!s_cov_done)
 		{
-			CoverClearCurrent();
+			if (s_cov_settle < BROWSER_COVER_LOAD_DELAY)
+			{
+				s_cov_settle++;
+			}
+			else
+			{
+				/* settled: do exactly one load attempt */
+				if (m_iSelect >= 0 && m_iSelect < m_nEntries &&
+				    m_pDirEntries[m_iSelect].eType == BROWSER_ENTRYTYPE_EXECUTABLE)
+				{
+					char rompath[1024];
+					if (GetEntryPath(rompath, sizeof(rompath)) != 0)
+						CoverLoadForRomPath(rompath);
+					else
+						CoverClearCurrent();
+				}
+				else
+				{
+					CoverClearCurrent();
+				}
+				s_cov_done = TRUE;
+			}
 		}
 	}
 
