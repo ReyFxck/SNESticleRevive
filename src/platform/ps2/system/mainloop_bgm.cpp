@@ -54,23 +54,19 @@ extern "C" {
 
 /* ---- configuracao ---------------------------------------------------- */
 
-#define BGM_OUT_RATE    48000          /* taxa do audsrv (Aud_*)          */
+/* Sintetiza NATIVO a 48 kHz (mesma taxa do audsrv): SEM upsample, melhor
+   qualidade possivel.  O custo de sintese e' ~proporcional ao numero de
+   AMOSTRAS geradas, nao a' taxa -- entao o que segura o fps e' o teto de
+   amostras por frame (BGM_OUT_CHUNK), nao a taxa. */
+#define BGM_RATE        48000
 
-/* Sintetiza a MEIA-taxa (24 kHz) e faz upsample linear 2x para 48 kHz.
-   Isso corta ~metade do custo de CPU do tocador de tracker na EE (era
-   o que derrubava o menu de 60 -> 30 fps).  Para chiptune de menu a
-   perda de qualidade e' inaudivel. */
-#define BGM_SYNTH_RATE  24000
-
-/* Maximo de frames de SAIDA (48 kHz) gerados por chamada de BgmUpdate.
-   4096 = teto do Aud_Enqueue (scratch do audsrv).  Em regime normal so
-   geramos ~800 frames/frame (o que o ring consumiu), barato.  O valor
-   alto serve para RECARREGAR o ring INTEIRO em 1 frame logo depois de um
-   bloqueio da EE (decode de capa PNG, troca de pasta, load de ROM) -- sem
-   isso o ring (~107ms) esvaziava e demorava ~20 frames p/ encher, fazendo
-   a musica engasgar ao navegar.  BGM_SYNTH_MAX e' a metade (24 kHz). */
-#define BGM_OUT_CHUNK   4096
-#define BGM_SYNTH_MAX   (BGM_OUT_CHUNK / 2)
+/* Teto de frames por chamada de BgmUpdate.  Em regime normal geramos so
+   ~800 (o que o ring consumiu) -> barato.  O teto limita o PICO de
+   sintese por frame a 2048 amostras: o MESMO pico do build de 24kHz que
+   ja' segurava 60fps, agora com qualidade nativa de 48kHz.  2048/frame
+   recarrega o ring (~107ms) em ~4 frames, mantendo a navegacao sem
+   engasgo.  (4096 e' o teto absoluto do Aud_Enqueue.) */
+#define BGM_OUT_CHUNK   2048
 
 /* Pastas tentadas, em ordem.  BGM_PATH (se definido pelo Makefile) vem
    primeiro.  A primeira faixa .mod/.xm encontrada e' tocada. */
@@ -105,10 +101,10 @@ static jar_xm_context_t  *s_xm  = NULL;/* contexto do tocador de XM       */
 static char              *s_xmBuf = NULL; /* buffer do arquivo .xm (vivo) */
 
 /* buffers de geracao (estaticos: evitam pressao de pilha na EE) */
-static short s_synth[BGM_SYNTH_MAX * 2] __attribute__((aligned(64))); /* 24k L,R */
-static float s_xmf  [BGM_SYNTH_MAX * 2] __attribute__((aligned(64))); /* scratch XM float */
-static short s_left [BGM_OUT_CHUNK]     __attribute__((aligned(64))); /* 48k saida L */
-static short s_right[BGM_OUT_CHUNK]     __attribute__((aligned(64))); /* 48k saida R */
+static short s_inter[BGM_OUT_CHUNK * 2] __attribute__((aligned(64))); /* 48k L,R,L,R */
+static float s_xmf  [BGM_OUT_CHUNK * 2] __attribute__((aligned(64))); /* scratch XM float */
+static short s_left [BGM_OUT_CHUNK]     __attribute__((aligned(64)));
+static short s_right[BGM_OUT_CHUNK]     __attribute__((aligned(64)));
 
 
 /* ---- utilitarios ----------------------------------------------------- */
@@ -206,7 +202,7 @@ static void _TryLoad(void)
     if (kind == 1) /* MOD */
     {
         jar_mod_init(&s_mod);                 /* defaults: 48000/16/stereo */
-        jar_mod_setcfg(&s_mod, BGM_SYNTH_RATE, 16, 1, 1, 1); /* meia-taxa */
+        jar_mod_setcfg(&s_mod, BGM_RATE, 16, 1, 1, 1); /* 48kHz nativo */
         if (jar_mod_load_file(&s_mod, path) != 0)
         {
             s_state = BGM_MOD;                /* jar_mod faz loop sozinho  */
@@ -222,7 +218,7 @@ static void _TryLoad(void)
         long len = 0;
         s_xmBuf = _LoadFileAlloc(path, &len);
         if (s_xmBuf &&
-            jar_xm_create_context_safe(&s_xm, s_xmBuf, (size_t)len, BGM_SYNTH_RATE) == 0)
+            jar_xm_create_context_safe(&s_xm, s_xmBuf, (size_t)len, BGM_RATE) == 0)
         {
             jar_xm_set_max_loop_count(s_xm, 0); /* 0 = loop infinito       */
             s_state = BGM_XM;
@@ -270,7 +266,7 @@ Bool BgmIsEnabled(void)
 
 void BgmUpdate(void)
 {
-    int avail, out, synthN, i;
+    int avail, n, i;
 
     if (!s_enabled)            return;
     if (!Aud_IsInitialized())  return;
@@ -278,47 +274,37 @@ void BgmUpdate(void)
     if (s_state == BGM_UNTRIED) _TryLoad();
     if (s_state != BGM_MOD && s_state != BGM_XM) return; /* FAILED/nada */
 
-    /* frames de SAIDA (48 kHz) que cabem no ring do audsrv agora */
+    /* frames (48 kHz) que cabem no ring do audsrv agora */
     avail = Aud_Available();
     if (avail <= 0) return;
-    out = avail;
-    if (out > BGM_OUT_CHUNK) out = BGM_OUT_CHUNK;
-    out &= ~1;                 /* par: upsample 2x exato */
-    if (out < 2) return;
+    n = avail;
+    if (n > BGM_OUT_CHUNK) n = BGM_OUT_CHUNK;
 
-    synthN = out / 2;          /* sintetiza a meia-taxa (24 kHz) */
-
-    /* gera PCM interleaved (L,R,...) a 24 kHz em s_synth */
+    /* gera n frames NATIVOS a 48 kHz, interleaved (L,R,...) */
     if (s_state == BGM_MOD)
     {
-        jar_mod_fillbuffer(&s_mod, s_synth, (unsigned long)synthN, NULL);
+        jar_mod_fillbuffer(&s_mod, s_inter, (unsigned long)n, NULL);
     }
     else
     {
         /* float -> int16 na mao: evita o malloc/free por chamada que
            jar_xm_generate_samples_16bit faz internamente. */
         int k;
-        jar_xm_generate_samples(s_xm, s_xmf, (size_t)synthN);
-        for (k = 0; k < synthN * 2; k++)
+        jar_xm_generate_samples(s_xm, s_xmf, (size_t)n);
+        for (k = 0; k < n * 2; k++)
         {
             float f = s_xmf[k] * 32767.0f;
             if (f >  32767.0f) f =  32767.0f;
             if (f < -32768.0f) f = -32768.0f;
-            s_synth[k] = (short)f;
+            s_inter[k] = (short)f;
         }
     }
 
-    /* upsample linear 2x (24k -> 48k) + desinterleave para L/R */
-    for (i = 0; i < synthN; i++)
+    /* desinterleave para L/R (Aud_Enqueue reinterleava) */
+    for (i = 0; i < n; i++)
     {
-        int l0 = s_synth[i * 2 + 0];
-        int r0 = s_synth[i * 2 + 1];
-        int l1 = (i + 1 < synthN) ? s_synth[i * 2 + 2] : l0;
-        int r1 = (i + 1 < synthN) ? s_synth[i * 2 + 3] : r0;
-        s_left [i * 2 + 0] = (short)l0;
-        s_left [i * 2 + 1] = (short)((l0 + l1) / 2);
-        s_right[i * 2 + 0] = (short)r0;
-        s_right[i * 2 + 1] = (short)((r0 + r1) / 2);
+        s_left[i]  = s_inter[i * 2 + 0];
+        s_right[i] = s_inter[i * 2 + 1];
     }
 
     /* garante volume audivel: o menu de pausa muta o audsrv (Aud_Setvol(0))
@@ -330,5 +316,5 @@ void BgmUpdate(void)
         s_volSet = TRUE;
     }
 
-    Aud_Enqueue(s_left, s_right, out, 0); /* out = 2*synthN frames, wait=0 */
+    Aud_Enqueue(s_left, s_right, n, 0); /* wait=0: best-effort, nao trava */
 }
