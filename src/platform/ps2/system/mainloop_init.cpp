@@ -60,6 +60,7 @@ extern "C" {
 };
 
 #include "uiBrowser.h"
+#include "uiCover.h"
 #include "uiNetwork.h"
 #include "uiMenu.h"
 #include "uiLog.h"
@@ -118,6 +119,14 @@ extern "C" void DLog(const char *fmt, ...);
 #define Z0      	0x1800
 #define TEXADDR 	0x2400
 #define FONT_TEX 	0x3000
+
+/* Cover-art texture slot (capas). 128x128 RGBA32 = 0x100 TBP units
+   (256-byte units), placed in the free region between the font atlas
+   (which only uses 0x3000..0x3080: a 256x32 RGBA atlas) and the SNES
+   blender at 0x3C00. So 0x3A00..0x3B00 sits clear of both, leaving a
+   0x100-unit margin before the blender. UNTESTED on real PS2 - if it
+   ever collides this is the single knob to relocate. */
+#define COVER_TEX 	0x3A00
 
 
 /* Browser starting directory. On real PS2 you typically want "mass:/"
@@ -214,6 +223,7 @@ dispx = MAINLOOP_DISPX;
 GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
     PolyInit();
     FontInit(FONT_TEX);
+    CoverInit(COVER_TEX);
 
 	// setup log screen
 	_MainLoop_pLogScreen = new CLogScreen();
@@ -274,6 +284,7 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
     {
         GSK_ReinitVideo();
         FontInit(FONT_TEX);
+        CoverInit(COVER_TEX);
     }
     else
     {

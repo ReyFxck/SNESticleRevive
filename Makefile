@@ -190,6 +190,7 @@ INCS := \
 	-I$(CURDIR)/src/nes/state \
 	-I$(CURDIR)/src/nes/system \
 	-I$(CURDIR)/src/third_party/miniz \
+	-I$(CURDIR)/src/third_party/upng \
 	-I$(PS2SDK)/common/include \
 	-I$(PS2SDK)/ee/include \
 	-I$(PS2SDK)/ports/include \
@@ -261,6 +262,7 @@ SRCS := \
 	src/third_party/miniz/miniz_tdef.c \
 	src/third_party/miniz/miniz_tinfl.c \
 	src/third_party/miniz/miniz_zip.c \
+	src/third_party/upng/upng.c \
 	src/modules/netplay/netplay_ee.c \
 	src/modules/netplay/protocol/netclient.c \
 	src/modules/netplay/protocol/netpacket.c \
@@ -317,6 +319,7 @@ SRCS := \
 	src/common/render/texture.cpp \
 	src/platform/ps2/system/titleman.c \
 	src/platform/ps2/ui/uiBrowser.cpp \
+	src/platform/ps2/ui/uiCover.cpp \
 	src/platform/ps2/ui/uiLog.cpp \
 	src/platform/ps2/ui/uiMenu.cpp \
 	src/platform/ps2/ui/uiNetwork.cpp \

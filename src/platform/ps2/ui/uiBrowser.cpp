@@ -18,6 +18,7 @@
 #endif
 #include "poly.h"
 #include "uiBrowser.h"
+#include "uiCover.h"
 
 extern "C" void DLog(const char *fmt, ...);
 
@@ -50,6 +51,19 @@ static const char *_MenuEntries[]=
    from clipping the panel edge. The size column on the right is
    currently commented out (line ~334), so this is the full column. */
 #define BROWSER_NAME_MAXPIXELS (240)
+
+/* When cover art (capas) is enabled the ROM list name column shrinks to
+   leave room for the cover box on the right side of the 256px-wide
+   browser; when disabled the list goes back to its full original width
+   (BROWSER_NAME_MAXPIXELS). The cover box itself is defined below. */
+#define BROWSER_NAME_MAXPIXELS_COVER (148)
+
+/* Cover box geometry (browser logical space is 256x240). Sits to the
+   right of the shrunken list when cover art is on. */
+#define BROWSER_COVER_X   (158)
+#define BROWSER_COVER_Y   (44)
+#define BROWSER_COVER_W   (92)
+#define BROWSER_COVER_H   (132)
 
 /* Marquee tuning (frame counts at the browser's 60 Hz draw rate):
      - DELAY_FRAMES: how long the name sits with a static ellipsis on
@@ -631,6 +645,11 @@ void CBrowserScreen::Draw()
 	Int32 vx=4, vy = 20;
 	Int32 iLine;
 
+	/* Name column width: shrinks when cover art is on (to leave room
+	   for the cover box on the right), full width when off so the
+	   screen looks exactly like the original. */
+	Int32 nameMaxPx = CoverIsEnabled() ? BROWSER_NAME_MAXPIXELS_COVER : BROWSER_NAME_MAXPIXELS;
+
 	/* Marquee state retained across frames. Reset whenever the
 	   selected entry changes OR the user CDs into a new directory, so
 	   long names always start in their static-ellipsis "rest" pose
@@ -706,7 +725,7 @@ void CBrowserScreen::Draw()
 					snprintf(probe, sizeof(probe), "/%s", pSel->name);
 				else
 					snprintf(probe, sizeof(probe), "%s", pSel->name);
-				if (FontGetStrWidth(probe) > BROWSER_NAME_MAXPIXELS)
+				if (FontGetStrWidth(probe) > nameMaxPx)
 					bScroll = TRUE;
 			}
 
@@ -728,7 +747,7 @@ void CBrowserScreen::Draw()
 					else
 						snprintf(probe2, sizeof(probe2), "%s", pSel2->name);
 					Int32 fullW2 = FontGetStrWidth(probe2);
-					Int32 maxOff2 = fullW2 - BROWSER_NAME_MAXPIXELS;
+					Int32 maxOff2 = fullW2 - nameMaxPx;
 					if (maxOff2 < 0) maxOff2 = 0;
 
 					if ((Int32)s_marquee_tick >= maxOff2)
@@ -767,6 +786,27 @@ void CBrowserScreen::Draw()
 	}
 
 	(void)_BrowserSpaceWidth; /* helper kept for future per-gap pixel tuning */
+
+	/* Cover art: keep the right-side cover in sync with the selected
+	   entry. CoverLoadForRomPath() dedupes on the path string, so this
+	   is cheap every frame and only touches the filesystem when the
+	   selection actually changes. Directories / drives clear it. */
+	if (CoverIsEnabled())
+	{
+		if (m_iSelect >= 0 && m_iSelect < m_nEntries &&
+		    m_pDirEntries[m_iSelect].eType == BROWSER_ENTRYTYPE_EXECUTABLE)
+		{
+			char rompath[1024];
+			if (GetEntryPath(rompath, sizeof(rompath)) != 0)
+				CoverLoadForRomPath(rompath);
+			else
+				CoverClearCurrent();
+		}
+		else
+		{
+			CoverClearCurrent();
+		}
+	}
 
 	for (iLine=0; iLine < m_MaxLines; iLine++)
 	{
@@ -808,11 +848,11 @@ void CBrowserScreen::Draw()
 			   cosmetic and never affects fopen(). */
 			if (iEntry == m_iSelect && s_marquee_delay >= BROWSER_MARQUEE_DELAY_FRAMES)
 			{
-				BrowserCopyMarquee(view, sizeof(view), str, BROWSER_NAME_MAXPIXELS, s_marquee_tick);
+				BrowserCopyMarquee(view, sizeof(view), str, nameMaxPx, s_marquee_tick);
 			}
 			else
 			{
-				BrowserCopyEllipsis(view, sizeof(view), str, BROWSER_NAME_MAXPIXELS);
+				BrowserCopyEllipsis(view, sizeof(view), str, nameMaxPx);
 			}
 
 			// render selection bar
@@ -876,6 +916,38 @@ void CBrowserScreen::Draw()
 
 	FontSelect(0);
 
+	/* Cover art panel (right side). A dark backing panel + the cover,
+	   or a "sem capa" placeholder when no matching PNG was found. Only
+	   shown while enabled - otherwise the browser is unchanged. */
+	if (CoverIsEnabled())
+	{
+		PolyTexture(NULL);
+		PolyBlend(TRUE);
+		PolyColor4f(0.0f, 0.0f, 0.0f, 0.55f);
+		PolyRect(BROWSER_COVER_X - 3, BROWSER_COVER_Y - 3,
+		         BROWSER_COVER_W + 6, BROWSER_COVER_H + 6);
+
+		if (CoverHasImage())
+		{
+			CoverDraw(BROWSER_COVER_X, BROWSER_COVER_Y,
+			          BROWSER_COVER_W, BROWSER_COVER_H);
+		}
+		else
+		{
+			FontColor4f(0.55f, 0.55f, 0.55f, 1.0f);
+			FontPrintf(BROWSER_COVER_X + 14,
+			           BROWSER_COVER_Y + BROWSER_COVER_H / 2 - 6, "sem capa");
+		}
+	}
+
+	/* Bottom hint for the cover-art toggle (R2). L1/R1 are taken by the
+	   mainloop for screen cycling, so we use R2 here. */
+	FontSelect(0);
+	FontColor4f(0.45f, 0.75f, 0.75f, 1.0f);
+	FontPrintf(4, 230, "R2: Capas %s", CoverIsEnabled() ? "ON" : "OFF");
+
+	FontSelect(0);
+
 	if (m_bSubMenu)
 	{
 		PolyTexture(NULL);
@@ -894,6 +966,14 @@ void CBrowserScreen::Process()
 
 void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 {
+	/* R2 toggles cover art on/off (L1/R1 are consumed by the mainloop
+	   for screen cycling and never reach us). Works whether or not the
+	   file submenu is open. */
+	if (trigger & PAD_R2)
+	{
+		CoverToggle();
+	}
+
 	if (trigger & PAD_SELECT)
 	{
 		m_bSubMenu = !m_bSubMenu;
