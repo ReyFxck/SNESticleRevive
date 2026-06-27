@@ -75,6 +75,13 @@ void _MenuEnable(Bool bEnable)
 			Aud_Setvol(0);
 		}
 
+		/* Ao abrir o menu (sair do jogo), troca para a proxima faixa da
+		   trilha para dar variedade.  No-op se houver 0/1 faixa. */
+		if (bEnable)
+		{
+			BgmNext();
+		}
+
 		// if menu is enabled, then attempt to save sram immediately
 		if (bEnable)
 		{

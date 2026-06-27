@@ -302,6 +302,21 @@ void BgmStop(void)
     s_drainWait = 0;
 }
 
+void BgmNext(void)
+{
+    /* Avanca para a proxima faixa do indice e libera o decoder atual, de
+       modo que o proximo BgmUpdate carregue a nova faixa.  Chamado ao
+       ABRIR o menu (sair do jogo) para dar variedade.  Releria do disco
+       (pode dar um hitch breve no memory card), por isso so' troca quando
+       ha 2+ faixas; com 0/1 faixa nao faz nada (sem reload, sem hitch). */
+    if (s_indexCount < 0) _BuildIndex();
+    if (s_indexCount <= 1) return;
+
+    s_trackIdx = (s_trackIdx + 1) % s_indexCount;
+
+    if (s_state == BGM_MOD || s_state == BGM_XM) _BgmFree();
+}
+
 void BgmSetVolume(int vol)
 {
     if (vol < 0)   vol = 0;

@@ -35,6 +35,10 @@ void BgmUpdate(void);
    mantem a faixa carregada para reabrir o menu sem reler do disco. */
 void BgmStop(void);
 
+/* Avanca para a proxima faixa (chamado ao abrir o menu / sair do jogo).
+   So' troca se houver 2+ faixas; releria do disco. */
+void BgmNext(void);
+
 /* Volume da trilha de menu: 0 = OFF (libera o decoder, nao carrega nem
    consome RAM), 1..100 = liga e toca nesse volume.  Vale para SNES e NES
    (a trilha do menu e' compartilhada). */
