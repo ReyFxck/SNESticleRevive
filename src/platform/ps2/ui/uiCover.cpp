@@ -1,27 +1,37 @@
 /*
  * uiCover.cpp - Cover-art (capas) display for the ROM browser.
  *
- * PNG decoding via upng (src/third_party/upng, zlib license). Each cover
- * is nearest-neighbour scaled (aspect-preserving) into a 128x128 RGBA
- * buffer and kept in a bounded LRU RAM cache, so revisiting / prefetched
- * entries display instantly with no disk access. One fixed 128x128 GS
- * VRAM slot holds whatever cover is currently on screen.
+ * Two-layer design so the (slow) cdfs/USB filesystem is touched as
+ * little as possible:
  *
- * The cache is malloc'd lazily and freed on disable and on ROM launch
- * (see CoverFreeCache), so it never holds RAM the emulator core needs.
+ *   1. Directory INDEX: when the browser enters a folder we list the
+ *      candidate cover directories ONCE (opendir/readdir) and remember
+ *      every "*.png" file name in RAM. Answering "does ROM X have a
+ *      cover?" is then a pure in-memory string compare - zero fopen per
+ *      ROM. This is what makes scrolling smooth even on a cdfs ISO with
+ *      no covers at all (the old code did up to 4 failed fopen()s per
+ *      ROM, and a failed open on CD is slow).
  *
- * A cache entry with usedW==0 is a "negative" entry: we probed the disk
- * for that ROM and found no cover. Keeping it stops us re-probing the
- * (slow) cdfs/USB filesystem for the same ROM over and over.
+ *   2. Image CACHE: decoded + scaled 128x128 covers kept in a bounded
+ *      LRU pool, so revisiting / prefetched entries display instantly.
  *
- * Alpha: the GS treats texel alpha 0x80 as fully opaque; covers are
- * opaque rectangles, so we force every texel's alpha to 0x80 and accept
- * both RGB8 and RGBA8 PNGs uniformly.
+ * Candidate cover directories (a cover for "Game.sfc" is "Game.png"):
+ *      $(COVERS_PATH)/    (only if built with -DCOVERS_PATH)
+ *      <rom directory>/
+ *
+ * Both the index and the cache are malloc'd lazily and freed on disable
+ * and on ROM launch (CoverFreeCache), so they never hold RAM the
+ * emulator core needs. PNG decode is upng (zlib license).
+ *
+ * NOTE (untested on real PS2): the cover texture lives in a hard-coded
+ * VRAM slot from the legacy GS layout (COVER_TEX in mainloop_init.cpp).
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <dirent.h>
 
 #include "types.h"
 #include "texture.h"
@@ -42,45 +52,79 @@ extern "C" void DLog(const char *fmt, ...);
 #define COVER_TEX_H 128
 #define COVER_RGBA_BYTES (COVER_TEX_W * COVER_TEX_H * 4)
 
-/* Bounded LRU cache. 24 * ~65 KB ~= 1.5 MB, malloc'd only while covers
-   are enabled and freed on disable / ROM launch. Holds the visible
-   neighbourhood plus recently-visited entries so back-and-forth and
-   single steps are cache hits. Tunable. */
+/* Decoded-image LRU cache. 24 * ~65 KB ~= 1.5 MB. */
 #define COVER_CACHE_SLOTS 24
 #define COVER_KEY_MAX     1024
 
+/* Directory index. */
+#define COVER_INDEX_MAX   2048   /* max PNG names remembered per folder  */
+#define COVER_NAME_MAX    208    /* max PNG file name length             */
+#define COVER_DIRS_MAX    2      /* COVERS_PATH + the ROM's own folder   */
+
 typedef struct
 {
-	char   key[COVER_KEY_MAX];   /* full ROM path; "" => slot unused   */
-	Int32  usedW, usedH;         /* filled sub-rect; 0 => no cover here */
+	char   key[COVER_KEY_MAX];   /* ROM path this image was decoded for */
+	Int32  usedW, usedH;
 	Bool   valid;
-	Uint32 lru;                  /* last-use tick for eviction          */
+	Uint32 lru;
 	Uint8  rgba[COVER_RGBA_BYTES];
 } CoverEntT;
 
-/* Display state for the on-screen panel. */
+typedef struct
+{
+	Uint8 dir;                   /* index into s_dirs[]                  */
+	char  name[COVER_NAME_MAX];  /* e.g. "Super Mario World (USA).png"   */
+} CoverIdxT;
+
+typedef enum { RES_UNKNOWN = 0, RES_FOUND, RES_NONE } ResolveE;
 typedef enum { COVER_PENDING = 0, COVER_HASIMG, COVER_NOIMG } CoverStateE;
 
 /* ---- module state -------------------------------------------------- */
 
-static CoverEntT *s_cache    = 0;       /* malloc'd pool, NULL when freed */
+static CoverEntT *s_cache    = 0;        /* image LRU pool, NULL = freed */
 static Uint32     s_lruClock = 0;
 
+static CoverIdxT *s_index    = 0;        /* directory PNG index          */
+static Int32      s_indexCount = 0;
+static char       s_indexDir[COVER_KEY_MAX] = "";  /* folder it was built for */
+static char       s_dirs[COVER_DIRS_MAX][COVER_KEY_MAX];
+static Int32      s_nDirs    = 0;
+
 static Uint32   s_uVramTBP   = 0;
-static Bool     s_bEnabled   = FALSE;   /* default OFF: original layout   */
+static Bool     s_bEnabled   = FALSE;    /* default OFF                  */
 static Bool     s_bTexInited = FALSE;
 static TextureT s_Tex;
 
 static CoverStateE s_state   = COVER_PENDING;
-static Int32       s_dispW   = 0;       /* used dims of the displayed cover */
+static Int32       s_dispW   = 0;
 static Int32       s_dispH   = 0;
-static char        s_vramKey[COVER_KEY_MAX] = "";  /* key currently in VRAM */
+static char        s_vramKey[COVER_KEY_MAX] = "";
+
+/* ---- path helpers -------------------------------------------------- */
+
+/* Split romPath into directory (with trailing slash) and base name
+   without extension. */
+static void _SplitRomPath(const char *romPath, char *dir, size_t dirSz,
+                          char *base, size_t baseSz)
+{
+	const char *slash = strrchr(romPath, '/');
+	const char *fname = slash ? slash + 1 : romPath;
+	size_t dlen = slash ? (size_t)(fname - romPath) : 0;
+	char *dot;
+
+	if (dlen >= dirSz)
+		dlen = dirSz - 1;
+	memcpy(dir, romPath, dlen);
+	dir[dlen] = '\0';
+
+	snprintf(base, baseSz, "%s", fname);
+	dot = strrchr(base, '.');
+	if (dot)
+		*dot = '\0';
+}
 
 /* ---- scaling / decode ---------------------------------------------- */
 
-/* Nearest-neighbour scale src (sw x sh, comp bytes/pixel: 3=RGB, 4=RGBA)
-   into dst (a COVER_TEX_W*COVER_TEX_H*4 buffer), preserving aspect.
-   Writes the filled region to pW / pH. Returns TRUE on success. */
 static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
                        unsigned sw, unsigned sh, unsigned comp,
                        Int32 *pW, Int32 *pH)
@@ -108,10 +152,10 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
 		for (x = 0; x < outW; x++) {
 			unsigned sxi = (x * sw) / outW;
 			const unsigned char *p = src + ((unsigned long)syi * sw + sxi) * comp;
-			d[x * 4 + 0] = p[0];   /* R */
-			d[x * 4 + 1] = p[1];   /* G */
-			d[x * 4 + 2] = p[2];   /* B */
-			d[x * 4 + 3] = 0x80;   /* A = GS-opaque */
+			d[x * 4 + 0] = p[0];
+			d[x * 4 + 1] = p[1];
+			d[x * 4 + 2] = p[2];
+			d[x * 4 + 3] = 0x80;   /* GS-opaque */
 		}
 	}
 
@@ -120,7 +164,6 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
 	return TRUE;
 }
 
-/* Decode one PNG file into dst. Returns TRUE + fills pW / pH on success. */
 static Bool _DecodeFileInto(const char *path, Uint8 *dst, Int32 *pW, Int32 *pH)
 {
 	upng_t *u;
@@ -149,58 +192,101 @@ static Bool _DecodeFileInto(const char *path, Uint8 *dst, Int32 *pW, Int32 *pH)
 	return ok;
 }
 
-/* Try the candidate PNG paths for a ROM and decode the first that
-   exists into dst. Returns TRUE on success. */
-static Bool _DecodeCoverForRom(const char *romPath, Uint8 *dst, Int32 *pW, Int32 *pH)
+/* ---- directory index ----------------------------------------------- */
+
+static Bool _IndexAlloc(void)
 {
-	char dir[1024];
-	char base[512];
-	char cand[1600];
-	const char *slash, *fname;
-	size_t dlen;
-	char *dot;
+	if (s_index)
+		return TRUE;
+	s_index = (CoverIdxT *)malloc(sizeof(CoverIdxT) * COVER_INDEX_MAX);
+	return s_index ? TRUE : FALSE;
+}
 
-	if (!romPath || !romPath[0])
-		return FALSE;
+static void _ScanDir(int dirIdx, const char *path)
+{
+	DIR *dir;
+	struct dirent *de;
 
-	slash = strrchr(romPath, '/');
-	fname = slash ? slash + 1 : romPath;
-	dlen  = slash ? (size_t)(fname - romPath) : 0;
-	if (dlen >= sizeof(dir))
-		dlen = sizeof(dir) - 1;
-	memcpy(dir, romPath, dlen);
-	dir[dlen] = '\0';
+	dir = opendir(path);
+	if (!dir)
+		return;
+	while ((de = readdir(dir)) != NULL && s_indexCount < COVER_INDEX_MAX) {
+		const char *n = de->d_name;
+		size_t L = strlen(n);
+		if (L < 5 || L >= COVER_NAME_MAX)
+			continue;
+		if (strcasecmp(n + L - 4, ".png") != 0)
+			continue;
+		s_index[s_indexCount].dir = (Uint8)dirIdx;
+		snprintf(s_index[s_indexCount].name, COVER_NAME_MAX, "%s", n);
+		s_indexCount++;
+	}
+	closedir(dir);
+}
 
-	snprintf(base, sizeof(base), "%s", fname);
-	dot = strrchr(base, '.');
-	if (dot)
-		*dot = '\0';
+/* Build the PNG index for romDir if it is not already built for it.
+   Touches the disk (opendir/readdir) - once per folder. */
+static void _EnsureIndex(const char *romDir)
+{
+	if (s_index && strcmp(s_indexDir, romDir) == 0)
+		return;
+	if (!_IndexAlloc())
+		return;
+
+	s_indexCount = 0;
+	s_nDirs      = 0;
+	snprintf(s_indexDir, sizeof(s_indexDir), "%s", romDir);
 
 #ifdef COVERS_PATH
 	{
 		const char *cp = COVERS_PATH;
 		size_t cl = strlen(cp);
-		if (cl > 0 && (cp[cl - 1] == '/' || cp[cl - 1] == ':'))
-			snprintf(cand, sizeof(cand), "%s%s.png", cp, base);
+		if (cl > 0 && cp[cl - 1] != '/' && cp[cl - 1] != ':')
+			snprintf(s_dirs[s_nDirs], COVER_KEY_MAX, "%s/", cp);
 		else
-			snprintf(cand, sizeof(cand), "%s/%s.png", cp, base);
-		if (_DecodeFileInto(cand, dst, pW, pH)) return TRUE;
+			snprintf(s_dirs[s_nDirs], COVER_KEY_MAX, "%s", cp);
+		s_nDirs++;
 	}
 #endif
 
-	snprintf(cand, sizeof(cand), "%s%s.png", dir, base);
-	if (_DecodeFileInto(cand, dst, pW, pH)) return TRUE;
+	/* romDir already carries its trailing slash (browser m_Dir). */
+	snprintf(s_dirs[s_nDirs], COVER_KEY_MAX, "%s", romDir);
+	s_nDirs++;
 
-	snprintf(cand, sizeof(cand), "%scovers/%s.png", dir, base);
-	if (_DecodeFileInto(cand, dst, pW, pH)) return TRUE;
-
-	snprintf(cand, sizeof(cand), "%sNamed_Boxarts/%s.png", dir, base);
-	if (_DecodeFileInto(cand, dst, pW, pH)) return TRUE;
-
-	return FALSE;
+	{
+		int d;
+		for (d = 0; d < s_nDirs; d++)
+			_ScanDir(d, s_dirs[d]);
+	}
+	DLog("[cover] indexed %d png(s) in %s\n", (int)s_indexCount, romDir);
 }
 
-/* ---- cache --------------------------------------------------------- */
+/* Resolve romPath -> existing cover file path using ONLY the in-memory
+   index (no disk). RES_UNKNOWN if the index is not built for this dir. */
+static ResolveE _ResolveCover(const char *romPath, char *out, size_t outSz)
+{
+	char dir[COVER_KEY_MAX];
+	char base[512];
+	char want[512 + 8];
+	int i;
+
+	_SplitRomPath(romPath, dir, sizeof(dir), base, sizeof(base));
+
+	if (!s_index || strcmp(s_indexDir, dir) != 0)
+		return RES_UNKNOWN;
+
+	snprintf(want, sizeof(want), "%s.png", base);
+	for (i = 0; i < s_indexCount; i++) {
+		if (strcasecmp(s_index[i].name, want) == 0) {
+			snprintf(out, outSz, "%s%s",
+			         s_dirs[s_index[i].dir], s_index[i].name);
+			return RES_FOUND;
+		}
+	}
+	return RES_NONE;
+}
+
+/* ---- image cache --------------------------------------------------- */
 
 static Bool _CacheAlloc(void)
 {
@@ -237,62 +323,41 @@ static CoverEntT *_CachePickSlot(void)
 	return lru;
 }
 
-/* Find or load romPath into the cache. Loads from disk on a miss (this
-   is the expensive path). Returns the entry, or NULL on hard failure
-   (cache alloc failed). A loaded-but-coverless ROM yields a negative
-   entry (usedW==0), not NULL. *pLoaded is set TRUE if a disk load was
-   performed on this call. */
-static CoverEntT *_CacheGet(const char *romPath, Bool *pLoaded)
+/* Decode coverFile into the image cache, keyed by romPath. Returns the
+   entry or NULL on decode failure. */
+static CoverEntT *_CacheDecode(const char *romPath, const char *coverFile)
 {
 	CoverEntT *e;
 	Int32 w = 0, h = 0;
 
-	if (pLoaded) *pLoaded = FALSE;
-	if (!romPath || !romPath[0])
-		return 0;
 	if (!_CacheAlloc())
 		return 0;
-
-	e = _CacheFind(romPath);
-	if (e) {
-		e->lru = ++s_lruClock;
-		return e;          /* hit (may be a negative entry) */
-	}
-
-	/* miss: take a slot (free or LRU) and probe the disk */
 	e = _CachePickSlot();
+	if (!_DecodeFileInto(coverFile, e->rgba, &w, &h)) {
+		e->valid = FALSE;   /* slot now free; evicted entry (if any) lost */
+		return 0;
+	}
 	snprintf(e->key, sizeof(e->key), "%s", romPath);
+	e->usedW = w;
+	e->usedH = h;
 	e->valid = TRUE;
 	e->lru   = ++s_lruClock;
-	if (_DecodeCoverForRom(romPath, e->rgba, &w, &h)) {
-		e->usedW = w;
-		e->usedH = h;
-	} else {
-		e->usedW = 0;      /* negative: checked, no cover */
-		e->usedH = 0;
-	}
-	if (pLoaded) *pLoaded = TRUE;
 	return e;
 }
 
-/* Point the display (and the GS texture) at a cache entry. */
-static void _ApplyEntry(CoverEntT *e, const char *key)
+static void _ApplyEntry(CoverEntT *e)
 {
-	if (!e) {
-		s_state = COVER_PENDING;
+	if (!e || e->usedW <= 0) {
+		s_state = COVER_NOIMG;
 		return;
 	}
-	if (e->usedW > 0) {
-		if (strcmp(s_vramKey, key) != 0) {
-			TextureUpload(&s_Tex, e->rgba);
-			snprintf(s_vramKey, sizeof(s_vramKey), "%s", key);
-		}
-		s_dispW = e->usedW;
-		s_dispH = e->usedH;
-		s_state = COVER_HASIMG;
-	} else {
-		s_state = COVER_NOIMG;
+	if (strcmp(s_vramKey, e->key) != 0) {
+		TextureUpload(&s_Tex, e->rgba);
+		snprintf(s_vramKey, sizeof(s_vramKey), "%s", e->key);
 	}
+	s_dispW = e->usedW;
+	s_dispH = e->usedH;
+	s_state = COVER_HASIMG;
 }
 
 /* ---- public API ---------------------------------------------------- */
@@ -308,16 +373,15 @@ void CoverInit(Uint32 uVramTBP)
 	s_state      = COVER_PENDING;
 	s_dispW = s_dispH = 0;
 	s_vramKey[0] = '\0';
-	/* leaves s_bEnabled untouched so a persisted setting survives a
-	   video reinit that re-runs CoverInit */
 }
 
 void CoverFreeCache(void)
 {
-	if (s_cache) {
-		free(s_cache);
-		s_cache = 0;
-	}
+	if (s_cache) { free(s_cache); s_cache = 0; }
+	if (s_index) { free(s_index); s_index = 0; }
+	s_indexCount = 0;
+	s_indexDir[0] = '\0';
+	s_nDirs = 0;
 	s_state = COVER_PENDING;
 	s_dispW = s_dispH = 0;
 	s_vramKey[0] = '\0';
@@ -330,70 +394,80 @@ void CoverSetEnabled(Bool bEnabled)
 		return;
 	s_bEnabled = b;
 	if (!b)
-		CoverFreeCache();   /* turning off hands the RAM back */
+		CoverFreeCache();
 }
 
-Bool CoverIsEnabled(void)
-{
-	return s_bEnabled;
-}
+Bool CoverIsEnabled(void) { return s_bEnabled; }
 
-void CoverToggle(void)
-{
-	CoverSetEnabled(s_bEnabled ? FALSE : TRUE);
-}
+void CoverToggle(void) { CoverSetEnabled(s_bEnabled ? FALSE : TRUE); }
 
+/* Current selection: may build the index and decode (disk allowed). */
 void CoverShow(const char *romPath)
 {
-	if (!s_bEnabled || !s_bTexInited) { s_state = COVER_PENDING; return; }
-	if (!romPath || !romPath[0])      { s_state = COVER_PENDING; return; }
-	_ApplyEntry(_CacheGet(romPath, 0), romPath);
-}
-
-void CoverShowCached(const char *romPath)
-{
+	char dir[COVER_KEY_MAX];
+	char base[512];
+	char coverFile[COVER_KEY_MAX];
 	CoverEntT *e;
 
 	if (!s_bEnabled || !s_bTexInited) { s_state = COVER_PENDING; return; }
 	if (!romPath || !romPath[0])      { s_state = COVER_PENDING; return; }
 
-	e = _CacheFind(romPath);
-	if (e) {
-		_ApplyEntry(e, romPath);
-		return;
-	}
+	_SplitRomPath(romPath, dir, sizeof(dir), base, sizeof(base));
+	_EnsureIndex(dir);
 
-	/* Not cached. If the live VRAM copy still happens to be this exact
-	   ROM (entry evicted but texture not overwritten), keep showing it;
-	   otherwise we are waiting on a load. */
-	if (strcmp(s_vramKey, romPath) == 0 && s_dispW > 0)
-		s_state = COVER_HASIMG;
-	else
-		s_state = COVER_PENDING;
+	e = _CacheFind(romPath);
+	if (e) { _ApplyEntry(e); return; }
+
+	if (_ResolveCover(romPath, coverFile, sizeof(coverFile)) == RES_FOUND) {
+		e = _CacheDecode(romPath, coverFile);
+		if (e) { _ApplyEntry(e); return; }
+	}
+	s_state = COVER_NOIMG;
 }
 
+/* Every-frame display: in-memory only, never touches the disk. */
+void CoverShowCached(const char *romPath)
+{
+	CoverEntT *e;
+	char tmp[COVER_KEY_MAX];
+
+	if (!s_bEnabled || !s_bTexInited) { s_state = COVER_PENDING; return; }
+	if (!romPath || !romPath[0])      { s_state = COVER_PENDING; return; }
+
+	e = _CacheFind(romPath);
+	if (e) { _ApplyEntry(e); return; }
+
+	switch (_ResolveCover(romPath, tmp, sizeof(tmp))) {
+	case RES_NONE: s_state = COVER_NOIMG;  break;  /* known: no cover  */
+	default:       s_state = COVER_PENDING; break; /* found-not-decoded / unknown */
+	}
+}
+
+/* Warm a neighbour. Returns TRUE only if it actually decoded (one such
+   per frame keeps prefetch from doing many decodes in a single frame).
+   Index lookups and "no cover" answers are free (no disk). */
 Bool CoverPrefetch(const char *romPath)
 {
-	Bool loaded = FALSE;
+	char dir[COVER_KEY_MAX];
+	char base[512];
+	char coverFile[COVER_KEY_MAX];
 
 	if (!s_bEnabled || !s_bTexInited || !romPath || !romPath[0])
 		return FALSE;
-	if (s_cache && _CacheFind(romPath))
-		return FALSE;       /* already cached: nothing to do */
 
-	_CacheGet(romPath, &loaded);
-	return loaded;          /* TRUE only if a disk load happened */
+	_SplitRomPath(romPath, dir, sizeof(dir), base, sizeof(base));
+	_EnsureIndex(dir);
+
+	if (_CacheFind(romPath))
+		return FALSE;
+	if (_ResolveCover(romPath, coverFile, sizeof(coverFile)) != RES_FOUND)
+		return FALSE;       /* no cover: nothing decoded */
+
+	return _CacheDecode(romPath, coverFile) ? TRUE : FALSE;
 }
 
-Bool CoverHasImage(void)
-{
-	return (s_state == COVER_HASIMG) ? TRUE : FALSE;
-}
-
-Bool CoverNoImage(void)
-{
-	return (s_state == COVER_NOIMG) ? TRUE : FALSE;
-}
+Bool CoverHasImage(void) { return (s_state == COVER_HASIMG) ? TRUE : FALSE; }
+Bool CoverNoImage(void)  { return (s_state == COVER_NOIMG)  ? TRUE : FALSE; }
 
 void CoverDraw(Float32 bx, Float32 by, Float32 bw, Float32 bh)
 {
@@ -406,13 +480,8 @@ void CoverDraw(Float32 bx, Float32 by, Float32 bw, Float32 bh)
 
 	ar    = (Float32)s_dispW / (Float32)s_dispH;
 	boxAr = bw / bh;
-	if (ar >= boxAr) {
-		dw = bw;
-		dh = bw / ar;
-	} else {
-		dh = bh;
-		dw = bh * ar;
-	}
+	if (ar >= boxAr) { dw = bw; dh = bw / ar; }
+	else             { dh = bh; dw = bh * ar; }
 	dx = bx + (bw - dw) * 0.5f;
 	dy = by + (bh - dh) * 0.5f;
 
