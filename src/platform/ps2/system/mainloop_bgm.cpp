@@ -71,6 +71,12 @@ extern "C" {
    pico que segurava 60fps, recarregando o ring (~107ms) em ~3 frames. */
 #define BGM_OUT_CHUNK   3072
 
+/* Limiar (em frames stereo) abaixo do qual consideramos que a cauda de
+   audio do jogo ja' drenou do ring do audsrv.  Ao abrir o menu, o
+   _MenuEnable muta o audsrv; esperamos o ring cair abaixo disso antes de
+   soltar o tracker, para nao ouvir SNES/NES junto com a trilha. ~5ms. */
+#define BGM_DRAIN_THRESH 256
+
 /* Pastas tentadas, em ordem.  BGM_PATH (se definido pelo Makefile) vem
    primeiro.  A primeira faixa .mod/.xm encontrada e' tocada. */
 static const char *s_dirs[] = {
@@ -235,30 +241,31 @@ static void _TryLoad(void)
 
 /* ---- API ------------------------------------------------------------- */
 
+/* Libera o decoder e o buffer do arquivo.  Chamado SO' quando a trilha e'
+   desligada (BgmSetEnabled FALSE) -- nao no fluxo de abrir jogo, para o
+   menu reabrir sem reler do disco. */
+static void _BgmFree(void)
+{
+    if (s_state == BGM_MOD) jar_mod_unload(&s_mod);
+    if (s_state == BGM_XM && s_xm) { jar_xm_free_context(s_xm); s_xm = NULL; }
+    if (s_xmBuf) { free(s_xmBuf); s_xmBuf = NULL; }
+    s_state  = BGM_UNTRIED;
+    s_volSet = FALSE;
+}
+
 void BgmStop(void)
 {
-    if (s_state == BGM_MOD)
-    {
-        jar_mod_unload(&s_mod);
-    }
-    else if (s_state == BGM_XM)
-    {
-        if (s_xm) { jar_xm_free_context(s_xm); s_xm = NULL; }
-    }
-    if (s_xmBuf) { free(s_xmBuf); s_xmBuf = NULL; }
-
-    /* volta a UNTRIED para recarregar do disco na proxima vez que o
-       menu reabrir (ex.: pausa durante o jogo). */
-    s_state  = BGM_UNTRIED;
+    /* Para de alimentar SEM liberar o decoder: a faixa fica carregada,
+       entao reabrir o menu e' instantaneo (sem reler do disco -> sem a
+       travadinha).  So' re-arma a logica de volume/dreno para a proxima
+       entrada no menu (esperar a cauda de audio do jogo drenar antes de
+       soltar o tracker).  A liberacao real acontece em BgmSetEnabled. */
     s_volSet = FALSE;
 }
 
 void BgmSetEnabled(Bool bEnable)
 {
-    if (!bEnable && (s_state == BGM_MOD || s_state == BGM_XM))
-    {
-        BgmStop();
-    }
+    if (!bEnable) _BgmFree();
     s_enabled = bEnable;
 }
 
@@ -276,6 +283,18 @@ void BgmUpdate(void)
 
     if (s_state == BGM_UNTRIED) _TryLoad();
     if (s_state != BGM_MOD && s_state != BGM_XM) return; /* FAILED/nada */
+
+    /* Espera a cauda de audio do jogo (mutada pelo _MenuEnable ao abrir o
+       menu) drenar do ring ANTES de soltar o tracker: evita ouvir SNES/NES
+       junto com a trilha, e da' um inicio limpo (nao instantaneo).  So'
+       enquanto ainda nao firmamos o volume desta sessao de menu. */
+    if (!s_volSet)
+    {
+        if (Aud_Buffered() > BGM_DRAIN_THRESH)
+            return;                 /* ainda drenando a cauda do jogo */
+        Aud_Setvol(0x3FFF);         /* ring limpo: libera o volume do tracker */
+        s_volSet = TRUE;
+    }
 
     /* frames de SAIDA (48 kHz) que cabem no ring do audsrv agora */
     avail = Aud_Available();
@@ -332,13 +351,8 @@ void BgmUpdate(void)
     }
 
     /* garante volume audivel: o menu de pausa muta o audsrv (Aud_Setvol(0))
-       para matar o rabo de audio do jogo; forcamos o volume cheio uma vez
-       quando a trilha comeca a tocar. */
-    if (!s_volSet)
-    {
-        Aud_Setvol(0x3FFF);
-        s_volSet = TRUE;
-    }
+       para matar o rabo de audio do jogo; o volume cheio ja' foi firmado
+       acima, apos a cauda do jogo drenar. */
 
     Aud_Enqueue(s_left, s_right, n, 0); /* wait=0: best-effort, nao trava */
 }
