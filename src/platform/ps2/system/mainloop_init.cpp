@@ -238,7 +238,19 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
 	   (replaces the #if 0 block above which depended on VersionGetInfo,
 	   itself wrapped in #if 0 inside version.cpp), followed by the
 	   ReyFxck fork credit. */
-	ScrPrintf("SNESticle Revive v1.0.0   %s  %s", __DATE__, __TIME__);
+	/* APP_VERSION / BUILD_DATE / BUILD_TIME vem do Makefile (data/hora
+	   em TZ de Brasilia p/ nao ficar 3h adiantado como o __TIME__ em
+	   UTC).  Fallback para os macros do compilador se nao definidos. */
+#ifndef APP_VERSION
+#define APP_VERSION "1.0.0"
+#endif
+#ifndef BUILD_DATE
+#define BUILD_DATE __DATE__
+#endif
+#ifndef BUILD_TIME
+#define BUILD_TIME __TIME__
+#endif
+	ScrPrintf("SNESticle Revive v%s   %s  %s", APP_VERSION, BUILD_DATE, BUILD_TIME);
 	ScrPrintf("Copyright (c) 1997-2004 Icer Addis");
 	ScrPrintf("Forked By ReyFxck - Thomas R. (2026)");
 

@@ -111,6 +111,18 @@ CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fn
 	-DDEBUG_BOOT_SCREEN=$(DEBUG_BOOT_SCREEN) \
 	-DMAINLOOP_DEBUG_GS_TEST=$(MAINLOOP_DEBUG_GS_TEST)
 
+# ---- versao + data/hora da build (TZ Brasilia, UTC-3) ----------------
+# __DATE__/__TIME__ pegam o horario do AMBIENTE de build (UTC nos
+# containers/Termux), ficando 3h adiantados no Brasil.  Geramos a
+# data/hora com TZ fixo de Brasilia e passamos por -D; o banner usa
+# esses em vez dos macros do compilador.
+APP_VERSION  ?= 1.0.0
+BUILD_DATE   := $(shell TZ='America/Sao_Paulo' date '+%Y-%m-%d')
+BUILD_TIME   := $(shell TZ='America/Sao_Paulo' date '+%H:%M:%S')
+VERSION_DEFS := -DAPP_VERSION=\"$(APP_VERSION)\" -DBUILD_DATE=\"$(BUILD_DATE)\" -DBUILD_TIME=\"$(BUILD_TIME)\"
+CFLAGS   += $(VERSION_DEFS)
+CXXFLAGS += $(VERSION_DEFS)
+
 # ---- ps2_drivers feature probe ---------------------------------------
 # init_usb_driver() was respelled to init_usb_driver(bool) in
 # ps2_drivers v2.0 (see ps2dev/ps2_drivers).  We can't tell at build
@@ -742,8 +754,8 @@ count:
 #   make iso roms=<pasta> out=<pasta> # gera ISO + copia pra <pasta>
 
 ISO_GAME_ID   ?= SLUS_999.99
-ISO_GAME_NAME ?= SNESticle
-ISO_LABEL     ?= SNESTICLE
+ISO_GAME_NAME ?= SNESticle_Revive_v$(APP_VERSION)
+ISO_LABEL     ?= SNESTICLE_REVIVE
 ISO_ROOT_DIR  ?= $(OBJ_DIR)/iso_root
 ISO_OUT       ?= $(OBJ_DIR)/$(ISO_GAME_ID).$(ISO_GAME_NAME).iso
 ISO_BOOT      ?= $(ISO_GAME_ID)
