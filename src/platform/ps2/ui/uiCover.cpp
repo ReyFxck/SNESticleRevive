@@ -587,7 +587,11 @@ void CoverDraw(Float32 bx, Float32 by, Float32 bw, Float32 bh)
 
 	PolyTexture(&s_Tex);
 	PolyUV(0, 0, s_dispW, s_dispH);
-	PolyBlend(TRUE);   /* honour PNG transparency */
+	/* Opaque draw. Alpha blending of the PSMCT32 cover made the image
+	   render invisible on real PS2 (the GS texel-alpha blend config is
+	   not what the flat-colour panels use, and is untestable here), so
+	   we draw opaque for now. Transparent PNGs show their RGB. */
+	PolyBlend(FALSE);
 	PolyColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 	PolyRect(dx, dy, dw, dh);
 

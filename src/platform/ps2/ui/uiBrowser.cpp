@@ -659,7 +659,18 @@ void CBrowserScreen::Draw()
 	/* Name column width: shrinks when cover art is on (to leave room
 	   for the cover box on the right), full width when off so the
 	   screen looks exactly like the original. */
-	Int32 nameMaxPx = CoverIsEnabled() ? BROWSER_NAME_MAXPIXELS_COVER : BROWSER_NAME_MAXPIXELS;
+	Bool bHasRoms = FALSE;
+	{
+		Int32 _i;
+		for (_i = 0; _i < m_nEntries; _i++)
+			if (m_pDirEntries[_i].eType == BROWSER_ENTRYTYPE_EXECUTABLE)
+			{
+				bHasRoms = TRUE;
+				break;
+			}
+	}
+	Bool bCoverUI = (CoverIsEnabled() && bHasRoms) ? TRUE : FALSE;
+	Int32 nameMaxPx = bCoverUI ? BROWSER_NAME_MAXPIXELS_COVER : BROWSER_NAME_MAXPIXELS;
 
 	/* Marquee state retained across frames. Reset whenever the
 	   selected entry changes OR the user CDs into a new directory, so
@@ -802,7 +813,7 @@ void CBrowserScreen::Draw()
 	   debounced so fast scrolling never touches the (slow) cdfs/USB
 	   filesystem, and the selection's neighbours are prefetched one per
 	   frame while idle, so single d-pad steps land on a warm cache. */
-	if (CoverIsEnabled())
+	if (bCoverUI)
 	{
 		char curPath[1024];
 		Bool curIsRom = (m_iSelect >= 0 && m_iSelect < m_nEntries &&
@@ -952,18 +963,8 @@ void CBrowserScreen::Draw()
 	   in the same faint light-gray as the row backdrops. Only shown when
 	   the folder actually contains ROMs; it starts just below the title
 	   bar (never crosses the title) and ends at the last visible entry. */
-	if (CoverIsEnabled())
+	if (bCoverUI)
 	{
-		Bool  hasRom = FALSE;
-		Int32 i;
-		for (i = 0; i < m_nEntries; i++)
-			if (m_pDirEntries[i].eType == BROWSER_ENTRYTYPE_EXECUTABLE)
-			{
-				hasRom = TRUE;
-				break;
-			}
-
-		if (hasRom)
 		{
 			Int32   visRows = m_nEntries - m_iScroll;
 			Float32 dlTop, dlBot;
@@ -1004,7 +1005,7 @@ void CBrowserScreen::Draw()
 	/* Cover art panel (right side). A dark backing panel + the cover,
 	   or a "No Covers" placeholder when no matching PNG was found. Only
 	   shown while enabled - otherwise the browser is unchanged. */
-	if (CoverIsEnabled())
+	if (bCoverUI)
 	{
 		PolyTexture(NULL);
 		PolyBlend(TRUE);
