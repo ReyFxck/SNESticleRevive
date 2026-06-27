@@ -41,7 +41,8 @@ void GSK_Init(int width, int height,
 #define GSK_VIDMODE_240P  0   /* NTSC 640x240 progressive (CRT/AV, default)    */
 #define GSK_VIDMODE_480I  1   /* NTSC 640x448 interlaced                       */
 #define GSK_VIDMODE_480P  2   /* DTV  640x480 progressive (GSM / HDMI)         */
-#define GSK_VIDMODE_COUNT 3
+#define GSK_VIDMODE_1080I 3   /* DTV  1080i (experimental, PCRTC-magnified)    */
+#define GSK_VIDMODE_COUNT 4
 
 extern int g_GskVideoMode;    /* one of GSK_VIDMODE_*    */
 extern int g_GskDispOffX;     /* horizontal display offset (0 = centred) */

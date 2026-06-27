@@ -184,6 +184,22 @@ void GSK_Init(int width, int height,
         _gsk_vck              = 4;
         break;
 
+    case GSK_VIDMODE_1080I:
+        /* 1080i (DTV) - EXPERIMENTAL.  A VRAM do PS2 (4MB) NAO comporta um
+           framebuffer real de 1920x1080; entao mantemos o mesmo FB 640x448
+           do 480i (cabe na VRAM, geometria comprovada) e deixamos o PCRTC
+           AMPLIAR (MAGH/MAGV) ate' preencher o raster 1080i -- mesma ideia
+           que o GSM usa ao "forcar" modos altos.  E' um CASO ISOLADO: nao
+           altera 240p/480i/480p.  So' vai exibir se a TV/conversor travar
+           em 1080i; senao, e' so' escolher outro modo. */
+        _pGsGlobal->Mode      = GS_MODE_DTV_1080I;
+        _pGsGlobal->Interlace = GS_INTERLACED;
+        _pGsGlobal->Field     = GS_FIELD;
+        _gsk_fb_width         = 640;
+        _gsk_fb_height        = 448;
+        _gsk_vck              = 4;
+        break;
+
     case GSK_VIDMODE_240P:
     default:
         /* NTSC 640x240 progressivo (4:3), 60Hz - nativo SNES/NES.
