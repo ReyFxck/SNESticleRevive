@@ -238,7 +238,7 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
 	   (replaces the #if 0 block above which depended on VersionGetInfo,
 	   itself wrapped in #if 0 inside version.cpp), followed by the
 	   ReyFxck fork credit. */
-	ScrPrintf("SNESticlePS2 v0.3.4   %s  %s", __DATE__, __TIME__);
+	ScrPrintf("SNESticle Revive v1.0.0   %s  %s", __DATE__, __TIME__);
 	ScrPrintf("Copyright (c) 1997-2004 Icer Addis");
 	ScrPrintf("Forked By ReyFxck ~ Thomas R. (2026)");
 
