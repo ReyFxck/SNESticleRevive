@@ -87,9 +87,9 @@ static const char *_MenuEntries[]=
        Using 2px per tick gives a smoother glide than jumping a full
        char width at once. */
 #define BROWSER_MARQUEE_DELAY_FRAMES (18)
-#define BROWSER_MARQUEE_STEP_FRAMES  (5)
+#define BROWSER_MARQUEE_STEP_FRAMES  (3)
 #define BROWSER_MARQUEE_PAUSE_END    (40)
-#define BROWSER_MARQUEE_SCROLL_PX    (2)
+#define BROWSER_MARQUEE_SCROLL_PX    (1)
 
 /* Width of a single space in the current font, used to size the
    marquee gap. We grab it lazily once per Draw() so the cost is one
@@ -217,27 +217,38 @@ static void BrowserCopyMarquee(Char *out, size_t out_size, const Char *src, Int3
 	if (pxOffset > maxOffset)
 		pxOffset = maxOffset;
 
-	/* Find the first char whose cumulative width crosses pxOffset,
-	   then render from there until we fill max_px. */
+	/* Pick the first visible char. */
 	{
-		Int32 cumW = 0;
 		size_t startChar = 0;
-		Char tmp[2] = {0, 0};
 
-		while (src[startChar])
+		if (pxOffset >= maxOffset)
 		{
-			tmp[0] = src[startChar];
-			Int32 cw = FontGetStrWidth(tmp);
-			if (cumW + cw > pxOffset)
-				break;
-			cumW += cw;
-			startChar++;
+			/* End of scroll: show the longest suffix that still fits in
+			   max_px, so the final characters (e.g. the ".nes"
+			   extension) are never clipped off the right edge. Walk the
+			   start forward until the remaining tail fits. */
+			while (src[startChar] &&
+			       FontGetStrWidth(src + startChar) > max_px)
+				startChar++;
+		}
+		else
+		{
+			/* Mid-scroll: first char whose cumulative width crosses
+			   pxOffset. */
+			Int32 cumW = 0;
+			Char  tmp[2] = {0, 0};
+			while (src[startChar])
+			{
+				tmp[0] = src[startChar];
+				Int32 cw = FontGetStrWidth(tmp);
+				if (cumW + cw > pxOffset)
+					break;
+				cumW += cw;
+				startChar++;
+			}
 		}
 
-		/* Now render from startChar, offsetting by the sub-char
-		   remainder (we can not sub-pixel shift with bitmap font,
-		   so we just start from the char that crosses the boundary
-		   and let the slight jitter be negligible at 2px/tick). */
+		/* Render from startChar until we fill max_px (or hit the end). */
 		size_t i = 0;
 		out[0] = '\0';
 		size_t idx = startChar;
