@@ -38,6 +38,8 @@ freely, subject to the following restrictions:
 #define CHUNK_IHDR MAKE_DWORD('I','H','D','R')
 #define CHUNK_IDAT MAKE_DWORD('I','D','A','T')
 #define CHUNK_IEND MAKE_DWORD('I','E','N','D')
+#define CHUNK_PLTE MAKE_DWORD('P','L','T','E')
+#define CHUNK_TRNS MAKE_DWORD('t','R','N','S')
 
 #define FIRST_LENGTH_CODE_INDEX 257
 #define LAST_LENGTH_CODE_INDEX 285
@@ -72,6 +74,7 @@ typedef enum upng_state {
 typedef enum upng_color {
 	UPNG_LUM		= 0,
 	UPNG_RGB		= 2,
+	UPNG_PLT		= 3,
 	UPNG_LUMA		= 4,
 	UPNG_RGBA		= 6
 } upng_color;
@@ -98,6 +101,9 @@ struct upng_t {
 
 	upng_state		state;
 	upng_source		source;
+
+	unsigned char	palette[256 * 4];   /* expanded RGBA palette (indexed PNGs) */
+	unsigned		palette_size;       /* number of PLTE entries (0 = none)    */
 };
 
 typedef struct huffman_tree {
@@ -854,6 +860,17 @@ static upng_format determine_format(upng_t* upng) {
 		default:
 			return UPNG_BADFORMAT;
 		}
+	case UPNG_PLT:
+		/* Indexed/palette. Treat the indices like LUMINANCE of the same
+		   bit depth through the inflate/unfilter pipeline; upng_decode
+		   then expands them through the palette into RGBA8. */
+		switch (upng->color_depth) {
+		case 1:  return UPNG_LUMINANCE1;
+		case 2:  return UPNG_LUMINANCE2;
+		case 4:  return UPNG_LUMINANCE4;
+		case 8:  return UPNG_LUMINANCE8;
+		default: return UPNG_BADFORMAT;
+		}
 	case UPNG_LUMA:
 		switch (upng->color_depth) {
 		case 1:
@@ -1029,6 +1046,25 @@ upng_error upng_decode(upng_t* upng)
 			compressed_size += length;
 		} else if (upng_chunk_type(chunk) == CHUNK_IEND) {
 			break;
+		} else if (upng_chunk_type(chunk) == CHUNK_PLTE) {
+			/* palette: RGB triplets -> our RGBA palette (alpha 255) */
+			unsigned n = (unsigned)(length / 3);
+			unsigned i;
+			if (n > 256) n = 256;
+			for (i = 0; i < n; i++) {
+				upng->palette[i * 4 + 0] = data[i * 3 + 0];
+				upng->palette[i * 4 + 1] = data[i * 3 + 1];
+				upng->palette[i * 4 + 2] = data[i * 3 + 2];
+				upng->palette[i * 4 + 3] = 255;
+			}
+			upng->palette_size = n;
+		} else if (upng_chunk_type(chunk) == CHUNK_TRNS) {
+			/* per-index alpha for palette images */
+			unsigned n = (unsigned)length;
+			unsigned i;
+			if (n > 256) n = 256;
+			for (i = 0; i < n; i++)
+				upng->palette[i * 4 + 3] = data[i];
 		} else if (upng_chunk_critical(chunk)) {
 			SET_ERROR(upng, UPNG_EUNSUPPORTED);
 			return upng->error;
@@ -1099,6 +1135,52 @@ upng_error upng_decode(upng_t* upng)
 	post_process_scanlines(upng, upng->buffer, inflated, upng);
 	free(inflated);
 
+	/* Indexed/palette images: upng->buffer now holds one index byte per
+	   pixel. Expand them through the palette into RGBA8 so callers get a
+	   normal RGBA image (with per-index transparency from tRNS). */
+	if (upng->error == UPNG_EOK && upng->color_type == UPNG_PLT) {
+		unsigned d        = upng->color_depth;            /* 1/2/4/8 bits/index */
+		unsigned mask     = (unsigned)((1u << d) - 1u);
+		unsigned long rowbytes = ((unsigned long)upng->width * d + 7) / 8;
+		unsigned long npix = (unsigned long)upng->width * upng->height;
+		unsigned char *rgba = (unsigned char*)malloc(npix * 4);
+		if (rgba == NULL) {
+			free(upng->buffer);
+			upng->buffer = NULL;
+			upng->size = 0;
+			SET_ERROR(upng, UPNG_ENOMEM);
+		} else {
+			unsigned y, x;
+			unsigned long o = 0;
+			for (y = 0; y < upng->height; y++) {
+				const unsigned char *row = upng->buffer + (unsigned long)y * rowbytes;
+				for (x = 0; x < upng->width; x++) {
+					unsigned idx;
+					if (d == 8) {
+						idx = row[x];
+					} else {
+						unsigned bitpos = x * d;
+						unsigned shift  = 8 - d - (bitpos & 7);
+						idx = (row[bitpos >> 3] >> shift) & mask;
+					}
+					if (idx >= upng->palette_size)
+						idx = 0;
+					rgba[o + 0] = upng->palette[idx * 4 + 0];
+					rgba[o + 1] = upng->palette[idx * 4 + 1];
+					rgba[o + 2] = upng->palette[idx * 4 + 2];
+					rgba[o + 3] = upng->palette[idx * 4 + 3];
+					o += 4;
+				}
+			}
+			free(upng->buffer);
+			upng->buffer      = rgba;
+			upng->size        = npix * 4;
+			upng->color_type  = UPNG_RGBA;
+			upng->color_depth = 8;
+			upng->format      = UPNG_RGBA8;
+		}
+	}
+
 	if (upng->error != UPNG_EOK) {
 		free(upng->buffer);
 		upng->buffer = NULL;
@@ -1139,6 +1221,8 @@ static upng_t* upng_new(void)
 	upng->source.buffer = NULL;
 	upng->source.size = 0;
 	upng->source.owning = 0;
+
+	upng->palette_size = 0;
 
 	return upng;
 }
@@ -1244,6 +1328,8 @@ unsigned upng_get_components(const upng_t* upng)
 		return 1;
 	case UPNG_RGB:
 		return 3;
+	case UPNG_PLT:
+		return 1;   /* one index byte per pixel (pre-expansion) */
 	case UPNG_LUMA:
 		return 2;
 	case UPNG_RGBA:
