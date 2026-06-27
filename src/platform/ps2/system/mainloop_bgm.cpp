@@ -63,9 +63,13 @@ extern "C" {
 #define BGM_SYNTH_RATE  24000
 
 /* Maximo de frames de SAIDA (48 kHz) gerados por chamada de BgmUpdate.
-   ~800 frames = 1 frame de video a 60Hz; 1024 da' folga sem gastar CPU
-   demais.  BGM_SYNTH_MAX e' a metade (frames sintetizados a 24 kHz). */
-#define BGM_OUT_CHUNK   1024
+   4096 = teto do Aud_Enqueue (scratch do audsrv).  Em regime normal so
+   geramos ~800 frames/frame (o que o ring consumiu), barato.  O valor
+   alto serve para RECARREGAR o ring INTEIRO em 1 frame logo depois de um
+   bloqueio da EE (decode de capa PNG, troca de pasta, load de ROM) -- sem
+   isso o ring (~107ms) esvaziava e demorava ~20 frames p/ encher, fazendo
+   a musica engasgar ao navegar.  BGM_SYNTH_MAX e' a metade (24 kHz). */
+#define BGM_OUT_CHUNK   4096
 #define BGM_SYNTH_MAX   (BGM_OUT_CHUNK / 2)
 
 /* Pastas tentadas, em ordem.  BGM_PATH (se definido pelo Makefile) vem
