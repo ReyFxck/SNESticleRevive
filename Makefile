@@ -873,7 +873,8 @@ iso-root: $(TARGET) iso-check
 		  find . -type f \
 			\( -iname '*.smc' -o -iname '*.sfc' -o -iname '*.swc' \
 			   -o -iname '*.fig' -o -iname '*.nes' -o -iname '*.fds' \
-			   -o -iname 'disksys.rom' -o -iname '*.zip' -o -iname '*.gz' \) \
+			   -o -iname 'disksys.rom' -o -iname '*.zip' -o -iname '*.gz' \
+			   -o -iname '*.png' \) \
 			-exec cp -f --parents {} "$(ISO_ROOT_DIR)/ROMS/" \; ) ; \
 		echo "[ ISO-ROOT ] ROMs copied from $(roms)"; \
 	else \
