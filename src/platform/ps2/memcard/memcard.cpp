@@ -63,12 +63,15 @@ int MemCardCreateSave(char *pDir, char *pTitle, Bool bForceWrite)
 	};
 
 	static iconFVECTOR lightcol[3] = {
-		{ 0.3, 0.3, 0.3, 0.00 },
-		{ 0.4, 0.4, 0.4, 0.00 },
-		{ 0.5, 0.5, 0.5, 0.00 },
+		{ 0.25, 0.25, 0.25, 0.00 },
+		{ 0.30, 0.30, 0.30, 0.00 },
+		{ 0.35, 0.35, 0.35, 0.00 },
 	};
 
-	static iconFVECTOR ambient = { 0.50, 0.50, 0.50, 0.00 };
+	/* Ambiente reduzido de 0.50 -> 0.30.  A soma anterior (luzes 1.2 +
+	   ambiente 0.5 = 1.7) estourava o icone em branco/lavado; agora fica
+	   ~1.2 no maximo, revelando o detalhe do SNES. */
+	static iconFVECTOR ambient = { 0.30, 0.30, 0.30, 0.00 };
 
 	printf("MemCard: CreateSave('%s', '%s', force=%d) init=%d\n",
 	       pDir, pTitle, (int)bForceWrite, (int)_MemCard_bInitialized);
