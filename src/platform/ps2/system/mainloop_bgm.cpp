@@ -117,7 +117,7 @@ static int  s_drainWait = 0;           /* frames esperando dreno da cauda */
 /* Frequencias de sintese oferecidas no Video Config (Hz).  Mais alta =
    melhor qualidade e mais CPU (48000 pode derrubar o fps).  32000 e' o
    padrao recomendado.  A saida e' sempre reamostrada para 48 kHz. */
-static const int s_rateList[] = { 16000, 22050, 24000, 32000, 44100, 48000 };
+static const int s_rateList[] = { 16000, 22050, 24000, 32000, 38000, 44100, 48000 };
 #define BGM_RATE_COUNT ((int)(sizeof(s_rateList) / sizeof(s_rateList[0])))
 
 static jar_mod_context_t  s_mod;       /* contexto do tocador de MOD      */
