@@ -54,6 +54,11 @@ void CoverShowCached(const char *romPath);
    so the caller can cap prefetching to one load per frame. */
 Bool CoverPrefetch(const char *romPath);
 
+/* Cycle to the next artwork variant that exists for the current ROM
+   (Game.png -> Game-1.png -> Game-2.png -> ... -> wrap). Bound to Square
+   in the browser. No-op if the ROM has only one image. */
+void CoverCycleVariant(void);
+
 /* Display-state queries for the browser's right-side panel. */
 Bool CoverHasImage(void);   /* a real cover is currently shown      */
 Bool CoverNoImage(void);    /* checked this entry, none found        */

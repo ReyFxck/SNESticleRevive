@@ -1081,7 +1081,12 @@ void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 
 	if (trigger & (PAD_SQUARE))
 	{
-		m_iSelect-= m_MaxLines-1;
+		/* With covers on, Square swaps the artwork (boxart / title /
+		   gameplay). With covers off it keeps its old job: page up. */
+		if (CoverIsEnabled())
+			CoverCycleVariant();
+		else
+			m_iSelect-= m_MaxLines-1;
 	}
 
 	if (trigger & (PAD_CIRCLE))
