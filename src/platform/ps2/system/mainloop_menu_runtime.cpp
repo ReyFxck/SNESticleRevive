@@ -32,6 +32,7 @@
 #include "poly.h"
 #include "memcard.h"
 #include "uiScreen.h"
+#include "mainloop_bgm.h"
 
 extern "C" {
 #include "ps2ip.h"
@@ -121,6 +122,14 @@ void _MenuEnable(Bool bEnable)
 		}
 
 		_bMenu = bEnable;
+
+		/* Saindo do menu (inicio de jogo ou retomada): para a trilha de
+		   fundo e libera o decoder, devolvendo o audsrv ao core do jogo.
+		   Ao reabrir o menu, BgmUpdate() recarrega a faixa sozinho. */
+		if (!bEnable)
+		{
+			BgmStop();
+		}
 
 		/* Restore audsrv output when leaving the menu. The entry-side
 		   mute happens at the top of this function (above the SRAM

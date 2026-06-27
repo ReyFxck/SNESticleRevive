@@ -13,6 +13,7 @@
 #include "mainloop_debug.h"
 #include "mainloop_shared.h"
 #include "mainloop_ui.h"
+#include "mainloop_bgm.h"
 
 #include "types.h"
 #include "console.h"
@@ -256,6 +257,9 @@ void MainLoopRender()
 
 		if (_bMenu)
 		{
+			/* Trilha de fundo do menu: gera/empurra PCM antes de
+			   desenhar.  No-op se desabilitada ou sem faixa. */
+			BgmUpdate();
 			_MenuDraw();
 		} 
 	}

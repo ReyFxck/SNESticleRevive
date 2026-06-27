@@ -150,6 +150,22 @@ endif
 CFLAGS   += $(COVERS_DEF)
 CXXFLAGS += $(COVERS_DEF)
 
+# ---- Trilha de fundo do menu (BGM) -----------------------------------
+# BGM_PATH e' VAZIO por padrao: o emulador procura a 1a faixa .mod/.xm em
+# pastas padrao (mc0:/SNESticle/bgm, mass:/SNESticle/bgm, mass:/bgm,
+# cdfs:/BGM).  Passe um caminho absoluto para uma pasta unica de musicas:
+#     make BGM_PATH=mass:/snes/bgm
+#     make BGM_PATH=mc0:/SNESticle/bgm
+# Esse caminho e' tentado PRIMEIRO; os padrao ficam de fallback.
+BGM_PATH ?=
+ifneq ($(strip $(BGM_PATH)),)
+BGM_DEF := -DBGM_PATH=\"$(BGM_PATH)\"
+else
+BGM_DEF :=
+endif
+CFLAGS   += $(BGM_DEF)
+CXXFLAGS += $(BGM_DEF)
+
 # ---- ps2_drivers feature probe ---------------------------------------
 # init_usb_driver() was respelled to init_usb_driver(bool) in
 # ps2_drivers v2.0 (see ps2dev/ps2_drivers).  We can't tell at build
@@ -209,6 +225,7 @@ INCS := \
 	-I$(CURDIR)/src/nes/system \
 	-I$(CURDIR)/src/third_party/miniz \
 	-I$(CURDIR)/src/third_party/upng \
+	-I$(CURDIR)/src/third_party/jar \
 	-I$(PS2SDK)/common/include \
 	-I$(PS2SDK)/ee/include \
 	-I$(PS2SDK)/ports/include \
@@ -281,6 +298,8 @@ SRCS := \
 	src/third_party/miniz/miniz_tinfl.c \
 	src/third_party/miniz/miniz_zip.c \
 	src/third_party/upng/upng.c \
+	src/third_party/jar/jar_mod.c \
+	src/third_party/jar/jar_xm.c \
 	src/modules/netplay/netplay_ee.c \
 	src/modules/netplay/protocol/netclient.c \
 	src/modules/netplay/protocol/netpacket.c \
@@ -361,6 +380,7 @@ SRCS := \
 	src/platform/ps2/system/mainloop_render.cpp \
 	src/platform/ps2/system/mainloop_process.cpp \
 	src/platform/ps2/system/mainloop_menu_runtime.cpp \
+	src/platform/ps2/system/mainloop_bgm.cpp \
 	src/platform/ps2/system/global_alloc.cpp \
 	src/platform/ps2/system/embedded_irx.cpp \
 	src/nes/core/InfoNES.cpp \
