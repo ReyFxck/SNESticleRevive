@@ -13,6 +13,7 @@ extern "C" {
 #include "gskit_backend.h"
 }
 #include "memcard.h"
+#include "uiCover.h"
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
@@ -22,7 +23,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 8
+#define VIDEOCFG_VERSION 9
 
 typedef struct
 {
@@ -33,6 +34,7 @@ typedef struct
 	Int32  offy;
 	Int32  overscan;
 	Int32  widescreen;
+	Int32  covers;
 } VideoCfgT;
 
 static void _VideoCfgPath(char *pOut)
@@ -53,6 +55,7 @@ void VideoSettingsSave(void)
 	cfg.offy    = g_GskDispOffY;
 	cfg.overscan   = g_GskOverscan;
 	cfg.widescreen = g_GskWidescreen;
+	cfg.covers     = CoverIsEnabled() ? 1 : 0;
 
 	_VideoCfgPath(path);
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -76,6 +79,7 @@ void VideoSettingsLoad(void)
 		if (cfg.offy >= -64 && cfg.offy <= 64) g_GskDispOffY = cfg.offy;
 		if (cfg.overscan >= 0 && cfg.overscan <= 100) g_GskOverscan = cfg.overscan;
 		if (cfg.widescreen == 0 || cfg.widescreen == 1) g_GskWidescreen = cfg.widescreen;
+		if (cfg.covers == 0 || cfg.covers == 1) CoverSetEnabled(cfg.covers ? TRUE : FALSE);
 	}
 }
 
@@ -150,10 +154,12 @@ void CVideoScreen::Draw()
 	_VideoRow(vy, 3, m_iSelect, "Offset X", buf);      vy += 12;
 
 	snprintf(buf, sizeof(buf), "%d", g_GskDispOffY);
-	_VideoRow(vy, 4, m_iSelect, "Offset Y", buf);
+	_VideoRow(vy, 4, m_iSelect, "Offset Y", buf);      vy += 12;
+
+	_VideoRow(vy, 5, m_iSelect, "Cover Art", CoverIsEnabled() ? "On" : "Off");
 
 	/* controls / hints, in the empty middle (clear of the vy=215 footer) */
-	vy = 120;
+	vy = 132;
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
 	_VideoCenter(128, vy, "Up/Down: select   Left/Right: change"); vy += 12;
 	_VideoCenter(128, vy, "X: save     Square: reset offset");     vy += 12;
@@ -169,8 +175,8 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 4; }
-	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 4) m_iSelect = 0; }
+	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 5; }
+	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 5) m_iSelect = 0; }
 
 	if (trigger & PAD_LEFT)  dir = -1;
 	if (trigger & PAD_RIGHT) dir = +1;
@@ -209,6 +215,10 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			if (g_GskDispOffY < -64) g_GskDispOffY = -64;
 			if (g_GskDispOffY >  64) g_GskDispOffY =  64;
 			GSK_SetDisplayOffset(g_GskDispOffX, g_GskDispOffY);
+			break;
+
+		case 5: /* cover art on/off (live; persisted on X like the rest) */
+			CoverToggle();
 			break;
 		}
 	}
