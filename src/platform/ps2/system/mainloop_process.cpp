@@ -39,7 +39,7 @@ extern "C" {
 };
 
 extern "C" {
-#include "sjpcm.h"
+#include "audio.h"
 };
 
 /* DLog is defined in sjpcm_rpc.c. It writes to the EE SIO TX FIFO so
@@ -104,10 +104,10 @@ Bool MainLoopProcess()
             pMixBuffer = &_WavFile;
         } else
         {
-            pMixBuffer = &_SJPCMMix;
+            pMixBuffer = &_AudMix;
         } 
         */                        
-        pMixBuffer = _SJPCMMix;
+        pMixBuffer = _AudMix;
 //                pMixBuffer = NULL;
 
 		// read inputs
@@ -237,7 +237,7 @@ Bool MainLoopProcess()
 		    _iframetex^=1;
         }
 
-        SjPCM_BufferedAsyncStart();
+        Aud_BufferedAsyncStart();
     }
 
     _MainLoopCheckSRAM();

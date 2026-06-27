@@ -51,7 +51,7 @@ extern "C" void DLog(const char *fmt, ...);
 #include "mixbuffer.h"
 #include "wavfile.h"
 #include "snstate.h"
-#include "sjpcmbuffer.h"
+#include "audmixbuffer.h"
 #include "memcard.h"
 
 #include "pathext.h"
@@ -92,7 +92,7 @@ extern "C" {
 };
 
 extern "C" {
-#include "sjpcm.h"
+#include "audio.h"
 };
 
 #include "embedded_irx.h"
@@ -246,7 +246,7 @@ Char *_MainLoop_IOPModulePaths[]=
 	NULL
 };
 
-Bool _MainLoop_bSjPCMReady = FALSE;
+Bool _MainLoop_bAudioReady = FALSE;
 Bool _MainLoop_bMCSaveReady = FALSE;
 
 void _MainLoopLoadModules(Char **ppSearchPaths)
@@ -439,19 +439,19 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	{
 		/* Mirror to screen so the user can see progression even when
 		   SIO is not connected.  If the next ScrPrintf does not appear,
-		   the hang is inside SjPCM_Init -> audsrv_init -> SifBindRpc
+		   the hang is inside Aud_Init -> audsrv_init -> SifBindRpc
 		   (audsrv RPC server never registered, likely sceSd init bug
 		   in whichever SPU2 driver we ended up with). */
-		ScrPrintf("AUDSRV: SjPCM_Init starting...\n");
-		// BOOTLOG("[boot] SjPCM_Init() (audsrv backend)\n");
-		if (SjPCM_Init(0, 960*25, SJPCMMIXBUFFER_MAXENQUEUE) >= 0)
+		ScrPrintf("AUDSRV: Aud_Init starting...\n");
+		// BOOTLOG("[boot] Aud_Init() (audsrv backend)\n");
+		if (Aud_Init(0, 960*25, AUDMIXBUFFER_MAXENQUEUE) >= 0)
 		{
-			_MainLoop_bSjPCMReady = TRUE;
-			// BOOTLOG("[boot] SjPCM_Init done\n");
+			_MainLoop_bAudioReady = TRUE;
+			// BOOTLOG("[boot] Aud_Init done\n");
 		}
 		else
 		{
-			// BOOTLOG("[boot] SjPCM_Init failed\n");
+			// BOOTLOG("[boot] Aud_Init failed\n");
 		}
 	}
 	else

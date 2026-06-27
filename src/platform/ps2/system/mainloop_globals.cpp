@@ -26,7 +26,7 @@
 #include "emumovie.h"
 #include "rendersurface.h"
 #include "texture.h"
-#include "sjpcmbuffer.h"
+#include "audmixbuffer.h"
 #include "wavfile.h"
 
 #include "uiBrowser.h"
@@ -112,7 +112,7 @@ Bool   _MainLoop_SRAMUpdated   = FALSE;
 Bool   _bStateSaved            = FALSE;
 Float32 _MainLoop_fOutputIntensity = 0.8f;
 
-SJPCMMixBuffer *_SJPCMMix;
+AudMixBuffer *_AudMix;
 
 
 /* ---- Flags / counters --------------------------------------------- */

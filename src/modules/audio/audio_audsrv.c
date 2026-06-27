@@ -1,6 +1,6 @@
 /*
     ---------------------------------------------------------------------
-    sjpcm_rpc.c - audsrv-backed reimplementation of the SjPCM EE-side API.
+    audio_audsrv.c - audsrv backend for the Aud_* EE-side audio API.
     ---------------------------------------------------------------------
 
     The original SjPCM library (Nick Van Veen "Sjeep", 2002) talked to a
@@ -19,16 +19,16 @@
         $(PS2SDK)/iop/irx/audsrv.irx
     and is the standard audio service used by SDL, ScummVM, OPL, etc.
 
-    This file keeps the SjPCM_* API surface that SJPCMMixBuffer and
+    This file keeps the Aud_* API surface that AudMixBuffer and
     mainloop_iop.cpp call into, but the backend is now audsrv. Sample
     format is fixed at the SPU2's native 48000 Hz / 16 bit / stereo,
-    which matches what SJPCMMixBuffer already converts the SNES output
+    which matches what AudMixBuffer already converts the SNES output
     to (see src/common/render/sjpcmbuffer.cpp). Left/right separated
     channels are interleaved into a stereo buffer before being passed
     to audsrv_play_audio().
 
     audsrv exposes audsrv_queued() / audsrv_available() (in bytes), so
-    SjPCM_Buffered() / SjPCM_Available() map directly without needing
+    Aud_Buffered() / Aud_Available() map directly without needing
     any time-based estimation.
 */
 
@@ -42,7 +42,7 @@
 #include <audsrv.h>
 #include <sio.h>
 
-#include "sjpcm.h"
+#include "audio.h"
 
 /* ScrPrintf goes to the on-screen log (and stays there during the
    splash). Plain printf on EE-side never reaches the emulator console
@@ -121,31 +121,31 @@ void DLog(const char *fmt, ...)
 
 /*
     Output is fixed 48000 Hz / 16 bit / stereo (SPU2 native).
-    SJPCMMixBuffer already up-samples 32000 Hz SNES audio to 48000 Hz
-    before calling SjPCM_Enqueue, so audsrv runs without any internal
+    AudMixBuffer already up-samples 32000 Hz SNES audio to 48000 Hz
+    before calling Aud_Enqueue, so audsrv runs without any internal
     upsampling.
 */
-#define SJPCM_AUDSRV_FREQ      48000
-#define SJPCM_AUDSRV_BITS      16
-#define SJPCM_AUDSRV_CHANNELS  2
-#define SJPCM_BYTES_PER_SAMPLE (SJPCM_AUDSRV_CHANNELS * (SJPCM_AUDSRV_BITS / 8)) /* 4 */
+#define AUD_AUDSRV_FREQ      48000
+#define AUD_AUDSRV_BITS      16
+#define AUD_AUDSRV_CHANNELS  2
+#define AUD_BYTES_PER_SAMPLE (AUD_AUDSRV_CHANNELS * (AUD_AUDSRV_BITS / 8)) /* 4 */
 
 
 /*
     Static interleave scratch sized for the worst case the engine will
-    ever pass into SjPCM_Enqueue. SJPCMMIXBUFFER_MAXENQUEUE in
+    ever pass into Aud_Enqueue. AUDMIXBUFFER_MAXENQUEUE in
     sjpcmbuffer.h is currently (800 * 5) = 4000 samples per channel.
     Round up to 4096 for alignment headroom.
 */
-#define SJPCM_MAX_ENQUEUE_SAMPLES 4096
-static short _interleave_buf[SJPCM_MAX_ENQUEUE_SAMPLES * SJPCM_AUDSRV_CHANNELS]
+#define AUD_MAX_ENQUEUE_SAMPLES 4096
+static short _interleave_buf[AUD_MAX_ENQUEUE_SAMPLES * AUD_AUDSRV_CHANNELS]
     __attribute__((aligned(64)));
 
 
 static int sjpcm_inited = 0;
 
 
-int SjPCM_Init(int sync, int numsamples, int maxenqueuesamples)
+int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
 {
     struct audsrv_fmt_t fmt;
     int ret;
@@ -178,9 +178,9 @@ int SjPCM_Init(int sync, int numsamples, int maxenqueuesamples)
         return -1;
     }
 
-    fmt.freq     = SJPCM_AUDSRV_FREQ;
-    fmt.bits     = SJPCM_AUDSRV_BITS;
-    fmt.channels = SJPCM_AUDSRV_CHANNELS;
+    fmt.freq     = AUD_AUDSRV_FREQ;
+    fmt.bits     = AUD_AUDSRV_BITS;
+    fmt.channels = AUD_AUDSRV_CHANNELS;
 
     ret = audsrv_set_format(&fmt);
     // DLog("[snes-aud] set_format(48000,16,2) = %d", ret);
@@ -194,7 +194,7 @@ int SjPCM_Init(int sync, int numsamples, int maxenqueuesamples)
         return -1;
     }
 
-    /* Default to full volume. SjPCM_Setvol() may override. */
+    /* Default to full volume. Aud_Setvol() may override. */
     ret = audsrv_set_volume(MAX_VOLUME);
     // DLog("[snes-aud] set_volume(%d) = %d", MAX_VOLUME, ret);
     ScrPrintf("audsrv set_volume = %d\n", ret);
@@ -204,7 +204,7 @@ int SjPCM_Init(int sync, int numsamples, int maxenqueuesamples)
 }
 
 
-void SjPCM_Quit(void)
+void Aud_Quit(void)
 {
     if (!sjpcm_inited) return;
     audsrv_stop_audio();
@@ -216,23 +216,23 @@ void SjPCM_Quit(void)
 /*
     The original API was pause/play; audsrv plays continuously while
     samples are queued, so Play is effectively "make sure not stopped"
-    and Pause is "drop the queue". SjPCMMixBuffer calls
-    SjPCM_Clearbuff() + SjPCM_Play() once at boot.
+    and Pause is "drop the queue". AudMixBuffer calls
+    Aud_Clearbuff() + Aud_Play() once at boot.
 */
-void SjPCM_Play(void)
+void Aud_Play(void)
 {
     /* nothing to do - audsrv plays as soon as samples are enqueued */
 }
 
 
-void SjPCM_Pause(void)
+void Aud_Pause(void)
 {
     if (!sjpcm_inited) return;
     audsrv_stop_audio();
 }
 
 
-void SjPCM_Clearbuff(void)
+void Aud_Clearbuff(void)
 {
     if (!sjpcm_inited) return;
     audsrv_stop_audio();
@@ -240,11 +240,11 @@ void SjPCM_Clearbuff(void)
 
 
 /*
-    SjPCM_Setvol took a 14-bit hardware-style volume (0..0x3FFF) where
+    Aud_Setvol took a 14-bit hardware-style volume (0..0x3FFF) where
     0x3FFF was full scale. audsrv's volume is 0..MAX_VOLUME (100), so
     rescale.
 */
-void SjPCM_Setvol(unsigned int volume)
+void Aud_Setvol(unsigned int volume)
 {
     int v;
 
@@ -261,10 +261,10 @@ void SjPCM_Setvol(unsigned int volume)
 
 /*
     Bytes already queued in audsrv's IOP-side ring buffer, expressed as
-    stereo sample-frames so the math in SJPCMMixBuffer::GetOutputSamples
+    stereo sample-frames so the math in AudMixBuffer::GetOutputSamples
     keeps working unchanged.
 */
-int SjPCM_Buffered(void)
+int Aud_Buffered(void)
 {
     int bytes;
 
@@ -273,11 +273,11 @@ int SjPCM_Buffered(void)
     bytes = audsrv_queued();
     if (bytes < 0) return 0;
 
-    return bytes / SJPCM_BYTES_PER_SAMPLE;
+    return bytes / AUD_BYTES_PER_SAMPLE;
 }
 
 
-int SjPCM_Available(void)
+int Aud_Available(void)
 {
     int bytes;
 
@@ -286,7 +286,7 @@ int SjPCM_Available(void)
     bytes = audsrv_available();
     if (bytes < 0) return 0;
 
-    return bytes / SJPCM_BYTES_PER_SAMPLE;
+    return bytes / AUD_BYTES_PER_SAMPLE;
 }
 
 
@@ -296,14 +296,14 @@ int SjPCM_Available(void)
     (audsrv_wait_audio) and best-effort (drop overflow if the IOP ring
     is full).
 */
-void SjPCM_Enqueue(short *left, short *right, int size, int wait)
+void Aud_Enqueue(short *left, short *right, int size, int wait)
 {
     int i;
     int bytes;
 
     if (!sjpcm_inited) return;
     if (size <= 0) return;
-    if (size > SJPCM_MAX_ENQUEUE_SAMPLES) size = SJPCM_MAX_ENQUEUE_SAMPLES;
+    if (size > AUD_MAX_ENQUEUE_SAMPLES) size = AUD_MAX_ENQUEUE_SAMPLES;
 
     for (i = 0; i < size; i++)
     {
@@ -311,7 +311,7 @@ void SjPCM_Enqueue(short *left, short *right, int size, int wait)
         _interleave_buf[i * 2 + 1] = right[i];
     }
 
-    bytes = size * SJPCM_BYTES_PER_SAMPLE;
+    bytes = size * AUD_BYTES_PER_SAMPLE;
 
     if (wait)
     {
@@ -323,31 +323,31 @@ void SjPCM_Enqueue(short *left, short *right, int size, int wait)
 
 
 /*
-    The original async API let SjPCMMixBuffer overlap RPC traffic with
+    The original async API let AudMixBuffer overlap RPC traffic with
     the next SNES frame via a SIF callback + semaphore handshake.
     audsrv_play_audio is already non-blocking when there is room in the
     ring buffer, and audsrv_wait_audio handles back-pressure when there
     isn't, so the async path collapses into the synchronous one.
 */
-void SjPCM_BufferedAsyncStart(void)
+void Aud_BufferedAsyncStart(void)
 {
     /* nothing to do - audsrv tracks queued bytes internally */
 }
 
 
-int SjPCM_BufferedAsyncGet(void)
+int Aud_BufferedAsyncGet(void)
 {
-    return SjPCM_Buffered();
+    return Aud_Buffered();
 }
 
 
-void SjPCM_EnqueueAsync(short *left, short *right, int size)
+void Aud_EnqueueAsync(short *left, short *right, int size)
 {
-    SjPCM_Enqueue(left, right, size, 0);
+    Aud_Enqueue(left, right, size, 0);
 }
 
 
-void SjPCM_Wait(void)
+void Aud_Wait(void)
 {
     /* audsrv ring-buffer back-pressure is handled inside Enqueue via
        audsrv_wait_audio when the caller passes wait=1, so there is no
@@ -355,7 +355,7 @@ void SjPCM_Wait(void)
 }
 
 
-int SjPCM_IsInitialized(void)
+int Aud_IsInitialized(void)
 {
     return sjpcm_inited;
 }

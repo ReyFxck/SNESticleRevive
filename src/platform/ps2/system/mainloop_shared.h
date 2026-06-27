@@ -23,7 +23,7 @@
 #include "emumovie.h"
 #include "rendersurface.h"
 #include "texture.h"
-#include "sjpcmbuffer.h"
+#include "audmixbuffer.h"
 #include "wavfile.h"
 #include "uiBrowser.h"
 #include "uiNetwork.h"
@@ -119,7 +119,7 @@ extern Bool            _MainLoop_bDiskInserted;
 extern Uint8           _RomData[8 * 1024 * 1024 + 1024];
 extern CRenderSurface *_fbTexture[2];
 extern TextureT        _OutTex;
-extern SJPCMMixBuffer *_SJPCMMix;
+extern AudMixBuffer *_AudMix;
 
 /* TBP (256-byte units) of the SNES output texture (_OutTex) and the
    blender's per-frame scratchpad slab. Both are populated by

@@ -42,7 +42,7 @@ extern "C" {
 };
 
 extern "C" {
-#include "sjpcm.h"
+#include "audio.h"
 };
 
 
@@ -68,10 +68,10 @@ void _MenuEnable(Bool bEnable)
 		   blocking calls, silences both the legitimate tail and the
 		   drone. The matching unmute on menu exit is at the bottom
 		   of this function. See the unmute comment for why we mute
-		   via SjPCM_Setvol rather than SjPCM_Clearbuff. */
-		if (bEnable && _MainLoop_bSjPCMReady)
+		   via Aud_Setvol rather than Aud_Clearbuff. */
+		if (bEnable && _MainLoop_bAudioReady)
 		{
-			SjPCM_Setvol(0);
+			Aud_Setvol(0);
 		}
 
 		// if menu is enabled, then attempt to save sram immediately
@@ -127,24 +127,24 @@ void _MenuEnable(Bool bEnable)
 		   save block) so the modal-printf loops there also play
 		   silent; we only handle the leave side here.
 
-		   We mute via SjPCM_Setvol(0) rather than SjPCM_Clearbuff
+		   We mute via Aud_Setvol(0) rather than Aud_Clearbuff
 		   (audsrv_stop_audio) because the latter sets audsrv's
 		   `playing` flag to 0, which freezes the IOP-side readpos
 		   and writepos and prevents audsrv_available() from ever
-		   advancing. The next SjPCM_Enqueue(...,wait=1) issued by
-		   SJPCMMixBuffer::Flush after the menu is dismissed then
+		   advancing. The next Aud_Enqueue(...,wait=1) issued by
+		   AudMixBuffer::Flush after the menu is dismissed then
 		   deadlocks inside audsrv_wait_audio, which is what made the
 		   audio stay dead until an emulator reset. Volume mute keeps
 		   audsrv in its normal playing state: the queue keeps
 		   draining, audsrv_wait_audio stays unblocked, and audio
 		   resumes the moment the SNES core writes new samples after
 		   the menu is closed. 0x3FFF is full scale in the 14-bit
-		   SjPCM_Setvol scale (rescaled to audsrv's MAX_VOLUME). Gated
-		   on _MainLoop_bSjPCMReady for symmetry with the boot
+		   Aud_Setvol scale (rescaled to audsrv's MAX_VOLUME). Gated
+		   on _MainLoop_bAudioReady for symmetry with the boot
 		   sequence in mainloop_init.cpp. */
-		if (!bEnable && _MainLoop_bSjPCMReady)
+		if (!bEnable && _MainLoop_bAudioReady)
 		{
-			SjPCM_Setvol(0x3FFF);
+			Aud_Setvol(0x3FFF);
 		}
 	}
 }

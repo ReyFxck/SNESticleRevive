@@ -185,7 +185,7 @@ INCS := \
 	-I$(CURDIR)/src/modules/mcsave \
 	-I$(CURDIR)/src/modules/netplay \
 	-I$(CURDIR)/src/modules/netplay/protocol \
-	-I$(CURDIR)/src/modules/sjpcm \
+	-I$(CURDIR)/src/modules/audio \
 	-I$(CURDIR)/src/platform/ps2 \
 	-I$(CURDIR)/src/platform/ps2/cdvd \
 	-I$(CURDIR)/src/platform/ps2/common \
@@ -297,8 +297,8 @@ SRCS := \
 	src/common/debug/proflog.c \
 	src/platform/ps2/lowlevel/ps2dma.c \
 	src/common/render/rendersurface.cpp \
-	src/common/render/sjpcmbuffer.cpp \
-	src/modules/sjpcm/sjpcm_rpc.c \
+	src/common/render/audmixbuffer.cpp \
+	src/modules/audio/audio_audsrv.c \
 	src/snes/cpu/sn65816.S \
 	src/snes/cpu/sncpu.c \
 	src/snes/cpu/sncpu_c.c \

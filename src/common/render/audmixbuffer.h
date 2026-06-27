@@ -1,16 +1,16 @@
 
-#ifndef _SJPCMBUFFER_H
-#define _SJPCMBUFFER_H
+#ifndef _AUDMIXBUFFER_H
+#define _AUDMIXBUFFER_H
 
 
 #include "mixbuffer.h"
 
 
-#define SJPCMMIXBUFFER_MAXENQUEUE (800*5)
+#define AUDMIXBUFFER_MAXENQUEUE (800*5)
 
-class SJPCMMixBuffer : public CMixBuffer
+class AudMixBuffer : public CMixBuffer
 {
-    Int16   m_OutData[2][SJPCMMIXBUFFER_MAXENQUEUE] _ALIGN(16);
+    Int16   m_OutData[2][AUDMIXBUFFER_MAXENQUEUE] _ALIGN(16);
     Int32   m_nOutSamples;
 
     Int32   m_iPrevSample[2];
@@ -24,7 +24,7 @@ class SJPCMMixBuffer : public CMixBuffer
 
 
 public:
-    SJPCMMixBuffer(Uint32 uSampleRate = 48000, Bool bAsync = FALSE);
+    AudMixBuffer(Uint32 uSampleRate = 48000, Bool bAsync = FALSE);
 
     void SetSampleRate(Uint32 uSampleRate) {m_uSampleRate = uSampleRate;}
 	Uint32 GetLastOutput() {return m_uLastOutput;}

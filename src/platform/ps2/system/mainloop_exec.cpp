@@ -86,7 +86,7 @@ Bool _ExecuteSnes(CRenderSurface *pSurface, CMixBuffer *pMixBuffer, Emu::SysInpu
             #endif
 
 
-//  		    _pSnes->ExecuteFrame(&Input, NULL, &_SJPCMMix);
+//  		    _pSnes->ExecuteFrame(&Input, NULL, &_AudMix);
 //  		    _pSnes->ExecuteFrame(&Input, pSurface, NULL);
         #endif
 

@@ -16,7 +16,7 @@
 #include "snes.h"
 #include "rendersurface.h"
 #include "texture.h"
-#include "sjpcmbuffer.h"
+#include "audmixbuffer.h"
 #include "emumovie.h"
 #include "mainloop_load.h"
 
@@ -462,5 +462,5 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 
 void _MainLoopSetSampleRate(Uint32 uSampleRate)
 {
-    _SJPCMMix->SetSampleRate(uSampleRate);
+    _AudMix->SetSampleRate(uSampleRate);
 }

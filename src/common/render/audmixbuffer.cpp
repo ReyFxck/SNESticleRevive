@@ -3,11 +3,11 @@
 #include "types.h"
 #include "prof.h"
 #include "mixbuffer.h"
-#include "sjpcmbuffer.h"
+#include "audmixbuffer.h"
 #include <string.h>
 
 extern "C" {
-#include "sjpcm.h"
+#include "audio.h"
 };
 
 /* Defined in sjpcm_rpc.c. Writes to EE SIO so the line shows up in
@@ -15,7 +15,7 @@ extern "C" {
 extern "C" void DLog(const char *fmt, ...);
 
 
-SJPCMMixBuffer::SJPCMMixBuffer(Uint32 uSampleRate, Bool bAsync)
+AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
 {
     m_iPrevSample[0]=0;
     m_iPrevSample[1]=0;
@@ -25,7 +25,7 @@ SJPCMMixBuffer::SJPCMMixBuffer(Uint32 uSampleRate, Bool bAsync)
 }
 
 
-void SJPCMMixBuffer::GetFormat(Uint32 *puSampleRate, Uint32 *pnSampleBits, Uint32 *pnChannels)
+void AudMixBuffer::GetFormat(Uint32 *puSampleRate, Uint32 *pnSampleBits, Uint32 *pnChannels)
 {
 	*puSampleRate = m_uSampleRate;
 	*pnSampleBits = 16;
@@ -33,22 +33,22 @@ void SJPCMMixBuffer::GetFormat(Uint32 *puSampleRate, Uint32 *pnSampleBits, Uint3
 }
 
 
-Int32 SJPCMMixBuffer::GetOutputSamples()
+Int32 AudMixBuffer::GetOutputSamples()
 {
     Int32 nSamples;
     Int32 nRaw;
 
-    if (!SjPCM_IsInitialized())
+    if (!Aud_IsInitialized())
     {
         return 0;
     }
 
-    PROF_ENTER("SjPCM_Available");
+    PROF_ENTER("Aud_Available");
 
     /*
      * Ask the audsrv backend how many sample-frames the IOP ring
      * buffer can accept RIGHT NOW.  This replaces the old formula
-     *     nRaw = 4 * 800 - SjPCM_Buffered();
+     *     nRaw = 4 * 800 - Aud_Buffered();
      * which assumed the ring buffer held exactly 3200 frames.
      * audsrv uses a 20480-byte (5120-frame) ring, and
      * audsrv_queued() can report a non-zero initial occupancy
@@ -56,12 +56,12 @@ Int32 SJPCMMixBuffer::GetOutputSamples()
      * chronically under-produced audio (~424 samples/frame
      * instead of the ~533 needed at 32 kHz / 60 fps).
      *
-     * SjPCM_Available() -> audsrv_available() / 4  gives the
+     * Aud_Available() -> audsrv_available() / 4  gives the
      * real free space.  We cap at 3200 so a single frame never
      * tries to mix more than the old worst-case, keeping EE CPU
      * load bounded.
      */
-    nRaw = SjPCM_Available();
+    nRaw = Aud_Available();
     if (nRaw > 4 * 800) nRaw = 4 * 800;
     nRaw &= ~3;
     if (nRaw < 0) nRaw = 0;
@@ -74,7 +74,7 @@ Int32 SJPCMMixBuffer::GetOutputSamples()
         default:    nSamples = 0;                   break;
     }
 
-    PROF_LEAVE("SjPCM_Available");
+    PROF_LEAVE("Aud_Available");
 
     m_uLastOutput  = nSamples;
     return nSamples;
@@ -113,7 +113,7 @@ Int32 SJPCMMixBuffer::GetOutputSamples()
  * per video frame this affects at most 3 output samples per frame
  * out of ~1200 (~0.25%), which is inaudible.
  */
-Int32 SJPCMMixBuffer::ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples, Int32 *pPrevSample)
+Int32 AudMixBuffer::ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples, Int32 *pPrevSample)
 {
     Int32 hist = *pPrevSample;
     Int16 *pOutStart = pOut;
@@ -173,21 +173,21 @@ Int32 SJPCMMixBuffer::ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples
 }
 
 
-Int32 SJPCMMixBuffer::ConvertSamplesStereo_32000(Int16 *pLeftSamples, Int16 *pRightSamples, Int16 *pOutLeft, Int16 *pOutRight, Int32 nInSamples)
+Int32 AudMixBuffer::ConvertSamplesStereo_32000(Int16 *pLeftSamples, Int16 *pRightSamples, Int16 *pOutLeft, Int16 *pOutRight, Int32 nInSamples)
 {
     Int32 nOutSamples;
 
-    if (nInSamples > SJPCMMIXBUFFER_MAXENQUEUE*2/3) nInSamples = SJPCMMIXBUFFER_MAXENQUEUE*2/3;
+    if (nInSamples > AUDMIXBUFFER_MAXENQUEUE*2/3) nInSamples = AUDMIXBUFFER_MAXENQUEUE*2/3;
 
-    PROF_ENTER("SjPCM_Convert");
+    PROF_ENTER("Aud_Convert");
     ConvertSamples2to3(pOutLeft, pLeftSamples, nInSamples, &m_iPrevSample[0]);
     nOutSamples=ConvertSamples2to3(pOutRight, pRightSamples, nInSamples, &m_iPrevSample[1]);
-    PROF_LEAVE("SjPCM_Convert");
+    PROF_LEAVE("Aud_Convert");
 
     return nOutSamples;
 }
 
-void SJPCMMixBuffer::OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSamples, Int32 nSamples)
+void AudMixBuffer::OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSamples, Int32 nSamples)
 {
     Int16 *pOutLeft, *pOutRight;
     Int32 nOutSamples;
@@ -208,7 +208,7 @@ void SJPCMMixBuffer::OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSampl
     }
 
     // check for buffer overflow 
-    if ((m_nOutSamples + nOutSamples) > SJPCMMIXBUFFER_MAXENQUEUE)
+    if ((m_nOutSamples + nOutSamples) > AUDMIXBUFFER_MAXENQUEUE)
     {
         return;
     }
@@ -234,7 +234,7 @@ void SJPCMMixBuffer::OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSampl
     }
 }
 
-void SJPCMMixBuffer::Flush()
+void AudMixBuffer::Flush()
 {
     Int32 nOutSamples;
 
@@ -251,22 +251,22 @@ void SJPCMMixBuffer::Flush()
             nOutSamples &= ~1;
         }
 
-        if (nOutSamples > SJPCMMIXBUFFER_MAXENQUEUE)
+        if (nOutSamples > AUDMIXBUFFER_MAXENQUEUE)
         {
             // uh oh
             #if CODE_DEBUG
             printf("Sample buffer overflow! %d\n", nOutSamples);
             #endif
-            nOutSamples = SJPCMMIXBUFFER_MAXENQUEUE;
+            nOutSamples = AUDMIXBUFFER_MAXENQUEUE;
         }
 
 
         if (m_bAsync)
         {
-            SjPCM_EnqueueAsync(m_OutData[0], m_OutData[1], nOutSamples);
+            Aud_EnqueueAsync(m_OutData[0], m_OutData[1], nOutSamples);
         } else
         {
-            SjPCM_Enqueue(m_OutData[0], m_OutData[1], nOutSamples,1);
+            Aud_Enqueue(m_OutData[0], m_OutData[1], nOutSamples,1);
         }
     }
 
@@ -275,7 +275,7 @@ void SJPCMMixBuffer::Flush()
 
 
 
-void SJPCMMixBuffer::OutputSamplesMono(Int16 *pSamples,Int32 nSamples)
+void AudMixBuffer::OutputSamplesMono(Int16 *pSamples,Int32 nSamples)
 {
     OutputSamplesStereo(pSamples, pSamples, nSamples);
 }

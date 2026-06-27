@@ -37,7 +37,7 @@
 #include "mixbuffer.h"
 #include "wavfile.h"
 #include "snstate.h"
-#include "sjpcmbuffer.h"
+#include "audmixbuffer.h"
 #include "memcard.h"
 #include "pathext.h"
 #include "snppucolor.h"
@@ -77,7 +77,7 @@ extern "C" {
 };
 
 extern "C" {
-#include "sjpcm.h"
+#include "audio.h"
 };
 
 extern "C" Int32 SNCPUExecute_ASM(SNCpuT *pCpu);

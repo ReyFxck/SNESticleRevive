@@ -336,7 +336,7 @@ void InfoNES_SoundInit( void )
 int InfoNES_SoundOpen( int samples_per_sync, int sample_rate )
 {
     /* The audsrv/SPU2 stream is brought up by the platform at boot
-       (SjPCM_Init in mainloop_iop.cpp) and handed to us per-frame as
+       (Aud_Init in mainloop_iop.cpp) and handed to us per-frame as
        g_pNesMixBuffer, so there is nothing to open here.  We DO keep
        the NES sample rate: InfoNES_SoundOutput needs it to resample at
        a constant ratio (NES rate -> mix-buffer rate) so the pitch is

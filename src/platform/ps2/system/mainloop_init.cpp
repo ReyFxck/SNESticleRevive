@@ -33,7 +33,7 @@
 #include "font.h"
 #include "poly.h"
 #include "texture.h"
-#include "sjpcmbuffer.h"
+#include "audmixbuffer.h"
 #include "pathext.h"
 #include "snppucolor.h"
 #include "emumovie.h"
@@ -56,7 +56,7 @@ extern "C" {
 };
 
 extern "C" {
-#include "sjpcm.h"
+#include "audio.h"
 };
 
 #include "uiBrowser.h"
@@ -294,7 +294,7 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
 	   the now-deleted VramAlloc helper. gsKit owns the GS-side VRAM
 	   allocator (gskit_backend.c::GSK_VramAllocTBP) so there is
 	   nothing left to initialise here. */
-_SJPCMMix = new SJPCMMixBuffer(32000, TRUE);
+_AudMix = new AudMixBuffer(32000, TRUE);
 	#if CODE_DEBUG
     printf("MainLoopInit\n");
 	#endif
@@ -424,13 +424,13 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 	// load rom
 	_MainLoopExecuteFile(_pRomFile, TRUE);
         _bMenu = _pSystem ? FALSE : TRUE;
-        if (_MainLoop_bSjPCMReady)
+        if (_MainLoop_bAudioReady)
         {
-            SjPCM_Clearbuff();
-            SjPCM_Play();
+            Aud_Clearbuff();
+            Aud_Play();
         }
 	// BOOTLOG("[boot] MainLoopInit: leave (bMenu=%d, sjpcm=%d, mcsave=%d)\n",
-	// 	(int)_bMenu, (int)_MainLoop_bSjPCMReady, (int)_MainLoop_bMCSaveReady);
+	// 	(int)_bMenu, (int)_MainLoop_bAudioReady, (int)_MainLoop_bMCSaveReady);
 
 /*
     if (!_WavFile.Open(_pSnesWavFileName, 32000, 16, 2))

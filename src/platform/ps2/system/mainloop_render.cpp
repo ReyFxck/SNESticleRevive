@@ -230,7 +230,7 @@ void MainLoopRender()
 		*/
 		}
 
-//			FontPrintf(195, 210, "%8d", _SJPCMMix.GetLastOutput());
+//			FontPrintf(195, 210, "%8d", _AudMix.GetLastOutput());
     }
 
 

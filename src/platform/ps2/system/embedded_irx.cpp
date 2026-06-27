@@ -41,7 +41,7 @@ struct EmbeddedEntry
    load via SifExecModuleBuffer but their RPC entry points never came
    up or came up incompatibly with the rom-resident services already
    bound by main.cpp / the BIOS, and the matching EE-side init function
-   (CDVD_Init, SjPCM_Init, MCSave_Init) would spin forever in
+   (CDVD_Init, Aud_Init, MCSave_Init) would spin forever in
    SifBindRpc and deadlock the boot.  Each one has been replaced with
    a modern PS2SDK-based path:
 

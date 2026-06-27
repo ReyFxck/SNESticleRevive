@@ -413,8 +413,8 @@ const char *NesSystem::GetString(StringE eString)
 Uint32 NesSystem::GetSampleRate()
 {
     /* IMPORTANTE: este valor configura a TAXA DE ENTRADA do
-       SJPCMMixBuffer (via _MainLoopSetSampleRate -> SetSampleRate).
-       O backend SjPCM/SPU2 toca SEMPRE a 48000 Hz, e o mix buffer so'
+       AudMixBuffer (via _MainLoopSetSampleRate -> SetSampleRate).
+       O backend audsrv/SPU2 toca SEMPRE a 48000 Hz, e o mix buffer so'
        sabe converter de {48000 (passthrough), 32000 (upsample cubico
        2:3), 24000 (1:2)} para 48000.  Qualquer outra taxa cai no
        'default' do switch em OutputSamplesStereo() e as amostras sao
