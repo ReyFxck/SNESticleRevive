@@ -940,12 +940,6 @@ void CBrowserScreen::Draw()
 		}
 	}
 
-	/* Bottom hint for the cover-art toggle (R2). L1/R1 are taken by the
-	   mainloop for screen cycling, so we use R2 here. */
-	FontSelect(0);
-	FontColor4f(0.45f, 0.75f, 0.75f, 1.0f);
-	FontPrintf(4, 230, "R2: Capas %s", CoverIsEnabled() ? "ON" : "OFF");
-
 	FontSelect(0);
 
 	if (m_bSubMenu)
@@ -966,14 +960,6 @@ void CBrowserScreen::Process()
 
 void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 {
-	/* R2 toggles cover art on/off (L1/R1 are consumed by the mainloop
-	   for screen cycling and never reach us). Works whether or not the
-	   file submenu is open. */
-	if (trigger & PAD_R2)
-	{
-		CoverToggle();
-	}
-
 	if (trigger & PAD_SELECT)
 	{
 		m_bSubMenu = !m_bSubMenu;
