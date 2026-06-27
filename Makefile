@@ -132,6 +132,24 @@ VERSION_DEFS := $(APP_VERSION_DEF) -DBUILD_DATE=\"$(BUILD_DATE)\" -DBUILD_TIME=\
 CFLAGS   += $(VERSION_DEFS)
 CXXFLAGS += $(VERSION_DEFS)
 
+# ---- Cover art (capas) -----------------------------------------------
+# COVERS_PATH e' VAZIO por padrao: o emulador procura a capa <rom>.png ao
+# lado da propria ROM (e tambem em subpastas covers/ e Named_Boxarts/).
+# Passe um caminho absoluto para usar uma pasta unica de capas,
+# independentemente de onde a ROM esteja, ex.:
+#     make COVERS_PATH=mass:/snes/covers
+#     make COVERS_PATH=mc0:/SNESticle/covers
+# A capa procurada nessa pasta sera "<COVERS_PATH>/<nome-da-rom>.png"
+# (esse caminho e' tentado PRIMEIRO; os relativos a ROM ficam de fallback).
+COVERS_PATH ?=
+ifneq ($(strip $(COVERS_PATH)),)
+COVERS_DEF := -DCOVERS_PATH=\"$(COVERS_PATH)\"
+else
+COVERS_DEF :=
+endif
+CFLAGS   += $(COVERS_DEF)
+CXXFLAGS += $(COVERS_DEF)
+
 # ---- ps2_drivers feature probe ---------------------------------------
 # init_usb_driver() was respelled to init_usb_driver(bool) in
 # ps2_drivers v2.0 (see ps2dev/ps2_drivers).  We can't tell at build

@@ -31,11 +31,15 @@ void CoverToggle(void);
 
 /* Load the cover for a ROM, given its full path (e.g.
    "mass:/snes/Super Mario World (USA).sfc"). Tries, in order:
+       $(COVERS_PATH)/<base>.png   (only if built with -DCOVERS_PATH)
        <dir>/<base>.png
        <dir>/covers/<base>.png
        <dir>/Named_Boxarts/<base>.png
-   where <base> is the file name without extension. Reloading the same
-   path is a cheap no-op. Returns TRUE if a cover is now loaded. */
+   where <base> is the file name without extension. The COVERS_PATH
+   build parameter (Makefile: make COVERS_PATH=mass:/snes/covers) points
+   at a single shared cover folder used regardless of the ROM location.
+   Reloading the same path is a cheap no-op. Returns TRUE if a cover is
+   now loaded. */
 Bool CoverLoadForRomPath(const char *pRomPath);
 
 /* Drop the currently-loaded cover (e.g. when a directory is selected

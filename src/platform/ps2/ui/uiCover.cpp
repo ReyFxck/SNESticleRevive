@@ -231,6 +231,22 @@ Bool CoverLoadForRomPath(const char *pRomPath)
 	if (dot)
 		*dot = '\0';
 
+#ifdef COVERS_PATH
+	/* Build-time configured cover folder (Makefile: COVERS_PATH=...).
+	   Tried first so a single shared folder works regardless of where
+	   the ROM lives. Normalize the join so a path ending in '/' or a
+	   bare device like "mass:" does not get a doubled / missing slash. */
+	{
+		const char *cp = COVERS_PATH;
+		size_t cl = strlen(cp);
+		if (cl > 0 && (cp[cl - 1] == '/' || cp[cl - 1] == ':'))
+			snprintf(cand, sizeof(cand), "%s%s.png", cp, base);
+		else
+			snprintf(cand, sizeof(cand), "%s/%s.png", cp, base);
+		if (_TryLoadFile(cand)) return TRUE;
+	}
+#endif
+
 	snprintf(cand, sizeof(cand), "%s%s.png", dir, base);
 	if (_TryLoadFile(cand)) return TRUE;
 
