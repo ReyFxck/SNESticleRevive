@@ -77,6 +77,13 @@ extern "C" {
    soltar o tracker, para nao ouvir SNES/NES junto com a trilha. ~5ms. */
 #define BGM_DRAIN_THRESH 256
 
+/* Maximo de frames esperando a cauda do jogo drenar antes de soltar o
+   tracker.  No boot o audsrv_queued() reporta uma ocupacao inicial
+   "fantasma" que nunca drena; sem este timeout a musica so' comecava
+   depois de entrar num jogo e voltar.  ~12 frames (~200ms) cobrem a cauda
+   real (~107ms) e destravam o caso do boot. */
+#define BGM_DRAIN_MAXFRAMES 12
+
 /* Pastas tentadas, em ordem.  BGM_PATH (se definido pelo Makefile) vem
    primeiro.  A primeira faixa .mod/.xm encontrada e' tocada. */
 static const char *s_dirs[] = {
@@ -103,7 +110,15 @@ enum BgmStateE {
 
 static int  s_state    = BGM_UNTRIED;
 static int  s_volume   = 100;          /* 0 = off; 1..100 (Video Config)  */
+static int  s_rate     = BGM_RATE;     /* taxa de sintese (Hz), Video Config */
 static Bool s_volSet   = FALSE;        /* ja' firmamos o volume p/ tocar? */
+static int  s_drainWait = 0;           /* frames esperando dreno da cauda */
+
+/* Frequencias de sintese oferecidas no Video Config (Hz).  Mais alta =
+   melhor qualidade e mais CPU (48000 pode derrubar o fps).  32000 e' o
+   padrao recomendado.  A saida e' sempre reamostrada para 48 kHz. */
+static const int s_rateList[] = { 16000, 22050, 24000, 32000, 44100, 48000 };
+#define BGM_RATE_COUNT ((int)(sizeof(s_rateList) / sizeof(s_rateList[0])))
 
 static jar_mod_context_t  s_mod;       /* contexto do tocador de MOD      */
 static jar_xm_context_t  *s_xm  = NULL;/* contexto do tocador de XM       */
@@ -211,7 +226,7 @@ static void _TryLoad(void)
     if (kind == 1) /* MOD */
     {
         jar_mod_init(&s_mod);                 /* defaults: 48000/16/stereo */
-        jar_mod_setcfg(&s_mod, BGM_RATE, 16, 1, 1, 1); /* 48kHz nativo */
+        jar_mod_setcfg(&s_mod, s_rate, 16, 1, 1, 1); /* taxa de sintese */
         if (jar_mod_load_file(&s_mod, path) != 0)
         {
             s_state = BGM_MOD;                /* jar_mod faz loop sozinho  */
@@ -227,7 +242,7 @@ static void _TryLoad(void)
         long len = 0;
         s_xmBuf = _LoadFileAlloc(path, &len);
         if (s_xmBuf &&
-            jar_xm_create_context_safe(&s_xm, s_xmBuf, (size_t)len, BGM_RATE) == 0)
+            jar_xm_create_context_safe(&s_xm, s_xmBuf, (size_t)len, s_rate) == 0)
         {
             jar_xm_set_max_loop_count(s_xm, 0); /* 0 = loop infinito       */
             s_state = BGM_XM;
@@ -251,6 +266,7 @@ static void _BgmFree(void)
     if (s_xmBuf) { free(s_xmBuf); s_xmBuf = NULL; }
     s_state  = BGM_UNTRIED;
     s_volSet = FALSE;
+    s_drainWait = 0;
 }
 
 void BgmStop(void)
@@ -261,6 +277,7 @@ void BgmStop(void)
        entrada no menu (esperar a cauda de audio do jogo drenar antes de
        soltar o tracker).  A liberacao real acontece em BgmSetVolume(0). */
     s_volSet = FALSE;
+    s_drainWait = 0;
 }
 
 void BgmSetVolume(int vol)
@@ -289,6 +306,33 @@ int BgmGetVolume(void)
     return s_volume;
 }
 
+int BgmGetRate(void)
+{
+    return s_rate;
+}
+
+void BgmSetRate(int hz)
+{
+    if (hz < 8000)  hz = 8000;
+    if (hz > 48000) hz = 48000;
+    if (hz == s_rate) return;
+    s_rate = hz;
+    /* recarrega o decoder na nova taxa: _BgmFree zera o estado e o proximo
+       BgmUpdate recarrega em s_rate. */
+    if (s_state == BGM_MOD || s_state == BGM_XM) _BgmFree();
+}
+
+void BgmCycleRate(int dir)
+{
+    int i, idx = 3; /* fallback ~32000 */
+    for (i = 0; i < BGM_RATE_COUNT; i++)
+        if (s_rateList[i] == s_rate) { idx = i; break; }
+    idx += (dir < 0) ? -1 : 1;
+    if (idx < 0)               idx = BGM_RATE_COUNT - 1;
+    if (idx >= BGM_RATE_COUNT)  idx = 0;
+    BgmSetRate(s_rateList[idx]);
+}
+
 void BgmUpdate(void)
 {
     int avail, n, synthN, j;
@@ -305,8 +349,17 @@ void BgmUpdate(void)
        enquanto ainda nao firmamos o volume desta sessao de menu. */
     if (!s_volSet)
     {
-        if (Aud_Buffered() > BGM_DRAIN_THRESH)
-            return;                 /* ainda drenando a cauda do jogo */
+        /* Espera a cauda do jogo drenar, mas com TIMEOUT: no boot o
+           audsrv_queued() reporta uma ocupacao inicial "fantasma" que
+           nunca drena -- sem o timeout a musica so' comecava depois de
+           entrar num jogo e voltar.  O timeout cobre a cauda real (~107ms)
+           e destrava o caso do boot. */
+        if (Aud_Buffered() > BGM_DRAIN_THRESH && s_drainWait < BGM_DRAIN_MAXFRAMES)
+        {
+            s_drainWait++;
+            return;
+        }
+        s_drainWait = 0;
         Aud_Setvol((unsigned int)(s_volume * 0x3FFF / 100)); /* volume do menu */
         s_volSet = TRUE;
     }
@@ -318,12 +371,12 @@ void BgmUpdate(void)
     if (n > BGM_OUT_CHUNK - 2) n = BGM_OUT_CHUNK - 2;
     if (n < 1) return;
 
-    /* frames a sintetizar na taxa BGM_RATE p/ render n frames @48k (+guarda) */
-    synthN = (int)(((unsigned int)n * (unsigned int)BGM_RATE) / 48000u) + 2;
+    /* frames a sintetizar na taxa s_rate p/ render n frames @48k (+guarda) */
+    synthN = (int)(((unsigned int)n * (unsigned int)s_rate) / 48000u) + 2;
     if (synthN > BGM_OUT_CHUNK) synthN = BGM_OUT_CHUNK;
     if (synthN < 2) synthN = 2;
 
-    /* gera synthN frames interleaved (L,R,...) a BGM_RATE em s_inter */
+    /* gera synthN frames interleaved (L,R,...) a s_rate em s_inter */
     if (s_state == BGM_MOD)
     {
         jar_mod_fillbuffer(&s_mod, s_inter, (unsigned long)synthN, NULL);
@@ -343,10 +396,10 @@ void BgmUpdate(void)
         }
     }
 
-    /* reamostra BGM_RATE -> 48 kHz (linear, ponto fixo 16.16) e
+    /* reamostra s_rate -> 48 kHz (linear, ponto fixo 16.16) e
        desinterleava para L/R (Aud_Enqueue reinterleava). */
     {
-        unsigned int step = (unsigned int)(((unsigned int)BGM_RATE << 16) / 48000u);
+        unsigned int step = (unsigned int)(((unsigned int)s_rate << 16) / 48000u);
         unsigned int pos  = 0;
         for (j = 0; j < n; j++)
         {

@@ -41,6 +41,12 @@ void BgmStop(void);
 void BgmSetVolume(int vol);
 int  BgmGetVolume(void);
 
+/* Frequencia de sintese (Hz).  A saida e' sempre 48 kHz (reamostrada).
+   BgmCycleRate(+1/-1) percorre a lista de frequencias oferecidas. */
+int  BgmGetRate(void);
+void BgmSetRate(int hz);
+void BgmCycleRate(int dir);
+
 #ifdef __cplusplus
 }
 #endif

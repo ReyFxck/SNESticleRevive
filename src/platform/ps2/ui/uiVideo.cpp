@@ -24,7 +24,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 10
+#define VIDEOCFG_VERSION 11
 
 typedef struct
 {
@@ -37,6 +37,7 @@ typedef struct
 	Int32  widescreen;
 	Int32  covers;
 	Int32  bgmvol;     /* volume da trilha de menu: 0=off, 1..100 */
+	Int32  bgmrate;    /* frequencia de sintese da trilha (Hz)     */
 } VideoCfgT;
 
 static void _VideoCfgPath(char *pOut)
@@ -59,6 +60,7 @@ void VideoSettingsSave(void)
 	cfg.widescreen = g_GskWidescreen;
 	cfg.covers     = CoverIsEnabled() ? 1 : 0;
 	cfg.bgmvol     = BgmGetVolume();
+	cfg.bgmrate    = BgmGetRate();
 
 	_VideoCfgPath(path);
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -84,6 +86,7 @@ void VideoSettingsLoad(void)
 		if (cfg.widescreen == 0 || cfg.widescreen == 1) g_GskWidescreen = cfg.widescreen;
 		if (cfg.covers == 0 || cfg.covers == 1) CoverSetEnabled(cfg.covers ? TRUE : FALSE);
 		if (cfg.bgmvol >= 0 && cfg.bgmvol <= 100) BgmSetVolume(cfg.bgmvol);
+		if (cfg.bgmrate >= 8000 && cfg.bgmrate <= 48000) BgmSetRate(cfg.bgmrate);
 	}
 }
 
@@ -169,10 +172,13 @@ void CVideoScreen::Draw()
 		if (bv <= 0) snprintf(buf, sizeof(buf), "Off");
 		else         snprintf(buf, sizeof(buf), "%d", bv);
 	}
-	_VideoRow(vy, 6, m_iSelect, "Menu Music", buf);
+	_VideoRow(vy, 6, m_iSelect, "Menu Music", buf); vy += 12;
+
+	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
+	_VideoRow(vy, 7, m_iSelect, "Frequency", buf);
 
 	/* controls / hints, in the empty middle (clear of the vy=215 footer) */
-	vy = 170;
+	vy = 175;
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
 	_VideoCenter(128, vy, "Up/Down: select   Left/Right: change"); vy += 12;
 	_VideoCenter(128, vy, "X: save     Square: reset offset");     vy += 12;
@@ -188,8 +194,8 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 6; }
-	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 6) m_iSelect = 0; }
+	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 7; }
+	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 7) m_iSelect = 0; }
 
 	if (trigger & PAD_LEFT)  dir = -1;
 	if (trigger & PAD_RIGHT) dir = +1;
@@ -241,6 +247,10 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				if (v > 100) v = 100;
 				BgmSetVolume(v);
 			}
+			break;
+
+		case 7: /* frequencia de sintese da trilha (cicla a lista) */
+			BgmCycleRate(dir);
 			break;
 		}
 	}
