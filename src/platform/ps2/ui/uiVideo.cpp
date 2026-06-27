@@ -15,6 +15,7 @@ extern "C" {
 #include "memcard.h"
 #include "uiCover.h"
 #include "mainloop_bgm.h"
+#include "audmixbuffer.h"
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
@@ -24,7 +25,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 11
+#define VIDEOCFG_VERSION 12
 
 typedef struct
 {
@@ -38,6 +39,7 @@ typedef struct
 	Int32  covers;
 	Int32  bgmvol;     /* volume da trilha de menu: 0=off, 1..100 */
 	Int32  bgmrate;    /* frequencia de sintese da trilha (Hz)     */
+	Int32  gamevol;    /* volume do audio do jogo (SNES/NES): 0..100 */
 } VideoCfgT;
 
 static void _VideoCfgPath(char *pOut)
@@ -61,6 +63,7 @@ void VideoSettingsSave(void)
 	cfg.covers     = CoverIsEnabled() ? 1 : 0;
 	cfg.bgmvol     = BgmGetVolume();
 	cfg.bgmrate    = BgmGetRate();
+	cfg.gamevol    = AudMixGameGetVolume();
 
 	_VideoCfgPath(path);
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -87,6 +90,7 @@ void VideoSettingsLoad(void)
 		if (cfg.covers == 0 || cfg.covers == 1) CoverSetEnabled(cfg.covers ? TRUE : FALSE);
 		if (cfg.bgmvol >= 0 && cfg.bgmvol <= 100) BgmSetVolume(cfg.bgmvol);
 		if (cfg.bgmrate >= 8000 && cfg.bgmrate <= 48000) BgmSetRate(cfg.bgmrate);
+		if (cfg.gamevol >= 0 && cfg.gamevol <= 100) AudMixGameSetVolume(cfg.gamevol);
 	}
 }
 
@@ -167,18 +171,21 @@ void CVideoScreen::Draw()
 
 	_VideoHeader(vy, "Audio"); vy += 14;
 
+	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
+	_VideoRow(vy, 6, m_iSelect, "Game Volume", buf); vy += 12;
+
 	{
 		int bv = BgmGetVolume();
 		if (bv <= 0) snprintf(buf, sizeof(buf), "Off");
 		else         snprintf(buf, sizeof(buf), "%d", bv);
 	}
-	_VideoRow(vy, 6, m_iSelect, "Menu Music", buf); vy += 12;
+	_VideoRow(vy, 7, m_iSelect, "Menu Music", buf); vy += 12;
 
 	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
-	_VideoRow(vy, 7, m_iSelect, "Frequency", buf);
+	_VideoRow(vy, 8, m_iSelect, "Frequency", buf);
 
 	/* controls / hints, in the empty middle (clear of the vy=215 footer) */
-	vy = 175;
+	vy = 178;
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
 	_VideoCenter(128, vy, "Up/Down: select   Left/Right: change"); vy += 12;
 	_VideoCenter(128, vy, "X: save     Square: reset offset");     vy += 12;
@@ -194,8 +201,8 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 7; }
-	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 7) m_iSelect = 0; }
+	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 8; }
+	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 8) m_iSelect = 0; }
 
 	if (trigger & PAD_LEFT)  dir = -1;
 	if (trigger & PAD_RIGHT) dir = +1;
@@ -240,7 +247,16 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			CoverToggle();
 			break;
 
-		case 6: /* menu music volume 0..100 (0 = off), step 1, live */
+		case 6: /* game (emulator) audio volume 0..100, step 1, live */
+			{
+				int v = AudMixGameGetVolume() + dir;
+				if (v < 0)   v = 0;
+				if (v > 100) v = 100;
+				AudMixGameSetVolume(v);
+			}
+			break;
+
+		case 7: /* menu music volume 0..100 (0 = off), step 1, live */
 			{
 				int v = BgmGetVolume() + dir;
 				if (v < 0)   v = 0;
@@ -249,7 +265,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 
-		case 7: /* frequencia de sintese da trilha (cicla a lista) */
+		case 8: /* frequencia de sintese da trilha (cicla a lista) */
 			BgmCycleRate(dir);
 			break;
 		}

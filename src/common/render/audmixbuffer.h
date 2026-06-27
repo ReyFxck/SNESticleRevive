@@ -37,6 +37,17 @@ public:
 };
 
 
+/* Game (emulator) audio volume: 0..100, where 100 = the build's base gain.
+   Shared by SNES and NES (single _AudMix).  Exposed for the Video Config. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void AudMixGameSetVolume(int vol);
+int  AudMixGameGetVolume(void);
+#ifdef __cplusplus
+}
+#endif
+
 
 #endif
 

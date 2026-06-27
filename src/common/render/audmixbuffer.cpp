@@ -14,12 +14,31 @@ extern "C" {
    the emulator log alongside [snes-aud] enq#... entries. */
 extern "C" void DLog(const char *fmt, ...);
 
-/* Output gain. The SPU2/audsrv volume is already at 100%, so to make
-   the output louder (closer to players like RetroArch) we raise the PCM
-   amplitude here, with int16 saturation (loud games clip rather than
-   wrap around). 100 = unity, 200 = 2x (+6 dB). Lower this if some loud
-   game sounds distorted; raise it for more headroom-light games. */
-#define AUDMIXBUFFER_GAIN_PCT 200
+/* Output gain for the emulated game audio (SNES/NES). The SPU2/audsrv
+   volume is already at 100%, so to match players like Snes9x/RetroArch we
+   raise the PCM amplitude here, with int16 saturation (loud games clip
+   rather than wrap around).
+
+   The user-facing "Game Volume" (Video Config) is 0..100, where 100 maps
+   to AUDMIXBUFFER_BASE_GAIN_PCT (the loudness this build shipped with) and
+   0 mutes:  gainPct = s_gameVolume * BASE / 100.  This single AudMixBuffer
+   instance (_AudMix) is shared by SNES and NES, so the control applies to
+   both. */
+#define AUDMIXBUFFER_BASE_GAIN_PCT 200
+
+static int s_gameVolume = 100;   /* 0..100 (Video Config); 100 = base gain */
+
+extern "C" void AudMixGameSetVolume(int vol)
+{
+    if (vol < 0)   vol = 0;
+    if (vol > 100) vol = 100;
+    s_gameVolume = vol;
+}
+
+extern "C" int AudMixGameGetVolume(void)
+{
+    return s_gameVolume;
+}
 
 
 AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
@@ -267,24 +286,27 @@ void AudMixBuffer::Flush()
             nOutSamples = AUDMIXBUFFER_MAXENQUEUE;
         }
 
-#if AUDMIXBUFFER_GAIN_PCT != 100
-        /* Apply output gain with saturation, just before enqueue, so it
-           covers every sample rate path (32k resampled and 48k passthrough). */
+        /* Apply the Game Volume gain with saturation, just before enqueue,
+           so it covers every sample-rate path (32k resampled and 48k
+           passthrough).  gainPct==100 (Game Volume 50) is unity -> skip. */
         {
-            Int32 ch, i;
-            for (ch = 0; ch < 2; ch++)
+            Int32 gainPct = (s_gameVolume * AUDMIXBUFFER_BASE_GAIN_PCT) / 100;
+            if (gainPct != 100)
             {
-                Int16 *p = m_OutData[ch];
-                for (i = 0; i < nOutSamples; i++)
+                Int32 ch, i;
+                for (ch = 0; ch < 2; ch++)
                 {
-                    Int32 v = ((Int32)p[i] * AUDMIXBUFFER_GAIN_PCT) / 100;
-                    if (v >  32767) v =  32767;
-                    if (v < -32768) v = -32768;
-                    p[i] = (Int16)v;
+                    Int16 *p = m_OutData[ch];
+                    for (i = 0; i < nOutSamples; i++)
+                    {
+                        Int32 v = ((Int32)p[i] * gainPct) / 100;
+                        if (v >  32767) v =  32767;
+                        if (v < -32768) v = -32768;
+                        p[i] = (Int16)v;
+                    }
                 }
             }
         }
-#endif
 
         if (m_bAsync)
         {
