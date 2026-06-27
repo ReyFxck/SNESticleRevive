@@ -10,9 +10,16 @@ extern "C" {
 #include "audio.h"
 };
 
-/* Defined in sjpcm_rpc.c. Writes to EE SIO so the line shows up in
+/* Defined in audio_audsrv.c. Writes to EE SIO so the line shows up in
    the emulator log alongside [snes-aud] enq#... entries. */
 extern "C" void DLog(const char *fmt, ...);
+
+/* Output gain. The SPU2/audsrv volume is already at 100%, so to make
+   the output louder (closer to players like RetroArch) we raise the PCM
+   amplitude here, with int16 saturation (loud games clip rather than
+   wrap around). 100 = unity, 200 = 2x (+6 dB). Lower this if some loud
+   game sounds distorted; raise it for more headroom-light games. */
+#define AUDMIXBUFFER_GAIN_PCT 200
 
 
 AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
@@ -260,6 +267,24 @@ void AudMixBuffer::Flush()
             nOutSamples = AUDMIXBUFFER_MAXENQUEUE;
         }
 
+#if AUDMIXBUFFER_GAIN_PCT != 100
+        /* Apply output gain with saturation, just before enqueue, so it
+           covers every sample rate path (32k resampled and 48k passthrough). */
+        {
+            Int32 ch, i;
+            for (ch = 0; ch < 2; ch++)
+            {
+                Int16 *p = m_OutData[ch];
+                for (i = 0; i < nOutSamples; i++)
+                {
+                    Int32 v = ((Int32)p[i] * AUDMIXBUFFER_GAIN_PCT) / 100;
+                    if (v >  32767) v =  32767;
+                    if (v < -32768) v = -32768;
+                    p[i] = (Int16)v;
+                }
+            }
+        }
+#endif
 
         if (m_bAsync)
         {
