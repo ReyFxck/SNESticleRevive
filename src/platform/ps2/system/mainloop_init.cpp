@@ -240,7 +240,7 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
 	   ReyFxck fork credit. */
 	ScrPrintf("SNESticle Revive v1.0.0   %s  %s", __DATE__, __TIME__);
 	ScrPrintf("Copyright (c) 1997-2004 Icer Addis");
-	ScrPrintf("Forked By ReyFxck ~ Thomas R. (2026)");
+	ScrPrintf("Forked By ReyFxck - Thomas R. (2026)");
 
 	ScrPrintf("BootPath: %s", MainGetBootPath());
 	ScrPrintf("BootDir: %s", MainGetBootDir());
