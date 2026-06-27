@@ -257,9 +257,14 @@ void MainLoopRender()
 
 		if (_bMenu)
 		{
-			/* Trilha de fundo do menu: gera/empurra PCM antes de
-			   desenhar.  No-op se desabilitada ou sem faixa. */
-			BgmUpdate();
+			/* Trilha de fundo do menu: so "arma" (comeca a tocar)
+			   depois que a tela de message log do boot der lugar ao
+			   browser pela 1a vez.  Depois disso toca sempre. */
+			static Bool s_bgmArmed = FALSE;
+			if ((void *)_MainLoop_pScreen == (void *)_MainLoop_pBrowserScreen)
+				s_bgmArmed = TRUE;
+			if (s_bgmArmed)
+				BgmUpdate();
 			_MenuDraw();
 		} 
 	}
