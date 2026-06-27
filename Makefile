@@ -166,6 +166,13 @@ endif
 CFLAGS   += $(BGM_DEF)
 CXXFLAGS += $(BGM_DEF)
 
+# Taxa de sintese da trilha de menu (Hz).  A saida e' sempre reamostrada
+# para 48 kHz.  24000 = leve (garante 60fps), 32000 = meio-termo (padrao),
+# 48000 = nativo (mais pesado).  Ex.:  make BGM_RATE=24000
+BGM_RATE ?= 32000
+CFLAGS   += -DBGM_RATE=$(BGM_RATE)
+CXXFLAGS += -DBGM_RATE=$(BGM_RATE)
+
 # ---- ps2_drivers feature probe ---------------------------------------
 # init_usb_driver() was respelled to init_usb_driver(bool) in
 # ps2_drivers v2.0 (see ps2dev/ps2_drivers).  We can't tell at build
