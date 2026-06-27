@@ -176,8 +176,9 @@ void CVideoScreen::Draw()
 
 	{
 		int bv = BgmGetVolume();
-		if (bv <= 0) snprintf(buf, sizeof(buf), "Off");
-		else         snprintf(buf, sizeof(buf), "%d", bv);
+		if (bv <= 0)                 snprintf(buf, sizeof(buf), "Off");
+		else if (BgmTrackCount() <= 0) snprintf(buf, sizeof(buf), "No Track");
+		else                         snprintf(buf, sizeof(buf), "%d", bv);
 	}
 	_VideoRow(vy, 7, m_iSelect, "Menu Music", buf); vy += 12;
 

@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <dirent.h>
 
 #include "types.h"
@@ -124,6 +125,16 @@ static jar_mod_context_t  s_mod;       /* contexto do tocador de MOD      */
 static jar_xm_context_t  *s_xm  = NULL;/* contexto do tocador de XM       */
 static char              *s_xmBuf = NULL; /* buffer do arquivo .xm (vivo) */
 
+/* Indice (cache) de TODAS as faixas .mod/.xm achadas -- escaneado UMA vez
+   (sem reler o disco toda hora).  s_trackIdx aponta a faixa atual; e'
+   sorteada no boot para dar variedade sem custo de reload (trocar de
+   faixa releria do disco, lento no memory card -> traria a travadinha). */
+#define BGM_INDEX_MAX 64
+typedef struct { char path[256]; int kind; } BgmTrackT; /* kind 1=mod 2=xm */
+static BgmTrackT s_index[BGM_INDEX_MAX];
+static int       s_indexCount = -1;    /* -1 = ainda nao escaneado */
+static int       s_trackIdx   = 0;     /* faixa atual no indice    */
+
 /* buffers de geracao (estaticos: evitam pressao de pilha na EE) */
 static short s_inter[BGM_OUT_CHUNK * 2] __attribute__((aligned(64))); /* 48k L,R,L,R */
 static float s_xmf  [BGM_OUT_CHUNK * 2] __attribute__((aligned(64))); /* scratch XM float */
@@ -150,12 +161,15 @@ static Bool _HasExt(const char *name, const char *ext)
     return TRUE;
 }
 
-/* Acha a 1a faixa .mod/.xm nas pastas candidatas.  Preenche outPath e
-   retorna 1 (MOD) / 2 (XM); 0 se nada achado. */
-static int _FindTrack(char *outPath, size_t cap)
+/* Escaneia as pastas candidatas UMA vez e indexa todas as faixas
+   .mod/.xm achadas (so' os nomes/caminhos -- barato).  Sorteia uma faixa
+   inicial (variedade por boot, sem custo de reload). */
+static void _BuildIndex(void)
 {
     size_t d;
-    for (d = 0; d < BGM_NUM_DIRS; d++)
+
+    s_indexCount = 0;
+    for (d = 0; d < BGM_NUM_DIRS && s_indexCount < BGM_INDEX_MAX; d++)
     {
         DIR *pDir;
         struct dirent *pEnt;
@@ -165,20 +179,28 @@ static int _FindTrack(char *outPath, size_t cap)
         pDir = opendir(s_dirs[d]);
         if (!pDir) continue;
 
-        while ((pEnt = readdir(pDir)) != NULL)
+        while ((pEnt = readdir(pDir)) != NULL && s_indexCount < BGM_INDEX_MAX)
         {
             int kind = 0;
             if (_HasExt(pEnt->d_name, ".mod")) kind = 1;
             else if (_HasExt(pEnt->d_name, ".xm")) kind = 2;
             if (!kind) continue;
 
-            snprintf(outPath, cap, "%s/%s", s_dirs[d], pEnt->d_name);
-            closedir(pDir);
-            return kind;
+            snprintf(s_index[s_indexCount].path, sizeof(s_index[0].path),
+                     "%s/%s", s_dirs[d], pEnt->d_name);
+            s_index[s_indexCount].kind = kind;
+            s_indexCount++;
         }
         closedir(pDir);
     }
-    return 0;
+
+    /* faixa inicial pseudo-aleatoria (clock varia conforme o tempo de
+       boot); se nao houver entropia, cai no indice 0 -- sem problema. */
+    if (s_indexCount > 0)
+    {
+        unsigned int seed = (unsigned int)clock();
+        s_trackIdx = (int)(seed % (unsigned int)s_indexCount);
+    }
 }
 
 /* Le um arquivo inteiro para um buffer malloc'd.  Retorna NULL em erro. */
@@ -213,15 +235,15 @@ static char *_LoadFileAlloc(const char *path, long *outLen)
 
 static void _TryLoad(void)
 {
-    char path[320];
+    const char *path;
     int  kind;
 
-    kind = _FindTrack(path, sizeof(path));
-    if (kind == 0)
-    {
-        s_state = BGM_FAILED;
-        return;
-    }
+    if (s_indexCount < 0) _BuildIndex();
+    if (s_indexCount == 0) { s_state = BGM_FAILED; return; }
+    if (s_trackIdx < 0 || s_trackIdx >= s_indexCount) s_trackIdx = 0;
+
+    path = s_index[s_trackIdx].path;
+    kind = s_index[s_trackIdx].kind;
 
     if (kind == 1) /* MOD */
     {
@@ -304,6 +326,14 @@ void BgmSetVolume(int vol)
 int BgmGetVolume(void)
 {
     return s_volume;
+}
+
+int BgmTrackCount(void)
+{
+    /* escaneia o indice na 1a chamada (cacheado depois) para o menu poder
+       mostrar "No Track" quando nao ha arquivos. */
+    if (s_indexCount < 0) _BuildIndex();
+    return s_indexCount;
 }
 
 int BgmGetRate(void)
