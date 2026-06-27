@@ -6,30 +6,28 @@
  *
  *   1. Directory INDEX: when the browser enters a folder we list the
  *      candidate cover directories ONCE (opendir/readdir) and remember
- *      every "*.png" file name in RAM. Answering "does ROM X have a
- *      cover?" is then a pure in-memory string compare - zero fopen per
- *      ROM, which keeps scrolling smooth even on a cdfs ISO.
+ *      every "*.png" file name in RAM, tagged with which folder it came
+ *      from. "Does ROM X have a cover?" is then a pure in-memory string
+ *      compare - no fopen per ROM, so scrolling stays smooth on a CD.
  *
  *   2. Image CACHE: decoded + scaled 256x256 covers kept in a bounded
  *      LRU pool, so revisiting / prefetched entries display instantly.
  *
- * Image variants: pressing Square cycles through the artwork a ROM has,
- * using the common "-N" suffix convention (boxart / title / gameplay):
- *      Game.png      (variant 0, the default boxart)
- *      Game-1.png    (variant 1)
- *      Game-2.png    (variant 2) ...
- * Only the variants that actually exist are visited.
+ * Cover sources (same base name as the ROM). Searched both next to the
+ * ROM and, if built with -DCOVERS_PATH, in that shared folder; each can
+ * also use the libretro thumbnail subfolders:
+ *      <dir>/<rom>.png                      (plain, next to the ROM)
+ *      <dir>/Named_Boxarts/<rom>.png        (libretro box art)
+ *      <dir>/Named_Titles/<rom>.png         (libretro title screen)
+ *      <dir>/Named_Snaps/<rom>.png          (libretro gameplay snap)
+ *      <dir>/<rom>-1.png, <rom>-2.png ...   (extra images)
+ * Square cycles through whichever of these exist for the selected ROM.
  *
- * Transparency: PNG alpha is honoured (mapped to the GS 0..0x80 range)
- * and the cover is drawn with blending on, so transparent logos show
- * the panel through their see-through areas.
- *
- * Candidate cover directories (same base name as the ROM):
- *      $(COVERS_PATH)/    (only if built with -DCOVERS_PATH)
- *      <rom directory>/
+ * PNG decode is upng (zlib license): RGB/RGBA 8/16-bit, grayscale, and
+ * palette/indexed. Interlaced (Adam7) is not supported.
  *
  * Index and cache are malloc'd lazily and freed on disable and on ROM
- * launch (CoverFreeCache). PNG decode is upng (zlib license).
+ * launch (CoverFreeCache).
  *
  * NOTE (untested on real PS2): the cover texture lives in a hard-coded
  * VRAM slot from the legacy GS layout (COVER_TEX in mainloop_init.cpp).
@@ -55,32 +53,28 @@ extern "C" {
 
 extern "C" void DLog(const char *fmt, ...);
 
-/* Force the GS texture cache to be flushed before the next textured
-   primitive. Defined in gskit_backend.c. We call it right before the
-   cover draw so a freshly re-uploaded cover (same VRAM address as the
-   previous one) is never served stale texels by the GS - the classic
-   "first texture shows, later ones don't" PS2 bug. */
+/* Flush the GS texture cache before the next textured primitive (the
+   "first texture shows, later ones don't" PS2 bug). */
 extern "C" void GSK_InvalidateTextureCache(void);
 
-/* Fixed cover texture size (power-of-two for the GS sampler). 256 keeps
-   it close to 1:1 with the on-screen panel so it is not blocky; bilinear
-   filtering (set in CoverInit) smooths the rest. */
 #define COVER_TEX_W 256
 #define COVER_TEX_H 256
 #define COVER_RGBA_BYTES (COVER_TEX_W * COVER_TEX_H * 4)
 
-/* Decoded-image LRU cache. 256x256 RGBA = 256 KB/slot. 16 slots = 4 MB
-   (menu only; freed on launch/off). */
 #define COVER_CACHE_SLOTS 16
 #define COVER_KEY_MAX     1024
 
-/* Directory index. */
 #define COVER_INDEX_MAX   2048
 #define COVER_NAME_MAX    208
-#define COVER_DIRS_MAX    2
+/* up to two bases (COVERS_PATH + ROM dir) x 4 kinds (root + 3 libretro) */
+#define COVER_DIRS_MAX    8
+/* max distinct artwork images we list per ROM (boxart/title/snap + -N) */
+#define COVER_FOUND_MAX   12
+/* highest "-N" suffix variant we look for */
+#define COVER_SUFFIX_MAX  9
 
-/* Highest "-N" variant we look for (0 = base boxart). */
-#define COVER_VARIANT_MAX 9
+/* Directory "kinds" - which thumbnail role a scanned folder plays. */
+enum { DK_ROOT = 0, DK_BOX, DK_TITLE, DK_SNAP };
 
 typedef struct
 {
@@ -97,7 +91,6 @@ typedef struct
 	char  name[COVER_NAME_MAX];
 } CoverIdxT;
 
-typedef enum { RES_UNKNOWN = 0, RES_FOUND, RES_NONE } ResolveE;
 typedef enum { COVER_PENDING = 0, COVER_HASIMG, COVER_NOIMG } CoverStateE;
 
 /* ---- module state -------------------------------------------------- */
@@ -109,7 +102,9 @@ static CoverIdxT *s_index    = 0;
 static Int32      s_indexCount = 0;
 static char       s_indexDir[COVER_KEY_MAX] = "";
 static char       s_dirs[COVER_DIRS_MAX][COVER_KEY_MAX];
+static Uint8      s_dirKind[COVER_DIRS_MAX];
 static Int32      s_nDirs    = 0;
+static Uint32     s_indexGen = 0;   /* bumped every time the index is rebuilt */
 
 static Uint32   s_uVramTBP   = 0;
 static Bool     s_bEnabled   = FALSE;
@@ -121,8 +116,14 @@ static Int32       s_dispW   = 0;
 static Int32       s_dispH   = 0;
 static char        s_vramKey[COVER_KEY_MAX] = "";
 
-static int  s_variant = 0;                  /* current artwork variant   */
-static char s_curRom[COVER_KEY_MAX] = "";   /* ROM the variant belongs to */
+/* Per-ROM list of artwork that actually exists (full paths), and which
+   one is currently shown (the variant index). */
+static char    s_found[COVER_FOUND_MAX][COVER_KEY_MAX];
+static int     s_foundCount = 0;
+static char    s_foundRom[COVER_KEY_MAX] = "";
+static Uint32  s_foundGen   = 0xFFFFFFFFu;
+static int     s_variant    = 0;
+static char    s_curRom[COVER_KEY_MAX] = "";
 
 /* ---- path helpers -------------------------------------------------- */
 
@@ -152,15 +153,12 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
                        Int32 *pW, Int32 *pH)
 {
 	unsigned outW, outH, x, y;
-	unsigned bps = (bd == 16) ? 2u : 1u;     /* bytes per channel sample */
-	unsigned stride = comp * bps;            /* bytes per source pixel   */
+	unsigned bps = (bd == 16) ? 2u : 1u;
+	unsigned stride = comp * bps;
 
 	if (!dst || !src || sw == 0 || sh == 0)
 		return FALSE;
 
-	/* Clear first: the aspect-fit image leaves unused area, and the
-	   bilinear sampler reads one texel past the edge - an uninitialised
-	   border would show a fringe. Cleared to fully-transparent black. */
 	memset(dst, 0, COVER_RGBA_BYTES);
 
 	if ((unsigned)(sw * COVER_TEX_H) >= (unsigned)(sh * COVER_TEX_W)) {
@@ -182,11 +180,7 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
 			unsigned sxi = (x * sw) / outW;
 			const unsigned char *p = src + ((unsigned long)syi * sw + sxi) * stride;
 			Uint8 r, g, b, a;
-
-			/* Read each channel's high byte (16-bit) or byte (8-bit),
-			   then expand to RGBA by component count:
-			     1 = grayscale, 2 = gray+alpha, 3 = RGB, 4 = RGBA. */
-			#define CH(i) (p[(i) * bps])     /* bps=2 -> big-endian high byte */
+			#define CH(i) (p[(i) * bps])
 			if (comp <= 2) {
 				r = g = b = CH(0);
 				a = (comp == 2) ? CH(1) : 0xFF;
@@ -195,12 +189,9 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
 				a = (comp == 4) ? CH(3) : 0xFF;
 			}
 			#undef CH
-
 			d[x * 4 + 0] = r;
 			d[x * 4 + 1] = g;
 			d[x * 4 + 2] = b;
-			/* GS treats texel alpha 0x80 as fully opaque (1.0); map the
-			   source 0..255 alpha into 0..0x80. */
 			d[x * 4 + 3] = (Uint8)(((unsigned)a * 128u) / 255u);
 		}
 	}
@@ -223,10 +214,6 @@ static Bool _DecodeFileInto(const char *path, Uint8 *dst, Int32 *pW, Int32 *pH)
 	if (upng_get_error(u) != UPNG_EOK) { upng_free(u); return FALSE; }
 	if (upng_decode(u) != UPNG_EOK)    { upng_free(u); return FALSE; }
 
-	/* upng decodes grayscale (8-bit), gray+alpha (8-bit), and RGB/RGBA
-	   at 8 OR 16 bits per channel. We handle all of those (16-bit takes
-	   the high byte). Sub-byte (1/2/4-bit) grayscale, palette/indexed
-	   and interlaced PNGs are NOT decodable by upng -> skipped. */
 	comp = upng_get_components(u);
 	bd   = upng_get_bitdepth(u);
 	if ((bd != 8 && bd != 16) || comp < 1 || comp > 4) {
@@ -275,6 +262,26 @@ static void _ScanDir(int dirIdx, const char *path)
 	closedir(dir);
 }
 
+static void _AddDir(const char *path, int kind)
+{
+	if (s_nDirs >= COVER_DIRS_MAX)
+		return;
+	snprintf(s_dirs[s_nDirs], COVER_KEY_MAX, "%s", path);
+	s_dirKind[s_nDirs] = (Uint8)kind;
+	_ScanDir(s_nDirs, s_dirs[s_nDirs]);
+	s_nDirs++;
+}
+
+/* Add a base folder (must end with '/') and its libretro subfolders. */
+static void _AddBase(const char *base)
+{
+	char sub[COVER_KEY_MAX];
+	_AddDir(base, DK_ROOT);
+	snprintf(sub, sizeof(sub), "%sNamed_Boxarts/", base); _AddDir(sub, DK_BOX);
+	snprintf(sub, sizeof(sub), "%sNamed_Titles/",  base); _AddDir(sub, DK_TITLE);
+	snprintf(sub, sizeof(sub), "%sNamed_Snaps/",   base); _AddDir(sub, DK_SNAP);
+}
+
 static void _EnsureIndex(const char *romDir)
 {
 	if (s_index && strcmp(s_indexDir, romDir) == 0)
@@ -290,53 +297,98 @@ static void _EnsureIndex(const char *romDir)
 	{
 		const char *cp = COVERS_PATH;
 		size_t cl = strlen(cp);
+		char b[COVER_KEY_MAX];
 		if (cl > 0 && cp[cl - 1] != '/' && cp[cl - 1] != ':')
-			snprintf(s_dirs[s_nDirs], COVER_KEY_MAX, "%s/", cp);
+			snprintf(b, sizeof(b), "%s/", cp);
 		else
-			snprintf(s_dirs[s_nDirs], COVER_KEY_MAX, "%s", cp);
-		s_nDirs++;
+			snprintf(b, sizeof(b), "%s", cp);
+		_AddBase(b);
 	}
 #endif
+	_AddBase(romDir);   /* romDir already carries its trailing slash */
 
-	snprintf(s_dirs[s_nDirs], COVER_KEY_MAX, "%s", romDir);
-	s_nDirs++;
-
-	{
-		int d;
-		for (d = 0; d < s_nDirs; d++)
-			_ScanDir(d, s_dirs[d]);
-	}
-	DLog("[cover] indexed %d png(s) in %s\n", (int)s_indexCount, romDir);
+	s_indexGen++;
+	DLog("[cover] indexed %d png(s) across %d dir(s) in %s\n",
+	     (int)s_indexCount, (int)s_nDirs, romDir);
 }
 
-/* Resolve (romPath, variant) -> existing cover file path, in-memory
-   only. variant 0 = "base.png"; variant N>0 = "base-N.png". */
-static ResolveE _ResolveCoverV(const char *romPath, int variant,
-                               char *out, size_t outSz)
+static Bool _IndexBuiltFor(const char *romDir)
+{
+	return (s_index && strcmp(s_indexDir, romDir) == 0) ? TRUE : FALSE;
+}
+
+/* Find file `name` in a folder of the given kind; build its full path. */
+static Bool _ResolveKind(const char *name, int kind, char *out, size_t outSz)
+{
+	int i;
+	if (!s_index)
+		return FALSE;
+	for (i = 0; i < s_indexCount; i++) {
+		if (s_dirKind[s_index[i].dir] == (Uint8)kind &&
+		    strcasecmp(s_index[i].name, name) == 0) {
+			snprintf(out, outSz, "%s%s", s_dirs[s_index[i].dir], s_index[i].name);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/* ---- per-ROM artwork list (s_found) -------------------------------- */
+
+static void _FoundAdd(const char *path)
+{
+	int i;
+	if (s_foundCount >= COVER_FOUND_MAX)
+		return;
+	for (i = 0; i < s_foundCount; i++)
+		if (strcmp(s_found[i], path) == 0)
+			return;   /* dedupe */
+	snprintf(s_found[s_foundCount], COVER_KEY_MAX, "%s", path);
+	s_foundCount++;
+}
+
+static void _RebuildFound(const char *romPath)
 {
 	char dir[COVER_KEY_MAX];
 	char base[512];
 	char want[512 + 16];
-	int i;
+	char path[COVER_KEY_MAX];
+	int  n;
 
 	_SplitRomPath(romPath, dir, sizeof(dir), base, sizeof(base));
+	s_foundCount = 0;
 
-	if (!s_index || strcmp(s_indexDir, dir) != 0)
-		return RES_UNKNOWN;
+	/* Order = cycle order: boxart, title, snap, then extra -N images. */
+	snprintf(want, sizeof(want), "%s.png", base);
+	if (_ResolveKind(want, DK_ROOT,  path, sizeof(path))) _FoundAdd(path);
+	if (_ResolveKind(want, DK_BOX,   path, sizeof(path))) _FoundAdd(path);
+	if (_ResolveKind(want, DK_TITLE, path, sizeof(path))) _FoundAdd(path);
+	if (_ResolveKind(want, DK_SNAP,  path, sizeof(path))) _FoundAdd(path);
 
-	if (variant <= 0)
-		snprintf(want, sizeof(want), "%s.png", base);
-	else
-		snprintf(want, sizeof(want), "%s-%d.png", base, variant);
-
-	for (i = 0; i < s_indexCount; i++) {
-		if (strcasecmp(s_index[i].name, want) == 0) {
-			snprintf(out, outSz, "%s%s",
-			         s_dirs[s_index[i].dir], s_index[i].name);
-			return RES_FOUND;
-		}
+	for (n = 1; n <= COVER_SUFFIX_MAX; n++) {
+		snprintf(want, sizeof(want), "%s-%d.png", base, n);
+		if (_ResolveKind(want, DK_ROOT, path, sizeof(path))) _FoundAdd(path);
 	}
-	return RES_NONE;
+
+	snprintf(s_foundRom, sizeof(s_foundRom), "%s", romPath);
+	s_foundGen = s_indexGen;
+	if (s_variant >= s_foundCount)
+		s_variant = 0;
+}
+
+static void _RebuildFoundIfNeeded(const char *romPath)
+{
+	if (strcmp(romPath, s_foundRom) != 0 || s_foundGen != s_indexGen)
+		_RebuildFound(romPath);
+}
+
+/* Reset the variant to 0 whenever the selected ROM changes. */
+static void _TrackRom(const char *romPath)
+{
+	if (strcmp(romPath, s_curRom) != 0) {
+		snprintf(s_curRom, sizeof(s_curRom), "%s", romPath);
+		s_variant = 0;
+	}
 }
 
 /* ---- image cache (keyed by cover file path) ------------------------ */
@@ -376,6 +428,9 @@ static CoverEntT *_CachePickSlot(void)
 	return lru;
 }
 
+/* Decode coverFile into the cache (always returns an entry; a decode
+   failure yields a NEGATIVE entry, usedW==0, so we show "No Covers"
+   instead of a blank panel and never re-probe the file). */
 static CoverEntT *_CacheDecode(const char *coverFile)
 {
 	CoverEntT *e;
@@ -391,10 +446,6 @@ static CoverEntT *_CacheDecode(const char *coverFile)
 		e->usedW = w;
 		e->usedH = h;
 	} else {
-		/* Undecodable PNG (palette/indexed, interlaced, or otherwise
-		   unsupported by upng). Keep a NEGATIVE entry (usedW==0) so the
-		   panel shows "No Covers" instead of staying blank forever, and
-		   so we never re-probe this file. */
 		e->usedW = 0;
 		e->usedH = 0;
 	}
@@ -414,15 +465,6 @@ static void _ApplyEntry(CoverEntT *e)
 	s_dispW = e->usedW;
 	s_dispH = e->usedH;
 	s_state = COVER_HASIMG;
-}
-
-/* Reset the variant to 0 (boxart) whenever the selected ROM changes. */
-static void _TrackRom(const char *romPath)
-{
-	if (strcmp(romPath, s_curRom) != 0) {
-		snprintf(s_curRom, sizeof(s_curRom), "%s", romPath);
-		s_variant = 0;
-	}
 }
 
 /* ---- public API ---------------------------------------------------- */
@@ -453,6 +495,9 @@ void CoverFreeCache(void)
 	s_vramKey[0] = '\0';
 	s_variant = 0;
 	s_curRom[0] = '\0';
+	s_foundCount = 0;
+	s_foundRom[0] = '\0';
+	s_foundGen = 0xFFFFFFFFu;
 }
 
 void CoverSetEnabled(Bool bEnabled)
@@ -474,9 +519,7 @@ void CoverShow(const char *romPath)
 {
 	char dir[COVER_KEY_MAX];
 	char base[512];
-	char coverFile[COVER_KEY_MAX];
 	CoverEntT *e;
-	ResolveE r;
 
 	if (!s_bEnabled || !s_bTexInited) { s_state = COVER_PENDING; return; }
 	if (!romPath || !romPath[0])      { s_state = COVER_PENDING; return; }
@@ -484,54 +527,46 @@ void CoverShow(const char *romPath)
 	_TrackRom(romPath);
 	_SplitRomPath(romPath, dir, sizeof(dir), base, sizeof(base));
 	_EnsureIndex(dir);
+	_RebuildFoundIfNeeded(romPath);
 
-	r = _ResolveCoverV(romPath, s_variant, coverFile, sizeof(coverFile));
-	if (r != RES_FOUND && s_variant != 0) {
-		/* requested variant missing - fall back to the base boxart */
-		s_variant = 0;
-		r = _ResolveCoverV(romPath, 0, coverFile, sizeof(coverFile));
-	}
-	if (r == RES_FOUND) {
-		e = _CacheFind(coverFile);
-		if (!e)
-			e = _CacheDecode(coverFile);
-		if (e) { _ApplyEntry(e); return; }
-	}
-	s_state = COVER_NOIMG;
+	if (s_foundCount == 0) { s_state = COVER_NOIMG; return; }
+	if (s_variant >= s_foundCount) s_variant = 0;
+
+	e = _CacheFind(s_found[s_variant]);
+	if (!e)
+		e = _CacheDecode(s_found[s_variant]);
+	_ApplyEntry(e);
 }
 
 /* Every-frame display: in-memory only, never touches the disk. */
 void CoverShowCached(const char *romPath)
 {
-	char coverFile[COVER_KEY_MAX];
+	char dir[COVER_KEY_MAX];
+	char base[512];
 	CoverEntT *e;
 
 	if (!s_bEnabled || !s_bTexInited) { s_state = COVER_PENDING; return; }
 	if (!romPath || !romPath[0])      { s_state = COVER_PENDING; return; }
 
 	_TrackRom(romPath);
+	_SplitRomPath(romPath, dir, sizeof(dir), base, sizeof(base));
 
-	switch (_ResolveCoverV(romPath, s_variant, coverFile, sizeof(coverFile))) {
-	case RES_FOUND:
-		e = _CacheFind(coverFile);
-		if (e) _ApplyEntry(e);
-		else   s_state = COVER_PENDING;   /* exists, not decoded yet */
-		break;
-	case RES_NONE:
-		s_state = COVER_NOIMG;
-		break;
-	default:
-		s_state = COVER_PENDING;          /* index not built yet */
-		break;
-	}
+	if (!_IndexBuiltFor(dir)) { s_state = COVER_PENDING; return; }
+
+	_RebuildFoundIfNeeded(romPath);
+	if (s_foundCount == 0) { s_state = COVER_NOIMG; return; }
+	if (s_variant >= s_foundCount) s_variant = 0;
+
+	e = _CacheFind(s_found[s_variant]);
+	if (e) _ApplyEntry(e);
+	else   s_state = COVER_PENDING;   /* listed but not decoded yet */
 }
 
-/* Warm a neighbour's base boxart. Returns TRUE only if it decoded. */
+/* Warm a neighbour's first (default) cover. TRUE only if it decoded. */
 Bool CoverPrefetch(const char *romPath)
 {
 	char dir[COVER_KEY_MAX];
 	char base[512];
-	char coverFile[COVER_KEY_MAX];
 
 	if (!s_bEnabled || !s_bTexInited || !romPath || !romPath[0])
 		return FALSE;
@@ -539,43 +574,41 @@ Bool CoverPrefetch(const char *romPath)
 	_SplitRomPath(romPath, dir, sizeof(dir), base, sizeof(base));
 	_EnsureIndex(dir);
 
-	if (_ResolveCoverV(romPath, 0, coverFile, sizeof(coverFile)) != RES_FOUND)
-		return FALSE;
-	if (_CacheFind(coverFile))
-		return FALSE;
-
-	return _CacheDecode(coverFile) ? TRUE : FALSE;
+	{
+		char want[512 + 16];
+		char path[COVER_KEY_MAX];
+		Bool found;
+		snprintf(want, sizeof(want), "%s.png", base);
+		found = _ResolveKind(want, DK_ROOT,  path, sizeof(path))
+		     || _ResolveKind(want, DK_BOX,   path, sizeof(path))
+		     || _ResolveKind(want, DK_TITLE, path, sizeof(path))
+		     || _ResolveKind(want, DK_SNAP,  path, sizeof(path));
+		if (!found)
+			return FALSE;
+		if (_CacheFind(path))
+			return FALSE;
+		return _CacheDecode(path) ? TRUE : FALSE;
+	}
 }
 
-/* Square: advance to the next artwork variant that exists for the
-   current ROM (wrapping), and display it now. */
+/* Square: show the next artwork that exists for the current ROM. */
 void CoverCycleVariant(void)
 {
-	char coverFile[COVER_KEY_MAX];
-	int v, cand, found = -1;
+	CoverEntT *e;
 
 	if (!s_bEnabled || !s_bTexInited || !s_curRom[0])
 		return;
 
-	for (v = 1; v <= COVER_VARIANT_MAX; v++) {
-		cand = (s_variant + v) % (COVER_VARIANT_MAX + 1);
-		if (_ResolveCoverV(s_curRom, cand, coverFile, sizeof(coverFile)) == RES_FOUND) {
-			found = cand;
-			break;
-		}
-	}
-	if (found < 0)
-		return;   /* only one image: nothing to cycle */
+	_RebuildFoundIfNeeded(s_curRom);
+	if (s_foundCount <= 1)
+		return;   /* zero or one image: nothing to cycle */
 
-	s_variant = found;
+	s_variant = (s_variant + 1) % s_foundCount;
 
-	{
-		CoverEntT *e = _CacheFind(coverFile);
-		if (!e)
-			e = _CacheDecode(coverFile);
-		if (e)
-			_ApplyEntry(e);
-	}
+	e = _CacheFind(s_found[s_variant]);
+	if (!e)
+		e = _CacheDecode(s_found[s_variant]);
+	_ApplyEntry(e);
 }
 
 Bool CoverHasImage(void) { return (s_state == COVER_HASIMG) ? TRUE : FALSE; }
@@ -597,18 +630,10 @@ void CoverDraw(Float32 bx, Float32 by, Float32 bw, Float32 bh)
 	dx = bx + (bw - dw) * 0.5f;
 	dy = by + (bh - dh) * 0.5f;
 
-	/* Invalidate the GS texture cache so the cover we just (re)uploaded
-	   to the shared VRAM slot is read fresh, not served stale from a
-	   previous cover at the same address. GPPrimTexRect (reached via
-	   PolyRect below) consumes this and emits the TEXFLUSH. */
 	GSK_InvalidateTextureCache();
 
 	PolyTexture(&s_Tex);
 	PolyUV(0, 0, s_dispW, s_dispH);
-	/* Opaque draw. Alpha blending of the PSMCT32 cover made the image
-	   render invisible on real PS2 (the GS texel-alpha blend config is
-	   not what the flat-colour panels use, and is untestable here), so
-	   we draw opaque for now. Transparent PNGs show their RGB. */
 	PolyBlend(FALSE);
 	PolyColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 	PolyRect(dx, dy, dw, dh);

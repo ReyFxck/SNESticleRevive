@@ -4,6 +4,11 @@ uPNG -- derived from LodePNG version 20100808
 Copyright (c) 2005-2010 Lode Vandevenne
 Copyright (c) 2010 Sean Middleditch
 
+ALTERED SOURCE: modified for SNESticle Revive (2026) to add decoding of
+palette/indexed PNGs (color type 3): reads the PLTE and tRNS chunks and
+expands 1/2/4/8-bit indices into RGBA8. Marked as altered per the zlib
+license terms below.
+
 This software is provided 'as-is', without any express or implied
 warranty. In no event will the authors be held liable for any damages
 arising from the use of this software.

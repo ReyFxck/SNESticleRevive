@@ -37,7 +37,7 @@ On top of the SNES core, the project now also integrates **InfoNES** to bring
 - Multiple video modes: **480i** (default, universally compatible), **480p**
   (GSM / HDMI), **240p / 288p** (CRT), plus screen offset and widescreen.
 - **Cover art** in the ROM browser — box art / screenshots from PNG files,
-  decoded by a bundled single‑file decoder (no external libs). See
+  decoded by **upng** (a bundled single‑file decoder, no external libs). See
   [Cover art](#cover-art-capas).
 - Audio via SjPCM / audsrv.
 - Controller / memory‑card / IRX bring‑up aligned to **Open‑PS2‑Loader** style.
@@ -94,19 +94,20 @@ The ROM browser can show box art / screenshots beside the game list.
 
 - Enable it in **Video Config → Cover Art** (press ✕ to save — it persists
   across boots).
-- Drop a PNG with the **same name as the ROM** next to it, e.g.
-  `Super Mario Kart (USA).png` for `Super Mario Kart (USA).sfc`.
-- Multiple images per game use a numeric suffix; press **□** in the browser to
-  cycle through the ones that exist:
-  - `Game.png` — box art
-  - `Game-1.png`, `Game-2.png`, … — title screen, gameplay, …
+- Put a PNG with the **same name as the ROM** anywhere the browser looks:
+  - **next to the ROM** — e.g. `Super Mario Kart (USA).png`
+  - in the **libretro thumbnail folders** (beside the ROMs, or inside a
+    `COVERS_PATH` folder): `Named_Boxarts/`, `Named_Titles/`, `Named_Snaps/`
+  - with a **numeric suffix** for extra images: `Game-1.png`, `Game-2.png`, …
+- Press **□** in the browser to cycle through whatever a game has, in order:
+  box art → title screen → gameplay snap → extra `-N` images.
 - To keep every cover in **one shared folder** instead of next to each ROM,
   build with `COVERS_PATH`:
   ```bash
   make COVERS_PATH=mass:/snes/covers
   ```
-  Covers are then looked up as `mass:/snes/covers/<rom name>.png` first, with
-  the ROM's own folder as a fallback.
+  Covers are then looked up under `mass:/snes/covers/` (including its
+  `Named_Boxarts/` etc.), with the ROM's own folder as a fallback.
 - When you build an ISO with `ROMS=`, PNGs in the ROM folder are bundled
   automatically.
 
@@ -232,6 +233,7 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 - **[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle)** — fork used as one of the bases for this repository.
 - **Sardu** — for releasing the recovered source under the MIT license (2022).
 - **[jay-kumogata/InfoNES](https://github.com/jay-kumogata/InfoNES)** — the NES core integrated here.
+- **[upng](https://github.com/elanthis/upng)** — Sean Middleditch & Lode Vandevenne; the bundled single‑file PNG decoder used for cover art (zlib license). Extended in this repo with palette/indexed support.
 - **[hugorsgarcia/PS2SNESticle](https://github.com/hugorsgarcia/PS2SNESticle)** — **Hugo Garcia**, whose PS2 work was the reference for the controller / memory‑card / IRX bring‑up and the netplay module.
 - **Open‑PS2‑Loader**, **picodrive‑PS2** and **uLaunchELF** — references for correct PS2 boot, IOP and video behavior.
 - **ReyFxck** — this revival/fork and ongoing development.
