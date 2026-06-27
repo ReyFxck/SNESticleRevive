@@ -16,6 +16,31 @@ static Uint8 _MemCard_IconData[]={
 
 static Bool _MemCard_bInitialized=FALSE;
 
+/* Converte ASCII -> Shift-JIS fullwidth (2 bytes/char) no campo title do
+   icon.sys.  O OSDSYS do PS2 exige SJIS: ASCII de 1 byte NAO aparece no
+   browser da BIOS (era por isso que o nome nao saia).  Cobre espaco,
+   0-9, A-Z, a-z (o que o titulo usa); o resto vira '?' fullwidth.
+   Retorna o numero de BYTES escritos (2 * num. de chars). */
+static int _TitleToSjis(unsigned char *pDst, const char *pSrc)
+{
+	int n = 0;
+	for (; *pSrc; pSrc++)
+	{
+		unsigned char c = (unsigned char)*pSrc;
+		unsigned short sj;
+
+		if      (c == ' ')             sj = 0x8140;            /* espaco */
+		else if (c >= '0' && c <= '9') sj = 0x824F + (c - '0');
+		else if (c >= 'A' && c <= 'Z') sj = 0x8260 + (c - 'A');
+		else if (c >= 'a' && c <= 'z') sj = 0x8281 + (c - 'a');
+		else                           sj = 0x8148;            /* '?'    */
+
+		pDst[n++] = (unsigned char)(sj >> 8);   /* lead byte (ex: 0x82) */
+		pDst[n++] = (unsigned char)(sj & 0xFF); /* trail byte           */
+	}
+	return n;
+}
+
 int MemCardCreateSave(char *pDir, char *pTitle, Bool bForceWrite)
 {
 	int icon_size;
@@ -74,16 +99,12 @@ int MemCardCreateSave(char *pDir, char *pTitle, Bool bForceWrite)
 
 	memset(&icon_sys, 0, sizeof(mcIcon));
 	strcpy((char *)icon_sys.head, "PS2D");
-#ifdef _EE
-	strcpy((char*)&icon_sys.title, (const char*)pTitle);
-#else
-	strcpy_sjis((short *)&icon_sys.title, pTitle);
-#endif
-	/* nlOffset = byte onde a 2a linha do titulo comeca no OSDSYS do PS2.
-	   Titulo "SNESticle Revive" (ASCII, 16 bytes): offset 10 quebra em
-	   "SNESticle " / "Revive".  NAO usar '\n' no titulo - o 0x0A nao e'
-	   quebra de linha no OSD e impedia o nome de aparecer. */
-	icon_sys.nlOffset = 10;
+	/* Titulo em Shift-JIS fullwidth (obrigatorio no OSDSYS). */
+	_TitleToSjis((unsigned char *)&icon_sys.title, pTitle);
+	/* nlOffset = byte onde a 2a linha comeca.  Cada char vira 2 bytes em
+	   SJIS, entao quebrar depois de "SNESticle " (10 chars) = 20 bytes:
+	   linha 1 "SNESticle ", linha 2 "Revive". */
+	icon_sys.nlOffset = 20;
 	icon_sys.trans = 0x60;
 	memcpy(icon_sys.bgCol, bgcolor, sizeof(bgcolor));
 	memcpy(icon_sys.lightDir, lightdir, sizeof(lightdir));
