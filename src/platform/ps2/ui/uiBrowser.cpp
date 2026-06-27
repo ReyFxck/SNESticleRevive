@@ -795,16 +795,23 @@ void CBrowserScreen::Draw()
 
 	(void)_BrowserSpaceWidth; /* helper kept for future per-gap pixel tuning */
 
-	/* Cover art: only hit the filesystem once the selection has been
-	   still for BROWSER_COVER_LOAD_DELAY frames. Each probe is up to 4
-	   fopen() attempts and a failed open on cdfs/USB is slow, so doing
-	   it per d-pad step made fast scrolling crawl (even with no PNGs at
-	   all). While scrolling, the selection keeps changing and resets the
-	   settle counter, so zero disk IO happens until you pause. The last
-	   loaded cover stays on screen meanwhile (no flicker). */
+	/* Cover art. A cache hit shows instantly (no disk). Cold loads are
+	   debounced so fast scrolling never touches the (slow) cdfs/USB
+	   filesystem, and the selection's neighbours are prefetched one per
+	   frame while idle, so single d-pad steps land on a warm cache. */
 	if (CoverIsEnabled())
 	{
-		static Int32  s_cov_sel  = -1;
+		char curPath[1024];
+		Bool curIsRom = (m_iSelect >= 0 && m_iSelect < m_nEntries &&
+		                 m_pDirEntries[m_iSelect].eType == BROWSER_ENTRYTYPE_EXECUTABLE);
+		curPath[0] = '\0';
+		if (curIsRom)
+			GetEntryPath(curPath, sizeof(curPath));
+
+		/* instant: display now if already cached (never hits the disk) */
+		CoverShowCached(curIsRom ? curPath : (const char *)0);
+
+		static Int32  s_cov_sel    = -1;
 		static Char   s_cov_dir[sizeof(m_Dir)] = "";
 		static Uint32 s_cov_settle = 0;
 		static Bool   s_cov_done   = FALSE;
@@ -819,27 +826,33 @@ void CBrowserScreen::Draw()
 		}
 		else if (!s_cov_done)
 		{
+			/* wait for the selection to settle, then cold-load it once */
 			if (s_cov_settle < BROWSER_COVER_LOAD_DELAY)
-			{
 				s_cov_settle++;
-			}
 			else
 			{
-				/* settled: do exactly one load attempt */
-				if (m_iSelect >= 0 && m_iSelect < m_nEntries &&
-				    m_pDirEntries[m_iSelect].eType == BROWSER_ENTRYTYPE_EXECUTABLE)
-				{
-					char rompath[1024];
-					if (GetEntryPath(rompath, sizeof(rompath)) != 0)
-						CoverLoadForRomPath(rompath);
-					else
-						CoverClearCurrent();
-				}
-				else
-				{
-					CoverClearCurrent();
-				}
+				CoverShow(curIsRom ? curPath : (const char *)0);
 				s_cov_done = TRUE;
+			}
+		}
+		else
+		{
+			/* settled: warm one un-cached neighbour per frame (at most
+			   one disk load/frame) so the next d-pad step is instant. */
+			static const int offs[8] = { 1, -1, 2, -2, 3, -3, 4, -4 };
+			unsigned k;
+			for (k = 0; k < 8; k++)
+			{
+				Int32 ni = m_iSelect + offs[k];
+				if (ni < 0 || ni >= m_nEntries)
+					continue;
+				if (m_pDirEntries[ni].eType != BROWSER_ENTRYTYPE_EXECUTABLE)
+					continue;
+
+				char npath[1024];
+				snprintf(npath, sizeof(npath), "%s%s", m_Dir, m_pDirEntries[ni].name);
+				if (CoverPrefetch(npath))
+					break;   /* performed one disk load this frame */
 			}
 		}
 	}
@@ -968,12 +981,14 @@ void CBrowserScreen::Draw()
 			CoverDraw(BROWSER_COVER_X, BROWSER_COVER_Y,
 			          BROWSER_COVER_W, BROWSER_COVER_H);
 		}
-		else
+		else if (CoverNoImage())
 		{
 			FontColor4f(0.55f, 0.55f, 0.55f, 1.0f);
 			FontPrintf(BROWSER_COVER_X + 14,
 			           BROWSER_COVER_Y + BROWSER_COVER_H / 2 - 6, "sem capa");
 		}
+		/* else: still loading -> just the empty panel (avoids a
+		   "sem capa" flash that would resolve into a real cover) */
 	}
 
 	FontSelect(0);
@@ -1081,6 +1096,9 @@ void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 
 	        default:
 		        printf("exec: %s\n", str);
+				/* Hand the cover-cache RAM (~1.5MB) back before the
+				   emulator core spins up for the game. */
+				CoverFreeCache();
 				SendMessage(1, m_pDirEntries[m_iSelect].eType, (void *)str);
 	            break;
 	            
