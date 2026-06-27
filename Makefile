@@ -117,6 +117,7 @@ CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fn
 # data/hora com TZ fixo de Brasilia e passamos por -D; o banner usa
 # esses em vez dos macros do compilador.
 APP_VERSION  ?= 1.0.0
+ELF_OUT_NAME := SNESticle_Revive_v$(APP_VERSION)
 BUILD_DATE   := $(shell TZ='America/Sao_Paulo' date '+%Y-%m-%d')
 BUILD_TIME   := $(shell TZ='America/Sao_Paulo' date '+%H:%M:%S')
 VERSION_DEFS := -DAPP_VERSION=\"$(APP_VERSION)\" -DBUILD_DATE=\"$(BUILD_DATE)\" -DBUILD_TIME=\"$(BUILD_TIME)\"
@@ -665,11 +666,11 @@ packed: $(TARGET_PACKED)
 elf: $(TARGET) $(if $(filter 1,$(PACK)),$(TARGET_PACKED))
 	@if [ -n "$(strip $(out))" ]; then \
 		mkdir -p "$(out)"; \
-		cp -f "$(TARGET)" "$(out)/"; \
-		echo "[elf] $$(basename '$(TARGET)') -> $(out)/ ($$(wc -c <'$(TARGET)') bytes, unpacked)"; \
+		cp -f "$(TARGET)" "$(out)/$(ELF_OUT_NAME).elf"; \
+		echo "[elf] $(ELF_OUT_NAME).elf -> $(out)/ ($$(wc -c <'$(TARGET)') bytes, unpacked)"; \
 		if [ "$(PACK)" = "1" ] && [ -f "$(TARGET_PACKED)" ]; then \
-			cp -f "$(TARGET_PACKED)" "$(out)/"; \
-			echo "[elf] $$(basename '$(TARGET_PACKED)') -> $(out)/ ($$(wc -c <'$(TARGET_PACKED)') bytes, packed)"; \
+			cp -f "$(TARGET_PACKED)" "$(out)/$(ELF_OUT_NAME).packed.elf"; \
+			echo "[elf] $(ELF_OUT_NAME).packed.elf -> $(out)/ ($$(wc -c <'$(TARGET_PACKED)') bytes, packed)"; \
 		fi; \
 	else \
 		echo "[elf] $(TARGET) ($$(wc -c <'$(TARGET)') bytes, unpacked)"; \
