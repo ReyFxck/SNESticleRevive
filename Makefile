@@ -802,6 +802,7 @@ count:
 #   make iso                          # gera ISO sem ROMs
 #   make iso roms=<pasta>             # gera ISO com ROMs
 #   make iso roms=<pasta> out=<pasta> # gera ISO + copia pra <pasta>
+#   make iso roms=<pasta> bgm=<pasta> # + soundtracks .mod/.xm (cdfs:/BGM)
 
 ISO_GAME_ID   ?= SLUS_999.99
 ISO_GAME_NAME ?= SNESticle_Revive$(VER_SUFFIX)
@@ -899,6 +900,20 @@ iso-root: $(TARGET) iso-check
 		echo "[ ISO-ROOT ] ROMs copied from $(roms)"; \
 	else \
 		echo "[ ISO-ROOT ] Sem ROMs (use roms=<pasta> para incluir)"; \
+	fi
+	@# Soundtracks do menu: copia .mod/.xm de bgm=<pasta> para BGM/ no
+	@# ISO, que vira cdfs:/BGM no disco -- uma das pastas que o player
+	@# de BGM (mainloop_bgm.cpp) varre por padrao.
+	@if [ -n "$(strip $(bgm))" ]; then \
+		if [ ! -d "$(bgm)" ]; then \
+			echo "ERRO: pasta de BGM nao existe: $(bgm)"; \
+			exit 1; \
+		fi; \
+		mkdir -p "$(ISO_ROOT_DIR)/BGM"; \
+		( cd "$(bgm)" && \
+		  find . -type f \( -iname '*.mod' -o -iname '*.xm' \) \
+			-exec cp -f --parents {} "$(ISO_ROOT_DIR)/BGM/" \; ) ; \
+		echo "[ ISO-ROOT ] BGM copiada de $(bgm) -> cdfs:/BGM"; \
 	fi
 	@if [ -d "$(CURDIR)/cdroot" ]; then \
 		cp -a "$(CURDIR)/cdroot/." "$(ISO_ROOT_DIR)/"; \
