@@ -904,6 +904,17 @@ void CBrowserScreen::Draw()
 				BrowserCopyEllipsis(view, sizeof(view), str, nameMaxPx);
 			}
 
+			/* Subtle row backdrop when covers are on: a faint light-gray
+			   bar behind each name (a "card list" look). _Poly_pTexture
+			   is NULL here (the font draws via GPPrim, not the Poly
+			   layer), so this renders as a flat rect just like the
+			   selection bar below. */
+			if (CoverIsEnabled())
+			{
+				PolyColor4f(0.85f, 0.85f, 0.90f, 0.10f);
+				PolyRect(vx - 2, vy - 1, nameMaxPx + 2, FontGetHeight() + 2);
+			}
+
 			// render selection bar
 			if (iEntry == m_iSelect)
 			{
@@ -943,6 +954,24 @@ void CBrowserScreen::Draw()
 		iEntry++;
 	}
 
+	/* Thin vertical divider between the ROM names and the cover area,
+	   in the same faint light-gray as the row backdrops. It starts just
+	   below the title bar (so it never crosses the title) and ends near
+	   the bottom of the list text. Sits in the gap between the clipped
+	   name column (ends ~x152) and the cover panel (starts ~x155). */
+	if (CoverIsEnabled())
+	{
+		Float32 dlTop = 32.0f;          /* just under the title bar (~y29) */
+		Float32 dlBot = (Float32)vy;    /* bottom of the last list row     */
+		if (dlBot > dlTop)
+		{
+			PolyTexture(NULL);
+			PolyBlend(TRUE);
+			PolyColor4f(0.85f, 0.85f, 0.90f, 0.22f);
+			PolyRect(154.0f, dlTop, 1.0f, dlBot - dlTop);
+		}
+	}
+
 
 /*
 	FontSelect(0);
@@ -966,7 +995,7 @@ void CBrowserScreen::Draw()
 	FontSelect(0);
 
 	/* Cover art panel (right side). A dark backing panel + the cover,
-	   or a "sem capa" placeholder when no matching PNG was found. Only
+	   or a "No Covers" placeholder when no matching PNG was found. Only
 	   shown while enabled - otherwise the browser is unchanged. */
 	if (CoverIsEnabled())
 	{
@@ -983,9 +1012,10 @@ void CBrowserScreen::Draw()
 		}
 		else if (CoverNoImage())
 		{
+			const Char *msg = "No Covers";
 			FontColor4f(0.55f, 0.55f, 0.55f, 1.0f);
-			FontPrintf(BROWSER_COVER_X + 14,
-			           BROWSER_COVER_Y + BROWSER_COVER_H / 2 - 6, "sem capa");
+			FontPrintf(BROWSER_COVER_X + (BROWSER_COVER_W - FontGetStrWidth(msg)) / 2,
+			           BROWSER_COVER_Y + BROWSER_COVER_H / 2 - 6, "%s", msg);
 		}
 		/* else: still loading -> just the empty panel (avoids a
 		   "sem capa" flash that would resolve into a real cover) */
