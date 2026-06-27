@@ -384,15 +384,20 @@ static CoverEntT *_CacheDecode(const char *coverFile)
 	if (!_CacheAlloc())
 		return 0;
 	e = _CachePickSlot();
-	if (!_DecodeFileInto(coverFile, e->rgba, &w, &h)) {
-		e->valid = FALSE;
-		return 0;
-	}
 	snprintf(e->key, sizeof(e->key), "%s", coverFile);
-	e->usedW = w;
-	e->usedH = h;
 	e->valid = TRUE;
 	e->lru   = ++s_lruClock;
+	if (_DecodeFileInto(coverFile, e->rgba, &w, &h)) {
+		e->usedW = w;
+		e->usedH = h;
+	} else {
+		/* Undecodable PNG (palette/indexed, interlaced, or otherwise
+		   unsupported by upng). Keep a NEGATIVE entry (usedW==0) so the
+		   panel shows "No Covers" instead of staying blank forever, and
+		   so we never re-probe this file. */
+		e->usedW = 0;
+		e->usedH = 0;
+	}
 	return e;
 }
 
