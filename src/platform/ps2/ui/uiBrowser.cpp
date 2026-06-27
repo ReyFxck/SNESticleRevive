@@ -933,17 +933,6 @@ void CBrowserScreen::Draw()
 				BrowserCopyEllipsis(view, sizeof(view), str, nameMaxPx);
 			}
 
-			/* Subtle row backdrop when covers are on: a faint light-gray
-			   bar behind each name (a "card list" look). _Poly_pTexture
-			   is NULL here (the font draws via GPPrim, not the Poly
-			   layer), so this renders as a flat rect just like the
-			   selection bar below. */
-			if (CoverIsEnabled())
-			{
-				PolyColor4f(0.85f, 0.85f, 0.90f, 0.18f);
-				PolyRect(vx - 2, vy - 1, nameMaxPx + 2, FontGetHeight() + 2);
-			}
-
 			// render selection bar
 			if (iEntry == m_iSelect)
 			{
@@ -952,7 +941,9 @@ void CBrowserScreen::Draw()
 					else
 					PolyColor4f(0.0f, 0.0f, 0.0f, 0.25f); 
 
-				PolyRect(vx-1, vy-1, FontGetStrWidth(view) + 2, FontGetHeight() + 2);
+				Int32 selW = FontGetStrWidth(str);
+				if (selW > nameMaxPx) selW = nameMaxPx;
+				PolyRect(vx-1, vy-1, selW + 2, FontGetHeight() + 2);
 //				PolyRect(vx-2, vy-0, strlen(str) * 12 + 2, 13 + 0);
 			}
 
@@ -1231,6 +1222,14 @@ void CBrowserScreen::SetDir(const Char *pDir)
 
 				if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
 					continue;
+
+				/* Hide cover-art PNGs from the browser list - they are
+				   artwork for the cover system, not ROMs. */
+				{
+					size_t _nl = strlen(de->d_name);
+					if (_nl >= 4 && strcasecmp(de->d_name + _nl - 4, ".png") == 0)
+						continue;
+				}
 
 				/* Trust d_type only when it is concrete; otherwise stat
 				   the joined path. cdfs.irx leaves d_type=DT_UNKNOWN. */
