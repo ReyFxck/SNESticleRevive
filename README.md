@@ -52,39 +52,39 @@ between the game and the menu at any time.
 
 **In a game**
 
-| PS2 button | SNES |
-|------------|------|
-| D‑Pad | D‑Pad |
-| ✕ | B |
-| ○ | A |
-| □ | Y |
-| △ | X |
-| L1 / R1 | L / R |
-| Select | Select |
-| Start | Start |
-| **L2 + R2** | Open the menu |
+| Button | SNES |
+|:------:|------|
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> | D‑Pad |
+| <img src="docs/controls/cross.svg" height="20" alt="Cross"> | B |
+| <img src="docs/controls/circle.svg" height="20" alt="Circle"> | A |
+| <img src="docs/controls/square.svg" height="20" alt="Square"> | Y |
+| <img src="docs/controls/triangle.svg" height="20" alt="Triangle"> | X |
+| <img src="docs/controls/l1.svg" height="20" alt="L1"> / <img src="docs/controls/r1.svg" height="20" alt="R1"> | L / R |
+| <img src="docs/controls/select.svg" height="20" alt="Select"> | Select |
+| <img src="docs/controls/start.svg" height="20" alt="Start"> | Start |
+| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | Open the menu |
 
 **Menu & ROM browser**
 
-| PS2 button | Action |
-|------------|--------|
-| D‑Pad Up / Down | Move the selection |
-| ✕ or Start | Launch the highlighted ROM (or open a folder) |
-| △ | Go up one folder (`..`) |
-| □ | Page up — *or swap the cover image when cover art is on (see below)* |
-| ○ | Page down |
-| Select | File menu (copy / paste / delete) |
-| L1 / R1 | Switch screen (Browser ⇆ Network ⇆ Menu ⇆ Log) |
-| **L2 + R2** | Return to the game |
+| Button | Action |
+|:------:|--------|
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> Up / Down | Move the selection |
+| <img src="docs/controls/cross.svg" height="20" alt="Cross"> or <img src="docs/controls/start.svg" height="20" alt="Start"> | Launch the highlighted ROM (or open a folder) |
+| <img src="docs/controls/triangle.svg" height="20" alt="Triangle"> | Go up one folder (`..`) |
+| <img src="docs/controls/square.svg" height="20" alt="Square"> | Page up — *or swap the cover image when cover art is on (see below)* |
+| <img src="docs/controls/circle.svg" height="20" alt="Circle"> | Page down |
+| <img src="docs/controls/select.svg" height="20" alt="Select"> | File menu (copy / paste / delete) |
+| <img src="docs/controls/l1.svg" height="20" alt="L1"> / <img src="docs/controls/r1.svg" height="20" alt="R1"> | Switch screen (Browser ⇆ Network ⇆ Menu ⇆ Log) |
+| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | Return to the game |
 
 **Video Config screen**
 
-| PS2 button | Action |
-|------------|--------|
-| D‑Pad Up / Down | Select an option |
-| D‑Pad Left / Right | Change its value |
-| □ | Reset the screen offset |
-| ✕ or Start | Save settings to the memory card |
+| Button | Action |
+|:------:|--------|
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> Up / Down | Select an option |
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> Left / Right | Change its value |
+| <img src="docs/controls/square.svg" height="20" alt="Square"> | Reset the screen offset |
+| <img src="docs/controls/cross.svg" height="20" alt="Cross"> or <img src="docs/controls/start.svg" height="20" alt="Start"> | Save settings to the memory card |
 
 ---
 
@@ -236,6 +236,7 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 - **Open‑PS2‑Loader**, **picodrive‑PS2** and **uLaunchELF** — references for correct PS2 boot, IOP and video behavior.
 - **ReyFxck** — this revival/fork and ongoing development.
 - **Adriano Oliveira** — real‑hardware testing.
+- **Control‑prompt icons** (`docs/controls/*.svg`) — original SVGs drawn for this repo; reuse freely.
 
 ---
 
