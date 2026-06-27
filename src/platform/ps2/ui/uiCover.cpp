@@ -141,10 +141,12 @@ static void _SplitRomPath(const char *romPath, char *dir, size_t dirSz,
 /* ---- scaling / decode ---------------------------------------------- */
 
 static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
-                       unsigned sw, unsigned sh, unsigned comp,
+                       unsigned sw, unsigned sh, unsigned comp, unsigned bd,
                        Int32 *pW, Int32 *pH)
 {
 	unsigned outW, outH, x, y;
+	unsigned bps = (bd == 16) ? 2u : 1u;     /* bytes per channel sample */
+	unsigned stride = comp * bps;            /* bytes per source pixel   */
 
 	if (!dst || !src || sw == 0 || sh == 0)
 		return FALSE;
@@ -171,15 +173,28 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
 		Uint8 *d = dst + (y * COVER_TEX_W) * 4;
 		for (x = 0; x < outW; x++) {
 			unsigned sxi = (x * sw) / outW;
-			const unsigned char *p = src + ((unsigned long)syi * sw + sxi) * comp;
-			d[x * 4 + 0] = p[0];
-			d[x * 4 + 1] = p[1];
-			d[x * 4 + 2] = p[2];
-			/* GS treats texel alpha 0x80 as fully opaque (1.0). Map the
-			   PNG's 0..255 alpha into 0..0x80; RGB (no alpha) = opaque. */
-			d[x * 4 + 3] = (comp == 4)
-			             ? (Uint8)(((unsigned)p[3] * 128u) / 255u)
-			             : 0x80;
+			const unsigned char *p = src + ((unsigned long)syi * sw + sxi) * stride;
+			Uint8 r, g, b, a;
+
+			/* Read each channel's high byte (16-bit) or byte (8-bit),
+			   then expand to RGBA by component count:
+			     1 = grayscale, 2 = gray+alpha, 3 = RGB, 4 = RGBA. */
+			#define CH(i) (p[(i) * bps])     /* bps=2 -> big-endian high byte */
+			if (comp <= 2) {
+				r = g = b = CH(0);
+				a = (comp == 2) ? CH(1) : 0xFF;
+			} else {
+				r = CH(0); g = CH(1); b = CH(2);
+				a = (comp == 4) ? CH(3) : 0xFF;
+			}
+			#undef CH
+
+			d[x * 4 + 0] = r;
+			d[x * 4 + 1] = g;
+			d[x * 4 + 2] = b;
+			/* GS treats texel alpha 0x80 as fully opaque (1.0); map the
+			   source 0..255 alpha into 0..0x80. */
+			d[x * 4 + 3] = (Uint8)(((unsigned)a * 128u) / 255u);
 		}
 	}
 
@@ -191,8 +206,7 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
 static Bool _DecodeFileInto(const char *path, Uint8 *dst, Int32 *pW, Int32 *pH)
 {
 	upng_t *u;
-	upng_format fmt;
-	unsigned comp, w, h;
+	unsigned comp, bd, w, h;
 	const unsigned char *buf;
 	Bool ok;
 
@@ -202,16 +216,22 @@ static Bool _DecodeFileInto(const char *path, Uint8 *dst, Int32 *pW, Int32 *pH)
 	if (upng_get_error(u) != UPNG_EOK) { upng_free(u); return FALSE; }
 	if (upng_decode(u) != UPNG_EOK)    { upng_free(u); return FALSE; }
 
-	fmt = upng_get_format(u);
-	if (fmt == UPNG_RGB8)       comp = 3;
-	else if (fmt == UPNG_RGBA8) comp = 4;
-	else { upng_free(u); return FALSE; }
+	/* upng decodes grayscale (8-bit), gray+alpha (8-bit), and RGB/RGBA
+	   at 8 OR 16 bits per channel. We handle all of those (16-bit takes
+	   the high byte). Sub-byte (1/2/4-bit) grayscale, palette/indexed
+	   and interlaced PNGs are NOT decodable by upng -> skipped. */
+	comp = upng_get_components(u);
+	bd   = upng_get_bitdepth(u);
+	if ((bd != 8 && bd != 16) || comp < 1 || comp > 4) {
+		upng_free(u);
+		return FALSE;
+	}
 
 	w   = upng_get_width(u);
 	h   = upng_get_height(u);
 	buf = upng_get_buffer(u);
 
-	ok = _ScaleInto(dst, buf, w, h, comp, pW, pH);
+	ok = _ScaleInto(dst, buf, w, h, comp, bd, pW, pH);
 	upng_free(u);
 	return ok;
 }
