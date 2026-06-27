@@ -36,9 +36,84 @@ On top of the SNES core, the project now also integrates **InfoNES** to bring
 - gsKit‑based video backend with a **Video Config** screen.
 - Multiple video modes: **480i** (default, universally compatible), **480p**
   (GSM / HDMI), **240p / 288p** (CRT), plus screen offset and widescreen.
+- **Cover art** in the ROM browser — box art / screenshots from PNG files,
+  decoded by a bundled single‑file decoder (no external libs). See
+  [Cover art](#cover-art-capas).
 - Audio via SjPCM / audsrv.
 - Controller / memory‑card / IRX bring‑up aligned to **Open‑PS2‑Loader** style.
 - Netplay code (`src/modules/netplay/`).
+
+---
+
+## Controls
+
+The PS2 pad maps to an SNES controller. **L2 + R2** (pressed together) toggles
+between the game and the menu at any time.
+
+**In a game**
+
+| PS2 button | SNES |
+|------------|------|
+| D‑Pad | D‑Pad |
+| ✕ | B |
+| ○ | A |
+| □ | Y |
+| △ | X |
+| L1 / R1 | L / R |
+| Select | Select |
+| Start | Start |
+| **L2 + R2** | Open the menu |
+
+**Menu & ROM browser**
+
+| PS2 button | Action |
+|------------|--------|
+| D‑Pad Up / Down | Move the selection |
+| ✕ or Start | Launch the highlighted ROM (or open a folder) |
+| △ | Go up one folder (`..`) |
+| □ | Page up — *or swap the cover image when cover art is on (see below)* |
+| ○ | Page down |
+| Select | File menu (copy / paste / delete) |
+| L1 / R1 | Switch screen (Browser ⇆ Network ⇆ Menu ⇆ Log) |
+| **L2 + R2** | Return to the game |
+
+**Video Config screen**
+
+| PS2 button | Action |
+|------------|--------|
+| D‑Pad Up / Down | Select an option |
+| D‑Pad Left / Right | Change its value |
+| □ | Reset the screen offset |
+| ✕ or Start | Save settings to the memory card |
+
+---
+
+## Cover art (capas)
+
+The ROM browser can show box art / screenshots beside the game list.
+
+- Enable it in **Video Config → Cover Art** (press ✕ to save — it persists
+  across boots).
+- Drop a PNG with the **same name as the ROM** next to it, e.g.
+  `Super Mario Kart (USA).png` for `Super Mario Kart (USA).sfc`.
+- Multiple images per game use a numeric suffix; press **□** in the browser to
+  cycle through the ones that exist:
+  - `Game.png` — box art
+  - `Game-1.png`, `Game-2.png`, … — title screen, gameplay, …
+- To keep every cover in **one shared folder** instead of next to each ROM,
+  build with `COVERS_PATH`:
+  ```bash
+  make COVERS_PATH=mass:/snes/covers
+  ```
+  Covers are then looked up as `mass:/snes/covers/<rom name>.png` first, with
+  the ROM's own folder as a fallback.
+- When you build an ISO with `ROMS=`, PNGs in the ROM folder are bundled
+  automatically.
+
+**Supported PNG formats:** RGB / RGBA (8‑ or 16‑bit), grayscale, and
+palette/indexed (1/2/4/8‑bit). **Interlaced (Adam7) PNGs are not supported** —
+re‑save those as non‑interlaced. Keep covers small (≈256 px) to save memory and
+decode time; they are cached in RAM and prefetched so browsing stays smooth.
 
 ---
 
@@ -77,6 +152,7 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 | `OUT=/path` | Copy the final ELF/ISO to this folder. |
 | `ROMS=/path` | ROM folder to embed when building an ISO. |
 | `PACK=0` | Build the ISO using the unpacked ELF. |
+| `COVERS_PATH=path` | Shared cover‑art folder baked into the build (e.g. `mass:/snes/covers`). See [Cover art](#cover-art-capas). |
 
 > Note: changing a flag like `PROFILE=1` does **not** force a recompile on its
 > own (make only tracks file timestamps). Run `make clean` first when toggling
@@ -93,6 +169,11 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
   one‑frame stepper), with the InfoNES core kept 1:1 with upstream.
 - **Video**: gsKit migration, the Video Config screen, multiple modes, and a
   **safe 480i default** (240p stays available for CRT users).
+- **Cover art**: the ROM browser shows box art / screenshots from PNG files,
+  via a bundled single‑file decoder (RGB/RGBA, grayscale, and palette/indexed).
+  Decoded covers are kept in a small RAM cache and neighbours are prefetched, so
+  browsing stays smooth even from a CD; toggle it in Video Config, point it at a
+  shared folder with `COVERS_PATH`, and cycle box/title/gameplay with □.
 - **Boot / input**: controller and IRX bring‑up reworked to behave on real
   hardware, not just emulators.
 - **Build system**: parallel jobs, `VERBOSE`, `PROFILE`, friendlier `make help`,
