@@ -199,6 +199,17 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
     // DLog("[snes-aud] set_volume(%d) = %d", MAX_VOLUME, ret);
     ScrPrintf("audsrv set_volume = %d\n", ret);
 
+    /* Prime audsrv: before the first audsrv_play_audio(), audsrv_queued()
+       / audsrv_available() can report a phantom initial occupancy, which
+       makes Aud_Available() return 0. Any producer that only feeds when
+       there is free space (the menu BGM at boot) then stays stuck until
+       some game "wakes up" audsrv with its first play. Pushing a short
+       block of silence here starts the IOP playback engine and clears
+       that state. The ring is empty at this point, so this does not
+       block. (~21 ms of silence: inaudible.) */
+    memset(_interleave_buf, 0, 1024 * AUD_BYTES_PER_SAMPLE);
+    audsrv_play_audio((const char *)_interleave_buf, 1024 * AUD_BYTES_PER_SAMPLE);
+
     sjpcm_inited = 1;
     return 0;
 }
