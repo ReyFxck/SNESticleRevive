@@ -97,7 +97,7 @@ void PolyTexture(TextureT *pTexture)
             pTexture->eFormat,
 
             0, 256, GS_PSMCT16,
-            0
+            pTexture->eFilter
            );
     }
 

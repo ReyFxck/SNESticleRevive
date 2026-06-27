@@ -185,23 +185,18 @@ static void BrowserCopyEllipsis(Char *out, size_t out_size, const Char *src, Int
 	}
 }
 
-/* Build a scrolled view of src, clipped to max_px pixels.
-   `tick` is a PIXEL offset into the rendered string. *pShiftPx receives
-   the sub-pixel amount the caller should shift the text LEFT by (0..one
-   char width) so the scroll is smooth pixel-by-pixel instead of jumping
-   a whole character at a time: the partial leading glyph slides off the
-   left edge while the right is clipped at a char boundary inside the
-   column. At the end of the scroll the shift is 0 and the longest
-   fitting suffix is shown so the final chars (".nes") are never cut. */
+/* Build a scrolled view of src, clipped to max_px pixels. `tick` is a
+   PIXEL offset into the string. We start at a CHARACTER boundary (never
+   a sub-pixel/negative x) because the PS2 GS wraps negative sprite
+   coordinates into a huge positive value, which draws a stray
+   horizontal streak across the screen. So the scroll steps by whole
+   chars - glitch-free, at the cost of not being sub-pixel smooth. At
+   the end the longest fitting suffix is shown so ".nes" is never cut. */
 static void BrowserCopyMarquee(Char *out, size_t out_size, const Char *src,
-                               Int32 max_px, Uint32 tick, Int32 *pShiftPx)
+                               Int32 max_px, Uint32 tick)
 {
-	if (pShiftPx)
-		*pShiftPx = 0;
-
 	if (!out || out_size == 0)
 		return;
-
 	if (!src)
 	{
 		out[0] = '\0';
@@ -213,8 +208,6 @@ static void BrowserCopyMarquee(Char *out, size_t out_size, const Char *src,
 	if (FontGetStrWidth(out) <= max_px)
 		return;
 
-	/* Full width of the source string. The scroll range is
-	   [0 .. fullW - max_px]; clamping at the top means "end reached". */
 	Int32 fullW = FontGetStrWidth(src);
 	Int32 maxOffset = fullW - max_px;
 	if (maxOffset < 0) maxOffset = 0;
@@ -223,58 +216,40 @@ static void BrowserCopyMarquee(Char *out, size_t out_size, const Char *src,
 	if (pxOffset > maxOffset)
 		pxOffset = maxOffset;
 
-	if (pxOffset >= maxOffset)
 	{
-		/* End of scroll: show the longest suffix that fits in max_px so
-		   the final characters (e.g. the ".nes" extension) are never
-		   clipped. No sub-pixel shift here - it settles aligned. */
 		size_t startChar = 0;
 		size_t i = 0, idx;
-		while (src[startChar] && FontGetStrWidth(src + startChar) > max_px)
-			startChar++;
-		out[0] = '\0';
-		for (idx = startChar; src[idx] && i + 1 < out_size; idx++, i++)
+
+		if (pxOffset >= maxOffset)
 		{
-			out[i] = src[idx];
-			out[i + 1] = '\0';
+			/* End: longest suffix that fits, so the final chars (".nes")
+			   are never clipped. */
+			while (src[startChar] && FontGetStrWidth(src + startChar) > max_px)
+				startChar++;
 		}
-		return;
-	}
-
-	/* Mid-scroll: find the char straddling pxOffset and the pixel
-	   remainder into it - that remainder is the smooth left shift. */
-	{
-		Int32  cumW = 0;
-		size_t startChar = 0;
-		Char   tmp[2] = {0, 0};
-		Int32  rem, limit;
-		size_t i, idx;
-
-		while (src[startChar])
+		else
 		{
-			tmp[0] = src[startChar];
-			Int32 cw = FontGetStrWidth(tmp);
-			if (cumW + cw > pxOffset)
-				break;
-			cumW += cw;
-			startChar++;
+			/* Mid-scroll: first char whose cumulative width crosses
+			   pxOffset (char-boundary start, x stays >= vx). */
+			Int32 cumW = 0;
+			Char  tmp[2] = {0, 0};
+			while (src[startChar])
+			{
+				tmp[0] = src[startChar];
+				Int32 cw = FontGetStrWidth(tmp);
+				if (cumW + cw > pxOffset)
+					break;
+				cumW += cw;
+				startChar++;
+			}
 		}
 
-		rem = pxOffset - cumW;        /* 0 .. (width of startChar - 1) */
-		if (pShiftPx)
-			*pShiftPx = rem;
-
-		/* Because the text is drawn shifted left by `rem`, we may render
-		   `rem` extra pixels of width and still end at vx+max_px. */
-		limit = max_px + rem;
-
-		i = 0;
 		out[0] = '\0';
 		for (idx = startChar; src[idx] && i + 1 < out_size; idx++)
 		{
 			out[i] = src[idx];
 			out[i + 1] = '\0';
-			if (FontGetStrWidth(out) > limit)
+			if (FontGetStrWidth(out) > max_px)
 			{
 				if (i > 0)
 					out[i] = '\0';
@@ -923,10 +898,9 @@ void CBrowserScreen::Draw()
 			   GetEntryPath() / GetEntryName() still read directly from
 			   m_pDirEntries[i].name, so the truncation here is purely
 			   cosmetic and never affects fopen(). */
-			Int32 marqShift = 0;
 			if (iEntry == m_iSelect && s_marquee_delay >= BROWSER_MARQUEE_DELAY_FRAMES)
 			{
-				BrowserCopyMarquee(view, sizeof(view), str, nameMaxPx, s_marquee_tick, &marqShift);
+				BrowserCopyMarquee(view, sizeof(view), str, nameMaxPx, s_marquee_tick);
 			}
 			else
 			{
@@ -966,7 +940,7 @@ void CBrowserScreen::Draw()
 
 		   //			FontColor4f(0.8, 0.8f, 0.8f, 1.0f);
 
-			FontPuts(vx - marqShift, vy, view);
+			FontPuts(vx, vy, view);
 //			FontPuts(vx+480, vy, sizestr);
 		}
 

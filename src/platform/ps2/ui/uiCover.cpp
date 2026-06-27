@@ -47,13 +47,16 @@ extern "C" {
 
 extern "C" void DLog(const char *fmt, ...);
 
-/* Fixed cover texture size (power-of-two for the GS sampler). */
-#define COVER_TEX_W 128
-#define COVER_TEX_H 128
+/* Fixed cover texture size (power-of-two for the GS sampler). 256 keeps
+   it close to 1:1 with the on-screen panel so it is not blocky, and
+   bilinear filtering (set in CoverInit) smooths the rest. */
+#define COVER_TEX_W 256
+#define COVER_TEX_H 256
 #define COVER_RGBA_BYTES (COVER_TEX_W * COVER_TEX_H * 4)
 
-/* Decoded-image LRU cache. 24 * ~65 KB ~= 1.5 MB. */
-#define COVER_CACHE_SLOTS 24
+/* Decoded-image LRU cache. 256x256 RGBA = 256 KB/slot, so keep the slot
+   count modest. 16 * 256 KB = 4 MB (menu only; freed on launch/off). */
+#define COVER_CACHE_SLOTS 16
 #define COVER_KEY_MAX     1024
 
 /* Directory index. */
@@ -133,6 +136,12 @@ static Bool _ScaleInto(Uint8 *dst, const unsigned char *src,
 
 	if (!dst || !src || sw == 0 || sh == 0)
 		return FALSE;
+
+	/* Clear first so the unused area below/right of the aspect-fit
+	   image is black: bilinear filtering samples one texel past the
+	   used region at the edges, and uninitialised VRAM there would
+	   show as a coloured fringe. */
+	memset(dst, 0, COVER_RGBA_BYTES);
 
 	if ((unsigned)(sw * COVER_TEX_H) >= (unsigned)(sh * COVER_TEX_W)) {
 		outW = COVER_TEX_W;
@@ -368,6 +377,7 @@ void CoverInit(Uint32 uVramTBP)
 
 	TextureNew(&s_Tex, COVER_TEX_W, COVER_TEX_H, GS_PSMCT32);
 	TextureSetAddr(&s_Tex, uVramTBP);
+	TextureSetFilter(&s_Tex, 1);   /* bilinear: smoother than nearest */
 
 	s_bTexInited = TRUE;
 	s_state      = COVER_PENDING;
