@@ -79,7 +79,11 @@ int MemCardCreateSave(char *pDir, char *pTitle, Bool bForceWrite)
 #else
 	strcpy_sjis((short *)&icon_sys.title, pTitle);
 #endif
-	icon_sys.nlOffset = 16;
+	/* nlOffset = byte onde a 2a linha do titulo comeca no OSDSYS do PS2.
+	   Titulo "SNESticle Revive" (ASCII, 16 bytes): offset 10 quebra em
+	   "SNESticle " / "Revive".  NAO usar '\n' no titulo - o 0x0A nao e'
+	   quebra de linha no OSD e impedia o nome de aparecer. */
+	icon_sys.nlOffset = 10;
 	icon_sys.trans = 0x60;
 	memcpy(icon_sys.bgCol, bgcolor, sizeof(bgcolor));
 	memcpy(icon_sys.lightDir, lightdir, sizeof(lightdir));

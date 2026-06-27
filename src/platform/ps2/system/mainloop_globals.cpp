@@ -73,7 +73,7 @@ Char _RomName[256];
 
 #if MAINLOOP_MEMCARD
 Char _SramPath[256] = "mc0:/SNESticle";
-Char _MainLoop_SaveTitle[] = "SNESticle\nSNESticle";
+Char _MainLoop_SaveTitle[] = "SNESticle Revive";
 #else
 Char _SramPath[256] = "host0:/cygdrive/d/emu/";
 #endif
