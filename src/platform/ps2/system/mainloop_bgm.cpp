@@ -102,8 +102,8 @@ enum BgmStateE {
 };
 
 static int  s_state    = BGM_UNTRIED;
-static Bool s_enabled  = TRUE;         /* Video Config liga/desliga       */
-static Bool s_volSet   = FALSE;        /* ja' forcamos o volume cheio?    */
+static int  s_volume   = 100;          /* 0 = off; 1..100 (Video Config)  */
+static Bool s_volSet   = FALSE;        /* ja' firmamos o volume p/ tocar? */
 
 static jar_mod_context_t  s_mod;       /* contexto do tocador de MOD      */
 static jar_xm_context_t  *s_xm  = NULL;/* contexto do tocador de XM       */
@@ -242,8 +242,8 @@ static void _TryLoad(void)
 /* ---- API ------------------------------------------------------------- */
 
 /* Libera o decoder e o buffer do arquivo.  Chamado SO' quando a trilha e'
-   desligada (BgmSetEnabled FALSE) -- nao no fluxo de abrir jogo, para o
-   menu reabrir sem reler do disco. */
+   desligada (BgmSetVolume(0)) -- nao no fluxo de abrir jogo, para o menu
+   reabrir sem reler do disco. */
 static void _BgmFree(void)
 {
     if (s_state == BGM_MOD) jar_mod_unload(&s_mod);
@@ -259,26 +259,41 @@ void BgmStop(void)
        entao reabrir o menu e' instantaneo (sem reler do disco -> sem a
        travadinha).  So' re-arma a logica de volume/dreno para a proxima
        entrada no menu (esperar a cauda de audio do jogo drenar antes de
-       soltar o tracker).  A liberacao real acontece em BgmSetEnabled. */
+       soltar o tracker).  A liberacao real acontece em BgmSetVolume(0). */
     s_volSet = FALSE;
 }
 
-void BgmSetEnabled(Bool bEnable)
+void BgmSetVolume(int vol)
 {
-    if (!bEnable) _BgmFree();
-    s_enabled = bEnable;
+    if (vol < 0)   vol = 0;
+    if (vol > 100) vol = 100;
+
+    if (vol == 0)
+    {
+        /* OFF: libera o decoder/buffer (nao consome RAM) e silencia o que
+           ainda estiver no ring. */
+        _BgmFree();
+        if (Aud_IsInitialized()) Aud_Setvol(0);
+    }
+    else if (s_volSet && Aud_IsInitialized())
+    {
+        /* ja' tocando: ajusta o volume ao vivo */
+        Aud_Setvol((unsigned int)(vol * 0x3FFF / 100));
+    }
+
+    s_volume = vol;
 }
 
-Bool BgmIsEnabled(void)
+int BgmGetVolume(void)
 {
-    return s_enabled;
+    return s_volume;
 }
 
 void BgmUpdate(void)
 {
     int avail, n, synthN, j;
 
-    if (!s_enabled)            return;
+    if (s_volume <= 0)         return;   /* OFF: nem carrega, nem usa RAM */
     if (!Aud_IsInitialized())  return;
 
     if (s_state == BGM_UNTRIED) _TryLoad();
@@ -292,7 +307,7 @@ void BgmUpdate(void)
     {
         if (Aud_Buffered() > BGM_DRAIN_THRESH)
             return;                 /* ainda drenando a cauda do jogo */
-        Aud_Setvol(0x3FFF);         /* ring limpo: libera o volume do tracker */
+        Aud_Setvol((unsigned int)(s_volume * 0x3FFF / 100)); /* volume do menu */
         s_volSet = TRUE;
     }
 

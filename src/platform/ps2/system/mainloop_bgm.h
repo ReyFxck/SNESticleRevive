@@ -31,12 +31,15 @@ extern "C" {
    se nao houver faixa, ou se o audio ainda nao esta pronto. */
 void BgmUpdate(void);
 
-/* Para a reproducao e libera o decoder (chamado ao lancar uma ROM). */
+/* Para a reproducao (chamado ao lancar uma ROM).  NAO libera o decoder:
+   mantem a faixa carregada para reabrir o menu sem reler do disco. */
 void BgmStop(void);
 
-/* Liga/desliga a trilha (persistencia fica a cargo do Video Config). */
-void BgmSetEnabled(Bool bEnable);
-Bool BgmIsEnabled(void);
+/* Volume da trilha de menu: 0 = OFF (libera o decoder, nao carrega nem
+   consome RAM), 1..100 = liga e toca nesse volume.  Vale para SNES e NES
+   (a trilha do menu e' compartilhada). */
+void BgmSetVolume(int vol);
+int  BgmGetVolume(void);
 
 #ifdef __cplusplus
 }
