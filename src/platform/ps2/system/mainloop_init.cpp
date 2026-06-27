@@ -238,19 +238,21 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
 	   (replaces the #if 0 block above which depended on VersionGetInfo,
 	   itself wrapped in #if 0 inside version.cpp), followed by the
 	   ReyFxck fork credit. */
-	/* APP_VERSION / BUILD_DATE / BUILD_TIME vem do Makefile (data/hora
-	   em TZ de Brasilia p/ nao ficar 3h adiantado como o __TIME__ em
-	   UTC).  Fallback para os macros do compilador se nao definidos. */
-#ifndef APP_VERSION
-#define APP_VERSION "1.0.0"
-#endif
+	/* BUILD_DATE/BUILD_TIME vem do Makefile (TZ Brasilia, p/ nao ficar 3h
+	   adiantado como o __TIME__ em UTC).  APP_VERSION e' opt-in: so' e'
+	   definido se o build passar APP_VERSION=...; sem ele, o banner nao
+	   mostra numero de versao. */
 #ifndef BUILD_DATE
 #define BUILD_DATE __DATE__
 #endif
 #ifndef BUILD_TIME
 #define BUILD_TIME __TIME__
 #endif
+#ifdef APP_VERSION
 	ScrPrintf("SNESticle Revive v%s   %s  %s", APP_VERSION, BUILD_DATE, BUILD_TIME);
+#else
+	ScrPrintf("SNESticle Revive   %s  %s", BUILD_DATE, BUILD_TIME);
+#endif
 	ScrPrintf("Copyright (c) 1997-2004 Icer Addis");
 	ScrPrintf("Forked By ReyFxck - Thomas R. (2026)");
 
