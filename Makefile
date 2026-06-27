@@ -934,14 +934,14 @@ iso-build-image:
 	if [ -n "$(strip $(out))" ]; then \
 		mkdir -p "$(out)"; \
 		cp -f "$(ISO_OUT)" "$(out)/"; \
-		cp -f "$(TARGET)" "$(out)/SNESticle.elf"; \
-		copied="$(out)/$$(basename "$(ISO_OUT)"); $(out)/SNESticle.elf"; \
+		cp -f "$(TARGET)" "$(out)/$(ELF_OUT_NAME).elf"; \
+		copied="$(out)/$$(basename "$(ISO_OUT)"); $(out)/$(ELF_OUT_NAME).elf"; \
 		printf "$${green}[ COPY ]$${reset} ISO -> $(out)/$$(basename "$(ISO_OUT)")\n"; \
-		printf "$${green}[ COPY ]$${reset} ELF -> $(out)/SNESticle.elf\n"; \
+		printf "$${green}[ COPY ]$${reset} ELF -> $(out)/$(ELF_OUT_NAME).elf\n"; \
 		if [ "$(PACK)" = "1" ] && [ -f "$(TARGET_PACKED)" ]; then \
-			cp -f "$(TARGET_PACKED)" "$(out)/SNESticle.packed.elf"; \
-			copied="$$copied; $(out)/SNESticle.packed.elf"; \
-			printf "$${green}[ COPY ]$${reset} PACKED ELF -> $(out)/SNESticle.packed.elf\n"; \
+			cp -f "$(TARGET_PACKED)" "$(out)/$(ELF_OUT_NAME).packed.elf"; \
+			copied="$$copied; $(out)/$(ELF_OUT_NAME).packed.elf"; \
+			printf "$${green}[ COPY ]$${reset} PACKED ELF -> $(out)/$(ELF_OUT_NAME).packed.elf\n"; \
 		fi; \
 		printf "%s\n" "$$copied" > "$(BUILD_COPIED_FILE)"; \
 	fi
@@ -1113,13 +1113,13 @@ build-begin:
 copy-output:
 	@if [ -n "$(strip $(out))" ]; then \
 		mkdir -p "$(out)"; \
-		cp -f "$(TARGET)" "$(out)/SNESticle.elf"; \
+		cp -f "$(TARGET)" "$(out)/$(ELF_OUT_NAME).elf"; \
 		bytes=$$(wc -c <"$(TARGET)"); \
 		reset=""; green=""; \
 		if [ "$(COLOR)" = "1" ]; then reset="\033[0m"; green="\033[32m"; fi; \
-		printf "$${green}[ COPY ]$${reset} SNESticle.elf -> $(out)/ (%s bytes)\n" "$$bytes"; \
+		printf "$${green}[ COPY ]$${reset} $(ELF_OUT_NAME).elf -> $(out)/ (%s bytes)\n" "$$bytes"; \
 		mkdir -p "$(BUILD_META_DIR)"; \
-		printf "%s\n" "$(out)/SNESticle.elf" > "$(BUILD_COPIED_FILE)"; \
+		printf "%s\n" "$(out)/$(ELF_OUT_NAME).elf" > "$(BUILD_COPIED_FILE)"; \
 	fi
 
 build-summary:
