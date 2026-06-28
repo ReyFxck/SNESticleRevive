@@ -448,7 +448,17 @@ SDK_EXTRA_IRX := ioptrap.irx poweroff.irx
 # init_ps2_filesystem_driver() brings up the modern cdfs.irx which
 # registers the cdfs: device with iomanX, and the browser / ROM
 # loader reach the disc through plain newlib stdio.
-EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip usbd bdm bdmfs_fatfs usbmass_bd ata_bd
+EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip usbd bdm bdmfs_fatfs usbmass_bd ps2atad ps2hdd
+
+# mmceman.irx (MemCard PRO2 / SD2PSX -> mmce0:/mmce1:) e' OPCIONAL: so'
+# embute se existir no PS2SDK, para nao quebrar o build em SDK que nao
+# tenha o modulo.  Define HAVE_MMCEMAN quando presente.
+MMCEMAN_IRX_PATH ?= $(PS2SDK)/iop/irx/mmceman.irx
+ifneq ($(wildcard $(MMCEMAN_IRX_PATH)),)
+EMBED_IRX_NAMES += mmceman
+CFLAGS   += -DHAVE_MMCEMAN=1
+CXXFLAGS += -DHAVE_MMCEMAN=1
+endif
 
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
@@ -476,7 +486,10 @@ BDMFS_FATFS_IRX_PATH ?= $(PS2SDK)/iop/irx/bdmfs_fatfs.irx
 USBMASS_BD_IRX_PATH  ?= $(PS2SDK)/iop/irx/usbmass_bd.irx
 # ATA block device para BDM: expoe o HD INTERNO (FAT/exFAT) como um massN:,
 # igual ao OPL moderno.  Usa o ps2dev9.irx (ja' embutido) como barramento.
-ATA_BD_IRX_PATH      ?= $(PS2SDK)/iop/irx/ata_bd.irx
+# HD interno formato APA (igual HDD-OSD/OPL): ps2atad (ATA) + ps2hdd
+# (expoe hdd0:), sobre o ps2dev9.irx ja' embutido.
+PS2ATAD_IRX_PATH     ?= $(PS2SDK)/iop/irx/ps2atad.irx
+PS2HDD_IRX_PATH      ?= $(PS2SDK)/iop/irx/ps2hdd.irx
 
 .PHONY: all clean strip list count package package-irx check-env packed elf fix-packer fast serial turbo rebuild-fast help ensure-ps2sdk install-ps2sdk ps2sdk-env ensure-ps2dev install-ps2dev-tar ps2dev-env build-begin build-summary copy-output iso-build-image ensure-ps2-packer install-ps2-packer ensure-iso-tool install-iso-tool ensure-local-ps2-packer
 
@@ -529,8 +542,12 @@ $(EMBED_DIR)/bdmfs_fatfs_irx.h: $(BDMFS_FATFS_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,bdmfs_fatfs_irx)
 $(EMBED_DIR)/usbmass_bd_irx.h: $(USBMASS_BD_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,usbmass_bd_irx)
-$(EMBED_DIR)/ata_bd_irx.h: $(ATA_BD_IRX_PATH) | $(EMBED_DIR)
-	$(call RUN_BIN2C,$<,$@,ata_bd_irx)
+$(EMBED_DIR)/ps2atad_irx.h: $(PS2ATAD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,ps2atad_irx)
+$(EMBED_DIR)/ps2hdd_irx.h: $(PS2HDD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,ps2hdd_irx)
+$(EMBED_DIR)/mmceman_irx.h: $(MMCEMAN_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,mmceman_irx)
 
 # embedded_irx.cpp #includes the generated headers, so make sure they
 # exist before that file is compiled.
