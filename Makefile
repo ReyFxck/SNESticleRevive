@@ -194,6 +194,18 @@ ifeq ($(PROFILE),1)
   CFLAGS   += -DCODE_PROFILE=1
   CXXFLAGS += -DCODE_PROFILE=1
 endif
+
+# HDD=1 liga o suporte ao HD INTERNO (formato APA/PFS, tipo HDD-OSD/OPL):
+# sobe dev9 + atad + hdd + pfs e mostra hdd0:/pfs0: no browser.
+# DESLIGADO por padrao porque a sondagem do dev9 pode TRAVAR o boot em
+# consoles sem HD / adaptador de rede (e em emuladores).  So' use em
+# console com HD interno:  make HDD=1
+# (HD EXTERNO USB nao precisa disso -- ja' aparece como mass0:/mass1:.)
+HDD ?= 0
+ifeq ($(HDD),1)
+  CFLAGS   += -DENABLE_HDD=1
+  CXXFLAGS += -DENABLE_HDD=1
+endif
 # ----------------------------------------------------------------------
 
 INCS := \

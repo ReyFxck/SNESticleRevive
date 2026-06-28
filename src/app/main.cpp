@@ -296,6 +296,23 @@ int main(int argc, char **argv)
 	init_usb_driver_compat();
 	// DLog("[boot] init_usb_driver: done");
 
+#ifdef ENABLE_HDD
+	/* HD interno (APA/PFS), so' quando compilado com HDD=1.  dev9 e' o
+	   barramento da baia de expansao / adaptador de rede; sem hardware
+	   dev9 a sondagem pode demorar/travar -- por isso isto fica atras da
+	   flag e DESLIGADO por padrao.  init_hdd_driver() carrega ps2hdd.irx
+	   + ps2fs.irx (do ps2_drivers) e habilita hdd0: (particoes APA) e
+	   pfs0: (apos montar uma particao).  As assinaturas seguem o
+	   ps2_drivers; se a versao instalada exigir o formato (bool), e' um
+	   ajuste de uma linha (igual ao init_usb_driver acima). */
+	// DLog("[boot] init_dev9_driver: enter");
+	init_dev9_driver();
+	// DLog("[boot] init_dev9_driver: done");
+	// DLog("[boot] init_hdd_driver: enter");
+	init_hdd_driver();
+	// DLog("[boot] init_hdd_driver: done");
+#endif
+
 	// DLog("[boot] init_cdfs_driver: enter");
 	init_cdfs_driver();
 	// DLog("[boot] init_cdfs_driver: done");

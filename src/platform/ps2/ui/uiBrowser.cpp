@@ -1260,6 +1260,13 @@ void CBrowserScreen::SetDir(const Char *pDir)
 //        AddEntry("cdrom:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("host:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mass:", BROWSER_ENTRYTYPE_DRIVE, 0);
+#ifdef ENABLE_HDD
+        /* HD interno (APA/PFS) -- so' nos builds feitos com HDD=1.
+           hdd0: lista as particoes APA; pfs0: e' o conteudo apos montar
+           uma particao. */
+        AddEntry("hdd0:", BROWSER_ENTRYTYPE_DRIVE, 0);
+        AddEntry("pfs0:", BROWSER_ENTRYTYPE_DRIVE, 0);
+#endif
         AddEntry("mc0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);
 //        AddEntry("rom:", BROWSER_ENTRYTYPE_DRIVE, 0);
