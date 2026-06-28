@@ -39,7 +39,11 @@ On top of the SNES core, the project now also integrates **InfoNES** to bring
 - **Cover art** in the ROM browser — box art / screenshots from PNG files,
   decoded by **upng** (a bundled single‑file decoder, no external libs). See
   [Cover art](#cover-art-capas).
-- Audio via SjPCM / audsrv.
+- **Menu music** — tracker tunes (`.mod` / `.xm`) play in the ROM browser and
+  pause menu, with volume and synthesis‑rate controls. See
+  [Menu music & audio](#menu-music--audio).
+- Audio via **audsrv**, with separate **Game Volume** and **Menu Music**
+  controls in the Video Config screen.
 - Controller / memory‑card / IRX bring‑up aligned to **Open‑PS2‑Loader** style.
 - Netplay code (`src/modules/netplay/`).
 
@@ -118,6 +122,53 @@ decode time; they are cached in RAM and prefetched so browsing stays smooth.
 
 ---
 
+## Menu music & audio
+
+Background music plays in the ROM browser and the pause menu — tracker modules
+in **`.mod`** (Amiga ProTracker) and **`.xm`** (FastTracker II) formats, decoded
+on the EE by the bundled single‑file players **jar_mod** / **jar_xm**.
+
+Drop one or more tracks in any of these folders (scanned **once** and cached in
+RAM, so it never re‑hits the disk while you browse):
+
+- the `BGM_PATH` folder (if you built with one — see below)
+- `mc0:/SNESticle/bgm`, `mc1:/SNESticle/bgm`
+- `mass:/SNESticle/bgm`, `mass:/bgm`
+- `cdfs:/BGM` (inside the ISO)
+
+A **random track** is picked at boot, and a **different one each time you leave
+a game** and return to the menu (when more than one track is present).
+
+**Video Config → Audio**
+
+| Option | Range | Notes |
+|--------|-------|-------|
+| **Game Volume** | 0–100 | Loudness of the emulated SNES/NES audio. **100 = the default** (matches Snes9x); 0 mutes. Applies to both cores. |
+| **Menu Music** | Off / 1–100 | Background‑music volume. **0 = Off** — the player isn't loaded and uses no RAM. Shows **No Track** when no `.mod`/`.xm` is found. |
+| **Frequency** | 16–48 kHz | Synthesis rate of the menu music (the output is always resampled to 48 kHz). Higher = better quality but more CPU; **32 kHz** is the default and recommended. |
+
+All three persist to the memory card (press ✕ to save), and work the same for
+SNES and NES (the menu and audio path are shared).
+
+To bake a default tracks folder or synth rate into the build:
+
+```bash
+make BGM_PATH=mass:/snes/bgm    # where to look for .mod/.xm first
+make BGM_RATE=24000             # 16000/22050/24000/32000/38000/44100/48000
+```
+
+When building an ISO, add `bgm=` to bundle a folder of tracks (they land in
+`cdfs:/BGM`):
+
+```bash
+make iso roms=/path/to/roms bgm=/path/to/tracks
+```
+
+> **Licenses:** `jar_mod` is public domain (CC0); `jar_xm` is WTFPL. Both are
+> single‑header players vendored from raylib's `src/external`.
+
+---
+
 ## Building (PlayStation 2)
 
 You need **PS2SDK** installed. Follow the
@@ -154,6 +205,8 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 | `ROMS=/path` | ROM folder to embed when building an ISO. |
 | `PACK=0` | Build the ISO using the unpacked ELF. |
 | `COVERS_PATH=path` | Shared cover‑art folder baked into the build (e.g. `mass:/snes/covers`). See [Cover art](#cover-art-capas). |
+| `BGM_PATH=path` | Folder scanned first for menu‑music `.mod`/`.xm` files. See [Menu music & audio](#menu-music--audio). |
+| `BGM_RATE=hz` | Default menu‑music synthesis rate (e.g. `32000`). |
 
 > Note: changing a flag like `PROFILE=1` does **not** force a recompile on its
 > own (make only tracks file timestamps). Run `make clean` first when toggling
@@ -175,6 +228,12 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
   Decoded covers are kept in a small RAM cache and neighbours are prefetched, so
   browsing stays smooth even from a CD; toggle it in Video Config, point it at a
   shared folder with `COVERS_PATH`, and cycle box/title/gameplay with □.
+- **Menu music & audio controls**: tracker music (`.mod` / `.xm`) plays in the
+  ROM browser and pause menu via bundled single‑file players (jar_mod / jar_xm),
+  decoded on the EE and resampled to the SPU2's 48 kHz. Added **Game Volume**,
+  **Menu Music** volume (0 = off, frees its RAM) and a synthesis **Frequency**
+  picker in Video Config — all persisted, shared by SNES and NES. A random track
+  plays at boot and a new one each time you leave a game.
 - **Boot / input**: controller and IRX bring‑up reworked to behave on real
   hardware, not just emulators.
 - **Build system**: parallel jobs, `VERBOSE`, `PROFILE`, friendlier `make help`,
@@ -234,6 +293,7 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 - **Sardu** — for releasing the recovered source under the MIT license (2022).
 - **[jay-kumogata/InfoNES](https://github.com/jay-kumogata/InfoNES)** — the NES core integrated here.
 - **[upng](https://github.com/elanthis/upng)** — Sean Middleditch & Lode Vandevenne; the bundled single‑file PNG decoder used for cover art (zlib license). Extended in this repo with palette/indexed support.
+- **jar_mod / jar_xm** — Joshua Reisenauer (jar_xm based on **libxm** by Romain "Artefact2" Dalmaso); the bundled single‑file `.mod` / `.xm` tracker players used for menu music (public domain / WTFPL), vendored from raylib's `src/external`.
 - **[hugorsgarcia/PS2SNESticle](https://github.com/hugorsgarcia/PS2SNESticle)** — **Hugo Garcia**, whose PS2 work was the reference for the controller / memory‑card / IRX bring‑up and the netplay module.
 - **Open‑PS2‑Loader**, **picodrive‑PS2** and **uLaunchELF** — references for correct PS2 boot, IOP and video behavior.
 - **ReyFxck** — this revival/fork and ongoing development.
