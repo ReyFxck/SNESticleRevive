@@ -293,7 +293,13 @@ int main(int argc, char **argv)
 	}
 
 	// DLog("[boot] init_usb_driver: enter");
+#ifdef EMBED_BDM
+	/* BDM=1: usa a stack BDM moderna embutida (le exFAT/GPT) no lugar da
+	   do ps2_drivers. */
+	UsbBdmLoadEmbeddedIrx();
+#else
 	init_usb_driver_compat();
+#endif
 	// DLog("[boot] init_usb_driver: done");
 
 	// DLog("[boot] init_cdfs_driver: enter");

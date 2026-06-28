@@ -28,6 +28,14 @@
 #include "smap_irx.h"
 #include "ps2ip_irx.h"
 
+#ifdef EMBED_BDM
+/* Stack BDM moderna (so' embutida com BDM=1). */
+#include "usbd_irx.h"
+#include "bdm_irx.h"
+#include "bdmfs_fatfs_irx.h"
+#include "usbmass_bd_irx.h"
+#endif
+
 struct EmbeddedEntry
 {
     const char          *name;
@@ -205,6 +213,44 @@ extern "C" int MemCardLoadEmbeddedIrx(void)
     s_memcard_loaded = 1;
     return 0;
 }
+
+#ifdef EMBED_BDM
+/* USB + BDM stack bring-up (so' compilado com BDM=1).
+ *
+ * Carrega a stack BDM moderna do PROPRIO PS2SDK em vez da que o
+ * ps2_drivers' init_usb_driver() embute -- um PS2SDK recente le exFAT e
+ * tabela de particao GPT (drives >2TB).  Ordem padrao (igual OPL /
+ * exemplos do PS2SDK):
+ *
+ *   1. usbd.irx        - pilha USB host (OHCI).  Base de tudo.
+ *   2. bdm.irx         - Block Device Manager: le MBR/GPT e expoe os
+ *                        block devices para os filesystems.
+ *   3. bdmfs_fatfs.irx - FatFs sobre BDM: monta FAT/exFAT como massN:.
+ *   4. usbmass_bd.irx  - mass storage USB -> block device do BDM.  Por
+ *                        ultimo, para que bdm + fatfs ja' estejam prontos
+ *                        quando ele detectar um pendrive.
+ *
+ * Quando BDM=1, main.cpp chama isto NO LUGAR de init_usb_driver_compat().
+ */
+extern "C" int UsbBdmLoadEmbeddedIrx(void)
+{
+    int ret;
+
+    ret = EmbeddedIrxLoad(usbd_irx, sizeof(usbd_irx), 0, NULL);
+    if (ret < 0) { printf("UsbBdmLoadEmbeddedIrx: usbd.irx failed (%d)\n", ret); return -1; }
+
+    ret = EmbeddedIrxLoad(bdm_irx, sizeof(bdm_irx), 0, NULL);
+    if (ret < 0) { printf("UsbBdmLoadEmbeddedIrx: bdm.irx failed (%d)\n", ret); return -2; }
+
+    ret = EmbeddedIrxLoad(bdmfs_fatfs_irx, sizeof(bdmfs_fatfs_irx), 0, NULL);
+    if (ret < 0) { printf("UsbBdmLoadEmbeddedIrx: bdmfs_fatfs.irx failed (%d)\n", ret); return -3; }
+
+    ret = EmbeddedIrxLoad(usbmass_bd_irx, sizeof(usbmass_bd_irx), 0, NULL);
+    if (ret < 0) { printf("UsbBdmLoadEmbeddedIrx: usbmass_bd.irx failed (%d)\n", ret); return -4; }
+
+    return 0;
+}
+#endif
 
 /* Network IRX stack bring-up.
  *

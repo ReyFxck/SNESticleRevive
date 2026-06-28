@@ -194,6 +194,19 @@ ifeq ($(PROFILE),1)
   CFLAGS   += -DCODE_PROFILE=1
   CXXFLAGS += -DCODE_PROFILE=1
 endif
+
+# BDM=1 embute e carrega a stack BDM moderna do PROPRIO PS2SDK
+# (usbd + bdm + bdmfs_fatfs + usbmass_bd) em vez de usar a do
+# ps2_drivers (init_usb_driver).  Util quando o bdm do ps2_drivers e'
+# antigo: um PS2SDK recente le exFAT e tabela de particao GPT (drives
+# >2TB), igual ao OPL.  DESLIGADO por padrao -- o caminho testado do
+# ps2_drivers continua sendo o normal.  So' use se precisar de GPT/exFAT
+# e o build normal nao reconhecer o drive:  make BDM=1
+BDM ?= 0
+ifeq ($(BDM),1)
+  CFLAGS   += -DEMBED_BDM=1
+  CXXFLAGS += -DEMBED_BDM=1
+endif
 # ----------------------------------------------------------------------
 
 INCS := \
@@ -449,6 +462,10 @@ SDK_EXTRA_IRX := ioptrap.irx poweroff.irx
 # registers the cdfs: device with iomanX, and the browser / ROM
 # loader reach the disc through plain newlib stdio.
 EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip
+# BDM=1: embute tambem a stack BDM moderna do PS2SDK (USB + FAT/exFAT/GPT).
+ifeq ($(BDM),1)
+EMBED_IRX_NAMES += usbd bdm bdmfs_fatfs usbmass_bd
+endif
 
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
@@ -467,6 +484,12 @@ PS2DEV9_IRX_PATH ?= $(PS2SDK)/iop/irx/ps2dev9.irx
 NETMAN_IRX_PATH  ?= $(PS2SDK)/iop/irx/netman.irx
 SMAP_IRX_PATH    ?= $(PS2SDK)/iop/irx/smap.irx
 PS2IP_IRX_PATH   ?= $(PS2SDK)/iop/irx/ps2ip.irx
+
+# BDM stack (so' embutida quando BDM=1; paths inofensivos se nao usados)
+USBD_IRX_PATH        ?= $(PS2SDK)/iop/irx/usbd.irx
+BDM_IRX_PATH         ?= $(PS2SDK)/iop/irx/bdm.irx
+BDMFS_FATFS_IRX_PATH ?= $(PS2SDK)/iop/irx/bdmfs_fatfs.irx
+USBMASS_BD_IRX_PATH  ?= $(PS2SDK)/iop/irx/usbmass_bd.irx
 
 .PHONY: all clean strip list count package package-irx check-env packed elf fix-packer fast serial turbo rebuild-fast help ensure-ps2sdk install-ps2sdk ps2sdk-env ensure-ps2dev install-ps2dev-tar ps2dev-env build-begin build-summary copy-output iso-build-image ensure-ps2-packer install-ps2-packer ensure-iso-tool install-iso-tool ensure-local-ps2-packer
 
@@ -511,6 +534,16 @@ $(EMBED_DIR)/smap_irx.h: $(SMAP_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,smap_irx)
 $(EMBED_DIR)/ps2ip_irx.h: $(PS2IP_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,ps2ip_irx)
+
+# BDM stack (usadas so' quando BDM=1 as adiciona a EMBED_IRX_NAMES)
+$(EMBED_DIR)/usbd_irx.h: $(USBD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,usbd_irx)
+$(EMBED_DIR)/bdm_irx.h: $(BDM_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,bdm_irx)
+$(EMBED_DIR)/bdmfs_fatfs_irx.h: $(BDMFS_FATFS_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,bdmfs_fatfs_irx)
+$(EMBED_DIR)/usbmass_bd_irx.h: $(USBMASS_BD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,usbmass_bd_irx)
 
 # embedded_irx.cpp #includes the generated headers, so make sure they
 # exist before that file is compiled.
