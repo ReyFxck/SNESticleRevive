@@ -261,18 +261,25 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     ScrPrintf("mx4sio_bd (SD->massN) = %d\n", ret);
 #endif
 
-    /* HD INTERNO formato APA (igual HDD-OSD/OPL): dev9 (barramento) +
-       ps2atad (ATA) + ps2hdd (expoe hdd0:).  BEST-EFFORT: em console SEM
-       HD interno os modulos so' nao acham hardware -- a gente loga e SEGUE
-       (nao aborta o USB, nao trava o boot).  Carregar os modulos NAO
-       bloqueia; o que travava era o waitUntilDeviceIsReady() do
-       ps2_drivers, que NAO usamos aqui. */
-    ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
-    ScrPrintf("dev9 = %d\n", ret);
-    ret = EmbeddedIrxLoad(ps2atad_irx, sizeof(ps2atad_irx), 0, NULL);
-    ScrPrintf("atad = %d\n", ret);
-    ret = EmbeddedIrxLoad(ps2hdd_irx, sizeof(ps2hdd_irx), 0, NULL);
-    ScrPrintf("hdd (hdd0:) = %d\n", ret);
+    /* HD INTERNO (APA): dev9 + ps2atad + ps2hdd -- DESABILITADO no boot.
+     *
+     * REGRESSAO confirmada em hardware real (Adriano): carregar estes 3
+     * modulos aqui dava TELA PRETA no boot (testado em FAT32 e exFAT).
+     * Motivo: EmbeddedIrxLoad usa SifExecModuleBuffer, que e' SINCRONO;
+     * a rotina de init do ps2dev9/ps2hdd fica esperando o hardware DEV9/
+     * ATA e, em muitos consoles, NAO retorna -> o boot congela ANTES do
+     * video inicializar (por isso nem o splash aparece).  O "best-effort"
+     * assumido antes estava errado: o load em si JA bloqueia, nao so' o
+     * waitUntilDeviceIsReady() do ps2_drivers.
+     *
+     * O USB (usbd/bdm/bdmfs_fatfs/usbmass_bd, acima) continua intacto.
+     * Suporte a hdd0: vai voltar depois como carga PREGUICOSA -- so' ao
+     * entrar em hdd0: no browser -- para nunca tocar o boot.
+     *
+     *   ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
+     *   ret = EmbeddedIrxLoad(ps2atad_irx, sizeof(ps2atad_irx), 0, NULL);
+     *   ret = EmbeddedIrxLoad(ps2hdd_irx,  sizeof(ps2hdd_irx),  0, NULL);
+     */
 
 #ifdef HAVE_MMCEMAN
     /* Memory cards modificados (MemCard PRO2 / SD2PSX) -> mmce0:/mmce1:.

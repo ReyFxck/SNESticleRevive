@@ -1265,7 +1265,6 @@ void CBrowserScreen::SetDir(const Char *pDir)
            abrem sem conteudo. */
         AddEntry("mass0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mass1:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("hdd0:", BROWSER_ENTRYTYPE_DRIVE, 0);   /* HD interno (APA); pfs montado por dentro */
         AddEntry("mmce0:", BROWSER_ENTRYTYPE_DRIVE, 0);  /* MemCard PRO2 / SD2PSX */
         AddEntry("mc0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);
