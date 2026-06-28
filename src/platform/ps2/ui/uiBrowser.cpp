@@ -26,6 +26,8 @@ extern "C" {
 #include "mcsave_ee.h"
 };
 
+#include "embedded_irx.h"   /* HddSupportIsEnabled / HddLoadEmbeddedIrx */
+
 static const char *_MenuEntries[]=
 {
 	"Copy File",
@@ -1173,6 +1175,12 @@ void CBrowserScreen::SetDir(const Char *pDir)
 
     // DLog("[ui] MenuDir: '%s'", pDir);
 
+	/* Carga PREGUICOSA do HD interno: ao entrar em hdd0: (ou qualquer
+	   subpasta dele), carrega dev9/ps2atad/ps2hdd AGORA -- nunca no boot.
+	   No-op se o suporte a HDD estiver desligado ou ja carregado. */
+	if (pDir[0] == 'h' && pDir[1] == 'd' && pDir[2] == 'd')
+		HddLoadEmbeddedIrx();
+
 	ResetEntries();
 
 	strcpy(m_Dir, pDir);
@@ -1265,7 +1273,11 @@ void CBrowserScreen::SetDir(const Char *pDir)
            abrem sem conteudo. */
         AddEntry("mass0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mass1:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("hdd0:", BROWSER_ENTRYTYPE_DRIVE, 0);   /* HD interno (APA); pfs montado por dentro */
+        /* HD interno (APA): so' listado se o usuario LIGOU o suporte a HDD
+           nas configs.  A carga dos modulos (dev9/atad/hdd) e' preguicosa,
+           feita em SetDir() ao entrar -- nunca no boot. */
+        if (HddSupportIsEnabled())
+            AddEntry("hdd0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mmce0:", BROWSER_ENTRYTYPE_DRIVE, 0);  /* MemCard PRO2 / SD2PSX */
         AddEntry("mc0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);

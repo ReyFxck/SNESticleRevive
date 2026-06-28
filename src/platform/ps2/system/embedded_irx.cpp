@@ -261,18 +261,25 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     ScrPrintf("mx4sio_bd (SD->massN) = %d\n", ret);
 #endif
 
-    /* HD INTERNO formato APA (igual HDD-OSD/OPL): dev9 (barramento) +
-       ps2atad (ATA) + ps2hdd (expoe hdd0:).  BEST-EFFORT: em console SEM
-       HD interno os modulos so' nao acham hardware -- a gente loga e SEGUE
-       (nao aborta o USB, nao trava o boot).  Carregar os modulos NAO
-       bloqueia; o que travava era o waitUntilDeviceIsReady() do
-       ps2_drivers, que NAO usamos aqui. */
-    ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
-    ScrPrintf("dev9 = %d\n", ret);
-    ret = EmbeddedIrxLoad(ps2atad_irx, sizeof(ps2atad_irx), 0, NULL);
-    ScrPrintf("atad = %d\n", ret);
-    ret = EmbeddedIrxLoad(ps2hdd_irx, sizeof(ps2hdd_irx), 0, NULL);
-    ScrPrintf("hdd (hdd0:) = %d\n", ret);
+    /* HD INTERNO (APA): dev9 + ps2atad + ps2hdd -- DESABILITADO no boot.
+     *
+     * REGRESSAO confirmada em hardware real (Adriano): carregar estes 3
+     * modulos aqui dava TELA PRETA no boot (testado em FAT32 e exFAT).
+     * Motivo: EmbeddedIrxLoad usa SifExecModuleBuffer, que e' SINCRONO;
+     * a rotina de init do ps2dev9/ps2hdd fica esperando o hardware DEV9/
+     * ATA e, em muitos consoles, NAO retorna -> o boot congela ANTES do
+     * video inicializar (por isso nem o splash aparece).  O "best-effort"
+     * assumido antes estava errado: o load em si JA bloqueia, nao so' o
+     * waitUntilDeviceIsReady() do ps2_drivers.
+     *
+     * O USB (usbd/bdm/bdmfs_fatfs/usbmass_bd, acima) continua intacto.
+     * Suporte a hdd0: vai voltar depois como carga PREGUICOSA -- so' ao
+     * entrar em hdd0: no browser -- para nunca tocar o boot.
+     *
+     *   ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
+     *   ret = EmbeddedIrxLoad(ps2atad_irx, sizeof(ps2atad_irx), 0, NULL);
+     *   ret = EmbeddedIrxLoad(ps2hdd_irx,  sizeof(ps2hdd_irx),  0, NULL);
+     */
 
 #ifdef HAVE_MMCEMAN
     /* Memory cards modificados (MemCard PRO2 / SD2PSX) -> mmce0:/mmce1:.
@@ -281,6 +288,49 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     ScrPrintf("mmceman (mmce0/1) = %d\n", ret);
 #endif
 
+    return 0;
+}
+
+/* HD INTERNO (APA) -- carga PREGUICOSA e opcional.
+ *
+ * Por que separado do UsbBdm: a init do ps2dev9/ps2hdd e' SINCRONA e,
+ * em consoles sem HD (ou com DEV9 problematico), NAO retorna -> travava
+ * o boot inteiro (tela preta).  Aqui isso so' roda quando o usuario
+ * ESCOLHE entrar em hdd0: no browser, e so' se o toggle estiver ligado.
+ * No pior caso, trava apenas a entrada no hdd0: (e so' de quem ligou a
+ * opcao), nunca o boot.  Mesma filosofia do "HDD device start mode" do
+ * OPL: padrao DESLIGADO, quem tem HD liga. */
+static int s_hdd_enabled = 0;   /* toggle (persistido no video.cfg) */
+static int s_hdd_loaded  = 0;   /* modulos ja carregados nesta sessao */
+
+extern "C" int HddSupportIsEnabled(void)
+{
+    return s_hdd_enabled;
+}
+
+extern "C" void HddSupportSetEnabled(int enabled)
+{
+    s_hdd_enabled = enabled ? 1 : 0;
+}
+
+extern "C" int HddLoadEmbeddedIrx(void)
+{
+    int ret;
+
+    if (!s_hdd_enabled) return -1;   /* desligado: nem tenta */
+    if (s_hdd_loaded)   return 0;    /* ja carregado: no-op */
+
+    /* dev9 -> ps2atad -> ps2hdd (expoe hdd0: no formato APA).  dev9 pode
+       ja estar carregado (stack de rede); SifExecModuleBuffer devolve
+       erro de duplicado, que ignoramos (best-effort). */
+    ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
+    printf("HddLoad: dev9 = %d\n", ret);
+    ret = EmbeddedIrxLoad(ps2atad_irx, sizeof(ps2atad_irx), 0, NULL);
+    printf("HddLoad: atad = %d\n", ret);
+    ret = EmbeddedIrxLoad(ps2hdd_irx,  sizeof(ps2hdd_irx),  0, NULL);
+    printf("HddLoad: hdd  = %d\n", ret);
+
+    s_hdd_loaded = 1;
     return 0;
 }
 
