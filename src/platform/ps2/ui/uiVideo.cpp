@@ -16,6 +16,7 @@ extern "C" {
 #include "uiCover.h"
 #include "mainloop_bgm.h"
 #include "audmixbuffer.h"
+#include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
@@ -25,7 +26,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 12
+#define VIDEOCFG_VERSION 13
 
 typedef struct
 {
@@ -40,6 +41,7 @@ typedef struct
 	Int32  bgmvol;     /* volume da trilha de menu: 0=off, 1..100 */
 	Int32  bgmrate;    /* frequencia de sintese da trilha (Hz)     */
 	Int32  gamevol;    /* volume do audio do jogo (SNES/NES): 0..100 */
+	Int32  hddenable;  /* suporte ao HD interno (hdd0:): 0=off, 1=on  */
 } VideoCfgT;
 
 static void _VideoCfgPath(char *pOut)
@@ -64,6 +66,7 @@ void VideoSettingsSave(void)
 	cfg.bgmvol     = BgmGetVolume();
 	cfg.bgmrate    = BgmGetRate();
 	cfg.gamevol    = AudMixGameGetVolume();
+	cfg.hddenable  = HddSupportIsEnabled() ? 1 : 0;
 
 	_VideoCfgPath(path);
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -91,6 +94,7 @@ void VideoSettingsLoad(void)
 		if (cfg.bgmvol >= 0 && cfg.bgmvol <= 100) BgmSetVolume(cfg.bgmvol);
 		if (cfg.bgmrate >= 8000 && cfg.bgmrate <= 48000) BgmSetRate(cfg.bgmrate);
 		if (cfg.gamevol >= 0 && cfg.gamevol <= 100) AudMixGameSetVolume(cfg.gamevol);
+		if (cfg.hddenable == 0 || cfg.hddenable == 1) HddSupportSetEnabled(cfg.hddenable);
 	}
 }
 
@@ -149,7 +153,7 @@ void CVideoScreen::Draw()
 	FontSelect(0);
 
 	_VideoHeader(vy, "Video Config");
-	vy += 26;
+	vy += 18;
 
 	_VideoHeader(vy, "Screen");
 	vy += 14;
@@ -183,13 +187,16 @@ void CVideoScreen::Draw()
 	_VideoRow(vy, 7, m_iSelect, "Menu Music", buf); vy += 12;
 
 	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
-	_VideoRow(vy, 8, m_iSelect, "Frequency", buf);
+	_VideoRow(vy, 8, m_iSelect, "Frequency", buf); vy += 12;
 
-	/* controls / hints, in the empty middle (clear of the vy=215 footer) */
-	vy = 178;
+	_VideoHeader(vy, "Storage"); vy += 12;
+
+	_VideoRow(vy, 9, m_iSelect, "HDD Support",
+	          HddSupportIsEnabled() ? "On" : "Off"); vy += 14;
+
+	/* controls / hints (clear of the vy=215 footer) */
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
-	_VideoCenter(128, vy, "Up/Down: select   Left/Right: change"); vy += 12;
-	_VideoCenter(128, vy, "X: save     Square: reset offset");     vy += 12;
+	_VideoCenter(128, vy, "Up/Dn: select   L/R: change   X: save"); vy += 12;
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode())
 	{
@@ -202,8 +209,8 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 8; }
-	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 8) m_iSelect = 0; }
+	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 9; }
+	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 9) m_iSelect = 0; }
 
 	if (trigger & PAD_LEFT)  dir = -1;
 	if (trigger & PAD_RIGHT) dir = +1;
@@ -268,6 +275,12 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 
 		case 8: /* frequencia de sintese da trilha (cicla a lista) */
 			BgmCycleRate(dir);
+			break;
+
+		case 9: /* HDD interno (hdd0:) on/off -- live; persistido no X.
+		           So' habilita/desabilita a LISTAGEM e a carga preguicosa;
+		           nao toca o boot. */
+			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
 		}
 	}

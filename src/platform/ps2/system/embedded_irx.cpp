@@ -291,6 +291,49 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     return 0;
 }
 
+/* HD INTERNO (APA) -- carga PREGUICOSA e opcional.
+ *
+ * Por que separado do UsbBdm: a init do ps2dev9/ps2hdd e' SINCRONA e,
+ * em consoles sem HD (ou com DEV9 problematico), NAO retorna -> travava
+ * o boot inteiro (tela preta).  Aqui isso so' roda quando o usuario
+ * ESCOLHE entrar em hdd0: no browser, e so' se o toggle estiver ligado.
+ * No pior caso, trava apenas a entrada no hdd0: (e so' de quem ligou a
+ * opcao), nunca o boot.  Mesma filosofia do "HDD device start mode" do
+ * OPL: padrao DESLIGADO, quem tem HD liga. */
+static int s_hdd_enabled = 0;   /* toggle (persistido no video.cfg) */
+static int s_hdd_loaded  = 0;   /* modulos ja carregados nesta sessao */
+
+extern "C" int HddSupportIsEnabled(void)
+{
+    return s_hdd_enabled;
+}
+
+extern "C" void HddSupportSetEnabled(int enabled)
+{
+    s_hdd_enabled = enabled ? 1 : 0;
+}
+
+extern "C" int HddLoadEmbeddedIrx(void)
+{
+    int ret;
+
+    if (!s_hdd_enabled) return -1;   /* desligado: nem tenta */
+    if (s_hdd_loaded)   return 0;    /* ja carregado: no-op */
+
+    /* dev9 -> ps2atad -> ps2hdd (expoe hdd0: no formato APA).  dev9 pode
+       ja estar carregado (stack de rede); SifExecModuleBuffer devolve
+       erro de duplicado, que ignoramos (best-effort). */
+    ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
+    printf("HddLoad: dev9 = %d\n", ret);
+    ret = EmbeddedIrxLoad(ps2atad_irx, sizeof(ps2atad_irx), 0, NULL);
+    printf("HddLoad: atad = %d\n", ret);
+    ret = EmbeddedIrxLoad(ps2hdd_irx,  sizeof(ps2hdd_irx),  0, NULL);
+    printf("HddLoad: hdd  = %d\n", ret);
+
+    s_hdd_loaded = 1;
+    return 0;
+}
+
 /* Network IRX stack bring-up.
  *
  * Mirrors the order used by hugorsgarcia/PS2SNESticle, picodrive,
