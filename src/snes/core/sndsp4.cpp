@@ -16,6 +16,7 @@
 #include "console.h"
 
 #include <string.h>
+#include <stdio.h>
 
 SNDSP4::SNDSP4()
 {
