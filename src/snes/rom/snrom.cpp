@@ -401,9 +401,12 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 		}
 
 		// O byte RomType nao distingue a variante do DSP (1/2/3/4): todos
-		// os jogos de DSP reportam 0x03/0x04/0x05. O Dungeon Master e' o
-		// UNICO jogo DSP-2, entao detecta-se pelo titulo do cabecalho e
-		// troca o flag de DSP-1 para DSP-2.
+		// os jogos de DSP reportam 0x03/0x04/0x05. Como cada variante so'
+		// e' usada por pouquissimos jogos, detecta-se pelo titulo do
+		// cabecalho e troca o flag de DSP-1 para a variante correta.
+		//   - DSP-2: Dungeon Master (unico).
+		//   - DSP-3: SD Gundam GX (unico, Japan).
+		//   - DSP-4: Top Gear 3000 / The Planet's Champ TG3000 (unicos).
 		if (m_Flags & SNROM_FLAG_DSP1)
 		{
 			char t[8];
@@ -419,6 +422,40 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			{
 				m_Flags &= ~SNROM_FLAG_DSP1;
 				m_Flags |=  SNROM_FLAG_DSP2;
+			}
+
+			// Titulo completo (21 chars) em maiusculas para os demais
+			// testes.  So' o ASCII a-z e' convertido; bytes altos (katakana
+			// de meia-largura do cabecalho japones) ficam intactos.
+			char ut[22];
+			for (k = 0; k < 21; k++)
+			{
+				char c = (char)pCartInfo->Title[k];
+				if (c >= 'a' && c <= 'z') c -= 32;
+				ut[k] = c;
+			}
+			ut[21] = 0;
+
+			// DSP-4: Top Gear 3000 (USA, "TOP GEAR 3000") e a versao
+			// japonesa "The Planet's Champ TG3000" -- ambos carregam
+			// "TG3000" no titulo.
+			if (strstr(ut, "TOP GEAR 3000") || strstr(ut, "TG3000"))
+			{
+				m_Flags &= ~SNROM_FLAG_DSP1;
+				m_Flags |=  SNROM_FLAG_DSP4;
+			}
+			// DSP-3: SD Gundam GX (Japan).  O titulo do cabecalho usa
+			// katakana de meia-largura ("SD" + bytes >=0x80 + "GX").
+			// Aceita tambem variantes/redumps em ASCII com "GUNDAM".
+			// OBS: confirmar os bytes exatos do cabecalho com um dump real;
+			// como estamos dentro do bloco de jogos-DSP, "SD"+katakana e'
+			// um sinal seguro (nenhum outro jogo DSP comeca assim).
+			else if (strstr(ut, "GUNDAM") ||
+			         (ut[0] == 'S' && ut[1] == 'D' &&
+			          (Uint8)pCartInfo->Title[2] >= 0x80))
+			{
+				m_Flags &= ~SNROM_FLAG_DSP1;
+				m_Flags |=  SNROM_FLAG_DSP3;
 			}
 		}
 

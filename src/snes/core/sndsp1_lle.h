@@ -49,6 +49,29 @@ public:
     void  LoadProgramRom(const Uint8 *prom, Uint32 size);
     void  LoadDataRom   (const Uint16 *drom, Uint32 size);
 
+    // -----------------------------------------------------------------
+    //  LoadFirmware - carrega a imagem combinada (program + data) no
+    //  formato "combinado" usado pelos dumps publicos dos uPD7725
+    //  (dsp1.rom / dsp1b.rom / dsp2.rom / dsp3.rom / dsp4.rom):
+    //
+    //      offset 0x0000 .. 0x17FF : Program ROM  (2048 instr. x 24-bit
+    //                                big-endian = 6144 bytes)
+    //      offset 0x1800 .. 0x1FFF : Data ROM     (1024 palavras x 16-bit
+    //                                big-endian = 2048 bytes)
+    //      total                   : 0x2000 (8192) bytes
+    //
+    //  Como TODOS os chips da familia DSP (1/1B/2/3/4) sao o mesmo
+    //  microcontrolador NEC uPD7725 -- so' muda o microcodigo gravado
+    //  na ROM -- este unico nucleo serve para qualquer um deles: basta
+    //  carregar o firmware correspondente.
+    //
+    //  Devolve TRUE se a imagem tinha pelo menos a Program ROM.  Deve
+    //  ser chamado ANTES do primeiro Reset/WriteData.
+    // -----------------------------------------------------------------
+    Bool  LoadFirmware  (const Uint8 *image, Uint32 size);
+
+    Bool  IsLoaded() const { return m_bProgLoaded ? TRUE : FALSE; }
+
     // ISNDSP interface
     void  Reset();
     void  WriteData (Uint32 uAddr, Uint8 uData);
@@ -67,7 +90,15 @@ private:
 
         PC_MASK    = 0x07FF,
         RP_MASK    = 0x03FF,
-        DP_MASK    = 0x00FF
+        DP_MASK    = 0x00FF,
+
+        // Quantidade maxima de instrucoes executadas por transferencia
+        // de barramento (WriteData/ReadData).  O loop para assim que o
+        // firmware re-afirma RQM (chip pronto), entao este teto so' e'
+        // atingido quando o microcodigo esta de fato ocupado -- comandos
+        // pesados do DSP-3 (descompressao/bitmap) precisam de bem mais
+        // ciclos que a matematica simples do DSP-1.
+        BUS_CYCLE_BUDGET = 0x8000
     };
 
     // -----------------------------------------------------------------

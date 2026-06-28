@@ -42,6 +42,8 @@ enum SNRomMappingE
 #define SNROM_FLAG_CX4		0x100
 #define SNROM_FLAG_SDD1		0x200
 #define SNROM_FLAG_SRTC		0x400
+#define SNROM_FLAG_DSP3		0x800
+#define SNROM_FLAG_DSP4		0x1000
 
 struct SNRomInfoT
 {

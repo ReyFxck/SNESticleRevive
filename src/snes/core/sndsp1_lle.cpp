@@ -100,6 +100,53 @@ void SNDSP1_LLE::LoadDataRom(const Uint16 *drom, Uint32 size)
 }
 
 
+// ----------------------------------------------------------------------
+//  LoadFirmware - carrega a imagem combinada Program+Data (formato dos
+//  dumps publicos de uPD7725).  Layout:
+//      [0x0000 .. 0x17FF]  Program ROM (6144 bytes, 24-bit big-endian)
+//      [0x1800 .. 0x1FFF]  Data ROM    (2048 bytes, 16-bit big-endian)
+//
+//  A Data ROM no arquivo esta em big-endian; convertemos para palavras
+//  nativas antes de entregar a LoadDataRom().  Aceita arquivos que
+//  contenham apenas a Program ROM (>=6144 bytes) -- nesse caso a Data
+//  ROM fica zerada.
+// ----------------------------------------------------------------------
+Bool SNDSP1_LLE::LoadFirmware(const Uint8 *image, Uint32 size)
+{
+    const Uint32 uProgBytes = PROM_SIZE * 3u;   // 6144
+    const Uint32 uDataBytes = DROM_SIZE * 2u;   // 2048
+
+    if (!image || size < uProgBytes)
+        return FALSE;
+
+    // Program ROM (reaproveita o parser big-endian de 24 bits)
+    LoadProgramRom(image, uProgBytes);
+
+    // Data ROM: monta as palavras de 16 bits big-endian do arquivo.
+    Uint16 aData[DROM_SIZE];
+    Uint32 uHave = (size >= uProgBytes + uDataBytes)
+                       ? (Uint32)DROM_SIZE
+                       : (size - uProgBytes) / 2u;
+    for (Uint32 i = 0; i < DROM_SIZE; i++)
+    {
+        if (i < uHave)
+        {
+            Uint32 b0 = image[uProgBytes + i * 2 + 0];   // MSB
+            Uint32 b1 = image[uProgBytes + i * 2 + 1];   // LSB
+            aData[i] = (Uint16)((b0 << 8) | b1);
+        }
+        else
+        {
+            aData[i] = 0;
+        }
+    }
+    LoadDataRom(aData, DROM_SIZE);
+
+    Reset();
+    return TRUE;
+}
+
+
 //==========================================================================
 //  Reset - zera todos os registradores conforme uPD7725
 //==========================================================================
@@ -182,10 +229,9 @@ void SNDSP1_LLE::WriteData(Uint32 uAddr, Uint8 uData)
     m_SR &= (Uint16)~SR_RQM;
 
     // Roda o microprograma para que o DSP consuma o byte e prepare a
-    // proxima transferencia.  64 ciclos por byte e' um valor ajustado
-    // empiricamente que cobre todos os comandos do DSP-1 sem custo
-    // perceptivel na PS2.
-    RunCycles(64);
+    // proxima transferencia.  O loop para assim que RQM volta a 1, entao
+    // o teto BUS_CYCLE_BUDGET so' importa para comandos longos.
+    RunCycles(BUS_CYCLE_BUDGET);
 }
 
 
@@ -217,7 +263,7 @@ Uint8 SNDSP1_LLE::ReadData(Uint32 uAddr)
 
     // CPU consumiu byte: chip ocupado ate ter o proximo pronto.
     m_SR &= (Uint16)~SR_RQM;
-    RunCycles(64);
+    RunCycles(BUS_CYCLE_BUDGET);
 
     return uOut;
 }

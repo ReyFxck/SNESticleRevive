@@ -22,6 +22,7 @@ extern "C" {
 
 #include "sndsp1.h"
 #include "sndsp2.h"
+#include "sndsp1_lle.h"
 #include "snobc1.h"
 #include "sncx4.h"
 #include "snsdd1.h"
@@ -81,6 +82,9 @@ private:
 #if SNES_DSP1
 	SNDSP1		m_DSP1;
 	SNDSP2		m_DSP2;
+	// Nucleo uPD7725 LLE compartilhado, usado para DSP-3 (SD Gundam GX)
+	// e DSP-4 (Top Gear 3000): so' muda o firmware carregado nele.
+	SNDSP1_LLE	m_DSP_LLE;
 #endif
 
 	SNOBC1		m_OBC1;
@@ -133,6 +137,10 @@ private:
 	void	MapMem(struct SnesMemMapT *pMemMap);
 	void	MapMem(SNRomMappingE eRomMapping, Uint32 uFlags);
 	void	MapMemExLoRom(void);
+	// Carrega o firmware combinado (program+data) do uPD7725 para o
+	// nucleo LLE compartilhado, procurando o arquivo <name>.rom em
+	// pastas conhecidas.  Devolve TRUE se conseguiu carregar.
+	Bool	LoadDspFirmware(const char *name);
 	void	RemapSDD1(void);   // (re)mapeia $C0-$FF conforme $4804-$4807
 	void	DumpMemMap();
 
