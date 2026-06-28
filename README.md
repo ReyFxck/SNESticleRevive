@@ -45,6 +45,11 @@ On top of the SNES core, the project now also integrates **InfoNES** to bring
 - Audio via **audsrv**, with separate **Game Volume** and **Menu Music**
   controls in the Video Config screen.
 - Controller / memory‑card / IRX bring‑up aligned to **Open‑PS2‑Loader** style.
+- **Storage**: USB (×2), external HDD/SSD and **MX4SIO** SD cards as
+  `mass0:`/`mass1:`; the internal **HDD** (`hdd0:`); memory cards
+  (`mc0:`/`mc1:`) including **MMCE** carts (MemCard PRO 2 / SD2PSX) as
+  `mmce0:`/`mmce1:`. Reads FAT16/FAT32/**exFAT** with MBR/GPT partition
+  tables via the bundled BDM stack. See [Storage & devices](#storage--devices).
 - Netplay code (`src/modules/netplay/`).
 
 ---
@@ -169,6 +174,37 @@ make iso roms=/path/to/roms bgm=/path/to/tracks
 
 ---
 
+## Storage & devices
+
+The ROM browser lists every storage device the build can reach. Pick one to
+browse it. There are no build flags for this — it all comes up automatically
+at boot.
+
+| Device | What it is |
+|--------|------------|
+| `mass0:` / `mass1:` | **USB** (the PS2's two ports), USB **external HDD/SSD**, and **MX4SIO** SD cards — all block devices share the `massN:` namespace, numbered in detection order. |
+| `hdd0:` | The **internal HDD** (PS2 Fat expansion bay), APA‑partitioned like HDD‑OSD / OPL. |
+| `mc0:` / `mc1:` | **Memory cards** — including the original **MemCard PRO** (gen 1), which behaves as a normal card. |
+| `mmce0:` / `mmce1:` | **MMCE** carts (**MemCard PRO 2**, **SD2PSX**) via `mmceman`. |
+| `cdfs:` | The game/data disc (or the ISO this ELF was burned into). |
+
+**Filesystems / partitions:** the bundled **BDM** stack (`bdm` + `bdmfs_fatfs` +
+`usbmass_bd`) reads **FAT16 / FAT32 / exFAT** with **MBR or GPT** partition
+tables (so drives larger than 2 TB work), mirroring modern OPL. The internal
+HDD additionally uses `ps2atad` + `ps2hdd` for the APA `hdd0:` device.
+
+> **Build note:** the USB/BDM and internal‑HDD modules are embedded from your
+> `$(PS2SDK)/iop/irx`. `mmceman.irx` (MMCE) and `mx4sio_bd.irx` (MX4SIO) are
+> **optional** — they are only baked in if your PS2SDK ships them, so a missing
+> module never breaks the build (those entries just stay empty).
+>
+> Each storage module prints its load result on the boot splash
+> (`bdm.irx = 0`, `hdd (hdd0:) = N`, …), so a failure is visible in a photo of
+> the screen. On a console without an internal HDD the `dev9`/`hdd` probe just
+> reports "no hardware" and boot continues — it does not hang.
+
+---
+
 ## Building (PlayStation 2)
 
 You need **PS2SDK** installed. Follow the
@@ -234,6 +270,11 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
   **Menu Music** volume (0 = off, frees its RAM) and a synthesis **Frequency**
   picker in Video Config — all persisted, shared by SNES and NES. A random track
   plays at boot and a new one each time you leave a game.
+- **Storage**: a modern **BDM** stack (embedded from PS2SDK) replaces the old
+  single‑USB path — two USB ports, external HDD/SSD and MX4SIO all appear as
+  `mass0:`/`mass1:`, reading FAT16/FAT32/exFAT with MBR/GPT. Added the internal
+  HDD (`hdd0:`, APA) and MMCE carts (`mmce0:`/`mmce1:`, MemCard PRO 2 / SD2PSX).
+  See [Storage & devices](#storage--devices).
 - **Boot / input**: controller and IRX bring‑up reworked to behave on real
   hardware, not just emulators.
 - **Build system**: parallel jobs, `VERBOSE`, `PROFILE`, friendlier `make help`,
