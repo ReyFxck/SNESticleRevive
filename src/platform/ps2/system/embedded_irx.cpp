@@ -33,6 +33,7 @@
 #include "bdm_irx.h"
 #include "bdmfs_fatfs_irx.h"
 #include "usbmass_bd_irx.h"
+#include "ata_bd_irx.h"
 
 /* Log visivel no splash de boot (real hardware) -- definido em audio_audsrv.c. */
 extern "C" void ScrPrintf(const char *pFormat, ...);
@@ -245,6 +246,18 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     ret = EmbeddedIrxLoad(usbmass_bd_irx, sizeof(usbmass_bd_irx), 0, NULL);
     ScrPrintf("usbmass_bd.irx = %d\n", ret);
     if (ret < 0) { printf("UsbBdm: usbmass_bd.irx failed (%d)\n", ret); return -4; }
+
+    /* HD INTERNO (FAT/exFAT) via BDM, igual OPL moderno: dev9 (barramento)
+       + ata_bd (block device ATA).  Aparece como mais um massN:.
+       BEST-EFFORT: em console SEM HD interno o dev9 so' nao acha hardware
+       -- a gente loga e SEGUE (nao aborta o USB, nao trava o boot).  Carregar
+       o modulo nao bloqueia; o que bloqueava era o wait-loop do ps2_drivers,
+       que NAO usamos aqui. */
+    ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
+    ScrPrintf("dev9 (HD) = %d\n", ret);
+
+    ret = EmbeddedIrxLoad(ata_bd_irx, sizeof(ata_bd_irx), 0, NULL);
+    ScrPrintf("ata_bd.irx (HD) = %d\n", ret);
 
     return 0;
 }

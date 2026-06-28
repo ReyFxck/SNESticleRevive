@@ -448,7 +448,7 @@ SDK_EXTRA_IRX := ioptrap.irx poweroff.irx
 # init_ps2_filesystem_driver() brings up the modern cdfs.irx which
 # registers the cdfs: device with iomanX, and the browser / ROM
 # loader reach the disc through plain newlib stdio.
-EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip usbd bdm bdmfs_fatfs usbmass_bd
+EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip usbd bdm bdmfs_fatfs usbmass_bd ata_bd
 
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
@@ -474,6 +474,9 @@ USBD_IRX_PATH        ?= $(PS2SDK)/iop/irx/usbd.irx
 BDM_IRX_PATH         ?= $(PS2SDK)/iop/irx/bdm.irx
 BDMFS_FATFS_IRX_PATH ?= $(PS2SDK)/iop/irx/bdmfs_fatfs.irx
 USBMASS_BD_IRX_PATH  ?= $(PS2SDK)/iop/irx/usbmass_bd.irx
+# ATA block device para BDM: expoe o HD INTERNO (FAT/exFAT) como um massN:,
+# igual ao OPL moderno.  Usa o ps2dev9.irx (ja' embutido) como barramento.
+ATA_BD_IRX_PATH      ?= $(PS2SDK)/iop/irx/ata_bd.irx
 
 .PHONY: all clean strip list count package package-irx check-env packed elf fix-packer fast serial turbo rebuild-fast help ensure-ps2sdk install-ps2sdk ps2sdk-env ensure-ps2dev install-ps2dev-tar ps2dev-env build-begin build-summary copy-output iso-build-image ensure-ps2-packer install-ps2-packer ensure-iso-tool install-iso-tool ensure-local-ps2-packer
 
@@ -526,6 +529,8 @@ $(EMBED_DIR)/bdmfs_fatfs_irx.h: $(BDMFS_FATFS_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,bdmfs_fatfs_irx)
 $(EMBED_DIR)/usbmass_bd_irx.h: $(USBMASS_BD_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,usbmass_bd_irx)
+$(EMBED_DIR)/ata_bd_irx.h: $(ATA_BD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,ata_bd_irx)
 
 # embedded_irx.cpp #includes the generated headers, so make sure they
 # exist before that file is compiled.
