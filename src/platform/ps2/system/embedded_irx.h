@@ -49,6 +49,10 @@ int  MemCardLoadEmbeddedIrx(void);
 int  PadLoadEmbeddedIrx(void);
 int  NetIfLoadEmbeddedIrx(void);
 
+/* USB + BDM moderno: substitui o init_usb_driver() do ps2_drivers,
+   lendo FAT/exFAT/MBR/GPT e enumerando massN: por drive. */
+int  UsbBdmLoadEmbeddedIrx(void);
+
 #ifdef __cplusplus
 }
 #endif

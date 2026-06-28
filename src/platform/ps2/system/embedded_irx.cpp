@@ -28,6 +28,15 @@
 #include "smap_irx.h"
 #include "ps2ip_irx.h"
 
+/* Stack BDM moderna (USB + FAT/exFAT/GPT). */
+#include "usbd_irx.h"
+#include "bdm_irx.h"
+#include "bdmfs_fatfs_irx.h"
+#include "usbmass_bd_irx.h"
+
+/* Log visivel no splash de boot (real hardware) -- definido em audio_audsrv.c. */
+extern "C" void ScrPrintf(const char *pFormat, ...);
+
 struct EmbeddedEntry
 {
     const char          *name;
@@ -203,6 +212,40 @@ extern "C" int MemCardLoadEmbeddedIrx(void)
     }
 
     s_memcard_loaded = 1;
+    return 0;
+}
+
+/* USB + BDM stack bring-up (substitui o init_usb_driver() do ps2_drivers).
+ *
+ * Carrega a stack BDM moderna do PROPRIO PS2SDK -- le FAT16/FAT32/exFAT e
+ * tabela de particao MBR/GPT, e enumera cada pendrive/HD-externo como uma
+ * unidade massN:.  Ordem padrao (igual OPL / exemplos PS2SDK):
+ *
+ *   usbd.irx -> bdm.irx -> bdmfs_fatfs.irx -> usbmass_bd.irx
+ *
+ * NAO usa dev9 (so' USB), entao nao tem o risco de travar boot do HD
+ * interno.  Cada passo loga via ScrPrintf, visivel no splash de boot --
+ * se der b.o., a ultima linha na tela mostra qual modulo falhou. */
+extern "C" int UsbBdmLoadEmbeddedIrx(void)
+{
+    int ret;
+
+    ret = EmbeddedIrxLoad(usbd_irx, sizeof(usbd_irx), 0, NULL);
+    ScrPrintf("usbd.irx = %d\n", ret);
+    if (ret < 0) { printf("UsbBdm: usbd.irx failed (%d)\n", ret); return -1; }
+
+    ret = EmbeddedIrxLoad(bdm_irx, sizeof(bdm_irx), 0, NULL);
+    ScrPrintf("bdm.irx = %d\n", ret);
+    if (ret < 0) { printf("UsbBdm: bdm.irx failed (%d)\n", ret); return -2; }
+
+    ret = EmbeddedIrxLoad(bdmfs_fatfs_irx, sizeof(bdmfs_fatfs_irx), 0, NULL);
+    ScrPrintf("bdmfs_fatfs.irx = %d\n", ret);
+    if (ret < 0) { printf("UsbBdm: bdmfs_fatfs.irx failed (%d)\n", ret); return -3; }
+
+    ret = EmbeddedIrxLoad(usbmass_bd_irx, sizeof(usbmass_bd_irx), 0, NULL);
+    ScrPrintf("usbmass_bd.irx = %d\n", ret);
+    if (ret < 0) { printf("UsbBdm: usbmass_bd.irx failed (%d)\n", ret); return -4; }
+
     return 0;
 }
 

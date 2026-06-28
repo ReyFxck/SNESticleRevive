@@ -448,7 +448,7 @@ SDK_EXTRA_IRX := ioptrap.irx poweroff.irx
 # init_ps2_filesystem_driver() brings up the modern cdfs.irx which
 # registers the cdfs: device with iomanX, and the browser / ROM
 # loader reach the disc through plain newlib stdio.
-EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip
+EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip usbd bdm bdmfs_fatfs usbmass_bd
 
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
@@ -467,6 +467,13 @@ PS2DEV9_IRX_PATH ?= $(PS2SDK)/iop/irx/ps2dev9.irx
 NETMAN_IRX_PATH  ?= $(PS2SDK)/iop/irx/netman.irx
 SMAP_IRX_PATH    ?= $(PS2SDK)/iop/irx/smap.irx
 PS2IP_IRX_PATH   ?= $(PS2SDK)/iop/irx/ps2ip.irx
+
+# Stack BDM moderna (USB + FAT/exFAT/GPT), embutida do proprio PS2SDK e
+# carregada no lugar do init_usb_driver() do ps2_drivers.
+USBD_IRX_PATH        ?= $(PS2SDK)/iop/irx/usbd.irx
+BDM_IRX_PATH         ?= $(PS2SDK)/iop/irx/bdm.irx
+BDMFS_FATFS_IRX_PATH ?= $(PS2SDK)/iop/irx/bdmfs_fatfs.irx
+USBMASS_BD_IRX_PATH  ?= $(PS2SDK)/iop/irx/usbmass_bd.irx
 
 .PHONY: all clean strip list count package package-irx check-env packed elf fix-packer fast serial turbo rebuild-fast help ensure-ps2sdk install-ps2sdk ps2sdk-env ensure-ps2dev install-ps2dev-tar ps2dev-env build-begin build-summary copy-output iso-build-image ensure-ps2-packer install-ps2-packer ensure-iso-tool install-iso-tool ensure-local-ps2-packer
 
@@ -511,6 +518,14 @@ $(EMBED_DIR)/smap_irx.h: $(SMAP_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,smap_irx)
 $(EMBED_DIR)/ps2ip_irx.h: $(PS2IP_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,ps2ip_irx)
+$(EMBED_DIR)/usbd_irx.h: $(USBD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,usbd_irx)
+$(EMBED_DIR)/bdm_irx.h: $(BDM_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,bdm_irx)
+$(EMBED_DIR)/bdmfs_fatfs_irx.h: $(BDMFS_FATFS_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,bdmfs_fatfs_irx)
+$(EMBED_DIR)/usbmass_bd_irx.h: $(USBMASS_BD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,usbmass_bd_irx)
 
 # embedded_irx.cpp #includes the generated headers, so make sure they
 # exist before that file is compiled.

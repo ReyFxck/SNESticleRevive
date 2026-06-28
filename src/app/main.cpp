@@ -293,7 +293,10 @@ int main(int argc, char **argv)
 	}
 
 	// DLog("[boot] init_usb_driver: enter");
-	init_usb_driver_compat();
+	/* USB via stack BDM moderna embutida (FAT/exFAT/MBR/GPT, multi-drive),
+	   no lugar do init_usb_driver() do ps2_drivers.  Nao usa dev9, entao
+	   nao corre o risco de travar boot do HD interno. */
+	UsbBdmLoadEmbeddedIrx();
 	// DLog("[boot] init_usb_driver: done");
 
 	// DLog("[boot] init_cdfs_driver: enter");
