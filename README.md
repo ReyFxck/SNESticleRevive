@@ -27,9 +27,13 @@ On top of the SNES core, the project now also integrates **InfoNES** to bring
 **SNES special chips (coprocessors)** — clean‑room reimplementations, MIT‑safe:
 - **DSP‑1 / DSP‑1B** — Pilotwings, Super Mario Kart, etc. (`sndsp1`)
 - **DSP‑2** — Dungeon Master (`sndsp2`)
-- **DSP‑3 / DSP‑4** — SD Gundam GX / Top Gear 3000, via the shared NEC
-  uPD7725 **LLE** core (`sndsp1_lle`); requires the chip firmware dump
-  (`dsp3.rom` / `dsp4.rom`, 8 KB) placed in `…/SNESticle/dsp/`.
+- **DSP‑3** — SD Gundam GX, via the shared NEC uPD7725 **LLE** core
+  (`sndsp1_lle`); requires the chip firmware dump (`dsp3.rom`, 8 KB)
+  placed in `…/SNESticle/dsp/`.
+- **DSP‑4** — Top Gear 3000 (`sndsp4`), **HLE / self‑contained** (no
+  firmware needed). The bus protocol is complete; the track‑projection
+  math is still experimental (the chip's functional commands have no
+  public spec — being reverse‑engineered by observing the game itself).
 - **CX4** — Mega Man X2 / X3 (`sncx4`)
 - **OBC1** — Metal Combat (`snobc1`)
 - **S‑DD1** — Star Ocean, Street Fighter Alpha 2 (`snsdd1`)
@@ -257,9 +261,12 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 
 - **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
   written clean‑room and verified bit‑exact host‑side against public references
-  before being committed (no GPL/Snes9x code in this MIT repo).  DSP‑3 / DSP‑4
-  are handled by a clean‑room NEC uPD7725 **low‑level** core that runs the
-  chip's own microcode from a firmware dump (no math reproduced from emulators).
+  before being committed (no GPL/Snes9x code in this MIT repo).  DSP‑3 is
+  handled by a clean‑room NEC uPD7725 **low‑level** core that runs the chip's
+  own microcode from a firmware dump.  DSP‑4 (Top Gear 3000) is **HLE /
+  self‑contained** (no firmware): the bus protocol is complete and host‑tested;
+  its track‑projection math is experimental and being reverse‑engineered by
+  observing the game (the chip's functional commands have no public spec).
 - **NES (InfoNES) integration**: full PS2 platform layer (render, input, audio,
   one‑frame stepper), with the InfoNES core kept 1:1 with upstream.
 - **Video**: gsKit migration, the Video Config screen, multiple modes, and a

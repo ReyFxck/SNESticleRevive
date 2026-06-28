@@ -22,6 +22,7 @@ extern "C" {
 
 #include "sndsp1.h"
 #include "sndsp2.h"
+#include "sndsp4.h"
 #include "sndsp1_lle.h"
 #include "snobc1.h"
 #include "sncx4.h"
@@ -92,8 +93,10 @@ private:
 #if SNES_DSP1
 	SNDSP1		m_DSP1;
 	SNDSP2		m_DSP2;
-	// Nucleo uPD7725 LLE compartilhado, usado para DSP-3 (SD Gundam GX)
-	// e DSP-4 (Top Gear 3000): so' muda o firmware carregado nele.
+	// DSP-4 (Top Gear 3000): HLE self-contained, sem firmware.
+	SNDSP4		m_DSP4;
+	// Nucleo uPD7725 LLE compartilhado, usado para DSP-3 (SD Gundam GX):
+	// so' muda o firmware carregado nele.
 	SNDSP1_LLE	m_DSP_LLE;
 #endif
 

@@ -438,14 +438,13 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 #if SNES_DSP1
 			if (uFlags & SNROM_FLAG_DSP1) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP1; }
 			if (uFlags & SNROM_FLAG_DSP2) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP2; }
-			// DSP-3 / DSP-4: mesmo decode de registrador do DSP-1 LoROM
-			// ($8000=DR / $C000=SR), mas rodam no nucleo uPD7725 LLE com
-			// o firmware proprio.  IMPORTANTE: so' mapeia a regiao do DSP
-			// (que aponta para os traps ReadDSP1/WriteDSP1) SE o firmware
-			// carregar -- senao m_pDsp fica NULL e o primeiro acesso do
-			// jogo dereferenciaria nulo (= crash).  Sem firmware, a regiao
-			// fica como ROM normal e o emulador segue estavel; a UI avisa
-			// o usuario via m_pMissingDspFw.
+			// DSP-3: mesmo decode de registrador do DSP-1 LoROM
+			// ($8000=DR / $C000=SR), roda no nucleo uPD7725 LLE com o
+			// firmware proprio.  So' mapeia a regiao do DSP (que aponta
+			// para os traps ReadDSP1/WriteDSP1) SE o firmware carregar --
+			// senao m_pDsp fica NULL e o primeiro acesso dereferenciaria
+			// nulo (= crash).  Sem firmware a regiao fica como ROM e o
+			// emulador segue estavel; a UI avisa via m_pMissingDspFw.
 			if (uFlags & SNROM_FLAG_DSP3)
 			{
 				if (LoadDspFirmware("dsp3"))
@@ -455,14 +454,13 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 				}
 				else m_pMissingDspFw = "dsp3";
 			}
+			// DSP-4 (Top Gear 3000): HLE self-contained -- NAO precisa de
+			// firmware.  O chip esta sempre disponivel, entao a regiao do
+			// DSP e' sempre mapeada e m_pDsp aponta para o HLE.
 			if (uFlags & SNROM_FLAG_DSP4)
 			{
-				if (LoadDspFirmware("dsp4"))
-				{
-					MapMem(_SnesMemMap_LoRom_DSP1);
-					m_pDsp = &m_DSP_LLE;
-				}
-				else m_pMissingDspFw = "dsp4";
+				MapMem(_SnesMemMap_LoRom_DSP1);
+				m_pDsp = &m_DSP4;
 			}
 #endif
 			if (uFlags & SNROM_FLAG_OBC1) { MapMem(_SnesMemMap_OBC1); }
