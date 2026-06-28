@@ -174,17 +174,10 @@ CFLAGS   += -DBGM_RATE=$(BGM_RATE)
 CXXFLAGS += -DBGM_RATE=$(BGM_RATE)
 
 # ---- ps2_drivers feature probe ---------------------------------------
-# init_usb_driver() was respelled to init_usb_driver(bool) in
-# ps2_drivers v2.0 (see ps2dev/ps2_drivers).  We can't tell at build
-# time which version of the header the user has installed, so probe by
-# compiling a one-liner against the actually-installed ps2_usb_driver.h.
-# When the (bool) form compiles, define INIT_USB_DRIVER_TAKES_BOOL so
-# src/app/main.cpp can pick the right branch.
-INIT_USB_TAKES_BOOL := $(shell printf '#include <stdbool.h>\n#include <ps2_usb_driver.h>\nint main(void){return init_usb_driver(true);}\n' | $(EE_CC) -I$(PS2SDK)/ports/include -I$(PS2SDK)/ee/include -x c -c -o /dev/null - >/dev/null 2>&1 && echo 1)
-ifeq ($(INIT_USB_TAKES_BOOL),1)
-  CFLAGS   += -DINIT_USB_DRIVER_TAKES_BOOL
-  CXXFLAGS += -DINIT_USB_DRIVER_TAKES_BOOL
-endif
+# init_usb_driver() (ps2_drivers) nao e' mais usado: o USB sobe pela stack
+# BDM embutida (UsbBdmLoadEmbeddedIrx em embedded_irx.cpp).  O antigo probe
+# INIT_USB_TAKES_BOOL (que detectava a assinatura do init_usb_driver) foi
+# removido junto com o wrapper init_usb_driver_compat().
 
 # PROFILE=1 liga o profiler embutido (define CODE_PROFILE=1). No jogo,
 # aperte R3 para capturar 1 frame; o resumo por secao (NesExecuteFrame,

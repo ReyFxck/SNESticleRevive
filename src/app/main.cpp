@@ -36,25 +36,12 @@ extern "C" {
 #include "hw.h"
 };
 
-/* ps2_drivers shipped two incompatible signatures for init_usb_driver
-   over its history:
-       enum USB_INIT_STATUS init_usb_driver(void);             // <= v1.x
-       enum USB_INIT_STATUS init_usb_driver(bool init_deps);   // >= v2.0
-   The newer version was introduced to let callers choose whether the
-   USBD/BDM dependency chain should be brought up together with
-   usbmass / fatfs.  We pick the right call at compile time using a
-   feature probe in the Makefile that tries to compile a one-liner
-   against the actually-installed ps2_usb_driver.h: when that probe
-   succeeds, INIT_USB_DRIVER_TAKES_BOOL is set on the command line.
-   Both branches mean "bring up the full chain". */
-static inline USB_INIT_STATUS init_usb_driver_compat(void)
-{
-#ifdef INIT_USB_DRIVER_TAKES_BOOL
-    return init_usb_driver(true);
-#else
-    return init_usb_driver();
-#endif
-}
+/* USB is now brought up by UsbBdmLoadEmbeddedIrx() (see
+   embedded_irx.cpp): we embed and load the modern BDM stack
+   (usbd + bdm + bdmfs_fatfs + usbmass_bd, plus ata_bd/ps2hdd for the
+   internal HDD) ourselves instead of going through ps2_drivers'
+   init_usb_driver().  The old init_usb_driver_compat() wrapper and its
+   Makefile feature probe were removed when that switch landed. */
 
 /* DLog: writes to EE SIO TX FIFO (defined in modules/sjpcm/sjpcm_rpc.c).
    Plain printf on the EE never reaches PCSX2/NetherSX2's emulator log
@@ -385,7 +372,7 @@ int main(int argc, char **argv)
 		__fileXioOpsInitializeImpl();
 		_ps2sdk_fileXio_init();
 		MemCardLoadEmbeddedIrx();
-		init_usb_driver_compat();
+		UsbBdmLoadEmbeddedIrx();
 		init_cdfs_driver();
 		// DLog("[boot] filesystem re-init done");
 	}
