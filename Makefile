@@ -460,6 +460,16 @@ CFLAGS   += -DHAVE_MMCEMAN=1
 CXXFLAGS += -DHAVE_MMCEMAN=1
 endif
 
+# mx4sio_bd.irx (MX4SIO: cartao SD pela porta de memory card / SIO2) tambem
+# e' OPCIONAL.  E' um block device BDM -> o SD aparece como um massN:,
+# igual a um pendrive (NAO e' mmce).  So' embute se existir no PS2SDK.
+MX4SIO_BD_IRX_PATH ?= $(PS2SDK)/iop/irx/mx4sio_bd.irx
+ifneq ($(wildcard $(MX4SIO_BD_IRX_PATH)),)
+EMBED_IRX_NAMES += mx4sio_bd
+CFLAGS   += -DHAVE_MX4SIO=1
+CXXFLAGS += -DHAVE_MX4SIO=1
+endif
+
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
 AUDSRV_IRX_PATH  ?= $(PS2SDK)/iop/irx/audsrv.irx
@@ -548,6 +558,8 @@ $(EMBED_DIR)/ps2hdd_irx.h: $(PS2HDD_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,ps2hdd_irx)
 $(EMBED_DIR)/mmceman_irx.h: $(MMCEMAN_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,mmceman_irx)
+$(EMBED_DIR)/mx4sio_bd_irx.h: $(MX4SIO_BD_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,mx4sio_bd_irx)
 
 # embedded_irx.cpp #includes the generated headers, so make sure they
 # exist before that file is compiled.

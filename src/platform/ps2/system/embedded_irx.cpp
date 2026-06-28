@@ -38,6 +38,9 @@
 #ifdef HAVE_MMCEMAN
 #include "mmceman_irx.h"
 #endif
+#ifdef HAVE_MX4SIO
+#include "mx4sio_bd_irx.h"
+#endif
 
 /* Log visivel no splash de boot (real hardware) -- definido em audio_audsrv.c. */
 extern "C" void ScrPrintf(const char *pFormat, ...);
@@ -250,6 +253,13 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     ret = EmbeddedIrxLoad(usbmass_bd_irx, sizeof(usbmass_bd_irx), 0, NULL);
     ScrPrintf("usbmass_bd.irx = %d\n", ret);
     if (ret < 0) { printf("UsbBdm: usbmass_bd.irx failed (%d)\n", ret); return -4; }
+
+#ifdef HAVE_MX4SIO
+    /* MX4SIO: cartao SD pela porta de memory card (SIO2).  Block device
+       BDM -> o SD aparece como um massN:.  Best-effort. */
+    ret = EmbeddedIrxLoad(mx4sio_bd_irx, sizeof(mx4sio_bd_irx), 0, NULL);
+    ScrPrintf("mx4sio_bd (SD->massN) = %d\n", ret);
+#endif
 
     /* HD INTERNO formato APA (igual HDD-OSD/OPL): dev9 (barramento) +
        ps2atad (ATA) + ps2hdd (expoe hdd0:).  BEST-EFFORT: em console SEM
