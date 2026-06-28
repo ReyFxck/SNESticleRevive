@@ -66,6 +66,13 @@ int  HddSupportIsEnabled(void);
 void HddSupportSetEnabled(int enabled);
 int  HddLoadEmbeddedIrx(void);
 
+/* MMCE (MemCard PRO2 / SD2PSX via mmceman) -> mmce0:/mmce1:.  Mesma logica
+   preguicosa/opcional do HDD: nunca carrega no boot.  Carga feita ao entrar
+   em mmce0:/mmce1:, so' se MmceSupportIsEnabled() (toggle persistido). */
+int  MmceSupportIsEnabled(void);
+void MmceSupportSetEnabled(int enabled);
+int  MmceLoadEmbeddedIrx(void);
+
 #ifdef __cplusplus
 }
 #endif

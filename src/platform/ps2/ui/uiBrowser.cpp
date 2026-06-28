@@ -1181,6 +1181,11 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	if (pDir[0] == 'h' && pDir[1] == 'd' && pDir[2] == 'd')
 		HddLoadEmbeddedIrx();
 
+	/* Idem para MMCE (MemCard PRO2 / SD2PSX): carrega mmceman ao entrar
+	   em mmce0:/mmce1:, nunca no boot. */
+	if (pDir[0] == 'm' && pDir[1] == 'm' && pDir[2] == 'c' && pDir[3] == 'e')
+		MmceLoadEmbeddedIrx();
+
 	ResetEntries();
 
 	strcpy(m_Dir, pDir);
@@ -1278,10 +1283,14 @@ void CBrowserScreen::SetDir(const Char *pDir)
            feita em SetDir() ao entrar -- nunca no boot. */
         if (HddSupportIsEnabled())
             AddEntry("hdd0:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("mmce0:", BROWSER_ENTRYTYPE_DRIVE, 0);  /* MemCard PRO2 / SD2PSX */
+        /* MMCE (MemCard PRO2 / SD2PSX): so' listado se o toggle estiver
+           ligado; mmceman carrega preguicoso ao entrar (ver SetDir). */
+        if (MmceSupportIsEnabled())
+            AddEntry("mmce0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("mmce1:", BROWSER_ENTRYTYPE_DRIVE, 0);  /* MemCard PRO2 / SD2PSX */
+        if (MmceSupportIsEnabled())
+            AddEntry("mmce1:", BROWSER_ENTRYTYPE_DRIVE, 0);
 //        AddEntry("rom:", BROWSER_ENTRYTYPE_DRIVE, 0);
 	}
 

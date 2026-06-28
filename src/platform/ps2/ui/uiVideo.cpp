@@ -26,7 +26,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 13
+#define VIDEOCFG_VERSION 14
 
 typedef struct
 {
@@ -42,6 +42,7 @@ typedef struct
 	Int32  bgmrate;    /* frequencia de sintese da trilha (Hz)     */
 	Int32  gamevol;    /* volume do audio do jogo (SNES/NES): 0..100 */
 	Int32  hddenable;  /* suporte ao HD interno (hdd0:): 0=off, 1=on  */
+	Int32  mmceenable; /* suporte a MMCE (mmce0/1): 0=off, 1=on       */
 } VideoCfgT;
 
 static void _VideoCfgPath(char *pOut)
@@ -67,6 +68,7 @@ void VideoSettingsSave(void)
 	cfg.bgmrate    = BgmGetRate();
 	cfg.gamevol    = AudMixGameGetVolume();
 	cfg.hddenable  = HddSupportIsEnabled() ? 1 : 0;
+	cfg.mmceenable = MmceSupportIsEnabled() ? 1 : 0;
 
 	_VideoCfgPath(path);
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -95,6 +97,7 @@ void VideoSettingsLoad(void)
 		if (cfg.bgmrate >= 8000 && cfg.bgmrate <= 48000) BgmSetRate(cfg.bgmrate);
 		if (cfg.gamevol >= 0 && cfg.gamevol <= 100) AudMixGameSetVolume(cfg.gamevol);
 		if (cfg.hddenable == 0 || cfg.hddenable == 1) HddSupportSetEnabled(cfg.hddenable);
+		if (cfg.mmceenable == 0 || cfg.mmceenable == 1) MmceSupportSetEnabled(cfg.mmceenable);
 	}
 }
 
@@ -153,10 +156,10 @@ void CVideoScreen::Draw()
 	FontSelect(0);
 
 	_VideoHeader(vy, "Video Config");
-	vy += 18;
+	vy += 13;
 
 	_VideoHeader(vy, "Screen");
-	vy += 14;
+	vy += 11;
 
 	_VideoRow(vy, 0, m_iSelect, "Video Mode", pMode);  vy += 12;
 
@@ -173,7 +176,7 @@ void CVideoScreen::Draw()
 
 	_VideoRow(vy, 5, m_iSelect, "Cover Art", CoverIsEnabled() ? "On" : "Off"); vy += 12;
 
-	_VideoHeader(vy, "Audio"); vy += 14;
+	_VideoHeader(vy, "Audio"); vy += 11;
 
 	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
 	_VideoRow(vy, 6, m_iSelect, "Game Volume", buf); vy += 12;
@@ -189,10 +192,13 @@ void CVideoScreen::Draw()
 	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
 	_VideoRow(vy, 8, m_iSelect, "Frequency", buf); vy += 12;
 
-	_VideoHeader(vy, "Storage"); vy += 12;
+	_VideoHeader(vy, "Storage"); vy += 11;
 
 	_VideoRow(vy, 9, m_iSelect, "HDD Support",
-	          HddSupportIsEnabled() ? "On" : "Off"); vy += 14;
+	          HddSupportIsEnabled() ? "On" : "Off"); vy += 12;
+
+	_VideoRow(vy, 10, m_iSelect, "MMCE Cards",
+	          MmceSupportIsEnabled() ? "On" : "Off"); vy += 12;
 
 	/* controls / hints (clear of the vy=215 footer) */
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
@@ -209,8 +215,8 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 9; }
-	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 9) m_iSelect = 0; }
+	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 10; }
+	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 10) m_iSelect = 0; }
 
 	if (trigger & PAD_LEFT)  dir = -1;
 	if (trigger & PAD_RIGHT) dir = +1;
@@ -281,6 +287,11 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 		           So' habilita/desabilita a LISTAGEM e a carga preguicosa;
 		           nao toca o boot. */
 			HddSupportSetEnabled(!HddSupportIsEnabled());
+			break;
+
+		case 10: /* MMCE (mmce0/1) on/off -- live; persistido no X. Idem ao
+		            HDD: so' lista e carrega preguicoso, nunca no boot. */
+			MmceSupportSetEnabled(!MmceSupportIsEnabled());
 			break;
 		}
 	}

@@ -282,10 +282,9 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
      */
 
 #ifdef HAVE_MMCEMAN
-    /* Memory cards modificados (MemCard PRO2 / SD2PSX) -> mmce0:/mmce1:.
-       So' embutido se o PS2SDK tiver mmceman.irx (ver Makefile). */
-    ret = EmbeddedIrxLoad(mmceman_irx, sizeof(mmceman_irx), 0, NULL);
-    ScrPrintf("mmceman (mmce0/1) = %d\n", ret);
+    /* MMCE (MemCard PRO2 / SD2PSX) NAO carrega mais no boot.  Agora e'
+       opcional e preguicoso, igual ao HDD (ver MmceLoadEmbeddedIrx):
+       evita ocupar RAM do IOP e tocar o SIO2 no boot de quem nao usa. */
 #endif
 
     return 0;
@@ -332,6 +331,41 @@ extern "C" int HddLoadEmbeddedIrx(void)
 
     s_hdd_loaded = 1;
     return 0;
+}
+
+/* MMCE (MemCard PRO2 / SD2PSX via mmceman) -- carga PREGUICOSA e opcional,
+ * mesma logica do HDD.  So' carrega mmceman.irx quando o usuario entra em
+ * mmce0:/mmce1:, e so' se o toggle estiver ligado.  Mantem o IOP/SIO2
+ * livres no boot de quem nao usa esses cartoes modificados. */
+static int s_mmce_enabled = 0;   /* toggle (persistido no video.cfg) */
+static int s_mmce_loaded  = 0;   /* mmceman ja carregado nesta sessao */
+
+extern "C" int MmceSupportIsEnabled(void)
+{
+    return s_mmce_enabled;
+}
+
+extern "C" void MmceSupportSetEnabled(int enabled)
+{
+    s_mmce_enabled = enabled ? 1 : 0;
+}
+
+extern "C" int MmceLoadEmbeddedIrx(void)
+{
+    if (!s_mmce_enabled) return -1;   /* desligado: nem tenta */
+    if (s_mmce_loaded)   return 0;    /* ja carregado: no-op */
+
+#ifdef HAVE_MMCEMAN
+    {
+        int ret = EmbeddedIrxLoad(mmceman_irx, sizeof(mmceman_irx), 0, NULL);
+        printf("MmceLoad: mmceman = %d\n", ret);
+        s_mmce_loaded = 1;
+        return 0;
+    }
+#else
+    /* mmceman.irx nao foi embutido neste build (PS2SDK sem o modulo). */
+    return -2;
+#endif
 }
 
 /* Network IRX stack bring-up.
