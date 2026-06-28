@@ -1259,7 +1259,12 @@ void CBrowserScreen::SetDir(const Char *pDir)
         AddEntry("cdfs:", BROWSER_ENTRYTYPE_DRIVE, 0);
 //        AddEntry("cdrom:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("host:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("mass:", BROWSER_ENTRYTYPE_DRIVE, 0);
+        /* USB via BDM (usbmass_bd + bdmfs_fatfs): cada pendrive vira uma
+           unidade massN:.  mass0: = 1o drive (== o antigo "mass:"),
+           mass1: = 2o drive.  Estilo OPL.  Se so' houver 1 pendrive,
+           mass1: abre vazio (sem problema). */
+        AddEntry("mass0:", BROWSER_ENTRYTYPE_DRIVE, 0);
+        AddEntry("mass1:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);
 //        AddEntry("rom:", BROWSER_ENTRYTYPE_DRIVE, 0);
