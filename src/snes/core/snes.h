@@ -45,6 +45,12 @@ public:
     Uint32	GetFrame() {return m_uFrame;}
     Uint8	*GetSRAM() {return m_SRam;}
 
+    // Nome do firmware de DSP (ex.: "dsp4") que o jogo selecionado
+    // precisa mas NAO foi encontrado.  NULL = nada faltando.  A UI
+    // consulta isto apos carregar a ROM para avisar o usuario na tela
+    // (em vez de simplesmente travar sem o chip).
+    const char *GetMissingDspFirmware() { return m_pMissingDspFw; }
+
     void 	SetRom(class Emu::Rom *pRom);
     void	SetSnesRom(SnesRom *pRom);
     void	Reset();
@@ -78,6 +84,10 @@ private:
 
 	// extra hardware
 	ISNDSP		*m_pDsp;
+
+	// nome do firmware DSP que o jogo precisa mas faltou carregar
+	// (ex.: "dsp4").  NULL = nada faltando.  Setado em MapMem.
+	const char	*m_pMissingDspFw;
 
 #if SNES_DSP1
 	SNDSP1		m_DSP1;

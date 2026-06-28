@@ -432,6 +432,18 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 
     _MainLoopSetSampleRate(pSystem->GetSampleRate());
 
+	// Aviso de firmware de DSP ausente (DSP-3/DSP-4 rodam no nucleo LLE
+	// e precisam de dsp3.rom/dsp4.rom).  Sem o arquivo o chip fica inerte
+	// (o jogo nao roda direito) -- avisamos na tela em vez de travar.
+	if (pSystem == _pSnes)
+	{
+		const char *pMiss = _pSnes->GetMissingDspFirmware();
+		if (pMiss)
+			MainLoopModalPrintf(60*6,
+				"DSP firmware ausente: coloque %s.rom em mc0:/SNESticle/dsp/",
+				pMiss);
+	}
+
 	printf("[LOAD-CALL] _MainLoopExecuteFile pre-LoadSRAM: bLoadSRAM=%d romname='%s'\n",
 	       (int)bLoadSRAM, _RomName);
 	if (bLoadSRAM)

@@ -377,10 +377,15 @@ Bool SnesSystem::LoadDspFirmware(const char *name)
 			if (FileReadMem(szPath, s_Image, sizeof(s_Image)))
 			{
 				if (m_DSP_LLE.LoadFirmware(s_Image, sizeof(s_Image)))
+				{
+					ConDebug("[dsp] firmware '%s' carregado de %s\n",
+					         name, szPath);
 					return TRUE;
+				}
 			}
 		}
 	}
+	ConDebug("[dsp] firmware '%s.rom' NAO encontrado (chip inerte)\n", name);
 	return FALSE;
 }
 
@@ -420,6 +425,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 
 	m_bSDD1 = FALSE;
 	m_bSRTC = (uFlags & SNROM_FLAG_SRTC) ? TRUE : FALSE;
+	m_pMissingDspFw = NULL;   // limpo a cada load; setado se faltar dsp3/4.rom
 
 	switch (eRomMapping)
 	{
@@ -434,16 +440,29 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 			if (uFlags & SNROM_FLAG_DSP2) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP2; }
 			// DSP-3 / DSP-4: mesmo decode de registrador do DSP-1 LoROM
 			// ($8000=DR / $C000=SR), mas rodam no nucleo uPD7725 LLE com
-			// o firmware proprio.  So' liga o chip se o firmware carregar.
+			// o firmware proprio.  IMPORTANTE: so' mapeia a regiao do DSP
+			// (que aponta para os traps ReadDSP1/WriteDSP1) SE o firmware
+			// carregar -- senao m_pDsp fica NULL e o primeiro acesso do
+			// jogo dereferenciaria nulo (= crash).  Sem firmware, a regiao
+			// fica como ROM normal e o emulador segue estavel; a UI avisa
+			// o usuario via m_pMissingDspFw.
 			if (uFlags & SNROM_FLAG_DSP3)
 			{
-				MapMem(_SnesMemMap_LoRom_DSP1);
-				if (LoadDspFirmware("dsp3")) m_pDsp = &m_DSP_LLE;
+				if (LoadDspFirmware("dsp3"))
+				{
+					MapMem(_SnesMemMap_LoRom_DSP1);
+					m_pDsp = &m_DSP_LLE;
+				}
+				else m_pMissingDspFw = "dsp3";
 			}
 			if (uFlags & SNROM_FLAG_DSP4)
 			{
-				MapMem(_SnesMemMap_LoRom_DSP1);
-				if (LoadDspFirmware("dsp4")) m_pDsp = &m_DSP_LLE;
+				if (LoadDspFirmware("dsp4"))
+				{
+					MapMem(_SnesMemMap_LoRom_DSP1);
+					m_pDsp = &m_DSP_LLE;
+				}
+				else m_pMissingDspFw = "dsp4";
 			}
 #endif
 			if (uFlags & SNROM_FLAG_OBC1) { MapMem(_SnesMemMap_OBC1); }

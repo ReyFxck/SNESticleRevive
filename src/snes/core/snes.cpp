@@ -706,6 +706,15 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 
+	// Guarda anti-crash: se o chip nao esta ligado (ex.: jogo de
+	// DSP-3/DSP-4 sem o firmware correspondente), nao ha objeto DSP.
+	// Devolve um status "ocupado/sem RQM" e dados 0 em vez de
+	// dereferenciar um ponteiro nulo.  (O mapa de memoria normalmente
+	// nem mapeia a regiao quando nao ha chip, mas isto e' a rede de
+	// seguranca para qualquer caminho residual.)
+	if (!pSnes->m_pDsp)
+		return _SnesDsp1IsStatus(uAddr) ? 0x80 : 0x00;
+
 	if (_SnesDsp1IsStatus(uAddr))
 	{
 		Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
@@ -728,6 +737,10 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+
+	// Guarda anti-crash: sem chip DSP ligado, ignora a escrita.
+	if (!pSnes->m_pDsp)
+		return;
 
 	// Escritas vao para o DR; o SR e' somente leitura.
 	if (!_SnesDsp1IsStatus(uAddr))
@@ -827,6 +840,7 @@ SnesSystem::SnesSystem()
 
 #if SNES_DSP1
 	m_pDsp = NULL;
+	m_pMissingDspFw = NULL;
 #endif
 }
 
