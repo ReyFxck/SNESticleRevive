@@ -148,6 +148,14 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	if (pSnes->m_bSRTC && uAddr == 0x2800)
 		return pSnes->m_SRTC.ReadReg();
 
+	// SuperFX/GSU: registradores em $3000-34FF.  Roteados aqui (dentro do
+	// handler do PPU0) porque a granularidade de trap e' 8KB e a pagina
+	// $2000-3FFF e' compartilhada com o PPU -- um trap proprio em $3000
+	// atropelaria o PPU.  Como o GSU roda ate' o STOP na escrita, o GO ja
+	// esta limpo na leitura.
+	if (pSnes->m_bSuperFX && uAddr >= 0x3000 && uAddr <= 0x34FF)
+		return pSnes->m_GSU.ReadReg((Uint16)uAddr);
+
 /*	if (uAddr < 0x2140)
 	{
 		// ppu read
@@ -266,6 +274,17 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	if (pSnes->m_bSRTC && uAddr == 0x2801)
 	{
 		pSnes->m_SRTC.WriteReg(uData);
+		return;
+	}
+
+	// SuperFX/GSU: registradores em $3000-34FF (ver Read2000).  Escrever
+	// R15.MSB ($301F) liga o GO; rodamos o GSU ate' o STOP aqui mesmo (igual
+	// o CX4 faz seu trabalho dentro do Write), limitado pelo watchdog.
+	if (pSnes->m_bSuperFX && uAddr >= 0x3000 && uAddr <= 0x34FF)
+	{
+		pSnes->m_GSU.WriteReg((Uint16)uAddr, uData);
+		if (pSnes->m_GSU.IsRunning())
+			pSnes->m_GSU.Run(0x7FFFFFFF);
 		return;
 	}
 

@@ -99,6 +99,7 @@ private:
 
 	SNSRTC		m_SRTC;
 	Bool		m_bSRTC;
+	Bool		m_bSuperFX;   // cartucho usa SuperFX/GSU -> rotear $3000-34FF
 
 	SnesRom		*m_pRom;
 
