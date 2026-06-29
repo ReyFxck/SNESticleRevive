@@ -22,7 +22,7 @@
 // (RUNAWAY).  No bench host, DLog e' stub.
 extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
-#define GSU_LOG(...) do { if (s_gsuLog < 128) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
+#define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
 {
@@ -55,6 +55,7 @@ void SNGSU::Reset()
     m_CBR = 0;
     m_RomBuffer = 0; m_RomBufValid = FALSE;
     m_Runaway = 0;
+    m_PlotCount = 0;
     m_BranchPending = FALSE; m_BranchTarget = 0;
     m_BranchSetPBR = FALSE; m_BranchPBR = 0;
     m_LastRamAddr = 0;
@@ -235,6 +236,7 @@ void SNGSU::WriteReg(Uint16 uAddrLow, Uint8 uData)
         {
             m_bGo = TRUE;
             m_Runaway = 0;      // reinicia o watchdog a cada novo START
+            m_PlotCount = 0;    // diag: conta PLOTs desta rotina
             GSU_LOG("[gsu] GO pbr=%02X r15=%04X scmr=%02X scbr=%02X",
                     (unsigned)m_PBR, (unsigned)m_R[15],
                     (unsigned)m_SCMR, (unsigned)m_SCBR);
@@ -331,6 +333,7 @@ void SNGSU::PixFlush()
 
 void SNGSU::Plot()
 {
+    m_PlotCount++;                    // diag
     Uint8 x = (Uint8)(m_R[1] & 0xFF);
     Uint8 y = (Uint8)(m_R[2] & 0xFF);
     Int32 bpp = ScreenBpp();
@@ -667,7 +670,9 @@ void SNGSU::Step()
     }
     else if (op == 0x00)                     // STOP
     {
-        GSU_LOG("[gsu] STOP steps=%u", (unsigned)m_Runaway);
+        GSU_LOG("[gsu] STOP steps=%u plots=%u r15=%04X scmr=%02X scbr=%02X",
+                (unsigned)m_Runaway, (unsigned)m_PlotCount,
+                (unsigned)m_R[15], (unsigned)m_SCMR, (unsigned)m_SCBR);
         m_bGo = FALSE; m_bIrq = TRUE; bIsPrefix = TRUE;
     }
     else if (op == 0x01)                     // NOP

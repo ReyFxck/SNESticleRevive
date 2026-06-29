@@ -94,6 +94,7 @@ private:
     // incompletos durante o desenvolvimento), forca a parada e devolve o
     // controle ao SNES, evitando travar a EE.
     Uint32 m_Runaway;
+    Uint32 m_PlotCount;      // diag: pixels plotados na rotina atual (por GO)
 
     // delay-slot dos saltos: o GSU executa SEMPRE a instrucao seguinte ao
     // branch/JMP/LOOP antes do salto tomar efeito (1 delay slot).

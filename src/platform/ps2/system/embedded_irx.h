@@ -82,6 +82,8 @@ void MassStorageSetEnabled(int enabled);
 int  HostIsEnabled(void);
 void HostSetEnabled(int enabled);
 int  Mx4sioLoadIfEnabled(void);
+int  Mx4sioIsEnabled(void);
+void Mx4sioSetEnabled(int enabled);
 
 #ifdef __cplusplus
 }
