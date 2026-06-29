@@ -44,6 +44,7 @@
 
 /* Log visivel no splash de boot (real hardware) -- definido em audio_audsrv.c. */
 extern "C" void ScrPrintf(const char *pFormat, ...);
+extern "C" void BootImport(const char *pName, int ret);
 
 struct EmbeddedEntry
 {
@@ -198,6 +199,7 @@ extern "C" int MemCardLoadEmbeddedIrx(void)
     ret = EmbeddedIrxLoad(sio2man_irx, sizeof(sio2man_irx), 0, NULL);
     if (ret < 0)
     {
+        BootImport("sio2man", ret);
         printf("MemCardLoadEmbeddedIrx: sio2man.irx failed (%d)\n", ret);
         /* MEMCARD_INIT_STATUS_DEPENDENCY_IRX_ERROR */
         return -4;
@@ -206,6 +208,7 @@ extern "C" int MemCardLoadEmbeddedIrx(void)
     ret = EmbeddedIrxLoad(mcman_irx, sizeof(mcman_irx), 0, NULL);
     if (ret < 0)
     {
+        BootImport("mcman", ret);
         printf("MemCardLoadEmbeddedIrx: mcman.irx failed (%d)\n", ret);
         /* MEMCARD_INIT_STATUS_MCMAN_IRX_ERROR */
         return -2;
@@ -214,6 +217,7 @@ extern "C" int MemCardLoadEmbeddedIrx(void)
     ret = EmbeddedIrxLoad(mcserv_irx, sizeof(mcserv_irx), 0, NULL);
     if (ret < 0)
     {
+        BootImport("mcserv", ret);
         printf("MemCardLoadEmbeddedIrx: mcserv.irx failed (%d)\n", ret);
         /* MEMCARD_INIT_STATUS_MCSERV_IRX_ERROR */
         return -3;
@@ -239,19 +243,19 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     int ret;
 
     ret = EmbeddedIrxLoad(usbd_irx, sizeof(usbd_irx), 0, NULL);
-    ScrPrintf("usbd.irx = %d\n", ret);
+    BootImport("usbd", ret);
     if (ret < 0) { printf("UsbBdm: usbd.irx failed (%d)\n", ret); return -1; }
 
     ret = EmbeddedIrxLoad(bdm_irx, sizeof(bdm_irx), 0, NULL);
-    ScrPrintf("bdm.irx = %d\n", ret);
+    BootImport("bdm", ret);
     if (ret < 0) { printf("UsbBdm: bdm.irx failed (%d)\n", ret); return -2; }
 
     ret = EmbeddedIrxLoad(bdmfs_fatfs_irx, sizeof(bdmfs_fatfs_irx), 0, NULL);
-    ScrPrintf("bdmfs_fatfs.irx = %d\n", ret);
+    BootImport("bdmfs_fatfs", ret);
     if (ret < 0) { printf("UsbBdm: bdmfs_fatfs.irx failed (%d)\n", ret); return -3; }
 
     ret = EmbeddedIrxLoad(usbmass_bd_irx, sizeof(usbmass_bd_irx), 0, NULL);
-    ScrPrintf("usbmass_bd.irx = %d\n", ret);
+    BootImport("usbmass_bd", ret);
     if (ret < 0) { printf("UsbBdm: usbmass_bd.irx failed (%d)\n", ret); return -4; }
 
 #ifdef HAVE_MX4SIO

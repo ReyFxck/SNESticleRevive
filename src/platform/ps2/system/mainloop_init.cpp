@@ -329,14 +329,11 @@ _AudMix = new AudMixBuffer(32000, TRUE);
 	 * indeed stalled (confirms the GSM hang); timed_out=0 means it fired
 	 * normally and any remaining GSM glitch is geometry, not a hang. */
 	// BOOTLOG("[boot] GS settle wait (timeout-safe) begin\n");
-	ScrPrintf("VID: GS settle wait...\n");
 	{
 		int base  = TestVRstart();
 		int guard = 1500;            /* 1500 * 1ms = 1.5s hard ceiling */
 		while ((TestVRstart() - base) < 60 && guard-- > 0)
 			usleep(1000);
-		ScrPrintf("VID: GS settle done (vbl=%d timed_out=%d)\n",
-		          TestVRstart() - base, (guard <= 0));
 	}
 	// BOOTLOG("[boot] GS settle wait done\n");
 // create textures in main ram

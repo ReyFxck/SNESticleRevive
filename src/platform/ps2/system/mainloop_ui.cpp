@@ -53,6 +53,40 @@ extern "C" void ScrPrintf(const Char *pFormat, ...)
 	MainLoopRender();
 }
 
+/* ---- Boot import log -------------------------------------------------
+ * Resumo limpo dos imports de modulo do IOP, no lugar do spam linha-a-linha.
+ * BootImport(name, ret): silencioso em sucesso (ret>=0); guarda a falha se
+ * ret<0.  BootImportFlush(): imprime "IOP imported: OK" ou "IOP imported:
+ * BAD" seguido de uma linha "[modulo] err=N" por falha.  Os nomes devem
+ * ser literais (guardamos o ponteiro direto). */
+#define BOOT_MAXFAIL 12
+static const char *s_BootFailName[BOOT_MAXFAIL];
+static int         s_BootFailRet [BOOT_MAXFAIL];
+static int         s_BootNFail = 0;
+
+extern "C" void BootImport(const char *pName, int ret)
+{
+	if (ret >= 0) return;
+	if (s_BootNFail < BOOT_MAXFAIL)
+	{
+		s_BootFailName[s_BootNFail] = pName ? pName : "?";
+		s_BootFailRet [s_BootNFail] = ret;
+		s_BootNFail++;
+	}
+}
+
+extern "C" void BootImportFlush(void)
+{
+	int i;
+	if (s_BootNFail == 0)
+	{
+		ScrPrintf("IOP imported: OK");
+		return;
+	}
+	ScrPrintf("IOP imported: BAD");
+	for (i = 0; i < s_BootNFail; i++)
+		ScrPrintf("  [%s] err=%d", s_BootFailName[i], s_BootFailRet[i]);
+}
 void _MainLoopSetScreen(CScreen *pScreen)
 {
 	_MainLoop_pScreen = pScreen;

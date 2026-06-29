@@ -165,7 +165,6 @@ static int _Input_InitPad(int port, int slot, void *buffer)
 
     if (ret == 0)
     {
-        ScrPrintf("Input: FAILED to open pad p=%d s=%d\n", port, slot);
         printf("Input: failed to open pad port=%d slot=%d\n", port, slot);
         return -1;
     }
@@ -245,8 +244,6 @@ static int _Input_InitPad(int port, int slot, void *buffer)
     }
     printf("Input: pad p=%d s=%d opened, mode=0x%X (%s)\n",
            port, slot, mode, mode_name);
-    ScrPrintf("Input: pad p=%d s=%d mode=0x%X (%s)\n",
-              port, slot, mode, mode_name);
 
     return 0;
 }

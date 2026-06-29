@@ -50,6 +50,7 @@
    in a screenshot of the boot screen. Forward-declare it here so we
    don't have to drag the C++ mainloop_ui.h into this C file. */
 extern void ScrPrintf(const char *pFormat, ...);
+extern void BootImport(const char *pName, int ret);  /* resumo IOP no boot */
 
 /* Diagnostic printf helper for this project.
 
@@ -165,16 +166,14 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
        SifBindRpc (because the IOP audsrv RPC server never registered),
        the user will see "audsrv_init..." on screen as the last line
        and we know exactly which step deadlocked. */
-    ScrPrintf("audsrv_init...\n");
     // DLog("[snes-aud] audsrv_init() ...");
     ret = audsrv_init();
     // DLog("[snes-aud] audsrv_init() = %d", ret);
-    ScrPrintf("audsrv_init = %d\n", ret);
     if (ret != 0)
     {
         // DLog("[snes-aud] init FAILED %d (%s)",
         //      ret, audsrv_get_error_string());
-        ScrPrintf("audsrv_init FAILED %d - continuing silent\n", ret);
+        BootImport("audsrv", ret < 0 ? ret : -1);
         return -1;
     }
 
@@ -184,12 +183,11 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
 
     ret = audsrv_set_format(&fmt);
     // DLog("[snes-aud] set_format(48000,16,2) = %d", ret);
-    ScrPrintf("audsrv set_format = %d\n", ret);
     if (ret != 0)
     {
         // DLog("[snes-aud] set_format FAILED %d (%s)",
         //      ret, audsrv_get_error_string());
-        ScrPrintf("audsrv set_format FAILED %d\n", ret);
+        BootImport("audsrv_fmt", ret < 0 ? ret : -1);
         audsrv_quit();
         return -1;
     }
@@ -197,7 +195,6 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
     /* Default to full volume. Aud_Setvol() may override. */
     ret = audsrv_set_volume(MAX_VOLUME);
     // DLog("[snes-aud] set_volume(%d) = %d", MAX_VOLUME, ret);
-    ScrPrintf("audsrv set_volume = %d\n", ret);
 
     /* Prime audsrv: before the first audsrv_play_audio(), audsrv_queued()
        / audsrv_available() can report a phantom initial occupancy, which

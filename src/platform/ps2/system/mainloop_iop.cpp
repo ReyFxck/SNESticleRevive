@@ -38,6 +38,10 @@ extern "C" void DLog(const char *fmt, ...);
 #include "snes.h"
 #include "rendersurface.h"
 #include "file.h"
+
+/* Boot import log (resumo limpo IOP imported OK/BAD) -- ver mainloop_ui.cpp */
+extern "C" void BootImport(const char *pName, int ret);
+extern "C" void BootImportFlush(void);
 #include "dataio.h"
 #include "prof.h"
 #include "bmpfile.h"
@@ -179,7 +183,6 @@ Int32 IOPLoadModule(const Char *pModuleName, Char **ppSearchPaths, int arglen, c
 			ret = EmbeddedIrxLoad(embed_data, embed_size, arglen, pArgs);
 			if (ret >= 0)
 			{
-				ScrPrintf("IOP Load (embed): %s\n", pModuleName);
 				return ret;
 			}
 			/* fall through to disk-based load if the embedded copy
@@ -223,11 +226,9 @@ Int32 IOPLoadModule(const Char *pModuleName, Char **ppSearchPaths, int arglen, c
 	if (ret >= 0)
 	{
 		// success!
-		ScrPrintf("IOP Load: %s\n", ModulePath);
 		return ret;
 	} else
 	{
-		ScrPrintf("IOP Fail: %s %d\n", pModuleName, ret);
 		printf("IOP: Failed to load module '%s'\n", pModuleName);
 
 		// module not loaded
@@ -287,48 +288,26 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	{
 		int pad_ok = 0;
 
-		// BOOTLOG("[boot] pad: load embedded padman.irx\n");
-		ScrPrintf("PAD: loading embedded padman.irx\n");
 		if (PadLoadEmbeddedIrx() == 0)
 		{
-			ScrPrintf("PAD: embedded padman.irx loaded\n");
 			pad_ok = 1;
 		}
-		else
+		else if (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0)
 		{
-			ScrPrintf("PAD: embedded padman.irx FAILED -> rom0:PADMAN\n");
-			if (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0)
-			{
-				ScrPrintf("PAD: rom0:PADMAN loaded\n");
-				pad_ok = 1;
-			}
-			else
-			{
-				ScrPrintf("PAD: rom0:PADMAN FAILED\n");
-			}
+			pad_ok = 1;   /* fallback: padman da BIOS */
 		}
 
-		if (pad_ok)
+		if (!pad_ok)
 		{
-			int pi = padInit(0);
-			// BOOTLOG("[boot] padInit=%d (expect 1)\n", pi);
-			ScrPrintf("PAD: padInit=%d (expect 1)\n", pi);
-			if (pi == 1)
-			{
-				InputInit(FALSE);
-				ScrPrintf("PAD: InputInit done\n");
-				// BOOTLOG("[boot] padInit/InputInit done\n");
-			}
-			else
-			{
-				ScrPrintf("PAD: padInit FAILED - controller unavailable\n");
-				// BOOTLOG("[boot] padInit failed -- controller unavailable\n");
-			}
+			BootImport("pad", -1);   /* sem controle */
 		}
 		else
 		{
-			ScrPrintf("PAD: no controller module - controller unavailable\n");
-			// BOOTLOG("[boot] no controller module loaded\n");
+			int pi = padInit(0);
+			if (pi == 1)
+				InputInit(FALSE);
+			else
+				BootImport("padInit", pi);   /* controle indisponivel */
 		}
 	}
 
@@ -336,9 +315,7 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   is currently loaded - the modern PS2DEV ones registered by
 	   init_memcard_driver() in main.cpp are detected automatically. */
 	// BOOTLOG("[boot] MemCardInit (ps2_drivers mcman/mcserv)\n");
-	ScrPrintf("MC: MemCardInit...\n");
 	MemCardInit();
-	ScrPrintf("MC: MemCardInit done\n");
 	// BOOTLOG("[boot] MemCardInit done\n");
 	#if MAINLOOP_MEMCARD
 	MemCardCreateSave(_SramPath, _MainLoop_SaveTitle, TRUE);
@@ -367,8 +344,7 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	 * _MainLoopConfigureNetwork() + NetPlayInit() there).  Tracked as a
 	 * follow-up; it was almost certainly never reachable on real
 	 * hardware anyway while the boot was hanging here. */
-	ScrPrintf("NET: skipped at boot (on-demand, OPL-style)\n");
-	bLoadedNetwork = FALSE;
+	bLoadedNetwork = FALSE;   /* rede e' on-demand (OPL-style), nunca no boot */
 
 	// configure network if we started it ourselves
 	if (bLoadedNetwork)
@@ -422,13 +398,11 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   where freesd somehow refuses to load -- in practice the embedded
 	   copy always loads). */
 	// BOOTLOG("[boot] FREESD/LIBSD: try load\n");
-	ScrPrintf("FREESD: try load\n");
 	if (IOPLoadModule("FREESD.IRX", ppSearchPaths, 0, NULL) < 0)
 	{
-		ScrPrintf("FREESD failed - falling back to rom0:LIBSD\n");
 		if (IOPLoadModule("rom0:LIBSD", NULL, 0, NULL) < 0)
 		{
-			ScrPrintf("FREESD/LIBSD: both failed - audio will be silent\n");
+			BootImport("libsd", -1);   /* sem SPU2 -> audio mudo */
 			// BOOTLOG("[boot] FREESD/LIBSD: both failed - audio will be silent\n");
 		}
 	}
@@ -437,28 +411,19 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	// BOOTLOG("[boot] AUDSRV.IRX: try load\n");
 	if (IOPLoadModule("AUDSRV.IRX", ppSearchPaths, 0, NULL) >= 0)
 	{
-		/* Mirror to screen so the user can see progression even when
-		   SIO is not connected.  If the next ScrPrintf does not appear,
-		   the hang is inside Aud_Init -> audsrv_init -> SifBindRpc
-		   (audsrv RPC server never registered, likely sceSd init bug
-		   in whichever SPU2 driver we ended up with). */
-		ScrPrintf("AUDSRV: Aud_Init starting...\n");
-		// BOOTLOG("[boot] Aud_Init() (audsrv backend)\n");
 		if (Aud_Init(0, 960*25, AUDMIXBUFFER_MAXENQUEUE) >= 0)
 		{
 			_MainLoop_bAudioReady = TRUE;
-			// BOOTLOG("[boot] Aud_Init done\n");
 		}
-		else
-		{
-			// BOOTLOG("[boot] Aud_Init failed\n");
-		}
+		/* Aud_Init registra a propria falha (audsrv) em BootImport */
 	}
 	else
 	{
-		// BOOTLOG("[boot] AUDSRV.IRX skipped (not available)\n");
-		ScrPrintf("AUDSRV: skipped (no IRX)\n");
+		BootImport("audsrv", -1);   /* sem AUDSRV.IRX -> audio mudo */
 	}
+
+	/* Resumo limpo dos imports do IOP (OK / BAD + modulos que falharam). */
+	BootImportFlush();
 
 	/* The iaddis-era custom MCSAVE.IRX (async memory-card writer) is
 	   no longer loaded.  The IRX is not shipped alongside the ELF or
