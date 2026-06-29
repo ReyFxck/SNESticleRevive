@@ -755,6 +755,26 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 #endif
 
 
+Uint8 SNCPU_TRAPFUNC SnesSystem::ReadGSU(SNCpuT *pCpu, Uint32 uAddr)
+{
+	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	// O jogo costuma polar o SFR; avanca o GSU enquanto estiver rodando.
+	if (pSnes->m_GSU.IsRunning())
+		pSnes->m_GSU.Run(4096);
+	return pSnes->m_GSU.ReadReg((Uint16)(uAddr & 0xFFFF));
+}
+
+void SNCPU_TRAPFUNC SnesSystem::WriteGSU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
+{
+	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	pSnes->m_GSU.WriteReg((Uint16)(uAddr & 0xFFFF), uData);
+	// escrever R15.MSB ($301F) liga GO -> roda um orcamento (Run tem teto,
+	// entao nao trava mesmo com opcodes ainda incompletos).
+	if (pSnes->m_GSU.IsRunning())
+		pSnes->m_GSU.Run(65536);
+}
+
+
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadOBC1(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
@@ -875,6 +895,8 @@ void SnesSystem::Reset()
 	m_OBC1.Reset();
 
 	m_CX4.Reset();
+
+	m_GSU.Reset();
 
 	m_SDD1.Reset();
 

@@ -25,6 +25,7 @@ extern "C" {
 #include "sndsp4.h"
 #include "snobc1.h"
 #include "sncx4.h"
+#include "sngsu.h"
 #include "snsdd1.h"
 #include "snsrtc.h"
 
@@ -90,6 +91,9 @@ private:
 
 	SNCX4		m_CX4;
 
+	// SuperFX / GSU (Star Fox, Yoshi's Island, etc.) -- core experimental
+	SNGSU		m_GSU;
+
 	SNSDD1		m_SDD1;
 	Bool		m_bSDD1;
 
@@ -122,6 +126,8 @@ private:
 	static void SNCPU_TRAPFUNC  WriteOBC1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
 	static Uint8 SNCPU_TRAPFUNC ReadCX4(SNCpuT *pCpu, Uint32 uAddr);
 	static void SNCPU_TRAPFUNC  WriteCX4(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
+	static Uint8 SNCPU_TRAPFUNC ReadGSU(SNCpuT *pCpu, Uint32 uAddr);
+	static void SNCPU_TRAPFUNC  WriteGSU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
 	static Uint8 CX4ReadMem(void *pCtx, Uint32 uAddr);
 
     static Uint8 SNCPU_TRAPFUNC Read2000Debug(SNCpuT *pCpu, Uint32 uAddr);
