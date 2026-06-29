@@ -197,27 +197,27 @@ extern "C" int MemCardLoadEmbeddedIrx(void)
     if (s_memcard_loaded) return 0;
 
     ret = EmbeddedIrxLoad(sio2man_irx, sizeof(sio2man_irx), 0, NULL);
+    BootImport("sio2man", ret);
     if (ret < 0)
     {
-        BootImport("sio2man", ret);
         printf("MemCardLoadEmbeddedIrx: sio2man.irx failed (%d)\n", ret);
         /* MEMCARD_INIT_STATUS_DEPENDENCY_IRX_ERROR */
         return -4;
     }
 
     ret = EmbeddedIrxLoad(mcman_irx, sizeof(mcman_irx), 0, NULL);
+    BootImport("mcman", ret);
     if (ret < 0)
     {
-        BootImport("mcman", ret);
         printf("MemCardLoadEmbeddedIrx: mcman.irx failed (%d)\n", ret);
         /* MEMCARD_INIT_STATUS_MCMAN_IRX_ERROR */
         return -2;
     }
 
     ret = EmbeddedIrxLoad(mcserv_irx, sizeof(mcserv_irx), 0, NULL);
+    BootImport("mcserv", ret);
     if (ret < 0)
     {
-        BootImport("mcserv", ret);
         printf("MemCardLoadEmbeddedIrx: mcserv.irx failed (%d)\n", ret);
         /* MEMCARD_INIT_STATUS_MCSERV_IRX_ERROR */
         return -3;

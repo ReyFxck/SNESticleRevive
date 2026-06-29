@@ -50,7 +50,6 @@
    in a screenshot of the boot screen. Forward-declare it here so we
    don't have to drag the C++ mainloop_ui.h into this C file. */
 extern void ScrPrintf(const char *pFormat, ...);
-extern void BootImport(const char *pName, int ret);  /* resumo IOP no boot */
 
 /* Diagnostic printf helper for this project.
 
@@ -173,7 +172,6 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
     {
         // DLog("[snes-aud] init FAILED %d (%s)",
         //      ret, audsrv_get_error_string());
-        BootImport("audsrv", ret < 0 ? ret : -1);
         return -1;
     }
 
@@ -187,7 +185,6 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
     {
         // DLog("[snes-aud] set_format FAILED %d (%s)",
         //      ret, audsrv_get_error_string());
-        BootImport("audsrv_fmt", ret < 0 ? ret : -1);
         audsrv_quit();
         return -1;
     }

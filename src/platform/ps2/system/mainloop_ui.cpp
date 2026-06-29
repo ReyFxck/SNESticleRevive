@@ -54,38 +54,52 @@ extern "C" void ScrPrintf(const Char *pFormat, ...)
 }
 
 /* ---- Boot import log -------------------------------------------------
- * Resumo limpo dos imports de modulo do IOP, no lugar do spam linha-a-linha.
- * BootImport(name, ret): silencioso em sucesso (ret>=0); guarda a falha se
- * ret<0.  BootImportFlush(): imprime "IOP imported: OK" ou "IOP imported:
- * BAD" seguido de uma linha "[modulo] err=N" por falha.  Os nomes devem
- * ser literais (guardamos o ponteiro direto). */
-#define BOOT_MAXFAIL 12
-static const char *s_BootFailName[BOOT_MAXFAIL];
-static int         s_BootFailRet [BOOT_MAXFAIL];
-static int         s_BootNFail = 0;
+ * Loga CADA modulo do IOP (e os passos que podem travar) -- facilita a
+ * manutencao e o diagnostico no PS2 real.
+ *
+ * BootImport(name, ret): acumula o resultado de um modulo (OK se ret>=0).
+ * BootImportFlush(): imprime a lista "[modulo] OK" / "[modulo] BAD (err=N)"
+ *   + um veredito final "IOP imported: OK/BAD".
+ * BootMark(label): marcador de etapa impresso NA HORA -- sobrevive a um
+ *   travamento, entao a ultima linha na tela mostra onde o boot parou.
+ *
+ * Por que acumular: memory card e USB sao carregados em main.cpp ANTES da
+ * tela de log existir; se imprimissem na hora, sumiriam.  Acumula-se tudo
+ * e despeja no flush, quando a tela ja esta pronta. */
+#define BOOT_MAXLOG 32
+static const char *s_BootName[BOOT_MAXLOG];
+static int         s_BootRet [BOOT_MAXLOG];
+static int         s_BootN = 0;
 
 extern "C" void BootImport(const char *pName, int ret)
 {
-	if (ret >= 0) return;
-	if (s_BootNFail < BOOT_MAXFAIL)
+	if (s_BootN < BOOT_MAXLOG)
 	{
-		s_BootFailName[s_BootNFail] = pName ? pName : "?";
-		s_BootFailRet [s_BootNFail] = ret;
-		s_BootNFail++;
+		s_BootName[s_BootN] = pName ? pName : "?";
+		s_BootRet [s_BootN] = ret;
+		s_BootN++;
 	}
 }
 
 extern "C" void BootImportFlush(void)
 {
-	int i;
-	if (s_BootNFail == 0)
+	int i, nfail = 0;
+	for (i = 0; i < s_BootN; i++)
 	{
-		ScrPrintf("IOP imported: OK");
-		return;
+		if (s_BootRet[i] >= 0)
+			ScrPrintf("[%s] OK", s_BootName[i]);
+		else
+		{
+			ScrPrintf("[%s] BAD (err=%d)", s_BootName[i], s_BootRet[i]);
+			nfail++;
+		}
 	}
-	ScrPrintf("IOP imported: BAD");
-	for (i = 0; i < s_BootNFail; i++)
-		ScrPrintf("  [%s] err=%d", s_BootFailName[i], s_BootFailRet[i]);
+	ScrPrintf(nfail == 0 ? "IOP imported: OK" : "IOP imported: BAD");
+}
+
+extern "C" void BootMark(const char *pLabel)
+{
+	if (pLabel) ScrPrintf("%s", pLabel);
 }
 void _MainLoopSetScreen(CScreen *pScreen)
 {

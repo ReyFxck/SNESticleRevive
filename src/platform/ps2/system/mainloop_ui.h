@@ -16,6 +16,7 @@ void ScrPrintf(const Char *pFormat, ...);
    BootImport(name, ret) guarda falha (ret<0); BootImportFlush() imprime. */
 void BootImport(const char *pName, int ret);
 void BootImportFlush(void);
+void BootMark(const char *pLabel);
 
 #ifdef __cplusplus
 }

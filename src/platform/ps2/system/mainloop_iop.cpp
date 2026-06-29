@@ -42,6 +42,7 @@ extern "C" void DLog(const char *fmt, ...);
 /* Boot import log (resumo limpo IOP imported OK/BAD) -- ver mainloop_ui.cpp */
 extern "C" void BootImport(const char *pName, int ret);
 extern "C" void BootImportFlush(void);
+extern "C" void BootMark(const char *pLabel);
 #include "dataio.h"
 #include "prof.h"
 #include "bmpfile.h"
@@ -286,29 +287,12 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	 * Every step is mirrored to the on-screen log via ScrPrintf so it
 	 * can be diagnosed on a real console without an EE SIO cable. */
 	{
-		int pad_ok = 0;
-
-		if (PadLoadEmbeddedIrx() == 0)
-		{
-			pad_ok = 1;
-		}
-		else if (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0)
-		{
-			pad_ok = 1;   /* fallback: padman da BIOS */
-		}
-
-		if (!pad_ok)
-		{
-			BootImport("pad", -1);   /* sem controle */
-		}
-		else
-		{
-			int pi = padInit(0);
-			if (pi == 1)
-				InputInit(FALSE);
-			else
-				BootImport("padInit", pi);   /* controle indisponivel */
-		}
+		int pad_ok = (PadLoadEmbeddedIrx() == 0)
+		          || (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0);
+		int pi     = pad_ok ? padInit(0) : -1;
+		BootImport("pad", (pad_ok && pi == 1) ? 0 : -1);
+		if (pad_ok && pi == 1)
+			InputInit(FALSE);
 	}
 
 	/* libmc finalise. mcInit() picks up whichever MCMAN/MCSERV pair
@@ -398,31 +382,29 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   where freesd somehow refuses to load -- in practice the embedded
 	   copy always loads). */
 	// BOOTLOG("[boot] FREESD/LIBSD: try load\n");
-	if (IOPLoadModule("FREESD.IRX", ppSearchPaths, 0, NULL) < 0)
 	{
-		if (IOPLoadModule("rom0:LIBSD", NULL, 0, NULL) < 0)
-		{
-			BootImport("libsd", -1);   /* sem SPU2 -> audio mudo */
-			// BOOTLOG("[boot] FREESD/LIBSD: both failed - audio will be silent\n");
-		}
-	}
-	// BOOTLOG("[boot] FREESD/LIBSD done\n");
-
-	// BOOTLOG("[boot] AUDSRV.IRX: try load\n");
-	if (IOPLoadModule("AUDSRV.IRX", ppSearchPaths, 0, NULL) >= 0)
-	{
-		if (Aud_Init(0, 960*25, AUDMIXBUFFER_MAXENQUEUE) >= 0)
-		{
-			_MainLoop_bAudioReady = TRUE;
-		}
-		/* Aud_Init registra a propria falha (audsrv) em BootImport */
-	}
-	else
-	{
-		BootImport("audsrv", -1);   /* sem AUDSRV.IRX -> audio mudo */
+		int spu2_ok = (IOPLoadModule("FREESD.IRX", ppSearchPaths, 0, NULL) >= 0)
+		           || (IOPLoadModule("rom0:LIBSD", NULL, 0, NULL) >= 0);
+		BootImport("spu2", spu2_ok ? 0 : -1);   /* SPU2 driver (freesd/libsd) */
 	}
 
-	/* Resumo limpo dos imports do IOP (OK / BAD + modulos que falharam). */
+	{
+		int audsrv_ok = (IOPLoadModule("AUDSRV.IRX", ppSearchPaths, 0, NULL) >= 0);
+		BootImport("audsrv.irx", audsrv_ok ? 0 : -1);
+		if (audsrv_ok)
+		{
+			/* canary: audsrv_init faz um SifBindRpc que e' ponto de
+			   deadlock conhecido em algumas BIOS -- marcador NA HORA, pra
+			   que, se travar, a ultima linha na tela aponte exatamente aqui. */
+			BootMark("audsrv_init...");
+			int ar = Aud_Init(0, 960*25, AUDMIXBUFFER_MAXENQUEUE);
+			BootImport("audsrv_init", ar >= 0 ? 0 : -1);
+			if (ar >= 0)
+				_MainLoop_bAudioReady = TRUE;
+		}
+	}
+
+	/* Lista de TODOS os modulos importados + veredito (tela ja pronta). */
 	BootImportFlush();
 
 	/* The iaddis-era custom MCSAVE.IRX (async memory-card writer) is
