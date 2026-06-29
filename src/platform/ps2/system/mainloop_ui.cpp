@@ -87,14 +87,15 @@ extern "C" void BootImportFlush(void)
 	for (i = 0; i < s_BootN; i++)
 	{
 		if (s_BootRet[i] >= 0)
-			ScrPrintf("[%s] OK", s_BootName[i]);
+			ScrPrintf("[IOP] %-11s imported OK", s_BootName[i]);
 		else
 		{
-			ScrPrintf("[%s] BAD (err=%d)", s_BootName[i], s_BootRet[i]);
+			ScrPrintf("[IOP] %-11s imported BAD (err=%d)",
+			          s_BootName[i], s_BootRet[i]);
 			nfail++;
 		}
 	}
-	ScrPrintf(nfail == 0 ? "IOP imported: OK" : "IOP imported: BAD");
+	ScrPrintf(nfail == 0 ? "[IOP] imported: OK" : "[IOP] imported: BAD");
 }
 
 extern "C" void BootMark(const char *pLabel)

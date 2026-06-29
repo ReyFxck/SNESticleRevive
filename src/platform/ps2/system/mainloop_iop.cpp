@@ -396,7 +396,7 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 			/* canary: audsrv_init faz um SifBindRpc que e' ponto de
 			   deadlock conhecido em algumas BIOS -- marcador NA HORA, pra
 			   que, se travar, a ultima linha na tela aponte exatamente aqui. */
-			BootMark("audsrv_init...");
+			BootMark("[IOP] audsrv_init...");
 			int ar = Aud_Init(0, 960*25, AUDMIXBUFFER_MAXENQUEUE);
 			BootImport("audsrv_init", ar >= 0 ? 0 : -1);
 			if (ar >= 0)

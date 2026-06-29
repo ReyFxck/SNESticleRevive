@@ -329,7 +329,7 @@ _AudMix = new AudMixBuffer(32000, TRUE);
 	 * indeed stalled (confirms the GSM hang); timed_out=0 means it fired
 	 * normally and any remaining GSM glitch is geometry, not a hang. */
 	// BOOTLOG("[boot] GS settle wait (timeout-safe) begin\n");
-	BootMark("video: settle...");   /* area de risco (hang GSM); marcador na hora */
+	BootMark("[VID] settle...");   /* area de risco (hang GSM); marcador na hora */
 	{
 		int base  = TestVRstart();
 		int guard = 1500;            /* 1500 * 1ms = 1.5s hard ceiling */
