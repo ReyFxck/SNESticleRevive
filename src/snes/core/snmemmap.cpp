@@ -322,73 +322,6 @@ static void _MapExLoRomRegion(SNCpuT *pCpu, Uint8 *pRom, Uint32 romBytes,
 }
 
 // ----------------------------------------------------------------------
-//  LoadDspFirmware - localiza e carrega o firmware combinado (program +
-//  data, 8192 bytes) de um uPD7725 para o nucleo LLE compartilhado.
-//
-//  Procura "<name>.rom" (ex.: "dsp3.rom" / "dsp4.rom") numa lista de
-//  pastas conhecidas -- mesmo espirito das pastas de fallback usadas
-//  para capas/BGM.  Aceita tambem o nome em MAIUSCULAS (ISO9660).
-//
-//  Os dumps de firmware NAO acompanham o emulador (dados proprietarios
-//  do silicio): o usuario coloca dsp3.rom / dsp4.rom numa dessas pastas.
-//  Sem o arquivo o chip nao e' ligado (o jogo simplesmente nao roda),
-//  mas o emulador continua estavel.
-// ----------------------------------------------------------------------
-Bool SnesSystem::LoadDspFirmware(const char *name)
-{
-	static Uint8 s_Image[0x2000];   // 8192 bytes (program+data)
-
-	// Candidatos de caminho.  %s = nome do arquivo (minusculo ou
-	// maiusculo).  A ordem segue a probabilidade em cada midia.
-	static const char *s_Dirs[] =
-	{
-#ifdef DSP_FIRMWARE_PATH
-		DSP_FIRMWARE_PATH "/",
-#endif
-		"mc0:/SNESticle/dsp/",
-		"mc1:/SNESticle/dsp/",
-		"mass:/SNESticle/dsp/",
-		"mass:/SNESticle/",
-		"cdfs:/DSP/",
-		"host:",
-		"",
-	};
-
-	char szLower[16], szUpper[16];
-	int i;
-	for (i = 0; name[i] && i < 12; i++)
-	{
-		char c = name[i];
-		szLower[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
-		szUpper[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
-	}
-	szLower[i] = 0; szUpper[i] = 0;
-
-	for (unsigned d = 0; d < sizeof(s_Dirs) / sizeof(s_Dirs[0]); d++)
-	{
-		char szPath[160];
-		// tenta minusculo (dsp3.rom) e depois maiusculo (DSP3.ROM)
-		const char *exts[2]   = { ".rom", ".ROM" };
-		const char *names[2]  = { szLower, szUpper };
-		for (int v = 0; v < 2; v++)
-		{
-			snprintf(szPath, sizeof(szPath), "%s%s%s",
-			         s_Dirs[d], names[v], exts[v]);
-			if (FileReadMem(szPath, s_Image, sizeof(s_Image)))
-			{
-				if (m_DSP_LLE.LoadFirmware(s_Image, sizeof(s_Image)))
-				{
-					ConDebug("[dsp] firmware '%s' carregado de %s\n",
-					         name, szPath);
-					return TRUE;
-				}
-			}
-		}
-	}
-	ConDebug("[dsp] firmware '%s.rom' NAO encontrado (chip inerte)\n", name);
-	return FALSE;
-}
-
 void SnesSystem::MapMemExLoRom(void)
 {
 	SNCpuT *pCpu     = &m_Cpu;
@@ -425,7 +358,6 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 
 	m_bSDD1 = FALSE;
 	m_bSRTC = (uFlags & SNROM_FLAG_SRTC) ? TRUE : FALSE;
-	m_pMissingDspFw = NULL;   // limpo a cada load; setado se faltar dsp3/4.rom
 
 	switch (eRomMapping)
 	{
@@ -438,21 +370,15 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 #if SNES_DSP1
 			if (uFlags & SNROM_FLAG_DSP1) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP1; }
 			if (uFlags & SNROM_FLAG_DSP2) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP2; }
-			// DSP-3: mesmo decode de registrador do DSP-1 LoROM
-			// ($8000=DR / $C000=SR), roda no nucleo uPD7725 LLE com o
-			// firmware proprio.  So' mapeia a regiao do DSP (que aponta
-			// para os traps ReadDSP1/WriteDSP1) SE o firmware carregar --
-			// senao m_pDsp fica NULL e o primeiro acesso dereferenciaria
-			// nulo (= crash).  Sem firmware a regiao fica como ROM e o
-			// emulador segue estavel; a UI avisa via m_pMissingDspFw.
+			// DSP-3 (SD Gundam GX): ainda SEM HLE proprio.  Mapeia a
+			// regiao do DSP, mas m_pDsp fica NULL -> a guarda anti-crash
+			// em ReadDSP1/WriteDSP1 mantem o emulador estavel (status
+			// "pronto", dados 0).  O jogo nao renderiza certo, mas nao
+			// trava.  (Sem dependencia de firmware externo.)
 			if (uFlags & SNROM_FLAG_DSP3)
 			{
-				if (LoadDspFirmware("dsp3"))
-				{
-					MapMem(_SnesMemMap_LoRom_DSP1);
-					m_pDsp = &m_DSP_LLE;
-				}
-				else m_pMissingDspFw = "dsp3";
+				MapMem(_SnesMemMap_LoRom_DSP1);
+				// m_pDsp permanece NULL (inerte)
 			}
 			// DSP-4 (Top Gear 3000): HLE self-contained -- NAO precisa de
 			// firmware.  O chip esta sempre disponivel, entao a regiao do

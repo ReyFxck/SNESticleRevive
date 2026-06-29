@@ -337,7 +337,6 @@ SRCS := \
 	src/snes/core/sndsp1.cpp \
 	src/snes/core/sndsp2.cpp \
 	src/snes/core/sndsp4.cpp \
-	src/snes/core/sndsp1_lle.cpp \
 	src/snes/core/snobc1.cpp \
 	src/snes/core/sncx4.cpp \
 	src/snes/core/snsdd1.cpp \

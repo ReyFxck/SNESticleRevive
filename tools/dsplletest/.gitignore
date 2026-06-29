@@ -1,7 +1,0 @@
-# binarios compilados e symlink gerado pelo build.sh
-dsplle_test
-sndsp1_lle.cpp
-
-# firmwares (dados proprietarios do silicio -- nao versionar)
-*.rom
-*.ROM
