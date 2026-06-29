@@ -90,6 +90,11 @@ private:
     Uint8  m_RomBuffer;      // byte pre-lido de ROM[ROMBR:R14]
     Bool   m_RomBufValid;
 
+    // watchdog: se o programa rodar demais sem STOP (ex.: opcodes ainda
+    // incompletos durante o desenvolvimento), forca a parada e devolve o
+    // controle ao SNES, evitando travar a EE.
+    Uint32 m_Runaway;
+
     // cache de codigo (512 bytes) em $3100-$32FF
     Uint8  m_Cache[512];
 

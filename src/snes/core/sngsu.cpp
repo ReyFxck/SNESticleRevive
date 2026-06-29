@@ -46,6 +46,7 @@ void SNGSU::Reset()
     m_VCR = 0x04;            // GSU2 por padrao (01h = MC1/Star Fox)
     m_CBR = 0;
     m_RomBuffer = 0; m_RomBufValid = FALSE;
+    m_Runaway = 0;
     memset(m_Cache, 0, sizeof(m_Cache));
 }
 
@@ -188,7 +189,10 @@ void SNGSU::WriteReg(Uint16 uAddrLow, Uint8 uData)
         Int32 idx = (a - 0x3000) >> 1;
         m_R[idx] = (Uint16)(((Uint16)uData << 8) | m_RegLatch);
         if (a == 0x301F)        // escrita em R15.MSB dispara GO
+        {
             m_bGo = TRUE;
+            m_Runaway = 0;      // reinicia o watchdog a cada novo START
+        }
         return;
     }
 
@@ -229,6 +233,15 @@ void SNGSU::Run(Int32 nClocks)
 
 void SNGSU::Step()
 {
+    // watchdog: enquanto o set de opcodes/graficos nao esta completo, um
+    // programa pode nunca alcancar STOP.  Apos um teto alto de instrucoes,
+    // forca a parada (+IRQ) para nao travar a EE.
+    if (++m_Runaway > 2000000)
+    {
+        m_bGo = FALSE; m_bIrq = TRUE; m_Runaway = 0;
+        return;
+    }
+
     Uint8 op = CodeFetch();
     Bool  bIsPrefix = FALSE;
 

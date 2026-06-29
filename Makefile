@@ -207,6 +207,16 @@ ifeq ($(DSP4_STUB),1)
   CFLAGS   += -DDSP4_INERT_STUB=1
   CXXFLAGS += -DDSP4_INERT_STUB=1
 endif
+
+# SuperFX / GSU (EXPERIMENTAL): DESLIGADO por padrao.  O chip ainda esta em
+# desenvolvimento (sem graficos), e liga-lo pode travar jogos SuperFX.  O
+# build padrao fica identico ao conhecido-bom.  Para testar o progresso:
+#     make iso SUPERFX=1
+SUPERFX ?= 0
+ifeq ($(SUPERFX),1)
+  CFLAGS   += -DSNES_SUPERFX=1
+  CXXFLAGS += -DSNES_SUPERFX=1
+endif
 # ----------------------------------------------------------------------
 
 INCS := \

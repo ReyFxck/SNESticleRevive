@@ -131,6 +131,7 @@ static SnesMemMapT _SnesMemMap_CX4[]={
     {0,0,0,0,SNESMEM_TYPE_NONE}
 };
 
+#ifdef SNES_SUPERFX
 // SuperFX / GSU: registradores/MMIO em $00-3F/$80-BF:3000-34FF.  A ROM usa
 // o mapeamento LoROM base (ja aplicado); a Game Pak RAM em $70-71 reaproveita
 // o buffer de SRAM, compartilhado com o GSU via SetMemory().
@@ -140,6 +141,7 @@ static SnesMemMapT _SnesMemMap_SuperFX[]={
     {0x70,0x71,0x0000,0xFFFF,SNCPU_CYCLE_SLOW,SNESMEM_TYPE_SRAM},
     {0,0,0,0,SNESMEM_TYPE_NONE}
 };
+#endif
 
 void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 {
@@ -408,16 +410,18 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 				MapMem(_SnesMemMap_CX4);
 				m_CX4.SetMemReader(CX4ReadMem, &m_Cpu);
 			}
-			// SuperFX / GSU (Star Fox, Yoshi's Island, etc.) -- core
-			// experimental.  Mapeia o MMIO do GSU e conecta os buffers de
-			// ROM/RAM do cartucho.  (Sem opcodes/graficos completos ainda:
-			// o chip nao renderiza, mas nao afeta jogos sem SuperFX.)
+			// SuperFX / GSU (Star Fox, Yoshi's Island, etc.) -- EXPERIMENTAL.
+			// So' liga com -DSNES_SUPERFX (make SUPERFX=1).  Sem o flag, o
+			// cartucho SuperFX usa apenas o mapa LoROM base (como antes),
+			// mantendo o boot e os outros jogos 100% intactos.
+#ifdef SNES_SUPERFX
 			if (uFlags & SNROM_FLAG_SUPERFX)
 			{
 				MapMem(_SnesMemMap_SuperFX);
 				m_GSU.SetMemory(m_pRom->GetData(), m_pRom->GetBytes(),
 				                m_SRam, SNES_SRAMSIZE);
 			}
+#endif
 			if (uFlags & SNROM_FLAG_SDD1)
 			{
 				m_bSDD1 = TRUE;
