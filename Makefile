@@ -187,6 +187,16 @@ ifeq ($(PROFILE),1)
   CFLAGS   += -DCODE_PROFILE=1
   CXXFLAGS += -DCODE_PROFILE=1
 endif
+
+# Captura de protocolo do DSP-4 (diagnostico).  Com DSP4_CAPTURE=1 o HLE
+# do DSP-4 registra a sequencia de comandos/params que o jogo envia e
+# despeja no log (logs.txt no emulador), pra reconstruir o protocolo a
+# partir do proprio jogo.  Ex.:  make DSP4_CAPTURE=1
+DSP4_CAPTURE ?= 0
+ifeq ($(DSP4_CAPTURE),1)
+  CFLAGS   += -DDSP4_CAPTURE=1
+  CXXFLAGS += -DDSP4_CAPTURE=1
+endif
 # ----------------------------------------------------------------------
 
 INCS := \

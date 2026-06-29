@@ -18,6 +18,51 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef DSP4_CAPTURE
+// --------------------------------------------------------------------------
+//  Captura de protocolo (diagnostico, gated por -DDSP4_CAPTURE).
+//
+//  Registra a sequencia de WRITES (comando + parametros) que o jogo envia,
+//  segmentada por pontos de READ (marcador "R").  Despeja tudo no printf
+//  (logs.txt no emulador) quando o buffer enche -- uma vez.  Isso deixa
+//  reconstruir o protocolo do DSP-4 a partir do PROPRIO jogo (clean-room
+//  observacional): quais opcodes ele usa e quantos params cada um leva.
+//
+//  Ex. de saida:   W 0014  R            (comando 0x14, sem params, le)
+//                  W 0006  W 1234  W 5678  R   (cmd 0x06 + 2 params, le)
+// --------------------------------------------------------------------------
+#define DSP4_CAP_MAX 4096
+static Uint16 s_capVal[DSP4_CAP_MAX];
+static Uint8  s_capDir[DSP4_CAP_MAX];   // 0 = W(word), 1 = R(marcador)
+static int    s_capN      = 0;
+static int    s_capDumped = 0;
+static int    s_capLastW  = 0;
+
+static void Dsp4CapDump(void)
+{
+    int i;
+    printf("=== DSP4 CAPTURE (%d) ===\n", s_capN);
+    for (i = 0; i < s_capN; i++)
+        printf(s_capDir[i] == 0 ? "W %04X\n" : "R\n", s_capVal[i]);
+    printf("=== DSP4 CAPTURE END ===\n");
+}
+
+static void Dsp4CapWrite(Uint16 w)
+{
+    if (s_capDumped) return;
+    if (s_capN < DSP4_CAP_MAX) { s_capDir[s_capN] = 0; s_capVal[s_capN] = w; s_capN++; }
+    s_capLastW = 1;
+    if (s_capN >= DSP4_CAP_MAX) { Dsp4CapDump(); s_capDumped = 1; }
+}
+
+static void Dsp4CapRead(void)
+{
+    if (s_capDumped || !s_capLastW) return;   // colapsa rajadas de leitura
+    if (s_capN < DSP4_CAP_MAX) { s_capDir[s_capN] = 1; s_capVal[s_capN] = 0; s_capN++; }
+    s_capLastW = 0;
+}
+#endif
+
 SNDSP4::SNDSP4()
 {
     memset(m_SeenCmd, 0, sizeof(m_SeenCmd));
@@ -118,6 +163,9 @@ void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
     }
     Uint16 uWord = (Uint16)(m_uWrLo | ((Uint16)uData << 8));
     m_bHaveLo = FALSE;
+#ifdef DSP4_CAPTURE
+    Dsp4CapWrite(uWord);
+#endif
 
     if (m_bWaitCmd)
     {
@@ -150,6 +198,9 @@ void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
 
 Uint8 SNDSP4::ReadData(Uint32 /*uAddr*/)
 {
+#ifdef DSP4_CAPTURE
+    Dsp4CapRead();
+#endif
     // serve a saida byte a byte (LSB depois MSB de cada palavra)
     Int32 nTotalBytes = m_nOut * 2;
     if (m_iOutByte < nTotalBytes)
