@@ -680,10 +680,16 @@ void SNGSU::Step()
     }
     else if (op == 0x00)                     // STOP
     {
-        GSU_LOG("[gsu] STOP steps=%u plots=%u r15=%04X scmr=%02X scbr=%02X",
+        GSU_LOG("[gsu] STOP steps=%u plots=%u r15=%04X scmr=%02X scbr=%02X cfgr=%02X",
                 (unsigned)m_Runaway, (unsigned)m_PlotCount,
-                (unsigned)m_R[15], (unsigned)m_SCMR, (unsigned)m_SCBR);
-        m_bGo = FALSE; m_bIrq = TRUE; bIsPrefix = TRUE;
+                (unsigned)m_R[15], (unsigned)m_SCMR, (unsigned)m_SCBR,
+                (unsigned)m_CFGR);
+        m_bGo = FALSE;
+        // IRQ ao SNES so' se NAO mascarado em CFGR.irq (bit7).  Igual hardware
+        // /bsnes: instructionSTOP so' levanta irq quando cfgr.irq==0.  Setar
+        // incondicionalmente (versao antiga) era espurio e quebrava o boot.
+        if (!(m_CFGR & 0x80)) m_bIrq = TRUE;
+        bIsPrefix = TRUE;
     }
     else if (op == 0x01)                     // NOP
     {
