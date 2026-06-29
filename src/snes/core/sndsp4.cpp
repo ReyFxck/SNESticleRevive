@@ -32,9 +32,8 @@
 extern "C" void DLog(const char *fmt, ...);
 
 //  Saida JA no formato .vec ("W xxxx" / "R xxxx", palavras de 16 bits),
-//  para casar 1:1 com o capturador de referencia (mesen_dsp4_capture.lua)
-//  e com o runner host-side (dsp4_vectors).  Os bytes do DR sao remontados
-//  em palavras (LSB depois MSB) por direcao.
+//  para casar 1:1 com o runner host-side (dsp4_vectors).  Os bytes do DR
+//  sao remontados em palavras (LSB depois MSB) por direcao.
 #define DSP4_CAP_MAX 4096
 static int  s_capN    = 0;
 static int  s_capInit = 0;
