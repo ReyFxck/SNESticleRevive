@@ -758,20 +758,21 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadGSU(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
-	// O jogo costuma polar o SFR; avanca o GSU enquanto estiver rodando.
+	// O jogo costuma polar o SFR num loop apertado; avanca uma fatia pequena
+	// do GSU a cada leitura para o loop de espera progredir (catch-up).
 	if (pSnes->m_GSU.IsRunning())
-		pSnes->m_GSU.Run(4096);
+		pSnes->m_GSU.Run(512);
 	return pSnes->m_GSU.ReadReg((Uint16)(uAddr & 0xFFFF));
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteGSU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	// Apenas registra a escrita.  Escrever R15.MSB ($301F) liga GO; o GSU
+	// roda INTERCALADO (em ExecuteLine e no catch-up do poll), NAO sincrono
+	// aqui dentro -- rodar dezenas de milhares de passos no meio de uma
+	// instrucao da CPU era o modelo errado (e provavel fonte do crash).
 	pSnes->m_GSU.WriteReg((Uint16)(uAddr & 0xFFFF), uData);
-	// escrever R15.MSB ($301F) liga GO -> roda um orcamento (Run tem teto,
-	// entao nao trava mesmo com opcodes ainda incompletos).
-	if (pSnes->m_GSU.IsRunning())
-		pSnes->m_GSU.Run(65536);
 }
 
 
@@ -1080,6 +1081,14 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+
+#ifdef SNES_SUPERFX
+	// SuperFX/GSU roda CONCORRENTE com a CPU (nao sincrono dentro do trap):
+	// avanca uma fatia do GSU a cada scanline enquanto GO=1.  (O watchdog
+	// no core garante que nunca trava se algo correr solto.)
+	if (m_GSU.IsRunning())
+		m_GSU.Run(2048);
+#endif
 
     // don't trigger IRQ by default
     int nHIRQCycles = -1;
