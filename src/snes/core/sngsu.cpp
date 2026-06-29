@@ -50,6 +50,9 @@ void SNGSU::Reset()
     m_BranchPending = FALSE; m_BranchTarget = 0;
     m_BranchSetPBR = FALSE; m_BranchPBR = 0;
     m_LastRamAddr = 0;
+    m_Color = 0; m_POR = 0;
+    memset(m_PixColor, 0, sizeof(m_PixColor));
+    m_PixFlags = 0; m_PixXBase = 0; m_PixY = 0; m_PixValid = FALSE;
     memset(m_Cache, 0, sizeof(m_Cache));
 }
 
@@ -257,6 +260,115 @@ void SNGSU::SetZSfromWord(Uint16 v)
     m_bS = (v & 0x8000) != 0;
 }
 
+//==========================================================================
+//  Graficos (PLOT / pixel cache)
+//==========================================================================
+Int32 SNGSU::ScreenBpp() const
+{
+    switch (m_SCMR & 0x03) {         // MD0-1
+    case 0:  return 2;               // 4 cores
+    case 3:  return 8;               // 256 cores
+    default: return 4;               // 16 cores (1) e reservado (2)
+    }
+}
+
+// Numero do tile (caractere) que contem o pixel (x,y), conforme a altura
+// de tela (SCMR.HT0/HT1).
+Uint32 SNGSU::PixelTileNo(Uint8 x, Uint8 y) const
+{
+    Uint32 cx = x >> 3, cy = y >> 3;
+    Uint32 ht = (((m_SCMR >> 5) & 1) << 1) | ((m_SCMR >> 2) & 1);
+    switch (ht) {
+    case 0:  return cx * 0x10 + cy;                       // 128 pixels
+    case 1:  return cx * 0x14 + cy;                       // 160 pixels
+    case 2:  return cx * 0x18 + cy;                       // 192 pixels
+    default:                                              // OBJ 256x256
+        return (((Uint32)y >> 7) * 0x200) + (((Uint32)x >> 7) * 0x100)
+             + ((cy & 0x0F) * 0x10) + (cx & 0x0F);
+    }
+}
+
+// Endereco (offset linear na Game Pak RAM) da linha de bitplanes do tile.
+Uint32 SNGSU::PixelRowAddr(Uint8 x, Uint8 y) const
+{
+    Uint32 tile = PixelTileNo(x, y);
+    Uint32 tileSize = (Uint32)(8 * ScreenBpp());          // 16/32/64
+    return tile * tileSize + ((Uint32)m_SCBR << 10) + (Uint32)(y & 7) * 2;
+}
+
+// Descarrega o cache de pixels para a RAM (formato bitplane do SNES).
+void SNGSU::PixFlush()
+{
+    if (!m_PixValid || m_PixFlags == 0) { m_PixFlags = 0; m_PixValid = FALSE; return; }
+    Int32  bpp = ScreenBpp();
+    Uint32 rowAddr = PixelRowAddr(m_PixXBase, m_PixY);
+    for (Int32 b = 0; b < bpp; b++) {
+        // plano b: par (b>>1) a offset (b>>1)*16, byte (b&1) dentro do par
+        Uint32 addr = rowAddr + (Uint32)((b >> 1) * 16 + (b & 1));
+        Uint8  byte = RamReadByte(addr);
+        for (Int32 i = 0; i < 8; i++) {
+            if (m_PixFlags & (1 << i)) {
+                Uint8 mask = (Uint8)(1 << (7 - i));        // pixel 0 = bit7
+                if ((m_PixColor[i] >> b) & 1) byte |= mask;
+                else                          byte &= (Uint8)~mask;
+            }
+        }
+        RamWriteByte(addr, byte);
+    }
+    m_PixFlags = 0; m_PixValid = FALSE;
+}
+
+void SNGSU::Plot()
+{
+    Uint8 x = (Uint8)(m_R[1] & 0xFF);
+    Uint8 y = (Uint8)(m_R[2] & 0xFF);
+    Int32 bpp = ScreenBpp();
+    Uint8 mask = (Uint8)((1 << bpp) - 1);
+
+    // cor (com dither opcional via POR.1: usa COLOR>>4 nos pixels alternados)
+    Uint8 c = m_Color;
+    if ((m_POR & 0x02) && (((x ^ y) & 1) != 0)) c = (Uint8)(m_Color >> 4);
+    Uint8 color = (Uint8)(c & mask);
+
+    // transparencia (POR.0): cor 0 nao e' desenhada (so' avanca X)
+    if ((m_POR & 0x01) && color == 0) { m_R[1]++; return; }
+
+    Uint8 xbase = (Uint8)(x & 0xF8);
+    if (m_PixValid && (xbase != m_PixXBase || y != m_PixY)) PixFlush();
+    m_PixXBase = xbase; m_PixY = y; m_PixValid = TRUE;
+    m_PixColor[x & 7] = color;
+    m_PixFlags |= (Uint8)(1 << (x & 7));
+    m_R[1]++;
+
+    if (m_PixFlags == 0xFF) PixFlush();
+}
+
+Uint16 SNGSU::Rpix()
+{
+    PixFlush();                       // RPIX sempre forca o flush antes de ler
+    Uint8 x = (Uint8)(m_R[1] & 0xFF);
+    Uint8 y = (Uint8)(m_R[2] & 0xFF);
+    Int32 bpp = ScreenBpp();
+    Uint32 rowAddr = PixelRowAddr(x, y);
+    Uint16 color = 0;
+    for (Int32 b = 0; b < bpp; b++) {
+        Uint32 addr = rowAddr + (Uint32)((b >> 1) * 16 + (b & 1));
+        Uint8  byte = RamReadByte(addr);
+        Uint8  bit  = (Uint8)((byte >> (7 - (x & 7))) & 1);
+        color |= (Uint16)(bit << b);
+    }
+    return color;
+}
+
+// Pipeline de escrita de COLOR (usado por COLOR e GETC), com POR.2/POR.3.
+void SNGSU::ColorWrite(Uint8 src)
+{
+    Uint8 c = src;
+    if (m_POR & 0x04) c = (Uint8)((c & 0xF0) | (c >> 4));   // high-nibble
+    if (m_POR & 0x08) m_Color = (Uint8)((m_Color & 0xF0) | (c & 0x0F)); // freeze-high
+    else              m_Color = c;
+}
+
 void SNGSU::Run(Int32 nClocks)
 {
     while (m_bGo && nClocks-- > 0)
@@ -348,6 +460,28 @@ void SNGSU::Step()
     else if (op == 0x4F)                     // NOT
     {
         Uint16 res = (Uint16)~sr; SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x4C)                     // PLOT / RPIX (ALT1)
+    {
+        if (m_bAlt1) { Uint16 px = Rpix(); SetZSfromWord(px); m_R[m_Dreg] = px; }
+        else         { Plot(); }
+    }
+    else if (op == 0x4E)                     // COLOR / CMODE (ALT1)
+    {
+        if (m_bAlt1) m_POR = (Uint8)(sr & 0x1F);     // CMODE: por = Rs & 1Fh
+        else         ColorWrite((Uint8)(sr & 0xFF)); // COLOR: color = Rs
+    }
+    else if (op == 0xEF)                      // GETB / GETBH / GETBL / GETBS
+    {
+        Uint8 byte = RomReadByte(m_ROMBR, m_R[14]);
+        if (m_bAlt1 && m_bAlt2)               // GETBS (3F): sign-expand
+            m_R[m_Dreg] = (Uint16)(Int16)(Int8)byte;
+        else if (m_bAlt1)                     // GETBH (3D): hi=byte, lo unchanged
+            m_R[m_Dreg] = (Uint16)((m_R[m_Dreg] & 0x00FF) | (byte << 8));
+        else if (m_bAlt2)                     // GETBL (3E): lo=byte, hi unchanged
+            m_R[m_Dreg] = (Uint16)((m_R[m_Dreg] & 0xFF00) | byte);
+        else                                  // GETB: zero-expand
+            m_R[m_Dreg] = (Uint16)byte;
     }
     else if (op == 0x03)                     // LSR
     {
@@ -498,7 +632,7 @@ void SNGSU::Step()
     {
         if (m_bAlt1 && m_bAlt2)  m_ROMBR = (Uint8)(m_R[m_Sreg] & 0xFF);  // ROMB (3F DF)
         else if (m_bAlt2)        m_RAMBR = (Uint8)(m_R[m_Sreg] & 0x01);  // RAMB (3E DF)
-        // else GETC: carrega COLOR de [romb:r14] -- etapa de graficos
+        else                     ColorWrite(RomReadByte(m_ROMBR, m_R[14])); // GETC
     }
     else if (op == 0x02)                     // CACHE
     {

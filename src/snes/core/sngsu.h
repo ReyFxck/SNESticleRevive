@@ -105,6 +105,17 @@ private:
     // ultimo endereco de RAM acessado (para SBK)
     Uint16 m_LastRamAddr;
 
+    // --- graficos (PLOT / pixel cache) ---
+    Uint8  m_Color;            // registrador COLOR
+    Uint8  m_POR;              // Plot Option Register (via CMODE): bit0 transp,
+                               // bit1 dither, bit2 high-nibble, bit3 freeze-high,
+                               // bit4 obj-mode
+    Uint8  m_PixColor[8];      // cache primario: cor de cada um dos 8 pixels
+    Uint8  m_PixFlags;         // 1 bit por pixel plotado (nao-transparente)
+    Uint8  m_PixXBase;         // X & 0xF8 do bloco em cache
+    Uint8  m_PixY;             // Y do bloco em cache
+    Bool   m_PixValid;
+
     // cache de codigo (512 bytes) em $3100-$32FF
     Uint8  m_Cache[512];
 
@@ -128,6 +139,15 @@ private:
 
     void   ResetPrefix();    // Sreg=Dreg=0, alt1=alt2=b=0 (apos op normal)
     void   SetZSfromWord(Uint16 v);   // atualiza Z e S a partir de um resultado
+
+    // graficos
+    Int32  ScreenBpp() const;                 // 2, 4 ou 8 (de SCMR.MD)
+    Uint32 PixelTileNo(Uint8 x, Uint8 y) const;
+    Uint32 PixelRowAddr(Uint8 x, Uint8 y) const;
+    void   PixFlush();                        // descarrega o cache para a RAM
+    void   Plot();                            // PLOT: desenha COLOR em (R1,R2)
+    Uint16 Rpix();                            // RPIX: flush + le pixel (R1,R2)
+    void   ColorWrite(Uint8 src);             // pipeline COLOR/GETC (POR.2/.3)
 
     void   Step();           // executa uma instrucao
 };

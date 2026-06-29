@@ -224,6 +224,42 @@ int main()
         CHECK("LOOP: R1 = 3 iteracoes", g.GetReg(1), 3);
     }
 
+    // ===== Parte D: graficos (PLOT / pixel cache / RPIX) =====
+    printf("\n--- graficos (PLOT/RPIX/bitplanes) ---\n");
+    {
+        // 16 cores (4bpp), altura 128, SCBR=0.  Plota cor 5 em (0,0), le de
+        // volta com RPIX e confere os bytes de bitplane gerados na RAM.
+        static const uint8_t pg[] = {
+            0xF5,0x05,0x00,   // IWT R5,#5
+            0xB5,             // FROM R5
+            0x4E,             // COLOR  -> color = 5
+            0xF1,0x00,0x00,   // IWT R1,#0  (X)
+            0xF2,0x00,0x00,   // IWT R2,#0  (Y)
+            0x4C,             // PLOT (0,0)=5 ; R1->1
+            0xF1,0x00,0x00,   // IWT R1,#0  (reset X)
+            0x16,             // TO R6
+            0x3D,0x4C,        // RPIX -> R6 = pixel(0,0) (flush)
+            0x00 };
+        memset(g_rom, 0x01, sizeof(g_rom));
+        memset(g_ram, 0x00, sizeof(g_ram));
+        memcpy(g_rom, pg, sizeof(pg));
+        SNGSU g;
+        g.SetMemory(g_rom, sizeof(g_rom), g_ram, sizeof(g_ram));
+        g.Reset();
+        g.WriteReg(0x303A, 0x19);   // SCMR: MD=1 (16c), RAN+RON, height 128
+        g.WriteReg(0x3038, 0x00);   // SCBR = 0
+        g.WriteReg(0x3034, 0x00);
+        g.WriteReg(0x301E, 0x00);
+        g.WriteReg(0x301F, 0x80);
+        g.Run(100000);
+        // cor 5 = 0101b: plano0=1 (byte[0] bit7), plano2=1 (byte[16] bit7)
+        CHECK("PLOT/RPIX round-trip R6", g.GetReg(6), 5);
+        CHECK("bitplane0 byte[0]",  g_ram[0],  0x80);
+        CHECK("bitplane1 byte[1]",  g_ram[1],  0x00);
+        CHECK("bitplane2 byte[16]", g_ram[16], 0x80);
+        CHECK("bitplane3 byte[17]", g_ram[17], 0x00);
+    }
+
     // ===== Parte B: fuzz oracle =====
     printf("\n--- fuzz oracle (milhares de casos) ---\n");
     fuzz();
