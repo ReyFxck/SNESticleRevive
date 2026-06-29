@@ -232,21 +232,21 @@ void SNGSU::Step()
     Uint8 op = CodeFetch();
     Bool  bIsPrefix = FALSE;
 
+    Uint8  n   = op & 0x0F;
+    Uint16 sr  = m_R[m_Sreg];               // valor source
+
     if (op >= 0x10 && op <= 0x1F)            // TO Rn / MOVE
     {
-        Uint8 n = op & 0x0F;
         if (!m_bB) { m_Dreg = n; bIsPrefix = TRUE; }
-        else       { m_R[n] = m_R[m_Sreg]; } // MOVE (B prefix): Rn = Rsreg
+        else       { m_R[n] = m_R[m_Sreg]; } // MOVE (B): Rn = Rsreg
     }
     else if (op >= 0x20 && op <= 0x2F)       // WITH Rn (Sreg=Dreg=n, B=1)
     {
-        Uint8 n = op & 0x0F;
         m_Sreg = n; m_Dreg = n; m_bB = TRUE;
         bIsPrefix = TRUE;
     }
     else if (op >= 0xB0 && op <= 0xBF)       // FROM Rn / MOVES
     {
-        Uint8 n = op & 0x0F;
         if (!m_bB) { m_Sreg = n; bIsPrefix = TRUE; }
         else       { m_R[m_Dreg] = m_R[n]; SetZSfromWord(m_R[n]); } // MOVES
     }
@@ -255,34 +255,120 @@ void SNGSU::Step()
     else if (op == 0x3F) { m_bAlt1 = TRUE; m_bAlt2 = TRUE; bIsPrefix = TRUE; } // ALT3
     else if (op >= 0x50 && op <= 0x5F)       // ADD / ADC / ADD#imm / ADC#imm
     {
-        Uint8 n = op & 0x0F;
-        Uint32 a = m_R[m_Sreg];
+        Uint32 a = sr;
         Uint32 b = m_bAlt2 ? (Uint32)n : (Uint32)m_R[n];
         Uint32 cin = m_bAlt1 ? (m_bCY ? 1u : 0u) : 0u;   // ALT1 => ADC
         Uint32 r = a + b + cin;
         m_bCY = (r > 0xFFFF);
         m_bOV = ((~(a ^ b)) & (a ^ r) & 0x8000) != 0;
-        Uint16 res = (Uint16)(r & 0xFFFF);
-        SetZSfromWord(res);
-        m_R[m_Dreg] = res;
+        Uint16 res = (Uint16)r; SetZSfromWord(res); m_R[m_Dreg] = res;
     }
     else if (op >= 0x60 && op <= 0x6F)       // SUB / SBC / SUB#imm / CMP
     {
-        Uint8 n = op & 0x0F;
-        Bool bCmp = (m_bAlt1 && m_bAlt2);     // ALT1+ALT2 => CMP (nao grava)
-        Uint32 a = m_R[m_Sreg];
-        Uint32 b = (m_bAlt2 && !m_bAlt1) ? (Uint32)n : (Uint32)m_R[n]; // ALT2 => #imm
-        Uint32 cin = (m_bAlt1 && !m_bAlt2) ? (m_bCY ? 1u : 0u) : 1u;   // ALT1 => SBC
+        Bool bCmp = (m_bAlt1 && m_bAlt2);
+        Uint32 a = sr;
+        Uint32 b = (m_bAlt2 && !m_bAlt1) ? (Uint32)n : (Uint32)m_R[n];
+        Uint32 cin = (m_bAlt1 && !m_bAlt2) ? (m_bCY ? 1u : 0u) : 1u;  // ALT1 => SBC
         Uint32 r = a + ((~b) & 0xFFFF) + cin;
         m_bCY = (r > 0xFFFF);
         m_bOV = ((a ^ b) & (a ^ r) & 0x8000) != 0;
-        Uint16 res = (Uint16)(r & 0xFFFF);
-        SetZSfromWord(res);
+        Uint16 res = (Uint16)r; SetZSfromWord(res);
         if (!bCmp) m_R[m_Dreg] = res;
+    }
+    else if (op == 0x70)                     // MERGE
+    {
+        Uint16 res = (Uint16)((m_R[7] & 0xFF00) | ((m_R[8] >> 8) & 0x00FF));
+        SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op >= 0x71 && op <= 0x7F)       // AND / BIC / AND#imm / BIC#imm
+    {
+        Uint16 b = m_bAlt2 ? (Uint16)n : m_R[n];
+        if (m_bAlt1) b = (Uint16)~b;          // ALT1 => BIC (AND NOT)
+        Uint16 res = (Uint16)(sr & b);
+        SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0xC0)                     // HIB (high byte -> low)
+    {
+        Uint16 res = (Uint16)(sr >> 8);
+        m_bZ = (res == 0); m_bS = (res & 0x80) != 0;
+        m_R[m_Dreg] = res;
+    }
+    else if (op >= 0xC1 && op <= 0xCF)       // OR / XOR / OR#imm / XOR#imm
+    {
+        Uint16 b = m_bAlt2 ? (Uint16)n : m_R[n];
+        Uint16 res = m_bAlt1 ? (Uint16)(sr ^ b) : (Uint16)(sr | b);
+        SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x4F)                     // NOT
+    {
+        Uint16 res = (Uint16)~sr; SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x03)                     // LSR
+    {
+        m_bCY = (sr & 1) != 0;
+        Uint16 res = (Uint16)(sr >> 1); SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x04)                     // ROL
+    {
+        Uint16 res = (Uint16)((sr << 1) | (m_bCY ? 1 : 0));
+        m_bCY = (sr & 0x8000) != 0; SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x96)                     // ASR / DIV2 (ALT1)
+    {
+        m_bCY = (sr & 1) != 0;
+        Uint16 res = (Uint16)(((Int16)sr) >> 1);
+        if (m_bAlt1 && sr == 0xFFFF) res = 0;  // DIV2 arredonda p/ zero
+        SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x97)                     // ROR
+    {
+        Uint16 res = (Uint16)((m_bCY ? 0x8000 : 0) | (sr >> 1));
+        m_bCY = (sr & 1) != 0; SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x4D)                     // SWAP (troca bytes)
+    {
+        Uint16 res = (Uint16)((sr >> 8) | (sr << 8));
+        SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x95)                     // SEX (sign-extend byte)
+    {
+        Uint16 res = (Uint16)(Int16)(Int8)(sr & 0xFF);
+        SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op == 0x9E)                     // LOB (low byte)
+    {
+        Uint16 res = (Uint16)(sr & 0x00FF);
+        m_bZ = (res == 0); m_bS = (res & 0x80) != 0;
+        m_R[m_Dreg] = res;
+    }
+    else if (op >= 0x80 && op <= 0x8F)       // MULT / UMULT / +#imm (low 16)
+    {
+        Int32 r;
+        if (m_bAlt1) {                        // UMULT (sem sinal)
+            Uint32 b = m_bAlt2 ? (Uint32)n : (Uint32)m_R[n];
+            r = (Int32)((Uint32)sr * b);
+        } else {                              // MULT (com sinal)
+            Int32 b = m_bAlt2 ? (Int32)n : (Int32)(Int16)m_R[n];
+            r = (Int32)(Int16)sr * b;
+        }
+        Uint16 res = (Uint16)r; SetZSfromWord(res); m_R[m_Dreg] = res;
+    }
+    else if (op >= 0xD0 && op <= 0xDE)       // INC Rn
+    {
+        Uint16 res = (Uint16)(m_R[n] + 1); SetZSfromWord(res); m_R[n] = res;
+    }
+    else if (op >= 0xE0 && op <= 0xEE)       // DEC Rn
+    {
+        Uint16 res = (Uint16)(m_R[n] - 1); SetZSfromWord(res); m_R[n] = res;
+    }
+    else if (op >= 0xA0 && op <= 0xAF)       // IBT Rn,#imm8 (ALT off)
+    {
+        // (ALT1=LMS / ALT2=SMS de memoria ficam para a etapa de memoria)
+        Uint8 imm = CodeFetch();
+        m_R[n] = (Uint16)(Int16)(Int8)imm;    // sign-extend
     }
     else if (op >= 0xF0 && op <= 0xFF)       // IWT Rn,#imm16 (ALT off)
     {
-        Uint8 n = op & 0x0F;
         Uint8 lo = CodeFetch();
         Uint8 hi = CodeFetch();
         m_R[n] = (Uint16)(((Uint16)hi << 8) | lo);
@@ -293,9 +379,7 @@ void SNGSU::Step()
     }
     else if (op == 0x00)                     // STOP
     {
-        m_bGo = FALSE;
-        m_bIrq = TRUE;                       // SFR IRQ (mascarado p/ SNES via CFGR.7)
-        bIsPrefix = TRUE;                    // nao resetar prefixo (irrelevante; parou)
+        m_bGo = FALSE; m_bIrq = TRUE; bIsPrefix = TRUE;
     }
     else if (op == 0x01)                     // NOP
     {
@@ -303,8 +387,9 @@ void SNGSU::Step()
     }
     else
     {
-        // opcode ainda nao implementado nesta etapa: trata como NOP
-        // (Etapa 2 completa o set). Mantem a FSM viva para testes.
+        // Opcodes ainda nao implementados nesta etapa (branches, LOOP, JMP,
+        // memoria LDW/STW/LM/SM/SBK, LINK, e graficos PLOT/RPIX/COLOR/CMODE).
+        // Tratados como NOP para nao travar; vem nas proximas etapas.
     }
 
     if (!bIsPrefix)
