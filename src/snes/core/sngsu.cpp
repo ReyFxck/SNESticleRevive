@@ -336,16 +336,27 @@ void SNGSU::Plot()
     m_PlotCount++;                    // diag
     Uint8 x = (Uint8)(m_R[1] & 0xFF);
     Uint8 y = (Uint8)(m_R[2] & 0xFF);
-    Int32 bpp = ScreenBpp();
-    Uint8 mask = (Uint8)((1 << bpp) - 1);
 
-    // cor (com dither opcional via POR.1: usa COLOR>>4 nos pixels alternados)
-    Uint8 c = m_Color;
-    if ((m_POR & 0x02) && (((x ^ y) & 1) != 0)) c = (Uint8)(m_Color >> 4);
-    Uint8 color = (Uint8)(c & mask);
+    // transparencia (igual ao hardware): por PADRAO (bit transparent=POR.0
+    // LIMPO) a cor 0 nao e' desenhada.  Em 8bpp (MD=3) checa a cor inteira
+    // (ou so' o low nibble se freezehigh); em 2/4bpp checa o low nibble.
+    if (!(m_POR & 0x01))
+    {
+        Bool skip;
+        if ((m_SCMR & 0x03) == 3)
+            skip = (m_POR & 0x08) ? ((m_Color & 0x0F) == 0) : (m_Color == 0);
+        else
+            skip = ((m_Color & 0x0F) == 0);
+        if (skip) { m_R[1]++; return; }
+    }
 
-    // transparencia (POR.0): cor 0 nao e' desenhada (so' avanca X)
-    if ((m_POR & 0x01) && color == 0) { m_R[1]++; return; }
+    // cor a plotar, com dither (POR.1) -- dither nao se aplica em 8bpp
+    Uint8 color = m_Color;
+    if ((m_POR & 0x02) && (m_SCMR & 0x03) != 3)
+    {
+        if (((x ^ y) & 1) != 0) color = (Uint8)(color >> 4);
+        color &= 0x0F;
+    }
 
     Uint8 xbase = (Uint8)(x & 0xF8);
     if (m_PixValid && (xbase != m_PixXBase || y != m_PixY)) PixFlush();
@@ -377,10 +388,9 @@ Uint16 SNGSU::Rpix()
 // Pipeline de escrita de COLOR (usado por COLOR e GETC), com POR.2/POR.3.
 void SNGSU::ColorWrite(Uint8 src)
 {
-    Uint8 c = src;
-    if (m_POR & 0x04) c = (Uint8)((c & 0xF0) | (c >> 4));   // high-nibble
-    if (m_POR & 0x08) m_Color = (Uint8)((m_Color & 0xF0) | (c & 0x0F)); // freeze-high
-    else              m_Color = c;
+    if (m_POR & 0x04)       m_Color = (Uint8)((m_Color & 0xF0) | (src >> 4));   // high-nibble
+    else if (m_POR & 0x08)  m_Color = (Uint8)((m_Color & 0xF0) | (src & 0x0F)); // freeze-high
+    else                    m_Color = src;
 }
 
 void SNGSU::Run(Int32 nClocks)
