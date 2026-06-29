@@ -132,13 +132,12 @@ static SnesMemMapT _SnesMemMap_CX4[]={
 };
 
 #ifdef SNES_SUPERFX
-// SuperFX / GSU: registradores/MMIO em $00-3F/$80-BF:3000-34FF.  A ROM usa
-// o mapeamento LoROM base (ja aplicado); a Game Pak RAM em $70-71 reaproveita
-// o buffer de SRAM, compartilhado com o GSU via SetMemory().
+// SuperFX / GSU: registradores/MMIO em $00-3F/$80-BF:3000-34FF.  A ROM usa o
+// mapeamento LoROM base (ja aplicado); a Game Pak RAM ($70-71) e' mapeada
+// diretamente no branch (ver MapMem), nao por aqui.
 static SnesMemMapT _SnesMemMap_SuperFX[]={
     {0x00,0x3F,0x3000,0x34FF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_GSU},
     {0x80,0xBF,0x3000,0x34FF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_GSU},
-    {0x70,0x71,0x0000,0xFFFF,SNCPU_CYCLE_SLOW,SNESMEM_TYPE_SRAM},
     {0,0,0,0,SNESMEM_TYPE_NONE}
 };
 #endif
@@ -417,9 +416,18 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 #ifdef SNES_SUPERFX
 			if (uFlags & SNROM_FLAG_SUPERFX)
 			{
-				MapMem(_SnesMemMap_SuperFX);
+				MapMem(_SnesMemMap_SuperFX);     // MMIO do GSU ($3000-34FF)
+
+				// Game Pak RAM em $70-71 (128KB) mapeada DIRETO no buffer
+				// compartilhado com o GSU.  O Star Fox reporta SRAMBytes=0,
+				// entao o mapeamento de SRAM normal seria PULADO, deixando
+				// $70-71 sem banco -> deref NULL -> crash (OSDSYS).
+				SNCPUSetMemSpeed(&m_Cpu, 0x700000, 0x20000, SNCPU_CYCLE_SLOW);
+				SNCPUSetTrap(&m_Cpu, 0x700000, 0x20000, NULL, NULL);
+				SNCPUSetBank(&m_Cpu, 0x700000, 0x20000, m_SRam, TRUE);  // RAM gravavel
+
 				m_GSU.SetMemory(m_pRom->GetData(), m_pRom->GetBytes(),
-				                m_SRam, SNES_SRAMSIZE);
+				                m_SRam, 0x20000);
 			}
 #endif
 			if (uFlags & SNROM_FLAG_SDD1)
