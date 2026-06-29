@@ -13,6 +13,17 @@
 #include "sndsp4.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstdarg>
+
+// Stub de DLog: no PS2 ele escreve no SIO; no bench host so' descartamos
+// (ou imprime, se quiser ver a captura no terminal).  Necessario porque a
+// captura do sndsp4.cpp agora referencia DLog sempre.
+extern "C" void DLog(const char *fmt, ...)
+{
+    (void)fmt;
+    // descomente para ver a captura no terminal:
+    // va_list ap; va_start(ap, fmt); vprintf(fmt, ap); printf("\n"); va_end(ap);
+}
 
 static void sendWord(SNDSP4 &d, uint16_t w)
 {

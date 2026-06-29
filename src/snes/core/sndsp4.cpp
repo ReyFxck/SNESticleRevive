@@ -18,18 +18,13 @@
 #include <string.h>
 #include <stdio.h>
 
-#ifdef DSP4_CAPTURE
 // --------------------------------------------------------------------------
-//  Captura de protocolo (diagnostico, gated por -DDSP4_CAPTURE).
+//  Captura de protocolo (diagnostico -- SEMPRE ATIVO nesta branch feat/dsp4).
 //
 //  Imprime AO VIVO (via DLog -> SIO da EE, que aparece no log do emulador)
 //  cada WRITE (comando + params) que o jogo envia, segmentado por pontos de
 //  READ (marcador "R"), ate um teto.  Reconstroi o protocolo do DSP-4 a
-//  partir do PROPRIO jogo (clean-room observacional).
-//
-//  Imprime um aviso "build ativo" no PRIMEIRO acesso ao DSP-4: se essa linha
-//  nao aparecer, ou o build nao foi recompilado (faca 'make clean' antes),
-//  ou o jogo nao esta usando o DSP-4.
+//  partir do PROPRIO jogo.  (Gate/remover antes de mergear na main.)
 //
 //  Ex.:  W 0014  R            (comando 0x14, sem params, leu)
 //        W 0006  W 1234  W 5678  R   (cmd 0x06 + 2 params, leu)
@@ -43,7 +38,7 @@ static int s_capLastW = 0;
 
 static void Dsp4CapWrite(Uint16 w)
 {
-    if (!s_capInit) { DLog("=== DSP4 CAPTURE: build ativo (DSP-4 em uso) ==="); s_capInit = 1; }
+    if (!s_capInit) { DLog("=== DSP4 CAPTURE: ativo (DSP-4 em uso) ==="); s_capInit = 1; }
     if (s_capN >  DSP4_CAP_MAX) return;
     if (s_capN == DSP4_CAP_MAX) { DLog("=== DSP4 CAPTURE FIM (%d writes) ===", s_capN); s_capN++; return; }
     DLog("W %04X", (unsigned)w);
@@ -58,7 +53,6 @@ static void Dsp4CapRead(void)
     s_capN++;
     s_capLastW = 0;
 }
-#endif
 
 SNDSP4::SNDSP4()
 {
@@ -160,9 +154,7 @@ void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
     }
     Uint16 uWord = (Uint16)(m_uWrLo | ((Uint16)uData << 8));
     m_bHaveLo = FALSE;
-#ifdef DSP4_CAPTURE
     Dsp4CapWrite(uWord);
-#endif
 
     if (m_bWaitCmd)
     {
@@ -195,9 +187,7 @@ void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
 
 Uint8 SNDSP4::ReadData(Uint32 /*uAddr*/)
 {
-#ifdef DSP4_CAPTURE
     Dsp4CapRead();
-#endif
     // serve a saida byte a byte (LSB depois MSB de cada palavra)
     Int32 nTotalBytes = m_nOut * 2;
     if (m_iOutByte < nTotalBytes)
