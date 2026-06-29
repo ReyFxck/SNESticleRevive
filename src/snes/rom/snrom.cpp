@@ -540,10 +540,11 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			m_Flags    = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_SRTC;
 		}
 
-		// --- diagnostico de deteccao de chip (sempre; DLog -> SIO/logs.txt) ---
+		// --- diagnostico de deteccao de chip (DLog -> SIO/logs.txt) ---
 		// Confirma se o cartucho esta sendo reconhecido como DSP-4 (Top Gear
-		// 3000).  Se DSP4=0 aqui, o glitch e' porque o jogo usa o DSP errado
-		// (ou nenhum) -- e por isso a captura do HLE do DSP-4 nao mostrava nada.
+		// 3000).  Gateado em DSP4_CAPTURE para nao poluir o log em builds
+		// normais; ligue com 'make DSP4_CAPTURE=1' para diagnosticar.
+#if DSP4_CAPTURE
 		{
 			char dt[22];
 			int  dk;
@@ -556,6 +557,7 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			     (m_Flags & SNROM_FLAG_DSP3) ? 1 : 0,
 			     (m_Flags & SNROM_FLAG_DSP4) ? 1 : 0);
 		}
+#endif
 	} else
 	{
 		m_eVideoType = SNROM_VIDEO_NTSC;
