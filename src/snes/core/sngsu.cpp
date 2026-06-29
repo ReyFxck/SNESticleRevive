@@ -402,20 +402,22 @@ void SNGSU::Step()
     Uint16 pc0 = m_R[15];                // PC no topo do Step (antes do fetch)
     Uint8 op = CodeFetch();
 
-    // dump compacto: janela contigua durante o runaway, uma linha por
-    // instrucao, com os registradores que importam neste loop (R0,R2,R3,R5,
-    // R6 = dados; R12 = contador; R13 = alvo; R14 = ponteiro ROM).  Permite
-    // ver o loop EXTERNO (onde R12 e' recarregado) e a condicao de saida.
-    if (m_Runaway >= 100000 && m_Runaway < 100150)
+    // dump: durante o runaway, captura (a) uma janela contigua de 130 passos
+    // com R1/R4 (os contadores dos loops!) e R15, e (b) qualquer instrucao
+    // FORA da regiao do loop medio [B380..B398] -- isto e', o loop "maior"
+    // que recarrega R3/R4 e decide o fim.  Assim vejo se R4 estoura (wrap) ou
+    // qual a condicao de saida que nao dispara.
+    if (m_Runaway >= 100000 && s_gsuDump < 350 &&
+        (m_Runaway < 100250 || pc0 < 0xB380 || pc0 > 0xB398))
     {
-        DLog("[gsu] %02X:%04X op=%02X s=%X d=%X cy=%d z=%d ov=%d sgn=%d "
-             "R0=%04X R2=%04X R3=%04X R5=%04X R6=%04X R12=%04X R13=%04X R14=%04X",
+        DLog("[gsu] %02X:%04X op=%02X cy=%d z=%d sgn=%d  "
+             "R0=%04X R1=%04X R3=%04X R4=%04X R5=%04X R6=%04X "
+             "R12=%04X R13=%04X R14=%04X R15=%04X",
              (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
-             (unsigned)m_Sreg, (unsigned)m_Dreg,
-             m_bCY?1:0, m_bZ?1:0, m_bOV?1:0, m_bS?1:0,
-             (unsigned)m_R[0],(unsigned)m_R[2],(unsigned)m_R[3],
+             m_bCY?1:0, m_bZ?1:0, m_bS?1:0,
+             (unsigned)m_R[0],(unsigned)m_R[1],(unsigned)m_R[3],(unsigned)m_R[4],
              (unsigned)m_R[5],(unsigned)m_R[6],
-             (unsigned)m_R[12],(unsigned)m_R[13],(unsigned)m_R[14]);
+             (unsigned)m_R[12],(unsigned)m_R[13],(unsigned)m_R[14],(unsigned)m_R[15]);
         s_gsuDump++;
     }
 
