@@ -22,7 +22,6 @@
 // (RUNAWAY).  No bench host, DLog e' stub.
 extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
-static int s_gsuDump = 0;
 #define GSU_LOG(...) do { if (s_gsuLog < 128) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
@@ -389,40 +388,18 @@ void SNGSU::Run(Int32 nClocks)
 
 void SNGSU::Step()
 {
-    // watchdog: enquanto investigamos, deixamos um teto ALTO.  Rotinas do
-    // Star Fox sao finitas porem enormes (contador R4 ~= 60000 -> milhoes de
-    // ciclos numa unica chamada).  Com 2M abortavamos no meio (tela preta);
-    // com 10M deixamos completar para confirmar que a rotina termina (STOP)
-    // e que a emulacao do GSU esta correta -- o custo e' um congelamento
-    // momentaneo da EE (modelo sincrono), resolvido depois com execucao
-    // concorrente (time-slice), que e' como o hardware real funciona.
-    if (++m_Runaway > 10000000)
+    // watchdog: rede de seguranca contra um programa que nunca alcance STOP
+    // (bug nosso ou ROM corrompida).  Apos um teto de instrucoes, forca a
+    // parada (+IRQ) para nao travar a EE.  Rotinas reais do Star Fox terminam
+    // bem antes disto.
+    if (++m_Runaway > 2000000)
     {
         GSU_LOG("[gsu] RUNAWAY! r15=%04X pbr=%02X", (unsigned)m_R[15], (unsigned)m_PBR);
         m_bGo = FALSE; m_bIrq = TRUE; m_Runaway = 0;
         return;
     }
 
-    Uint16 pc0 = m_R[15];                // PC no topo do Step (antes do fetch)
     Uint8 op = CodeFetch();
-
-    // dump do SETUP: as primeiras ~280 instrucoes APOS o GO (B301->B380),
-    // com TODOS os registradores, para ver como R4/R5/R1/R14 sao
-    // inicializados.  R4=0xE8FB (contador gigante) parece carregado errado;
-    // aqui vemos qual opcode (MULT? leitura de ROM/RAM? GETB?) o produz.
-    if (m_Runaway >= 1 && m_Runaway <= 280 && s_gsuDump < 280)
-    {
-        DLog("[gsu] %02X:%04X op=%02X cy=%d z=%d sgn=%d  "
-             "R0=%04X R1=%04X R2=%04X R3=%04X R4=%04X R5=%04X R6=%04X R7=%04X "
-             "R8=%04X R10=%04X R11=%04X R12=%04X R13=%04X R14=%04X R15=%04X",
-             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
-             m_bCY?1:0, m_bZ?1:0, m_bS?1:0,
-             (unsigned)m_R[0],(unsigned)m_R[1],(unsigned)m_R[2],(unsigned)m_R[3],
-             (unsigned)m_R[4],(unsigned)m_R[5],(unsigned)m_R[6],(unsigned)m_R[7],
-             (unsigned)m_R[8],(unsigned)m_R[10],(unsigned)m_R[11],
-             (unsigned)m_R[12],(unsigned)m_R[13],(unsigned)m_R[14],(unsigned)m_R[15]);
-        s_gsuDump++;
-    }
 
     Bool  bIsPrefix = FALSE;
     Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
@@ -557,6 +534,19 @@ void SNGSU::Step()
         Uint16 res = (Uint16)(sr & 0x00FF);
         m_bZ = (res == 0); m_bS = (res & 0x80) != 0;
         m_R[m_Dreg] = res;
+    }
+    else if (op == 0x9F)                     // FMULT / LMULT (ALT1)
+    {
+        // Produto com sinal de Sreg x R6 (32 bits).  FMULT: 16 bits altos ->
+        // destino, CY = bit15 do produto.  LMULT (ALT1): alem disso, 16 bits
+        // baixos -> R4.  R4 nunca pode ser destino do byte alto.
+        Int32  p  = (Int32)(Int16)sr * (Int32)(Int16)m_R[6];
+        Uint32 up = (Uint32)p;
+        Uint16 hi = (Uint16)(up >> 16);
+        if (m_bAlt1) m_R[4] = (Uint16)(up & 0xFFFF);   // LMULT: low 16 -> R4
+        if (m_Dreg != 4) m_R[m_Dreg] = hi;             // R4 nao pode receber o alto
+        SetZSfromWord(hi);
+        m_bCY = ((up >> 15) & 1) != 0;                 // CY = bit15 do produto
     }
     else if (op >= 0x80 && op <= 0x8F)       // MULT / UMULT / +#imm (low 16)
     {

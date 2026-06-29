@@ -223,6 +223,34 @@ int main()
         SNGSU g = runProgram(p4, sizeof(p4));
         CHECK("LOOP: R1 = 3 iteracoes", g.GetReg(1), 3);
     }
+    {
+        // LMULT (3D 9F): R9 x R6 com sinal; alto->R8, baixo->R4.
+        // Exemplo oficial: R9=B556 x R6=DAAB => R8=0AE3, R4=5C72.
+        static const uint8_t p5[] = {
+            0xF6,0xAB,0xDA,   // IWT R6,#DAAB
+            0xF9,0x56,0xB5,   // IWT R9,#B556
+            0xB9,             // FROM R9 (Sreg=9)
+            0x18,             // TO   R8 (Dreg=8)
+            0x3D,             // ALT1
+            0x9F,             // LMULT
+            0x00 };
+        SNGSU g = runProgram(p5, sizeof(p5));
+        CHECK("LMULT R8 (alto)", g.GetReg(8), 0x0AE3);
+        CHECK("LMULT R4 (baixo)", g.GetReg(4), 0x5C72);
+    }
+    {
+        // FMULT (9F): R5 x R6 com sinal; alto->R2.  R4 nao e' tocado.
+        // Exemplo oficial: R5=4AAA x R6=DAAB => R2=F51C.
+        static const uint8_t p6[] = {
+            0xF6,0xAB,0xDA,   // IWT R6,#DAAB
+            0xF5,0xAA,0x4A,   // IWT R5,#4AAA
+            0xB5,             // FROM R5 (Sreg=5)
+            0x12,             // TO   R2 (Dreg=2)
+            0x9F,             // FMULT
+            0x00 };
+        SNGSU g = runProgram(p6, sizeof(p6));
+        CHECK("FMULT R2 (alto)", g.GetReg(2), 0xF51C);
+    }
 
     // ===== Parte D: graficos (PLOT / pixel cache / RPIX) =====
     printf("\n--- graficos (PLOT/RPIX/bitplanes) ---\n");
