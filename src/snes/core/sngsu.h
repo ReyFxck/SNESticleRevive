@@ -95,6 +95,16 @@ private:
     // controle ao SNES, evitando travar a EE.
     Uint32 m_Runaway;
 
+    // delay-slot dos saltos: o GSU executa SEMPRE a instrucao seguinte ao
+    // branch/JMP/LOOP antes do salto tomar efeito (1 delay slot).
+    Bool   m_BranchPending;
+    Uint16 m_BranchTarget;
+    Bool   m_BranchSetPBR;
+    Uint8  m_BranchPBR;
+
+    // ultimo endereco de RAM acessado (para SBK)
+    Uint16 m_LastRamAddr;
+
     // cache de codigo (512 bytes) em $3100-$32FF
     Uint8  m_Cache[512];
 
@@ -112,6 +122,9 @@ private:
     Uint8  RomReadByte(Uint8 uBank, Uint16 uAddr) const;
     Uint8  RamReadByte(Uint32 uAddr) const;
     void   RamWriteByte(Uint32 uAddr, Uint8 v);
+    Uint32 RamLinear(Uint16 uAddr) const;     // RAMBR:addr -> offset linear
+    Uint16 RamReadWord(Uint16 uAddr) const;   // com swap em endereco impar
+    void   RamWriteWord(Uint16 uAddr, Uint16 v);
 
     void   ResetPrefix();    // Sreg=Dreg=0, alt1=alt2=b=0 (apos op normal)
     void   SetZSfromWord(Uint16 v);   // atualiza Z e S a partir de um resultado

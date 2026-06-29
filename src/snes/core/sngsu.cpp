@@ -47,6 +47,9 @@ void SNGSU::Reset()
     m_CBR = 0;
     m_RomBuffer = 0; m_RomBufValid = FALSE;
     m_Runaway = 0;
+    m_BranchPending = FALSE; m_BranchTarget = 0;
+    m_BranchSetPBR = FALSE; m_BranchPBR = 0;
+    m_LastRamAddr = 0;
     memset(m_Cache, 0, sizeof(m_Cache));
 }
 
@@ -115,6 +118,35 @@ void SNGSU::RamWriteByte(Uint32 uAddr, Uint8 v)
 {
     if (!m_pRam || !m_uRamSize) return;
     m_pRam[uAddr % m_uRamSize] = v;
+}
+
+// RAMBR(0x70/0x71):addr -> offset linear na Game Pak RAM
+Uint32 SNGSU::RamLinear(Uint16 uAddr) const
+{
+    return (((Uint32)(m_RAMBR & 1)) << 16) | uAddr;
+}
+
+// Leitura de word.  Em endereco impar o GSU acessa [addr AND NOT 1] com os
+// bytes LSB/MSB trocados (quirk documentado).
+Uint16 SNGSU::RamReadWord(Uint16 uAddr) const
+{
+    Uint16 base = (Uint16)(uAddr & ~1);
+    Uint8 b0 = RamReadByte(RamLinear(base));
+    Uint8 b1 = RamReadByte(RamLinear((Uint16)(base + 1)));
+    if (uAddr & 1) return (Uint16)((b0 << 8) | b1);   // swapped
+    return (Uint16)(b0 | (b1 << 8));                  // normal (LE)
+}
+
+void SNGSU::RamWriteWord(Uint16 uAddr, Uint16 v)
+{
+    Uint16 base = (Uint16)(uAddr & ~1);
+    if (uAddr & 1) {
+        RamWriteByte(RamLinear(base),               (Uint8)(v >> 8));
+        RamWriteByte(RamLinear((Uint16)(base + 1)), (Uint8)(v & 0xFF));
+    } else {
+        RamWriteByte(RamLinear(base),               (Uint8)(v & 0xFF));
+        RamWriteByte(RamLinear((Uint16)(base + 1)), (Uint8)(v >> 8));
+    }
 }
 
 Uint8 SNGSU::CodeFetch()
@@ -244,6 +276,7 @@ void SNGSU::Step()
 
     Uint8 op = CodeFetch();
     Bool  bIsPrefix = FALSE;
+    Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
 
     Uint8  n   = op & 0x0F;
     Uint16 sr  = m_R[m_Sreg];               // valor source
@@ -374,17 +407,98 @@ void SNGSU::Step()
     {
         Uint16 res = (Uint16)(m_R[n] - 1); SetZSfromWord(res); m_R[n] = res;
     }
-    else if (op >= 0xA0 && op <= 0xAF)       // IBT Rn,#imm8 (ALT off)
+    else if (op >= 0xA0 && op <= 0xAF)       // IBT Rn,#imm8 / LMS / SMS
     {
-        // (ALT1=LMS / ALT2=SMS de memoria ficam para a etapa de memoria)
-        Uint8 imm = CodeFetch();
-        m_R[n] = (Uint16)(Int16)(Int8)imm;    // sign-extend
+        if (m_bAlt1) {                        // LMS Rn,(yy): Rn = word[ramb:kk*2]
+            Uint16 addr = (Uint16)(CodeFetch() * 2);
+            m_R[n] = RamReadWord(addr); m_LastRamAddr = addr;
+        } else if (m_bAlt2) {                 // SMS (yy),Rn: word[ramb:kk*2] = Rn
+            Uint16 addr = (Uint16)(CodeFetch() * 2);
+            RamWriteWord(addr, m_R[n]); m_LastRamAddr = addr;
+        } else {                              // IBT Rn,#imm8 (sign-extend)
+            Uint8 imm = CodeFetch();
+            m_R[n] = (Uint16)(Int16)(Int8)imm;
+        }
     }
-    else if (op >= 0xF0 && op <= 0xFF)       // IWT Rn,#imm16 (ALT off)
+    else if (op >= 0xF0 && op <= 0xFF)       // IWT Rn,#imm16 / LM / SM
     {
-        Uint8 lo = CodeFetch();
-        Uint8 hi = CodeFetch();
-        m_R[n] = (Uint16)(((Uint16)hi << 8) | lo);
+        if (m_bAlt1) {                        // LM Rn,(hilo)
+            Uint8 lo = CodeFetch(), hi = CodeFetch();
+            Uint16 addr = (Uint16)((hi << 8) | lo);
+            m_R[n] = RamReadWord(addr); m_LastRamAddr = addr;
+        } else if (m_bAlt2) {                 // SM (hilo),Rn
+            Uint8 lo = CodeFetch(), hi = CodeFetch();
+            Uint16 addr = (Uint16)((hi << 8) | lo);
+            RamWriteWord(addr, m_R[n]); m_LastRamAddr = addr;
+        } else {                              // IWT Rn,#imm16
+            Uint8 lo = CodeFetch(), hi = CodeFetch();
+            m_R[n] = (Uint16)(((Uint16)hi << 8) | lo);
+        }
+    }
+    else if (op >= 0x05 && op <= 0x0F)       // branches (delay slot)
+    {
+        Int8 disp = (Int8)CodeFetch();
+        Bool take = FALSE;
+        switch (op) {
+        case 0x05: take = TRUE;               break;   // BRA
+        case 0x06: take = (m_bS == m_bOV);    break;   // BGE  (S^V=0)
+        case 0x07: take = (m_bS != m_bOV);    break;   // BLT  (S^V=1)
+        case 0x08: take = !m_bZ;              break;   // BNE
+        case 0x09: take =  m_bZ;              break;   // BEQ
+        case 0x0A: take = !m_bS;              break;   // BPL
+        case 0x0B: take =  m_bS;              break;   // BMI
+        case 0x0C: take = !m_bCY;             break;   // BCC
+        case 0x0D: take =  m_bCY;             break;   // BCS
+        case 0x0E: take = !m_bOV;             break;   // BVC
+        case 0x0F: take =  m_bOV;             break;   // BVS
+        }
+        if (take) { m_BranchTarget = (Uint16)(m_R[15] + disp); m_BranchPending = TRUE; }
+    }
+    else if (op == 0x3C)                      // LOOP (delay slot)
+    {
+        m_R[12] = (Uint16)(m_R[12] - 1);
+        SetZSfromWord(m_R[12]);
+        if (m_R[12] != 0) { m_BranchTarget = m_R[13]; m_BranchPending = TRUE; }
+    }
+    else if (op >= 0x30 && op <= 0x3B)        // STW (Rn) / STB (Rn) [ALT1]
+    {
+        Uint16 addr = m_R[n];
+        if (m_bAlt1) RamWriteByte(RamLinear(addr), (Uint8)(m_R[m_Sreg] & 0xFF)); // STB
+        else         RamWriteWord(addr, m_R[m_Sreg]);                           // STW
+        m_LastRamAddr = addr;
+    }
+    else if (op >= 0x40 && op <= 0x4B)        // LDW (Rn) / LDB (Rn) [ALT1]
+    {
+        Uint16 addr = m_R[n];
+        if (m_bAlt1) m_R[m_Dreg] = (Uint16)RamReadByte(RamLinear(addr)); // LDB (zero-ext)
+        else         m_R[m_Dreg] = RamReadWord(addr);                    // LDW
+        m_LastRamAddr = addr;
+    }
+    else if (op == 0x90)                      // SBK (escreve no ultimo end. RAM)
+    {
+        RamWriteWord(m_LastRamAddr, m_R[m_Sreg]);
+    }
+    else if (op >= 0x91 && op <= 0x94)        // LINK #n
+    {
+        m_R[11] = (Uint16)(m_R[15] + (op & 0x0F));
+    }
+    else if (op >= 0x98 && op <= 0x9D)        // JMP Rn / LJMP Rn (delay slot)
+    {
+        if (m_bAlt1) {                         // LJMP: R15=Rsreg, PBR=Rn
+            m_BranchTarget = m_R[m_Sreg];
+            m_BranchPBR    = (Uint8)(m_R[n] & 0x7F);
+            m_BranchSetPBR = TRUE;
+            m_CBR = (Uint16)(m_BranchTarget & 0xFFF0);
+        } else {                               // JMP: R15=Rn
+            m_BranchTarget = m_R[n];
+        }
+        m_BranchPending = TRUE;
+    }
+    else if (op == 0xDF)                       // GETC / RAMB / ROMB
+    {
+        if (m_bAlt1 && m_bAlt2)  m_ROMBR = (Uint8)(m_R[m_Sreg] & 0xFF);  // ROMB (3F DF)
+        else if (m_bAlt2)        m_RAMBR = (Uint8)(m_R[m_Sreg] & 0x01);  // RAMB (3E DF)
+        // else GETC: carrega COLOR de [romb:r14] -- etapa de graficos
     }
     else if (op == 0x02)                     // CACHE
     {
@@ -407,4 +521,14 @@ void SNGSU::Step()
 
     if (!bIsPrefix)
         ResetPrefix();
+
+    // delay slot: aplica o salto pendente DEPOIS de executar a instrucao
+    // seguinte ao branch/JMP/LOOP (1 delay slot, como no hardware).
+    if (doBranch)
+    {
+        if (m_BranchSetPBR) m_PBR = m_BranchPBR;
+        m_R[15]        = m_BranchTarget;
+        m_BranchPending = FALSE;
+        m_BranchSetPBR  = FALSE;
+    }
 }

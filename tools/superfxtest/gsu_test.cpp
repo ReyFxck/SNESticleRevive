@@ -58,6 +58,22 @@ static Res runOp(const uint8_t *op, int oplen, uint16_t a, uint16_t b, bool cyIn
     return o;
 }
 
+// roda um programa arbitrario a partir de rom[0] (PBR=0, R15=0x8000)
+static SNGSU runProgram(const uint8_t *prog, int len)
+{
+    memset(g_rom, 0x01, sizeof(g_rom));
+    memset(g_ram, 0x00, sizeof(g_ram));
+    memcpy(g_rom, prog, len);
+    SNGSU g;
+    g.SetMemory(g_rom, sizeof(g_rom), g_ram, sizeof(g_ram));
+    g.Reset();
+    g.WriteReg(0x3034, 0x00);
+    g.WriteReg(0x301E, 0x00);
+    g.WriteReg(0x301F, 0x80);
+    g.Run(100000);
+    return g;
+}
+
 // ---- oracle (referencia) ----
 static const uint16_t VALS[] = {
     0x0000,0x0001,0x0002,0x0003,0x000F,0x0010,0x007F,0x0080,0x00FF,0x0100,
@@ -153,6 +169,59 @@ int main()
         CHECK("R4 = 100-3", g.GetReg(4), 97);
         CHECK("R8 = FFFF+1", g.GetReg(8), 0x0000);
         CHECK("IRQ no STOP", g.ReadReg(0x3031)&0x80, 0x80);
+    }
+
+    // ===== Parte C: controle de fluxo + memoria =====
+    printf("\n--- controle de fluxo + memoria ---\n");
+    {
+        // round-trip STW/LDW: [0x100]=0xBEEF via R5, le de volta em R6
+        static const uint8_t p1[] = {
+            0xF1,0x00,0x01,   // IWT R1,#0x0100 (endereco)
+            0xF5,0xEF,0xBE,   // IWT R5,#0xBEEF (valor)
+            0xB5,             // FROM R5  (Sreg=5)
+            0x31,             // STW (R1) -> [0x100] = R5
+            0x16,             // TO R6    (Dreg=6)
+            0x41,             // LDW (R1) -> R6 = [0x100]
+            0x00 };
+        SNGSU g = runProgram(p1, sizeof(p1));
+        CHECK("STW/LDW round-trip R6", g.GetReg(6), 0xBEEF);
+    }
+    {
+        // SM/LM: [0x200]=0x1234 via R7, le em R8
+        static const uint8_t p2[] = {
+            0xF7,0x34,0x12,         // IWT R7,#0x1234
+            0x3E,0xF7,0x00,0x02,    // SM (0x0200),R7   (ALT2 + F7)
+            0x3D,0xF8,0x00,0x02,    // LM R8,(0x0200)   (ALT1 + F8)
+            0x00 };
+        SNGSU g = runProgram(p2, sizeof(p2));
+        CHECK("SM/LM round-trip R8", g.GetReg(8), 0x1234);
+    }
+    {
+        // BRA com delay-slot: o NOP apos o BRA executa; o IWT R4 e' PULADO;
+        // o IWT R5 (alvo) executa.  R3=1, R4=0(pulado), R5=0xBB.
+        static const uint8_t p3[] = {
+            /*0*/ 0xF3,0x01,0x00,   // IWT R3,#1
+            /*3*/ 0x05,0x04,        // BRA +4  (alvo = 0x8005+4 = 0x8009)
+            /*5*/ 0x01,             // NOP  (DELAY SLOT - executa)
+            /*6*/ 0xF4,0xAA,0x00,   // IWT R4,#0xAA  (PULADO)
+            /*9*/ 0xF5,0xBB,0x00,   // IWT R5,#0xBB  (ALVO)
+            /*12*/0x00 };
+        SNGSU g = runProgram(p3, sizeof(p3));
+        CHECK("BRA: R3 setado",      g.GetReg(3), 1);
+        CHECK("BRA: R4 pulado",      g.GetReg(4), 0);
+        CHECK("BRA: R5 alvo",        g.GetReg(5), 0xBB);
+    }
+    {
+        // LOOP: corpo (INC R1) roda 3x via R12=contador, R13=alvo
+        static const uint8_t p4[] = {
+            /*0*/ 0xFC,0x03,0x00,   // IWT R12,#3
+            /*3*/ 0xFD,0x06,0x80,   // IWT R13,#0x8006 (inicio do corpo)
+            /*6*/ 0xD1,             // INC R1   (corpo)
+            /*7*/ 0x3C,             // LOOP     (R12--, se !=0 salta R13)
+            /*8*/ 0x01,             // NOP      (delay slot)
+            /*9*/ 0x00 };           // STOP
+        SNGSU g = runProgram(p4, sizeof(p4));
+        CHECK("LOOP: R1 = 3 iteracoes", g.GetReg(1), 3);
     }
 
     // ===== Parte B: fuzz oracle =====
