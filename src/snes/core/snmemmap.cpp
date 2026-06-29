@@ -151,6 +151,15 @@ void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 	// determine size of SRAM in bytes 
 	m_uSramSize = pRom->GetSRAMBytes();
 	if (m_uSramSize > SNES_SRAMSIZE) m_uSramSize = SNES_SRAMSIZE; 
+#ifdef SNES_SUPERFX
+	// SuperFX usa a Game Pak RAM ($70-71 + espelhos $6000-7FFF) como
+	// framebuffer, mesmo sem SRAM com bateria (o header reporta 0).  Forca
+	// um tamanho valido (128K, potencia de 2) para que o mapa instale essas
+	// regioes em m_SRam (sem isso elas eram puladas -> banco nulo -> crash)
+	// e a mascara (size-1) case com o enderecamento RamLinear do GSU.
+	if ((m_pRom->m_Flags & SNROM_FLAG_SUPERFX) && m_uSramSize < 0x20000)
+		m_uSramSize = 0x20000;
+#endif
 	//uSRAMBytes = (uSRAMBytes + SNCPU_BANK_SIZE - 1)  & ~(SNCPU_BANK_MASK);
 
 	// calculate size of each map type
@@ -416,16 +425,11 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 #ifdef SNES_SUPERFX
 			if (uFlags & SNROM_FLAG_SUPERFX)
 			{
-				MapMem(_SnesMemMap_SuperFX);     // MMIO do GSU ($3000-34FF)
-
-				// Game Pak RAM em $70-71 (128KB) mapeada DIRETO no buffer
-				// compartilhado com o GSU.  O Star Fox reporta SRAMBytes=0,
-				// entao o mapeamento de SRAM normal seria PULADO, deixando
-				// $70-71 sem banco -> deref NULL -> crash (OSDSYS).
-				SNCPUSetMemSpeed(&m_Cpu, 0x700000, 0x20000, SNCPU_CYCLE_SLOW);
-				SNCPUSetTrap(&m_Cpu, 0x700000, 0x20000, NULL, NULL);
-				SNCPUSetBank(&m_Cpu, 0x700000, 0x20000, m_SRam, TRUE);  // RAM gravavel
-
+				// O mapa LoROM base ja instalou a Game Pak RAM/SRAM (incl.
+				// $70-77 e os espelhos $00-3F:6000-7FFF) em m_SRam, porque
+				// MapMem forca o tamanho da RAM para SuperFX (ver MapMem).
+				// Aqui so' instalamos o MMIO do GSU e conectamos os buffers.
+				MapMem(_SnesMemMap_SuperFX);
 				m_GSU.SetMemory(m_pRom->GetData(), m_pRom->GetBytes(),
 				                m_SRam, 0x20000);
 			}
