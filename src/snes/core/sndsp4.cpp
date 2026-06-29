@@ -70,17 +70,28 @@ void SNDSP4::Reset()
 
 void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
 {
+#ifdef DSP4_INERT_STUB
+    // A/B diagnostico: ignora escritas (DSP-4 "mudo"), igual ao stub antigo.
+    (void)uData;
+#else
     Dsp4CapWriteByte(uData);
     dsp4_byte = uData;
     DSP4SetByte();
+#endif
 }
 
 Uint8 SNDSP4::ReadData(Uint32 /*uAddr*/)
 {
+#ifdef DSP4_INERT_STUB
+    // A/B diagnostico: sempre 0xFF (-> 0xFFFF). Compile com -DDSP4_INERT_STUB
+    // para voltar ao comportamento "stub" e comparar com o HLE real.
+    return 0xFF;
+#else
     DSP4GetByte();
     Uint8 uByte = dsp4_byte;
     Dsp4CapReadByte(uByte);
     return uByte;
+#endif
 }
 
 Uint8 SNDSP4::ReadStatus(Uint32 /*uAddr*/)
