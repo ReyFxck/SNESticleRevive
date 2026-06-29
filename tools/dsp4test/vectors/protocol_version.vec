@@ -17,9 +17,10 @@ R 0400
 NAME terminador apos fim
 R FFFF
 
-# FSM deve continuar sincronizada apos um comando funcional desconhecido
+# FSM deve continuar sincronizada apos um opcode REALMENTE desconhecido
+# (0x12 nao existe no DSP-4; 0x08 agora e' um comando real de poligonos)
 NAME unknown nao trava
-W 0008
+W 0012
 R FFFF
 
 NAME versao novamente

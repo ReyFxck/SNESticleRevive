@@ -1,27 +1,23 @@
-// Bancada host-side do DSP-4 HLE (src/snes/core/sndsp4.cpp).
+// Bancada host-side do DSP-4 HLE (src/snes/core/sndsp4.cpp + dsp4emu.cpp).
 //
-// Valida o PROTOCOLO de barramento (o que e' documentado e testavel):
+// Agora que o HLE do ZSNES (GPLv2) esta portado, validamos:
 //   - Status sempre pronto (0x80 = RQM).
 //   - Transfers de 16 bits LSB-first.
 //   - Comando 0x14 (Test ROM Version) -> 0x0400 (identifica o DSP-4).
+//   - Comando 0x00 (multiplicacao 16-bit) -> resultado correto (FUNCIONAL).
 //   - Terminador 0xFFFF ao ler alem do fim de um comando.
-//   - Comando funcional desconhecido nao trava e mantem a FSM sincronizada.
-//
-// NAO valida a matematica de renderizacao da pista: ela nao tem spec
-// publica e ainda nao foi implementada (ver sndsp4.h).
+//   - Opcode realmente desconhecido nao trava e mantem a FSM sincronizada.
 
 #include "sndsp4.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdarg>
 
-// Stub de DLog: no PS2 ele escreve no SIO; no bench host so' descartamos
-// (ou imprime, se quiser ver a captura no terminal).  Necessario porque a
-// captura do sndsp4.cpp agora referencia DLog sempre.
+// Stub de DLog: no PS2 ele escreve no SIO; no bench host so' descartamos.
 extern "C" void DLog(const char *fmt, ...)
 {
     (void)fmt;
-    // descomente para ver a captura no terminal:
+    // descomente para ver a captura .vec no terminal:
     // va_list ap; va_start(ap, fmt); vprintf(fmt, ap); printf("\n"); va_end(ap);
 }
 
@@ -58,11 +54,21 @@ int main()
     if (term != 0xFFFF) { printf("FAIL: terminador=0x%04X (esperado 0xFFFF)\n", term); fail++; }
     else                printf("OK  : terminador=0xFFFF\n");
 
-    // comando funcional desconhecido (0x08): inerte, nao trava, da 0xFFFF
-    sendWord(dsp, 0x0008);
+    // comando 0x00: multiplicacao 16-bit  (multiplier=100, multiplicand=3 -> 300)
+    sendWord(dsp, 0x0000);
+    sendWord(dsp, 100);   // multiplier
+    sendWord(dsp, 3);     // multiplicand
+    uint16_t prod_lo = readWord(dsp);
+    uint16_t prod_hi = readWord(dsp);
+    uint32_t prod = prod_lo | ((uint32_t)prod_hi << 16);
+    if (prod != 300) { printf("FAIL: multiply 100*3 = %u (esperado 300)\n", prod); fail++; }
+    else             printf("OK  : multiply 100*3 = 300 (HLE funcional!)\n");
+
+    // opcode realmente desconhecido (0x12): inerte, nao trava, da 0xFFFF
+    sendWord(dsp, 0x0012);
     uint16_t r = readWord(dsp);
-    if (r != 0xFFFF) { printf("FAIL: cmd 0x08 deu 0x%04X (esperado 0xFFFF)\n", r); fail++; }
-    else             printf("OK  : cmd 0x08 inerte -> 0xFFFF (sem crash)\n");
+    if (r != 0xFFFF) { printf("FAIL: cmd 0x12 deu 0x%04X (esperado 0xFFFF)\n", r); fail++; }
+    else             printf("OK  : cmd 0x12 desconhecido -> 0xFFFF (sem crash)\n");
 
     // re-testar versao depois do desconhecido (FSM ainda sincronizada?)
     sendWord(dsp, 0x0014);
