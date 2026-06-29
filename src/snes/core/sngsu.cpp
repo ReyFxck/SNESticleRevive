@@ -406,21 +406,20 @@ void SNGSU::Step()
     Uint16 pc0 = m_R[15];                // PC no topo do Step (antes do fetch)
     Uint8 op = CodeFetch();
 
-    // dump: durante o runaway, captura (a) uma janela contigua de 130 passos
-    // com R1/R4 (os contadores dos loops!) e R15, e (b) qualquer instrucao
-    // FORA da regiao do loop medio [B380..B398] -- isto e', o loop "maior"
-    // que recarrega R3/R4 e decide o fim.  Assim vejo se R4 estoura (wrap) ou
-    // qual a condicao de saida que nao dispara.
-    if (m_Runaway >= 100000 && s_gsuDump < 350 &&
-        (m_Runaway < 100250 || pc0 < 0xB380 || pc0 > 0xB398))
+    // dump do SETUP: as primeiras ~280 instrucoes APOS o GO (B301->B380),
+    // com TODOS os registradores, para ver como R4/R5/R1/R14 sao
+    // inicializados.  R4=0xE8FB (contador gigante) parece carregado errado;
+    // aqui vemos qual opcode (MULT? leitura de ROM/RAM? GETB?) o produz.
+    if (m_Runaway >= 1 && m_Runaway <= 280 && s_gsuDump < 280)
     {
         DLog("[gsu] %02X:%04X op=%02X cy=%d z=%d sgn=%d  "
-             "R0=%04X R1=%04X R3=%04X R4=%04X R5=%04X R6=%04X "
-             "R12=%04X R13=%04X R14=%04X R15=%04X",
+             "R0=%04X R1=%04X R2=%04X R3=%04X R4=%04X R5=%04X R6=%04X R7=%04X "
+             "R8=%04X R10=%04X R11=%04X R12=%04X R13=%04X R14=%04X R15=%04X",
              (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
              m_bCY?1:0, m_bZ?1:0, m_bS?1:0,
-             (unsigned)m_R[0],(unsigned)m_R[1],(unsigned)m_R[3],(unsigned)m_R[4],
-             (unsigned)m_R[5],(unsigned)m_R[6],
+             (unsigned)m_R[0],(unsigned)m_R[1],(unsigned)m_R[2],(unsigned)m_R[3],
+             (unsigned)m_R[4],(unsigned)m_R[5],(unsigned)m_R[6],(unsigned)m_R[7],
+             (unsigned)m_R[8],(unsigned)m_R[10],(unsigned)m_R[11],
              (unsigned)m_R[12],(unsigned)m_R[13],(unsigned)m_R[14],(unsigned)m_R[15]);
         s_gsuDump++;
     }
