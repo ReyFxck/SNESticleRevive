@@ -22,6 +22,7 @@
 // (RUNAWAY).  No bench host, DLog e' stub.
 extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
+static int s_setupDump = 0;
 #define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
@@ -412,7 +413,20 @@ void SNGSU::Step()
         return;
     }
 
+    Uint16 pc0 = m_R[15];
     Uint8 op = CodeFetch();
+
+    // dump do SETUP do B301: primeiras ~160 instrucoes apos o GO, com R4 (o
+    // contador que estoura), R5/R6/R1/R14.  Captura os 2 primeiros GOs (ambos
+    // B301).  Mostra qual opcode poe 0xE8FB no R4.
+    if (m_Runaway >= 1 && m_Runaway <= 160 && s_setupDump < 320)
+    {
+        DLog("[gss] %02X:%04X op=%02X R0=%04X R1=%04X R4=%04X R5=%04X R6=%04X R7=%04X R14=%04X",
+             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
+             (unsigned)m_R[0], (unsigned)m_R[1], (unsigned)m_R[4],
+             (unsigned)m_R[5], (unsigned)m_R[6], (unsigned)m_R[7], (unsigned)m_R[14]);
+        s_setupDump++;
+    }
 
     Bool  bIsPrefix = FALSE;
     Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
