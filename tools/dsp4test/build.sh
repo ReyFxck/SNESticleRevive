@@ -18,3 +18,12 @@ g++ -O0 -g -fsigned-char -fpermissive \
     dsp4_test.cpp sndsp4.cpp -o dsp4_test
 
 echo "OK -> ./dsp4_test"
+
+# runner de vetores clean-room (TDD da matematica do DSP-4)
+g++ -O0 -g -fsigned-char -fpermissive \
+    -I . \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/snes/core" \
+    dsp4_vectors.cpp sndsp4.cpp -o dsp4_vectors
+
+echo "OK -> ./dsp4_vectors   (roda ./vectors/*.vec)"

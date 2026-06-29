@@ -31,27 +31,34 @@
 // --------------------------------------------------------------------------
 extern "C" void DLog(const char *fmt, ...);
 
-#define DSP4_CAP_MAX 2048
-static int s_capN     = 0;
-static int s_capInit  = 0;
-static int s_capLastW = 0;
+//  Saida JA no formato .vec ("W xxxx" / "R xxxx", palavras de 16 bits),
+//  para casar 1:1 com o capturador de referencia (mesen_dsp4_capture.lua)
+//  e com o runner host-side (dsp4_vectors).  Os bytes do DR sao remontados
+//  em palavras (LSB depois MSB) por direcao.
+#define DSP4_CAP_MAX 4096
+static int  s_capN    = 0;
+static int  s_capInit = 0;
+static Bool s_capRdHaveLo = FALSE;
+static Uint8 s_capRdLo    = 0;
 
 static void Dsp4CapWrite(Uint16 w)
 {
-    if (!s_capInit) { DLog("=== DSP4 CAPTURE: ativo (DSP-4 em uso) ==="); s_capInit = 1; }
+    if (!s_capInit) { DLog("# === DSP4 CAPTURE (.vec): ativo (DSP-4 em uso) ==="); s_capInit = 1; }
     if (s_capN >  DSP4_CAP_MAX) return;
-    if (s_capN == DSP4_CAP_MAX) { DLog("=== DSP4 CAPTURE FIM (%d writes) ===", s_capN); s_capN++; return; }
+    if (s_capN == DSP4_CAP_MAX) { DLog("# === DSP4 CAPTURE FIM (%d palavras) ===", s_capN); s_capN++; return; }
     DLog("W %04X", (unsigned)w);
     s_capN++;
-    s_capLastW = 1;
 }
 
-static void Dsp4CapRead(void)
+// recebe a saida BYTE a byte e emite uma palavra a cada par (LSB, MSB)
+static void Dsp4CapReadByte(Uint8 b)
 {
-    if (s_capN >= DSP4_CAP_MAX || !s_capLastW) return;   // colapsa rajadas de leitura
-    DLog("R");
+    if (s_capN > DSP4_CAP_MAX) return;
+    if (!s_capRdHaveLo) { s_capRdLo = b; s_capRdHaveLo = TRUE; return; }
+    s_capRdHaveLo = FALSE;
+    if (s_capN == DSP4_CAP_MAX) { DLog("# === DSP4 CAPTURE FIM (%d palavras) ===", s_capN); s_capN++; return; }
+    DLog("R %04X", (unsigned)(s_capRdLo | ((Uint16)b << 8)));
     s_capN++;
-    s_capLastW = 0;
 }
 
 SNDSP4::SNDSP4()
@@ -187,20 +194,24 @@ void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
 
 Uint8 SNDSP4::ReadData(Uint32 /*uAddr*/)
 {
-    Dsp4CapRead();
+    Uint8 uByte;
     // serve a saida byte a byte (LSB depois MSB de cada palavra)
     Int32 nTotalBytes = m_nOut * 2;
     if (m_iOutByte < nTotalBytes)
     {
         Uint16 uWord = m_Out[m_iOutByte >> 1];
-        Uint8  uByte = (m_iOutByte & 1) ? (Uint8)(uWord >> 8)
-                                        : (Uint8)(uWord & 0xFF);
+        uByte = (m_iOutByte & 1) ? (Uint8)(uWord >> 8)
+                                 : (Uint8)(uWord & 0xFF);
         m_iOutByte++;
-        return uByte;
     }
-    // alem do fim -> terminador 0xFFFF (DR deve conter 0xFFFF ao
-    // completar um comando valido, conforme a doc do DSP-4)
-    return 0xFF;
+    else
+    {
+        // alem do fim -> terminador 0xFFFF (DR deve conter 0xFFFF ao
+        // completar um comando valido, conforme a doc do DSP-4)
+        uByte = 0xFF;
+    }
+    Dsp4CapReadByte(uByte);
+    return uByte;
 }
 
 Uint8 SNDSP4::ReadStatus(Uint32 /*uAddr*/)

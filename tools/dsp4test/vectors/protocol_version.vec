@@ -1,0 +1,27 @@
+# protocol_version.vec
+# Vetor de PROTOCOLO (comportamento documentado publicamente, nao deriva
+# de nenhum emulador). Serve de exemplo do formato .vec.
+#
+#   snes.nesdev.org/wiki/DSP-4 / sneslab / nocash fullsnes:
+#   - Status sempre pronto (RQM bit7 = 1 -> 0x80)
+#   - Comando 0x14 "Test ROM Version" -> 0x0400 (identifica o DSP-4)
+#   - Ler alem do fim de um comando -> terminador 0xFFFF
+
+NAME status pronto
+S 80
+
+NAME versao DSP-4
+W 0014
+R 0400
+
+NAME terminador apos fim
+R FFFF
+
+# FSM deve continuar sincronizada apos um comando funcional desconhecido
+NAME unknown nao trava
+W 0008
+R FFFF
+
+NAME versao novamente
+W 0014
+R 0400
