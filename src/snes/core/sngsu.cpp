@@ -22,7 +22,8 @@
 // (RUNAWAY).  No bench host, DLog e' stub.
 extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
-#define GSU_LOG(...) do { if (s_gsuLog < 48) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
+static int s_gsuDump = 0;
+#define GSU_LOG(...) do { if (s_gsuLog < 128) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
 {
@@ -398,7 +399,22 @@ void SNGSU::Step()
         return;
     }
 
+    Uint16 pc0 = m_R[15];                // PC no topo do Step (antes do fetch)
     Uint8 op = CodeFetch();
+
+    // dump de uma janela de instrucoes durante um runaway, para decodificar
+    // o corpo do loop e achar o opcode tratado errado.
+    if (m_Runaway >= 100000 && m_Runaway < 100060 && s_gsuDump < 60)
+    {
+        DLog("[gsu] %02X:%04X op=%02X a1=%d a2=%d b=%d s=%X d=%X cy=%d z=%d ov=%d sgn=%d R12=%04X R13=%04X R14=%04X",
+             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
+             m_bAlt1?1:0, m_bAlt2?1:0, m_bB?1:0,
+             (unsigned)m_Sreg, (unsigned)m_Dreg, m_bCY?1:0, m_bZ?1:0,
+             m_bOV?1:0, m_bS?1:0,
+             (unsigned)m_R[12], (unsigned)m_R[13], (unsigned)m_R[14]);
+        s_gsuDump++;
+    }
+
     Bool  bIsPrefix = FALSE;
     Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
 
