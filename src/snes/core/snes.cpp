@@ -154,13 +154,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	// atropelaria o PPU.  Como o GSU roda ate' o STOP na escrita, o GO ja
 	// esta limpo na leitura.
 	if (pSnes->m_bSuperFX && uAddr >= 0x3000 && uAddr <= 0x34FF)
-	{
-		Uint8 v = pSnes->m_GSU.ReadReg((Uint16)uAddr);
-		// ler o SFR limpa o flag de IRQ do GSU -> baixa a linha de IRQ
-		if (!pSnes->m_GSU.IrqPending())
-			SNCPUSignalIRQ(&pSnes->m_Cpu, 0);
-		return v;
-	}
+		return pSnes->m_GSU.ReadReg((Uint16)uAddr);
 
 /*	if (uAddr < 0x2140)
 	{
@@ -291,10 +285,10 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		pSnes->m_GSU.WriteReg((Uint16)uAddr, uData);
 		if (pSnes->m_GSU.IsRunning())
 			pSnes->m_GSU.Run(0x7FFFFFFF);
-		// GSU terminou (STOP) -> levanta IRQ se nao mascarado em CFGR.  Muitos
-		// jogos SuperFX (Star Fox) esperam esse IRQ para processar o frame.
-		if (pSnes->m_GSU.IrqPending())
-			SNCPUSignalIRQ(&pSnes->m_Cpu, 1);
+		// NAO levantamos IRQ da CPU aqui: estudando o ZSNES, o jogo pola o
+		// SFR ($3030/$3031) para saber que o GSU terminou; levantar IRQ era
+		// espurio e suspeito de quebrar o boot do Star Fox.  O flag de IRQ no
+		// SFR (lido em $3031) continua existindo para quem realmente o usa.
 		return;
 	}
 
