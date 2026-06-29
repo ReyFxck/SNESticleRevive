@@ -389,10 +389,14 @@ void SNGSU::Run(Int32 nClocks)
 
 void SNGSU::Step()
 {
-    // watchdog: enquanto o set de opcodes/graficos nao esta completo, um
-    // programa pode nunca alcancar STOP.  Apos um teto alto de instrucoes,
-    // forca a parada (+IRQ) para nao travar a EE.
-    if (++m_Runaway > 2000000)
+    // watchdog: enquanto investigamos, deixamos um teto ALTO.  Rotinas do
+    // Star Fox sao finitas porem enormes (contador R4 ~= 60000 -> milhoes de
+    // ciclos numa unica chamada).  Com 2M abortavamos no meio (tela preta);
+    // com 10M deixamos completar para confirmar que a rotina termina (STOP)
+    // e que a emulacao do GSU esta correta -- o custo e' um congelamento
+    // momentaneo da EE (modelo sincrono), resolvido depois com execucao
+    // concorrente (time-slice), que e' como o hardware real funciona.
+    if (++m_Runaway > 10000000)
     {
         GSU_LOG("[gsu] RUNAWAY! r15=%04X pbr=%02X", (unsigned)m_R[15], (unsigned)m_PBR);
         m_bGo = FALSE; m_bIrq = TRUE; m_Runaway = 0;
