@@ -25,6 +25,7 @@
 // --------------------------------------------------------------------------
 extern "C" void DLog(const char *fmt, ...);
 
+#ifdef DSP4_CAPTURE
 #define DSP4_CAP_MAX 4096
 static int   s_capN        = 0;
 static int   s_capInit     = 0;
@@ -53,6 +54,12 @@ static void Dsp4CapReadByte(Uint8 b)
     DLog("R %04X", (unsigned)(s_capRdLo | ((Uint16)b << 8)));
     s_capN++;
 }
+#else
+// Captura desligada (build normal): no-ops, otimizadas para nada.
+// Compile com DSP4_CAPTURE=1 para logar o stream do barramento via DLog.
+static inline void Dsp4CapWriteByte(Uint8) {}
+static inline void Dsp4CapReadByte(Uint8) {}
+#endif
 
 //==========================================================================
 
@@ -64,8 +71,10 @@ SNDSP4::SNDSP4()
 void SNDSP4::Reset()
 {
     InitDSP4();
+#ifdef DSP4_CAPTURE
     s_capWrHaveLo = FALSE;
     s_capRdHaveLo = FALSE;
+#endif
 }
 
 void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)

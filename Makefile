@@ -197,6 +197,16 @@ ifeq ($(DSP4_CAPTURE),1)
   CFLAGS   += -DDSP4_CAPTURE=1
   CXXFLAGS += -DDSP4_CAPTURE=1
 endif
+
+# A/B diagnostico: DSP4_STUB=1 desliga o HLE do DSP-4 (writes ignorados,
+# reads devolvem 0xFFFF), igual ao stub antigo.  Serve para comparar uma
+# cena bugada com/sem o HLE e isolar se o problema e' o coprocessador ou
+# o render (PPU/HDMA) do emulador.  Ex.:  make DSP4_STUB=1
+DSP4_STUB ?= 0
+ifeq ($(DSP4_STUB),1)
+  CFLAGS   += -DDSP4_INERT_STUB=1
+  CXXFLAGS += -DDSP4_INERT_STUB=1
+endif
 # ----------------------------------------------------------------------
 
 INCS := \
