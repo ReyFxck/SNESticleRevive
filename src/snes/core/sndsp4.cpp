@@ -22,43 +22,40 @@
 // --------------------------------------------------------------------------
 //  Captura de protocolo (diagnostico, gated por -DDSP4_CAPTURE).
 //
-//  Registra a sequencia de WRITES (comando + parametros) que o jogo envia,
-//  segmentada por pontos de READ (marcador "R").  Despeja tudo no printf
-//  (logs.txt no emulador) quando o buffer enche -- uma vez.  Isso deixa
-//  reconstruir o protocolo do DSP-4 a partir do PROPRIO jogo (clean-room
-//  observacional): quais opcodes ele usa e quantos params cada um leva.
+//  Imprime AO VIVO (via DLog -> SIO da EE, que aparece no log do emulador)
+//  cada WRITE (comando + params) que o jogo envia, segmentado por pontos de
+//  READ (marcador "R"), ate um teto.  Reconstroi o protocolo do DSP-4 a
+//  partir do PROPRIO jogo (clean-room observacional).
 //
-//  Ex. de saida:   W 0014  R            (comando 0x14, sem params, le)
-//                  W 0006  W 1234  W 5678  R   (cmd 0x06 + 2 params, le)
+//  Imprime um aviso "build ativo" no PRIMEIRO acesso ao DSP-4: se essa linha
+//  nao aparecer, ou o build nao foi recompilado (faca 'make clean' antes),
+//  ou o jogo nao esta usando o DSP-4.
+//
+//  Ex.:  W 0014  R            (comando 0x14, sem params, leu)
+//        W 0006  W 1234  W 5678  R   (cmd 0x06 + 2 params, leu)
 // --------------------------------------------------------------------------
-#define DSP4_CAP_MAX 4096
-static Uint16 s_capVal[DSP4_CAP_MAX];
-static Uint8  s_capDir[DSP4_CAP_MAX];   // 0 = W(word), 1 = R(marcador)
-static int    s_capN      = 0;
-static int    s_capDumped = 0;
-static int    s_capLastW  = 0;
+extern "C" void DLog(const char *fmt, ...);
 
-static void Dsp4CapDump(void)
-{
-    int i;
-    printf("=== DSP4 CAPTURE (%d) ===\n", s_capN);
-    for (i = 0; i < s_capN; i++)
-        printf(s_capDir[i] == 0 ? "W %04X\n" : "R\n", s_capVal[i]);
-    printf("=== DSP4 CAPTURE END ===\n");
-}
+#define DSP4_CAP_MAX 2048
+static int s_capN     = 0;
+static int s_capInit  = 0;
+static int s_capLastW = 0;
 
 static void Dsp4CapWrite(Uint16 w)
 {
-    if (s_capDumped) return;
-    if (s_capN < DSP4_CAP_MAX) { s_capDir[s_capN] = 0; s_capVal[s_capN] = w; s_capN++; }
+    if (!s_capInit) { DLog("=== DSP4 CAPTURE: build ativo (DSP-4 em uso) ==="); s_capInit = 1; }
+    if (s_capN >  DSP4_CAP_MAX) return;
+    if (s_capN == DSP4_CAP_MAX) { DLog("=== DSP4 CAPTURE FIM (%d writes) ===", s_capN); s_capN++; return; }
+    DLog("W %04X", (unsigned)w);
+    s_capN++;
     s_capLastW = 1;
-    if (s_capN >= DSP4_CAP_MAX) { Dsp4CapDump(); s_capDumped = 1; }
 }
 
 static void Dsp4CapRead(void)
 {
-    if (s_capDumped || !s_capLastW) return;   // colapsa rajadas de leitura
-    if (s_capN < DSP4_CAP_MAX) { s_capDir[s_capN] = 1; s_capVal[s_capN] = 0; s_capN++; }
+    if (s_capN >= DSP4_CAP_MAX || !s_capLastW) return;   // colapsa rajadas de leitura
+    DLog("R");
+    s_capN++;
     s_capLastW = 0;
 }
 #endif
