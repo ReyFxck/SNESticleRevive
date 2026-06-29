@@ -16,6 +16,14 @@
 
 #include <string.h>
 
+// Trace de diagnostico (via DLog -> SIO da EE, visivel no log do NetherSX2).
+// Limitado a poucos eventos para nao floodar.  Mostra se o jogo realmente
+// dispara o GSU, com qual PBR:R15/SCMR, e se ele termina (STOP) ou enrosca
+// (RUNAWAY).  No bench host, DLog e' stub.
+extern "C" void DLog(const char *fmt, ...);
+static int s_gsuLog = 0;
+#define GSU_LOG(...) do { if (s_gsuLog < 48) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
+
 SNGSU::SNGSU()
 {
     m_pRom = NULL; m_uRomSize = 0; m_uRomMask = 0;
@@ -227,6 +235,9 @@ void SNGSU::WriteReg(Uint16 uAddrLow, Uint8 uData)
         {
             m_bGo = TRUE;
             m_Runaway = 0;      // reinicia o watchdog a cada novo START
+            GSU_LOG("[gsu] GO pbr=%02X r15=%04X scmr=%02X scbr=%02X",
+                    (unsigned)m_PBR, (unsigned)m_R[15],
+                    (unsigned)m_SCMR, (unsigned)m_SCBR);
         }
         return;
     }
@@ -382,6 +393,7 @@ void SNGSU::Step()
     // forca a parada (+IRQ) para nao travar a EE.
     if (++m_Runaway > 2000000)
     {
+        GSU_LOG("[gsu] RUNAWAY! r15=%04X pbr=%02X", (unsigned)m_R[15], (unsigned)m_PBR);
         m_bGo = FALSE; m_bIrq = TRUE; m_Runaway = 0;
         return;
     }
@@ -640,6 +652,7 @@ void SNGSU::Step()
     }
     else if (op == 0x00)                     // STOP
     {
+        GSU_LOG("[gsu] STOP steps=%u", (unsigned)m_Runaway);
         m_bGo = FALSE; m_bIrq = TRUE; bIsPrefix = TRUE;
     }
     else if (op == 0x01)                     // NOP
