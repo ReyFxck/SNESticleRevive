@@ -32,6 +32,7 @@
 #include "prof.h"
 #include "font.h"
 #include "poly.h"
+#include "embedded_irx.h"   /* Mx4sioLoadIfEnabled (carga adiada do mx4sio) */
 #include "texture.h"
 #include "audmixbuffer.h"
 #include "pathext.h"
@@ -280,6 +281,10 @@ GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
        480i before the card was available.  Default (480i) users take the
        else branch and the GS is left exactly as it was. */
     VideoSettingsLoad();
+    /* MX4SIO (SD via SIO2) carrega AQUI, depois da config -- nunca no boot.
+       So' se o suporte a Mass estiver ligado (padrao on).  Best-effort:
+       em quem nao tem o adaptador, so' nao acha hardware. */
+    Mx4sioLoadIfEnabled();
     if (g_GskVideoMode != GSK_GetActiveVideoMode())
     {
         GSK_ReinitVideo();

@@ -255,10 +255,9 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     if (ret < 0) { printf("UsbBdm: usbmass_bd.irx failed (%d)\n", ret); return -4; }
 
 #ifdef HAVE_MX4SIO
-    /* MX4SIO: cartao SD pela porta de memory card (SIO2).  Block device
-       BDM -> o SD aparece como um massN:.  Best-effort. */
-    ret = EmbeddedIrxLoad(mx4sio_bd_irx, sizeof(mx4sio_bd_irx), 0, NULL);
-    ScrPrintf("mx4sio_bd (SD->massN) = %d\n", ret);
+    /* MX4SIO saiu do boot: agora carrega DEPOIS da config (Mx4sioLoadIfEnabled,
+       chamado em mainloop_init), e so' se o suporte a Mass estiver ligado.
+       Evita tocar o SIO2 no boot de quem nao usa o adaptador SD. */
 #endif
 
     /* HD INTERNO (APA): dev9 + ps2atad + ps2hdd -- DESABILITADO no boot.
@@ -365,6 +364,48 @@ extern "C" int MmceLoadEmbeddedIrx(void)
 #else
     /* mmceman.irx nao foi embutido neste build (PS2SDK sem o modulo). */
     return -2;
+#endif
+}
+
+/* ------------------------------------------------------------------------
+ * Toggles de dispositivos SEM modulo proprio de carga preguicosa:
+ *
+ *  - Mass (USB): a stack USB (usbd/bdm/bdmfs_fatfs/usbmass_bd) SEMPRE sobe
+ *    no boot -- e' o armazenamento principal e seguro, e gatear isso no
+ *    boot mexeria no caminho critico que causava a tela preta.  Este flag
+ *    so' controla a LISTAGEM de mass0:/mass1: no browser e a carga do
+ *    mx4sio (abaixo).  Padrao LIGADO.
+ *  - Host (host:): entrada de dev (PC via ps2link/ps2client); nao carrega
+ *    modulo, so' aparece/some do browser.  Padrao DESLIGADO.
+ * ------------------------------------------------------------------------ */
+static int s_mass_enabled = 1;   /* padrao LIGADO */
+static int s_host_enabled = 0;   /* padrao DESLIGADO */
+
+extern "C" int  MassStorageIsEnabled(void)   { return s_mass_enabled; }
+extern "C" void MassStorageSetEnabled(int e) { s_mass_enabled = e ? 1 : 0; }
+extern "C" int  HostIsEnabled(void)          { return s_host_enabled; }
+extern "C" void HostSetEnabled(int e)        { s_host_enabled = e ? 1 : 0; }
+
+/* MX4SIO (cartao SD pela porta de memory card / SIO2) -> aparece como um
+ * massN: (block device BDM).  Tirado do boot: carrega DEPOIS da config
+ * (chamado em mainloop_init), e so' se o suporte a Mass estiver ligado.
+ * Carga unica. */
+static int s_mx4sio_loaded = 0;
+
+extern "C" int Mx4sioLoadIfEnabled(void)
+{
+    if (!s_mass_enabled) return -1;   /* mass desligado: nao carrega */
+    if (s_mx4sio_loaded) return 0;    /* ja carregado */
+
+#ifdef HAVE_MX4SIO
+    {
+        int ret = EmbeddedIrxLoad(mx4sio_bd_irx, sizeof(mx4sio_bd_irx), 0, NULL);
+        printf("Mx4sioLoad: mx4sio_bd = %d\n", ret);
+        s_mx4sio_loaded = 1;
+        return 0;
+    }
+#else
+    return -2;   /* mx4sio_bd.irx nao embutido neste build */
 #endif
 }
 

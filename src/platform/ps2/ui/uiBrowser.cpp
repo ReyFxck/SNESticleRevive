@@ -1271,13 +1271,18 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	{
         AddEntry("cdfs:", BROWSER_ENTRYTYPE_DRIVE, 0);
 //        AddEntry("cdrom:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("host:", BROWSER_ENTRYTYPE_DRIVE, 0);
+        /* host: (PC via ps2link) -- so' se ligado nas configs (dev). */
+        if (HostIsEnabled())
+            AddEntry("host:", BROWSER_ENTRYTYPE_DRIVE, 0);
         /* USB/HD via BDM: cada pendrive, HD externo USB e o HD INTERNO
            (FAT/exFAT, via ata_bd) viram uma unidade massN:.  A ordem
            depende da deteccao, entao listamos algumas; as vazias so'
            abrem sem conteudo. */
-        AddEntry("mass0:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("mass1:", BROWSER_ENTRYTYPE_DRIVE, 0);
+        if (MassStorageIsEnabled())
+        {
+            AddEntry("mass0:", BROWSER_ENTRYTYPE_DRIVE, 0);
+            AddEntry("mass1:", BROWSER_ENTRYTYPE_DRIVE, 0);
+        }
         /* HD interno (APA): so' listado se o usuario LIGOU o suporte a HDD
            nas configs.  A carga dos modulos (dev9/atad/hdd) e' preguicosa,
            feita em SetDir() ao entrar -- nunca no boot. */

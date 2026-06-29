@@ -26,7 +26,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 14
+#define VIDEOCFG_VERSION 15
 
 typedef struct
 {
@@ -43,6 +43,8 @@ typedef struct
 	Int32  gamevol;    /* volume do audio do jogo (SNES/NES): 0..100 */
 	Int32  hddenable;  /* suporte ao HD interno (hdd0:): 0=off, 1=on  */
 	Int32  mmceenable; /* suporte a MMCE (mmce0/1): 0=off, 1=on       */
+	Int32  massenable; /* mass/USB (mass0/1 + mx4sio): 0=off, 1=on    */
+	Int32  hostenable; /* host: (PC link via ps2link): 0=off, 1=on    */
 } VideoCfgT;
 
 static void _VideoCfgPath(char *pOut)
@@ -69,6 +71,8 @@ void VideoSettingsSave(void)
 	cfg.gamevol    = AudMixGameGetVolume();
 	cfg.hddenable  = HddSupportIsEnabled() ? 1 : 0;
 	cfg.mmceenable = MmceSupportIsEnabled() ? 1 : 0;
+	cfg.massenable = MassStorageIsEnabled() ? 1 : 0;
+	cfg.hostenable = HostIsEnabled() ? 1 : 0;
 
 	_VideoCfgPath(path);
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -98,6 +102,8 @@ void VideoSettingsLoad(void)
 		if (cfg.gamevol >= 0 && cfg.gamevol <= 100) AudMixGameSetVolume(cfg.gamevol);
 		if (cfg.hddenable == 0 || cfg.hddenable == 1) HddSupportSetEnabled(cfg.hddenable);
 		if (cfg.mmceenable == 0 || cfg.mmceenable == 1) MmceSupportSetEnabled(cfg.mmceenable);
+		if (cfg.massenable == 0 || cfg.massenable == 1) MassStorageSetEnabled(cfg.massenable);
+		if (cfg.hostenable == 0 || cfg.hostenable == 1) HostSetEnabled(cfg.hostenable);
 	}
 }
 
@@ -152,14 +158,16 @@ void CVideoScreen::Draw()
 	int   m = (g_GskVideoMode >= 0 && g_GskVideoMode < GSK_VIDMODE_COUNT)
 	        ? g_GskVideoMode : 0;
 	const char *pMode = names[m];
+	bool  bDevices = (m_iSelect >= 9);   /* pagina 2/2 = dispositivos */
 
 	FontSelect(0);
 
-	_VideoHeader(vy, "Video Config");
-	vy += 13;
+	_VideoHeader(vy, bDevices ? "Video Config (2/2)" : "Video Config (1/2)");
+	vy += 18;
 
+	if (!bDevices) {
 	_VideoHeader(vy, "Screen");
-	vy += 11;
+	vy += 14;
 
 	_VideoRow(vy, 0, m_iSelect, "Video Mode", pMode);  vy += 12;
 
@@ -176,7 +184,7 @@ void CVideoScreen::Draw()
 
 	_VideoRow(vy, 5, m_iSelect, "Cover Art", CoverIsEnabled() ? "On" : "Off"); vy += 12;
 
-	_VideoHeader(vy, "Audio"); vy += 11;
+	_VideoHeader(vy, "Audio"); vy += 14;
 
 	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
 	_VideoRow(vy, 6, m_iSelect, "Game Volume", buf); vy += 12;
@@ -191,18 +199,26 @@ void CVideoScreen::Draw()
 
 	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
 	_VideoRow(vy, 8, m_iSelect, "Frequency", buf); vy += 12;
+	}
+	else
+	{
+		_VideoHeader(vy, "Storage / Devices"); vy += 14;
 
-	_VideoHeader(vy, "Storage"); vy += 11;
-
-	_VideoRow(vy, 9, m_iSelect, "HDD Support",
-	          HddSupportIsEnabled() ? "On" : "Off"); vy += 12;
-
-	_VideoRow(vy, 10, m_iSelect, "MMCE Cards",
-	          MmceSupportIsEnabled() ? "On" : "Off"); vy += 12;
+		_VideoRow(vy,  9, m_iSelect, "Mass / USB",
+		          MassStorageIsEnabled() ? "On" : "Off"); vy += 12;
+		_VideoRow(vy, 10, m_iSelect, "HDD Support",
+		          HddSupportIsEnabled() ? "On" : "Off"); vy += 12;
+		_VideoRow(vy, 11, m_iSelect, "MMCE Cards",
+		          MmceSupportIsEnabled() ? "On" : "Off"); vy += 12;
+		_VideoRow(vy, 12, m_iSelect, "Host (PC link)",
+		          HostIsEnabled() ? "On" : "Off"); vy += 12;
+	}
 
 	/* controls / hints (clear of the vy=215 footer) */
+	vy = 178;
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
 	_VideoCenter(128, vy, "Up/Dn: select   L/R: change   X: save"); vy += 12;
+	_VideoCenter(128, vy, "O (Circle): switch page"); vy += 12;
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode())
 	{
@@ -215,8 +231,18 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < 0) m_iSelect = 10; }
-	if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > 10) m_iSelect = 0; }
+	/* Circle (O) alterna entre as 2 paginas: Video/Audio (idx 0-8) e
+	   Devices (9-12).  NAO uso L1/R1 aqui de proposito -- eles ja trocam
+	   de ABA no nivel global (Browser/Network/Menu/Log/Video). */
+	if (trigger & PAD_CIRCLE)
+		m_iSelect = (m_iSelect >= 9) ? 0 : 9;
+
+	{
+		int lo = (m_iSelect >= 9) ? 9  : 0;
+		int hi = (m_iSelect >= 9) ? 12 : 8;
+		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
+		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
+	}
 
 	if (trigger & PAD_LEFT)  dir = -1;
 	if (trigger & PAD_RIGHT) dir = +1;
@@ -283,15 +309,22 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			BgmCycleRate(dir);
 			break;
 
-		case 9: /* HDD interno (hdd0:) on/off -- live; persistido no X.
-		           So' habilita/desabilita a LISTAGEM e a carga preguicosa;
-		           nao toca o boot. */
+		case 9: /* Mass / USB on/off -- lista mass0:/mass1: e libera a carga
+		           (deferida) do mx4sio.  O USB core sobe no boot de qualquer
+		           forma (seguro); isto controla a listagem + o mx4sio. */
+			MassStorageSetEnabled(!MassStorageIsEnabled());
+			break;
+
+		case 10: /* HDD interno (hdd0:) on/off -- lista + carga preguicosa. */
 			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
 
-		case 10: /* MMCE (mmce0/1) on/off -- live; persistido no X. Idem ao
-		            HDD: so' lista e carrega preguicoso, nunca no boot. */
+		case 11: /* MMCE (mmce0/1) on/off -- lista + carga preguicosa. */
 			MmceSupportSetEnabled(!MmceSupportIsEnabled());
+			break;
+
+		case 12: /* Host (host:) on/off -- so' lista a entrada (sem modulo). */
+			HostSetEnabled(!HostIsEnabled());
 			break;
 		}
 	}
