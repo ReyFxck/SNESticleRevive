@@ -67,8 +67,8 @@ extern "C" void GSK_InvalidateTextureCache(void);
 
 #define COVER_INDEX_MAX   2048
 #define COVER_NAME_MAX    208
-/* up to two bases (COVERS_PATH + ROM dir) x 4 kinds (root + 3 libretro) */
-#define COVER_DIRS_MAX    8
+/* up to three bases (COVERS_PATH + ROM dir + ELF dir) x 4 kinds */
+#define COVER_DIRS_MAX    12
 /* max distinct artwork images we list per ROM (boxart/title/snap + -N) */
 #define COVER_FOUND_MAX   12
 /* highest "-N" suffix variant we look for */
@@ -313,6 +313,28 @@ static void _EnsureIndex(const char *romDir)
 	}
 #endif
 	_AddBase(romDir);   /* romDir already carries its trailing slash */
+
+	/* Pasta "covers/" AO LADO DO ELF (boot dir): permite uma pasta de capas
+	   junto do ELF no dispositivo, sem recompilar com COVERS_PATH.  Fallback
+	   apos as capas ao lado da propria ROM. */
+	{
+		extern "C" char *MainGetBootDir();
+		const char *bd = MainGetBootDir();
+		if (bd && bd[0])
+		{
+			char b[COVER_KEY_MAX];
+			int n = 0;
+			while (bd[n] && n < (int)sizeof(b) - 10)
+			{
+				b[n] = (bd[n] == '\\') ? '/' : bd[n];   /* normaliza '\' */
+				n++;
+			}
+			if (n > 0 && b[n - 1] != '/') b[n++] = '/';
+			b[n] = 0;
+			strncat(b, "covers/", sizeof(b) - strlen(b) - 1);
+			_AddBase(b);
+		}
+	}
 
 	s_indexGen++;
 	DLog("[cover] indexed %d png(s) across %d dir(s) in %s\n",

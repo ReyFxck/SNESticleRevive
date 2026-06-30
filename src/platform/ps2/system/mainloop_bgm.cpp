@@ -164,19 +164,48 @@ static Bool _HasExt(const char *name, const char *ext)
 /* Escaneia as pastas candidatas UMA vez e indexa todas as faixas
    .mod/.xm achadas (so' os nomes/caminhos -- barato).  Sorteia uma faixa
    inicial (variedade por boot, sem custo de reload). */
+/* MainGetBootDir(): pasta de onde o ELF foi carregado (exportada pelo
+   entrypoint do app).  Usada para achar a pasta "bgm" AO LADO do ELF. */
+extern "C" char *MainGetBootDir();
+
 static void _BuildIndex(void)
 {
     size_t d;
+    char   bootBgm[256];
 
     s_indexCount = 0;
-    for (d = 0; d < BGM_NUM_DIRS && s_indexCount < BGM_INDEX_MAX; d++)
+
+    /* Monta o caminho da pasta "bgm" AO LADO DO ELF (boot dir).  Assim, se
+       o usuario deixar a pasta bgm junto do ELF no dispositivo, ela e' usada
+       automaticamente -- sem precisar recompilar com BGM_PATH.  Tentada
+       PRIMEIRO; as pastas padrao ficam de fallback. */
+    bootBgm[0] = 0;
     {
+        const char *bd = MainGetBootDir();
+        if (bd && bd[0])
+        {
+            int n = 0;
+            while (bd[n] && n < (int)sizeof(bootBgm) - 6)
+            {
+                bootBgm[n] = (bd[n] == '\\') ? '/' : bd[n];  /* normaliza '\' */
+                n++;
+            }
+            if (n > 0 && bootBgm[n - 1] != '/') bootBgm[n++] = '/';
+            bootBgm[n] = 0;
+            strncat(bootBgm, "bgm", sizeof(bootBgm) - strlen(bootBgm) - 1);
+        }
+    }
+
+    /* d==0: pasta ao lado do ELF; d>=1: pastas padrao (s_dirs[d-1]). */
+    for (d = 0; d <= BGM_NUM_DIRS && s_indexCount < BGM_INDEX_MAX; d++)
+    {
+        const char    *scanDir = (d == 0) ? bootBgm : s_dirs[d - 1];
         DIR *pDir;
         struct dirent *pEnt;
 
-        if (!s_dirs[d] || !s_dirs[d][0]) continue;
+        if (!scanDir || !scanDir[0]) continue;
 
-        pDir = opendir(s_dirs[d]);
+        pDir = opendir(scanDir);
         if (!pDir) continue;
 
         while ((pEnt = readdir(pDir)) != NULL && s_indexCount < BGM_INDEX_MAX)
@@ -187,7 +216,7 @@ static void _BuildIndex(void)
             if (!kind) continue;
 
             snprintf(s_index[s_indexCount].path, sizeof(s_index[0].path),
-                     "%s/%s", s_dirs[d], pEnt->d_name);
+                     "%s/%s", scanDir, pEnt->d_name);
             s_index[s_indexCount].kind = kind;
             s_indexCount++;
         }
