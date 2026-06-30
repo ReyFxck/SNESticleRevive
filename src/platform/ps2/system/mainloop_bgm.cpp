@@ -71,7 +71,7 @@ extern "C" {
    (meio-termo, padrao), 48000 (nativo, mais pesado).  Sobrescrevivel pelo
    Makefile:  make BGM_RATE=24000 */
 #ifndef BGM_RATE
-#define BGM_RATE        32000
+#define BGM_RATE        24000
 #endif
 
 /* Teto de frames de SAIDA (48 kHz) por chamada.  Em regime normal so
@@ -90,6 +90,12 @@ extern "C" {
    pra tras do consumo, mas baixo o bastante pra nao dar pico.  ~1200
    permite ~400 frames/recarga sem estourar o orcamento de CPU. */
 #define BGM_MAX_OUT_PER_FRAME 1200
+
+/* Duracao (em frames de menu @60fps) do "respiro" de silencio inserido
+   ENTRE faixas, ao trocar.  Cobre o bloqueio de disco do carregamento da
+   proxima faixa (o ring toca silencio limpo durante a leitura, em vez de
+   underrun/estralo) e da' uma pausa agradavel tipo playlist.  ~12 = 200ms. */
+#define BGM_GAP_FRAMES 12
 
 /* Limiar (em frames stereo) abaixo do qual consideramos que a cauda de
    audio do jogo ja' drenou do ring do audsrv.  Ao abrir o menu, o
@@ -133,6 +139,7 @@ static int  s_volume   = 100;          /* 0 = off; 1..100 (Video Config)  */
 static int  s_rate     = BGM_RATE;     /* taxa de sintese (Hz), Video Config */
 static Bool s_volSet   = FALSE;        /* ja' firmamos o volume p/ tocar? */
 static int  s_drainWait = 0;           /* frames esperando dreno da cauda */
+static int  s_gapFrames = 0;           /* frames de silencio na troca de faixa */
 
 /* Frequencias de sintese oferecidas no Video Config (Hz).  Mais alta =
    melhor qualidade e mais CPU (48000 pode derrubar o fps).  32000 e' o
@@ -317,11 +324,12 @@ static void _TryLoad(void)
             jar_xm_create_context_safe(&s_xm, s_xmBuf, (size_t)len, s_rate) == 0)
         {
             jar_xm_set_max_loop_count(s_xm, 0); /* 0 = loop infinito       */
-            /* PS2: desliga interpolacao linear -- modulos de muitos canais
-               (ate' 32) ficam pesados demais com ela ligada e fazem o menu
-               engasgar.  Nearest-neighbor segura o tempo real; a perda de
-               qualidade (agudos) e' aceitavel pra trilha de menu. */
-            jar_xm_set_linear_interpolation(s_xm, 0);
+            /* interpolacao linear LIGADA (default): som mais limpo (sem o
+               aliasing/aspereza do nearest).  O custo extra de CPU e'
+               compensado pela taxa de sintese mais baixa (BGM_RATE=24000)
+               e pelo teto de sintese por frame -- a reproducao continua
+               fluida.  Se algum modulo de 32ch ainda engasgar, baixe a
+               taxa no Video Config. */
             s_state = BGM_XM;
             return;
         }
@@ -355,6 +363,7 @@ static void _BgmFree(void)
     _BgmFreeDecoder();
     s_volSet = FALSE;
     s_drainWait = 0;
+    s_gapFrames = 0;
 }
 
 /* Avanca para a proxima faixa do indice (sequencial, circular) e libera o
@@ -379,6 +388,7 @@ void BgmStop(void)
        soltar o tracker).  A liberacao real acontece em BgmSetVolume(0). */
     s_volSet = FALSE;
     s_drainWait = 0;
+    s_gapFrames = 0;
 }
 
 void BgmNext(void)
@@ -464,6 +474,26 @@ void BgmUpdate(void)
     if (s_volume <= 0)         return;   /* OFF: nem carrega, nem usa RAM */
     if (!Aud_IsInitialized())  return;
 
+    /* Respiro entre faixas: apos detectar o fim e avancar (decoder ja'
+       liberado), tocamos alguns frames de SILENCIO antes de carregar a
+       proxima.  Enche o ring de zeros -- quando o _TryLoad bloquear a EE
+       lendo o arquivo do disco, o audsrv toca silencio limpo (sem
+       underrun/estralo) em vez de repetir lixo do ring.  Da' tambem uma
+       pausa curta tipo playlist entre as musicas. */
+    if (s_gapFrames > 0)
+    {
+        int g = Aud_Available();
+        s_gapFrames--;
+        if (g > 0)
+        {
+            if (g > BGM_OUT_CHUNK) g = BGM_OUT_CHUNK;
+            memset(s_left,  0, (size_t)g * sizeof(s_left[0]));
+            memset(s_right, 0, (size_t)g * sizeof(s_right[0]));
+            Aud_Enqueue(s_left, s_right, g, 0);
+        }
+        return;
+    }
+
     if (s_state == BGM_UNTRIED) _TryLoad();
     if (s_state != BGM_MOD && s_state != BGM_XM) return; /* FAILED/nada */
 
@@ -534,7 +564,7 @@ void BgmUpdate(void)
         Bool ended = FALSE;
         if      (s_state == BGM_MOD)        ended = (s_mod.loopcount > 0);
         else if (s_state == BGM_XM && s_xm) ended = (jar_xm_get_loop_count(s_xm) > 0);
-        if (ended && _BgmAdvance()) return;   /* trocou: descarta buffer do loop */
+        if (ended && _BgmAdvance()) { s_gapFrames = BGM_GAP_FRAMES; return; }  /* respiro + carrega a proxima */
     }
 
     /* reamostra s_rate -> 48 kHz (linear, ponto fixo 16.16) e
