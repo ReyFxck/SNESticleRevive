@@ -421,6 +421,18 @@ OBJS := \
 	$(patsubst src/%.s,$(OBJ_DIR)/%.o,$(filter %.s,$(SRCS))) \
 	$(patsubst src/%.S,$(OBJ_DIR)/%.o,$(filter %.S,$(SRCS)))
 
+# Rastreamento de dependencia de headers.  -MMD faz o compilador gerar um
+# .d por objeto listando os headers que ele inclui; -MP adiciona alvos
+# phony para cada header (evita erro se um header for removido).  O
+# -include puxa esses .d de volta, entao editar um header (ex.: jar_xm.h)
+# recompila TODO .c/.cpp que o inclui.  Sem isso, um .o velho linkava
+# contra um header desatualizado -> ex.: "undefined reference" a uma
+# funcao recem-adicionada no header.  (DEPFLAGS ja' era usado nas regras
+# de compilacao, mas nunca tinha sido definido -> expandia vazio.)
+DEPFLAGS := -MMD -MP
+DEPS := $(OBJS:.o=.d)
+-include $(DEPS)
+
 SDK_NET_IRX := ps2dev9.irx netman.irx ps2ip-nm.irx smap.irx
 SDK_COMPAT_NET_IRX := ps2ip.irx ps2ips.irx smap-ps2ip.irx
 SDK_MC_IRX := mcman.irx mcserv.irx
