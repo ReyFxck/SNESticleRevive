@@ -22,12 +22,6 @@
 // (RUNAWAY).  No bench host, DLog e' stub.
 extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
-static int s_setupDump = 0;
-static int s_r4log = 0;     /* trap: quando R4 vira valor grande (lixo) */
-static int s_bllog = 0;     /* trace do loop B4B2-B4C2 que monta R4 */
-static int s_gblog = 0;     /* trace dos GETB (bytes-fonte lidos da ROM) */
-static int s_r12log = 0;    /* trap: onde R12 (nº de bits) e' carregado */
-static int s_dclog = 0;     /* trace da arvore de decode do token (dispatch) */
 #define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
@@ -421,57 +415,6 @@ void SNGSU::Step()
     Uint16 pc0 = m_R[15];
     Uint8 op = CodeFetch();
 
-    // dump do SETUP do B301: primeiras ~200 instrucoes apos o GO, com R4 (o
-    // contador que estoura), os regs de loop (R12/R13/R2/R3) e -- crucial --
-    // o estado de PREFIXO (alt1/alt2/b) + Sreg/Dreg de CADA opcode, pra eu
-    // saber EXATAMENTE como cada op e' decodificado e qual poe 0xE8FB no R4.
-    if (m_Runaway >= 1 && m_Runaway <= 24 && s_setupDump < 48)
-    {
-        DLog("[gss] %02X:%04X op=%02X alt=%d%d b=%d s=%X d=%X | R2=%04X R3=%04X R4=%04X R6=%04X R12=%04X R13=%04X R14=%04X",
-             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
-             (int)m_bAlt1, (int)m_bAlt2, (int)m_bB,
-             (unsigned)m_Sreg, (unsigned)m_Dreg,
-             (unsigned)m_R[2], (unsigned)m_R[3], (unsigned)m_R[4],
-             (unsigned)m_R[6], (unsigned)m_R[12], (unsigned)m_R[13], (unsigned)m_R[14]);
-        s_setupDump++;
-    }
-
-    // trace do LOOP que monta R4 (B4B2-B4C2): mostra R2/R3 (dados-fonte que
-    // estao sendo shiftados), R12/R13 (contador/alvo do LOOP) e CY a cada
-    // passo -- pra ver se a visita que monta R4=EC07 recebe R2/R3 ja' errados
-    // (bug de leitura) ou se o loop conta demais (R12/R13/BEQ).
-    if (pc0 >= 0xB4B2 && pc0 <= 0xB4E2 && s_bllog < 90)
-    {
-        DLog("[gsbl] %04X op=%02X R2=%04X R3=%04X R4=%04X R12=%04X R13=%04X CY=%d a=%d%d b=%d s=%X d=%X",
-             (unsigned)pc0, (unsigned)op,
-             (unsigned)m_R[2], (unsigned)m_R[3], (unsigned)m_R[4],
-             (unsigned)m_R[12], (unsigned)m_R[13], (int)m_bCY,
-             (int)m_bAlt1, (int)m_bAlt2, (int)m_bB, (unsigned)m_Sreg, (unsigned)m_Dreg);
-        s_bllog++;
-    }
-
-    Uint16 dbg_r4 = m_R[4];   /* p/ trap: detecta quando R4 vira lixo grande */
-    Uint16 dbg_r12 = m_R[12]; /* p/ trap: detecta onde R12 (nº de bits) e' carregado */
-
-    /* trace da ARVORE DE DECODE do token: o codigo acumulado (R4) e' testado
-       por CMP/branches em B33E-B47F pra escolher qual handler de token rodar
-       (B337/B3C6/B3F0/B40D/B45E).  Loga op + regs + flags pra ver QUAL branch
-       manda pro handler errado (B45E=16bits).  Exclui o loop de saida
-       (B384-B392) e o refill (B39E-B3AF) que floodariam. */
-    if (pc0 >= 0xB33E && pc0 <= 0xB47F &&
-        !(pc0 >= 0xB380 && pc0 <= 0xB392) &&
-        !(pc0 >= 0xB39E && pc0 <= 0xB3AF) &&
-        s_dclog < 400)
-    {
-        DLog("[gsdc] %04X op=%02X a=%d%d b=%d s=%X d=%X | R0=%04X R1=%04X R4=%04X R5=%04X R7=%04X | S=%d Z=%d CY=%d OV=%d",
-             (unsigned)pc0, (unsigned)op, (int)m_bAlt1, (int)m_bAlt2, (int)m_bB,
-             (unsigned)m_Sreg, (unsigned)m_Dreg,
-             (unsigned)m_R[0], (unsigned)m_R[1], (unsigned)m_R[4],
-             (unsigned)m_R[5], (unsigned)m_R[7],
-             (int)m_bS, (int)m_bZ, (int)m_bCY, (int)m_bOV);
-        s_dclog++;
-    }
-
     Bool  bIsPrefix = FALSE;
     Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
 
@@ -559,13 +502,6 @@ void SNGSU::Step()
     else if (op == 0xEF)                      // GETB / GETBH / GETBL / GETBS
     {
         Uint8 byte = RomReadByte(m_ROMBR, m_R[14]);
-        if (s_gblog < 80)
-        {
-            DLog("[gsgb] %04X getb rombr=%02X r14=%04X -> %02X (d=%X)",
-                 (unsigned)pc0, (unsigned)m_ROMBR, (unsigned)m_R[14],
-                 (unsigned)byte, (unsigned)m_Dreg);
-            s_gblog++;
-        }
         if (m_bAlt1 && m_bAlt2)               // GETBS (3F): sign-expand
             m_R[m_Dreg] = (Uint16)(Int16)(Int8)byte;
         else if (m_bAlt1)                     // GETBH (3D): hi=byte, lo unchanged
@@ -771,33 +707,6 @@ void SNGSU::Step()
 
     if (!bIsPrefix)
         ResetPrefix();
-
-    // trap: a rotina B301 (descompressor) usa R4 como contador de bytes.
-    // No fluxo correto R4 e' pequeno; quando ele vira um valor grande e' o
-    // bug (o loop do meio dispara ~milhares de vezes -> RUNAWAY).  Loga o
-    // PC/opcode/contexto NO MOMENTO em que R4 e' escrito com valor > 0xFF,
-    // pra achar QUAL instrucao (e que dado de origem) corrompe o contador.
-    if (m_R[4] != dbg_r4 && m_R[4] > 0x00FF && op != 0xE4 && s_r4log < 24)
-    {
-        DLog("[gsr4] %02X:%04X op=%02X R4 %04X->%04X | s=%X d=%X R14=%04X ROMBR=%02X RAMBR=%02X",
-             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
-             (unsigned)dbg_r4, (unsigned)m_R[4],
-             (unsigned)m_Sreg, (unsigned)m_Dreg,
-             (unsigned)m_R[14], (unsigned)m_ROMBR, (unsigned)m_RAMBR);
-        s_r4log++;
-    }
-
-    // trap: onde R12 (o contador "ler N bits" do descompressor) e' CARREGADO
-    // (exclui o LOOP 0x3C que so' decrementa).  A visita ruim entra com
-    // R12=0x10; aqui descobrimos qual instrucao poe esse valor e de onde.
-    if (m_R[12] != dbg_r12 && op != 0x3C && s_r12log < 40)
-    {
-        DLog("[gsr12] %02X:%04X op=%02X R12 %04X->%04X | s=%X d=%X R14=%04X",
-             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
-             (unsigned)dbg_r12, (unsigned)m_R[12],
-             (unsigned)m_Sreg, (unsigned)m_Dreg, (unsigned)m_R[14]);
-        s_r12log++;
-    }
 
     // delay slot: aplica o salto pendente DEPOIS de executar a instrucao
     // seguinte ao branch/JMP/LOOP (1 delay slot, como no hardware).
