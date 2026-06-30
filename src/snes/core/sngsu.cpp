@@ -24,6 +24,8 @@ extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
 static int s_setupDump = 0;
 static int s_r4log = 0;     /* trap: quando R4 vira valor grande (lixo) */
+static int s_bllog = 0;     /* trace do loop B4B2-B4C2 que monta R4 */
+static int s_gblog = 0;     /* trace dos GETB (bytes-fonte lidos da ROM) */
 #define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
@@ -432,6 +434,20 @@ void SNGSU::Step()
         s_setupDump++;
     }
 
+    // trace do LOOP que monta R4 (B4B2-B4C2): mostra R2/R3 (dados-fonte que
+    // estao sendo shiftados), R12/R13 (contador/alvo do LOOP) e CY a cada
+    // passo -- pra ver se a visita que monta R4=EC07 recebe R2/R3 ja' errados
+    // (bug de leitura) ou se o loop conta demais (R12/R13/BEQ).
+    if (pc0 >= 0xB4B2 && pc0 <= 0xB4C2 && s_bllog < 200)
+    {
+        DLog("[gsbl] %04X op=%02X R2=%04X R3=%04X R4=%04X R12=%04X R13=%04X CY=%d a=%d%d b=%d s=%X d=%X",
+             (unsigned)pc0, (unsigned)op,
+             (unsigned)m_R[2], (unsigned)m_R[3], (unsigned)m_R[4],
+             (unsigned)m_R[12], (unsigned)m_R[13], (int)m_bCY,
+             (int)m_bAlt1, (int)m_bAlt2, (int)m_bB, (unsigned)m_Sreg, (unsigned)m_Dreg);
+        s_bllog++;
+    }
+
     Uint16 dbg_r4 = m_R[4];   /* p/ trap: detecta quando R4 vira lixo grande */
 
     Bool  bIsPrefix = FALSE;
@@ -521,6 +537,13 @@ void SNGSU::Step()
     else if (op == 0xEF)                      // GETB / GETBH / GETBL / GETBS
     {
         Uint8 byte = RomReadByte(m_ROMBR, m_R[14]);
+        if (s_gblog < 80)
+        {
+            DLog("[gsgb] %04X getb rombr=%02X r14=%04X -> %02X (d=%X)",
+                 (unsigned)pc0, (unsigned)m_ROMBR, (unsigned)m_R[14],
+                 (unsigned)byte, (unsigned)m_Dreg);
+            s_gblog++;
+        }
         if (m_bAlt1 && m_bAlt2)               // GETBS (3F): sign-expand
             m_R[m_Dreg] = (Uint16)(Int16)(Int8)byte;
         else if (m_bAlt1)                     // GETBH (3D): hi=byte, lo unchanged
@@ -730,7 +753,7 @@ void SNGSU::Step()
     // bug (o loop do meio dispara ~milhares de vezes -> RUNAWAY).  Loga o
     // PC/opcode/contexto NO MOMENTO em que R4 e' escrito com valor > 0xFF,
     // pra achar QUAL instrucao (e que dado de origem) corrompe o contador.
-    if (m_R[4] != dbg_r4 && m_R[4] > 0x00FF && s_r4log < 60)
+    if (m_R[4] != dbg_r4 && m_R[4] > 0x00FF && op != 0xE4 && s_r4log < 24)
     {
         DLog("[gsr4] %02X:%04X op=%02X R4 %04X->%04X | s=%X d=%X R14=%04X ROMBR=%02X RAMBR=%02X",
              (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
