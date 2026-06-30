@@ -487,6 +487,17 @@ CFLAGS   += -DHAVE_MX4SIO=1
 CXXFLAGS += -DHAVE_MX4SIO=1
 endif
 
+# ps2fs.irx (PFS): sistema de arquivos das particoes APA do HD interno.
+# Necessario para MONTAR e ler dentro de uma particao (pfs0:).  Opcional:
+# so' embute se existir no PS2SDK (define HAVE_PS2FS), para nao quebrar o
+# build em SDK que nao tenha o modulo.
+PS2FS_IRX_PATH ?= $(PS2SDK)/iop/irx/ps2fs.irx
+ifneq ($(wildcard $(PS2FS_IRX_PATH)),)
+EMBED_IRX_NAMES += ps2fs
+CFLAGS   += -DHAVE_PS2FS=1
+CXXFLAGS += -DHAVE_PS2FS=1
+endif
+
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
 AUDSRV_IRX_PATH  ?= $(PS2SDK)/iop/irx/audsrv.irx
@@ -517,6 +528,7 @@ USBMASS_BD_IRX_PATH  ?= $(PS2SDK)/iop/irx/usbmass_bd.irx
 # (expoe hdd0:), sobre o ps2dev9.irx ja' embutido.
 PS2ATAD_IRX_PATH     ?= $(PS2SDK)/iop/irx/ps2atad.irx
 PS2HDD_IRX_PATH      ?= $(PS2SDK)/iop/irx/ps2hdd.irx
+# PS2FS_IRX_PATH definido acima (bloco opcional HAVE_PS2FS).
 
 .PHONY: all clean strip list count package package-irx check-env packed elf fix-packer fast serial turbo rebuild-fast help ensure-ps2sdk install-ps2sdk ps2sdk-env ensure-ps2dev install-ps2dev-tar ps2dev-env build-begin build-summary copy-output iso-build-image ensure-ps2-packer install-ps2-packer ensure-iso-tool install-iso-tool ensure-local-ps2-packer
 
@@ -573,6 +585,8 @@ $(EMBED_DIR)/ps2atad_irx.h: $(PS2ATAD_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,ps2atad_irx)
 $(EMBED_DIR)/ps2hdd_irx.h: $(PS2HDD_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,ps2hdd_irx)
+$(EMBED_DIR)/ps2fs_irx.h: $(PS2FS_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,ps2fs_irx)
 $(EMBED_DIR)/mmceman_irx.h: $(MMCEMAN_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,mmceman_irx)
 $(EMBED_DIR)/mx4sio_bd_irx.h: $(MX4SIO_BD_IRX_PATH) | $(EMBED_DIR)

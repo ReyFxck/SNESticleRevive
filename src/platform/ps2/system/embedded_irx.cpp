@@ -35,6 +35,9 @@
 #include "usbmass_bd_irx.h"
 #include "ps2atad_irx.h"
 #include "ps2hdd_irx.h"
+#ifdef HAVE_PS2FS
+#include "ps2fs_irx.h"
+#endif
 #ifdef HAVE_MMCEMAN
 #include "mmceman_irx.h"
 #endif
@@ -322,15 +325,29 @@ extern "C" int HddLoadEmbeddedIrx(void)
     if (!s_hdd_enabled) return -1;   /* desligado: nem tenta */
     if (s_hdd_loaded)   return 0;    /* ja carregado: no-op */
 
-    /* dev9 -> ps2atad -> ps2hdd (expoe hdd0: no formato APA).  dev9 pode
-       ja estar carregado (stack de rede); SifExecModuleBuffer devolve
-       erro de duplicado, que ignoramos (best-effort). */
+    /* dev9 -> ps2atad -> ps2hdd (expoe hdd0: no formato APA) -> ps2fs (PFS,
+       para montar/ler dentro das particoes via pfs0:).  dev9 pode ja' estar
+       carregado (stack de rede); o erro de duplicado e' ignorado.
+
+       IMPORTANTE: ps2hdd e ps2fs PRECISAM de argumentos (-o/-n/-m) para
+       alocar as tabelas internas de arquivos/buffers.  Sem eles, o ps2hdd
+       nao inicializa direito e o primeiro dopen("hdd0:") (listar particoes)
+       crasha.  Os valores batem com o wLaunchELF/OPL. */
+    static const char hddarg[] = "-o\0" "4\0" "-n\0" "20";   /* 4 open, 20 buffers */
+    static const char pfsarg[] = "-m\0" "4\0" "-o\0" "10\0" "-n\0" "40"; /* 4 mount, 10 open, 40 buf */
+
     ret = EmbeddedIrxLoad(ps2dev9_irx, sizeof(ps2dev9_irx), 0, NULL);
     printf("HddLoad: dev9 = %d\n", ret);
     ret = EmbeddedIrxLoad(ps2atad_irx, sizeof(ps2atad_irx), 0, NULL);
     printf("HddLoad: atad = %d\n", ret);
-    ret = EmbeddedIrxLoad(ps2hdd_irx,  sizeof(ps2hdd_irx),  0, NULL);
+    ret = EmbeddedIrxLoad(ps2hdd_irx,  sizeof(ps2hdd_irx),  sizeof(hddarg), hddarg);
     printf("HddLoad: hdd  = %d\n", ret);
+#ifdef HAVE_PS2FS
+    ret = EmbeddedIrxLoad(ps2fs_irx,   sizeof(ps2fs_irx),   sizeof(pfsarg), pfsarg);
+    printf("HddLoad: pfs  = %d\n", ret);
+#else
+    printf("HddLoad: pfs  = (nao embutido)\n");
+#endif
 
     s_hdd_loaded = 1;
     return 0;
