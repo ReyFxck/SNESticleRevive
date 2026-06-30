@@ -650,13 +650,14 @@ void SNGSU::Step()
     {
         if (m_bAlt1) {                        // LMS Rn,(yy): Rn = word[ramb:kk*2]
             Uint16 addr = (Uint16)(CodeFetch() * 2);
-            m_R[n] = RamReadWord(addr); m_LastRamAddr = addr;
+            Uint16 v = RamReadWord(addr); m_LastRamAddr = addr;
+            WriteR15Maybe(n, v);
         } else if (m_bAlt2) {                 // SMS (yy),Rn: word[ramb:kk*2] = Rn
             Uint16 addr = (Uint16)(CodeFetch() * 2);
             RamWriteWord(addr, m_R[n]); m_LastRamAddr = addr;
         } else {                              // IBT Rn,#imm8 (sign-extend)
             Uint8 imm = CodeFetch();
-            m_R[n] = (Uint16)(Int16)(Int8)imm;
+            WriteR15Maybe(n, (Uint16)(Int16)(Int8)imm);
         }
     }
     else if (op >= 0xF0 && op <= 0xFF)       // IWT Rn,#imm16 / LM / SM
@@ -664,14 +665,15 @@ void SNGSU::Step()
         if (m_bAlt1) {                        // LM Rn,(hilo)
             Uint8 lo = CodeFetch(), hi = CodeFetch();
             Uint16 addr = (Uint16)((hi << 8) | lo);
-            m_R[n] = RamReadWord(addr); m_LastRamAddr = addr;
+            Uint16 v = RamReadWord(addr); m_LastRamAddr = addr;
+            WriteR15Maybe(n, v);
         } else if (m_bAlt2) {                 // SM (hilo),Rn
             Uint8 lo = CodeFetch(), hi = CodeFetch();
             Uint16 addr = (Uint16)((hi << 8) | lo);
             RamWriteWord(addr, m_R[n]); m_LastRamAddr = addr;
         } else {                              // IWT Rn,#imm16
             Uint8 lo = CodeFetch(), hi = CodeFetch();
-            m_R[n] = (Uint16)(((Uint16)hi << 8) | lo);
+            WriteR15Maybe(n, (Uint16)(((Uint16)hi << 8) | lo));
         }
     }
     else if (op >= 0x05 && op <= 0x0F)       // branches (delay slot)

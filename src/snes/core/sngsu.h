@@ -141,6 +141,16 @@ private:
     void   ResetPrefix();    // Sreg=Dreg=0, alt1=alt2=b=0 (apos op normal)
     void   SetZSfromWord(Uint16 v);   // atualiza Z e S a partir de um resultado
 
+    // Escreve val em Rn; se n==15 (escrita no PC) vira um SALTO com DELAY
+    // SLOT (pipeline do GSU: a instrucao seguinte executa antes do salto
+    // valer), igual aos branches.  Sem isso, IWT/IBT/LM R15 saltavam na hora
+    // e a instrucao do delay slot era pulada -> decode do descompressor lia
+    // errado.  inline no header pra ser barato no laco principal.
+    inline void WriteR15Maybe(Uint8 n, Uint16 val) {
+        if (n == 15) { m_BranchTarget = val; m_BranchPending = TRUE; }
+        else         { m_R[n] = val; }
+    }
+
     // graficos
     Int32  ScreenBpp() const;                 // 2, 4 ou 8 (de SCMR.MD)
     Uint32 PixelTileNo(Uint8 x, Uint8 y) const;
