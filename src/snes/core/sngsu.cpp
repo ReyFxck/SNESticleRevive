@@ -23,6 +23,7 @@
 extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
 static int s_setupDump = 0;
+static int s_r4log = 0;     /* trap: quando R4 vira valor grande (lixo) */
 #define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
@@ -420,7 +421,7 @@ void SNGSU::Step()
     // contador que estoura), os regs de loop (R12/R13/R2/R3) e -- crucial --
     // o estado de PREFIXO (alt1/alt2/b) + Sreg/Dreg de CADA opcode, pra eu
     // saber EXATAMENTE como cada op e' decodificado e qual poe 0xE8FB no R4.
-    if (m_Runaway >= 1 && m_Runaway <= 200 && s_setupDump < 400)
+    if (m_Runaway >= 1 && m_Runaway <= 24 && s_setupDump < 48)
     {
         DLog("[gss] %02X:%04X op=%02X alt=%d%d b=%d s=%X d=%X | R2=%04X R3=%04X R4=%04X R6=%04X R12=%04X R13=%04X R14=%04X",
              (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
@@ -430,6 +431,8 @@ void SNGSU::Step()
              (unsigned)m_R[6], (unsigned)m_R[12], (unsigned)m_R[13], (unsigned)m_R[14]);
         s_setupDump++;
     }
+
+    Uint16 dbg_r4 = m_R[4];   /* p/ trap: detecta quando R4 vira lixo grande */
 
     Bool  bIsPrefix = FALSE;
     Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
@@ -721,6 +724,21 @@ void SNGSU::Step()
 
     if (!bIsPrefix)
         ResetPrefix();
+
+    // trap: a rotina B301 (descompressor) usa R4 como contador de bytes.
+    // No fluxo correto R4 e' pequeno; quando ele vira um valor grande e' o
+    // bug (o loop do meio dispara ~milhares de vezes -> RUNAWAY).  Loga o
+    // PC/opcode/contexto NO MOMENTO em que R4 e' escrito com valor > 0xFF,
+    // pra achar QUAL instrucao (e que dado de origem) corrompe o contador.
+    if (m_R[4] != dbg_r4 && m_R[4] > 0x00FF && s_r4log < 60)
+    {
+        DLog("[gsr4] %02X:%04X op=%02X R4 %04X->%04X | s=%X d=%X R14=%04X ROMBR=%02X RAMBR=%02X",
+             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
+             (unsigned)dbg_r4, (unsigned)m_R[4],
+             (unsigned)m_Sreg, (unsigned)m_Dreg,
+             (unsigned)m_R[14], (unsigned)m_ROMBR, (unsigned)m_RAMBR);
+        s_r4log++;
+    }
 
     // delay slot: aplica o salto pendente DEPOIS de executar a instrucao
     // seguinte ao branch/JMP/LOOP (1 delay slot, como no hardware).
