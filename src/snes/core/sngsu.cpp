@@ -438,7 +438,7 @@ void SNGSU::Step()
     // estao sendo shiftados), R12/R13 (contador/alvo do LOOP) e CY a cada
     // passo -- pra ver se a visita que monta R4=EC07 recebe R2/R3 ja' errados
     // (bug de leitura) ou se o loop conta demais (R12/R13/BEQ).
-    if (pc0 >= 0xB4B2 && pc0 <= 0xB4C2 && s_bllog < 200)
+    if (pc0 >= 0xB4B2 && pc0 <= 0xB4E2 && s_bllog < 320)
     {
         DLog("[gsbl] %04X op=%02X R2=%04X R3=%04X R4=%04X R12=%04X R13=%04X CY=%d a=%d%d b=%d s=%X d=%X",
              (unsigned)pc0, (unsigned)op,
