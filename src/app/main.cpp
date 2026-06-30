@@ -290,17 +290,23 @@ int main(int argc, char **argv)
 	init_cdfs_driver();
 	// DLog("[boot] init_cdfs_driver: done");
 
-	/* Kick the IOP-side cdvdman so sceCdGetDiskType returns the real
-	   disc type instead of SCECdNODISC.  Without this cdfs.irx's
-	   isValidDisc refuses to enumerate the root, and
-	   opendir("cdfs:/") returns NULL - which is exactly the
-	   "browser shows no files" symptom.  Same call the working
-	   InfinityStation project uses in
-	   ps2boot/storage/disc.c::ps2_disc_init_once. */
+	/* Inicia o cdvd SEM checar disco (SCECdINoD), nao SCECdINIT.  No boot
+	   por DISCO num PS2 real, o drive ainda esta assentando/girando e o
+	   SCECdINIT (que espera o disco) pode TRAVAR -> tela preta (so' no
+	   hardware; no emulador o drive ja' esta pronto).  SCECdINoD inicia o
+	   subsistema sem o check, evitando o lockup -- mesma defesa do
+	   wLaunchELF (loadCdModules).  O tipo do disco e' consultado depois,
+	   quando o browser entra em cdfs: (drive ja' pronto). */
 	// DLog("[boot] sceCdInit: enter");
-	sceCdInit(SCECdINIT);
+	sceCdInit(SCECdINoD);
 	// DLog("[boot] sceCdInit: done (diskType=%d)", sceCdGetDiskType());
 
+	/* Probes de boot DESATIVADOS (#if 0): faziam opendir/stat/fileXioDopen
+	   em cdfs: durante a inicializacao (codigo de debug -- os DLog ja'
+	   estavam comentados).  Num PS2 real bootando por disco isso tocava o
+	   drive cedo demais (antes de pronto) e podia travar/atrasar o boot.
+	   O browser le o cdfs: so' quando o usuario entra nele (drive pronto). */
+#if 0
 	/* Runtime FS probe: log opendir/stat for every top-level mount so
 	   the next boot tells us exactly where the browser breaks. The
 	   browser uses printf which never reaches the SIO log; this dup
@@ -357,6 +363,7 @@ int main(int argc, char **argv)
 		}
 	}
 	// DLog("[fxprobe] direct fileXio probe end");
+#endif
 
 	if (_Main_pBootPath[0]=='m' && _Main_pBootPath[1]=='c')
 	{
