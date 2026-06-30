@@ -53,6 +53,10 @@ extern "C" {
     /* numero de vezes que o modulo ja' deu a volta inteira (loop).  Usado
        para detectar fim de faixa e avancar para a proxima (playlist). */
     unsigned char jar_xm_get_loop_count(jar_xm_context_t *ctx);
+    /* liga/desliga interpolacao linear.  Desligada (nearest) e' mais barata
+       por sample -- usada no PS2 p/ segurar modulos de muitos canais (32ch)
+       em tempo real. */
+    void jar_xm_set_linear_interpolation(jar_xm_context_t *ctx, int enable);
 }
 
 #include "mainloop_bgm.h"
@@ -76,6 +80,16 @@ extern "C" {
    48000) amostras -- com 3072 e BGM_RATE<=48000 fica <=2048@32k, o mesmo
    pico que segurava 60fps, recarregando o ring (~107ms) em ~3 frames. */
 #define BGM_OUT_CHUNK   3072
+
+/* Teto de frames de SAIDA (48 kHz) sintetizados POR CHAMADA de BgmUpdate.
+   Em regime normal so' geramos ~800 (um frame @60fps), mas quando o ring
+   drena (ex.: bloqueio de disco ao trocar de faixa) avail pode chegar a
+   milhares -- sintetizar tudo de uma vez num unico frame faz um PICO de
+   CPU que estoura os 16ms (pior com XM de 32 canais) e causa o engasgo.
+   Limitar aqui espalha a recarga por varios frames: > 800 para nao ficar
+   pra tras do consumo, mas baixo o bastante pra nao dar pico.  ~1200
+   permite ~400 frames/recarga sem estourar o orcamento de CPU. */
+#define BGM_MAX_OUT_PER_FRAME 1200
 
 /* Limiar (em frames stereo) abaixo do qual consideramos que a cauda de
    audio do jogo ja' drenou do ring do audsrv.  Ao abrir o menu, o
@@ -303,6 +317,11 @@ static void _TryLoad(void)
             jar_xm_create_context_safe(&s_xm, s_xmBuf, (size_t)len, s_rate) == 0)
         {
             jar_xm_set_max_loop_count(s_xm, 0); /* 0 = loop infinito       */
+            /* PS2: desliga interpolacao linear -- modulos de muitos canais
+               (ate' 32) ficam pesados demais com ela ligada e fazem o menu
+               engasgar.  Nearest-neighbor segura o tempo real; a perda de
+               qualidade (agudos) e' aceitavel pra trilha de menu. */
+            jar_xm_set_linear_interpolation(s_xm, 0);
             s_state = BGM_XM;
             return;
         }
@@ -340,13 +359,15 @@ static void _BgmFree(void)
 
 /* Avanca para a proxima faixa do indice (sequencial, circular) e libera o
    decoder atual SEM re-armar o dreno -- usado pelo auto-advance quando a
-   faixa atual termina uma passada inteira.  Com 0/1 faixa nao ha "outra":
-   deixa a faixa atual seguir em loop (sem reload, sem hitch). */
-static void _BgmAdvance(void)
+   faixa atual termina uma passada inteira.  Retorna TRUE se trocou; com
+   0/1 faixa nao ha "outra": retorna FALSE (o chamador deixa a faixa unica
+   seguir em loop normal, sem reload nem hitch). */
+static Bool _BgmAdvance(void)
 {
-    if (s_indexCount <= 1) return;
+    if (s_indexCount <= 1) return FALSE;
     s_trackIdx = (s_trackIdx + 1) % s_indexCount;
     _BgmFreeDecoder();   /* mantem s_volSet: proxima faixa toca na hora */
+    return TRUE;
 }
 
 void BgmStop(void)
@@ -471,6 +492,7 @@ void BgmUpdate(void)
     avail = Aud_Available();
     if (avail <= 0) return;
     n = avail;
+    if (n > BGM_MAX_OUT_PER_FRAME) n = BGM_MAX_OUT_PER_FRAME; /* anti-pico (bug stutter) */
     if (n > BGM_OUT_CHUNK - 2) n = BGM_OUT_CHUNK - 2;
     if (n < 1) return;
 
@@ -497,6 +519,22 @@ void BgmUpdate(void)
             if (f < -32768.0f) f = -32768.0f;
             s_inter[k] = (short)f;
         }
+    }
+
+    /* Auto-advance (playlist): detecta o fim da faixa (o player completou
+       uma passada e voltou ao inicio) ANTES de enfileirar.  O buffer recem
+       sintetizado ja' pode conter o RECOMECO do loop -- enfileira-lo daria
+       os "estralos"/fragmentos.  Entao, se terminou, DESCARTA este buffer
+       e avanca: o ponto de loop e' o fim musical da faixa, cortar ali e' o
+       certo.  A cauda ja' no ring do audsrv cobre a troca enquanto a nova
+       faixa carrega.  Com 0/1 faixa _BgmAdvance retorna FALSE: caimos no
+       enqueue normal e a faixa unica segue em loop (sem descartar -> sem
+       silenciar). */
+    {
+        Bool ended = FALSE;
+        if      (s_state == BGM_MOD)        ended = (s_mod.loopcount > 0);
+        else if (s_state == BGM_XM && s_xm) ended = (jar_xm_get_loop_count(s_xm) > 0);
+        if (ended && _BgmAdvance()) return;   /* trocou: descarta buffer do loop */
     }
 
     /* reamostra s_rate -> 48 kHz (linear, ponto fixo 16.16) e
@@ -526,18 +564,4 @@ void BgmUpdate(void)
        acima, apos a cauda do jogo drenar. */
 
     Aud_Enqueue(s_left, s_right, n, 0); /* wait=0: best-effort, nao trava */
-
-    /* Auto-advance (playlist): quando a faixa atual completa uma passada
-       inteira, pula para a proxima do indice.  jar_mod/jar_xm continuam
-       em loop infinito por si so'; aqui detectamos a volta (loopcount) e
-       trocamos.  _BgmAdvance e' no-op com 0/1 faixa, entao nesse caso a
-       faixa unica simplesmente segue em loop.  A nova faixa carrega no
-       proximo BgmUpdate -- a cauda ja' enfileirada acima cobre o breve
-       hitch de leitura do disco. */
-    {
-        Bool ended = FALSE;
-        if      (s_state == BGM_MOD)            ended = (s_mod.loopcount > 0);
-        else if (s_state == BGM_XM && s_xm)     ended = (jar_xm_get_loop_count(s_xm) > 0);
-        if (ended) _BgmAdvance();
-    }
 }

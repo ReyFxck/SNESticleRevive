@@ -152,6 +152,12 @@ void jar_xm_set_max_loop_count(jar_xm_context_t* ctx, uint8_t loopcnt);
 //** Get the loop count of the currently playing module. This value is 0 when the module is still playing, 1 when the module has looped once, etc.
 uint8_t jar_xm_get_loop_count(jar_xm_context_t* ctx);
 
+//** Enable (default) or disable linear interpolation between sample points.
+// * Nearest-neighbor (disabled) is cheaper per sample -- useful on weak
+// * hardware such as the PS2 to keep many-channel modules realtime, at a
+// * small high-frequency quality cost.
+void jar_xm_set_linear_interpolation(jar_xm_context_t* ctx, bool enable);
+
 //** Mute or unmute a channel.
 // * @note Channel numbers go from 1 to jar_xm_get_number_of_channels(...).
 // * @return whether the channel was muted.
@@ -603,6 +609,10 @@ void jar_xm_free_context(jar_xm_context_t *ctx) {
 
 void jar_xm_set_max_loop_count(jar_xm_context_t *ctx, uint8_t loopcnt) {
     ctx->max_loop_count = loopcnt;
+}
+
+void jar_xm_set_linear_interpolation(jar_xm_context_t *ctx, bool enable) {
+    ctx->module.linear_interpolation = enable ? 1 : 0;
 }
 
 uint8_t jar_xm_get_loop_count(jar_xm_context_t *ctx) {
