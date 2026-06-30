@@ -54,11 +54,10 @@ extern "C" {
 
 extern "C" void DLog(const char *fmt, ...);
 
-/* Pasta de onde o ELF foi carregado (exportada pelo entrypoint do app);
-   usada para achar a pasta "covers" ao lado do ELF.  Declarada em escopo
-   de arquivo: linkage spec 'extern "C"' nao e' permitida em escopo de
-   bloco (dentro de funcao). */
-extern "C" char *MainGetBootDir();
+/* Pasta de onde o ELF foi carregado (definida em main.cpp com linkage
+   C++).  Declarada SEM extern "C" para casar com a definicao (igual
+   mainloop_init.cpp); usar extern "C" geraria undefined reference. */
+char *MainGetBootDir();
 
 /* Flush the GS texture cache before the next textured primitive (the
    "first texture shows, later ones don't" PS2 bug). */

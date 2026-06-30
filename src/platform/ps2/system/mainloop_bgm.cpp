@@ -169,9 +169,11 @@ static Bool _HasExt(const char *name, const char *ext)
 /* Escaneia as pastas candidatas UMA vez e indexa todas as faixas
    .mod/.xm achadas (so' os nomes/caminhos -- barato).  Sorteia uma faixa
    inicial (variedade por boot, sem custo de reload). */
-/* MainGetBootDir(): pasta de onde o ELF foi carregado (exportada pelo
-   entrypoint do app).  Usada para achar a pasta "bgm" AO LADO do ELF. */
-extern "C" char *MainGetBootDir();
+/* MainGetBootDir(): pasta de onde o ELF foi carregado (definida em
+   main.cpp com linkage C++).  Declarada SEM extern "C" para casar com a
+   definicao (igual mainloop_init.cpp); usada para achar a pasta "bgm" AO
+   LADO do ELF. */
+char *MainGetBootDir();
 
 static void _BuildIndex(void)
 {
