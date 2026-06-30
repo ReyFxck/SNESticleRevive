@@ -6,7 +6,10 @@
 #include <kernel.h>
 #include <loadfile.h>
 #include <sifrpc.h>
+#define NEWLIB_PORT_AWARE          /* libera fileXio no port newlib (igual main.cpp) */
+#include <fileXio.h>
 #include <fileXio_rpc.h>
+#undef NEWLIB_PORT_AWARE
 
 #include "embedded_irx.h"
 

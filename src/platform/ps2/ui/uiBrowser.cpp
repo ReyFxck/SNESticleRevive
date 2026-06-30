@@ -10,8 +10,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#define NEWLIB_PORT_AWARE          /* libera fileXio no port newlib (igual main.cpp) */
+#include <fileXio.h>
 #include <fileXio_rpc.h>   /* HDD APA: fileXioDopen/Dread (listar particoes) */
 #include <libhdd.h>        /* ATTR_MAIN_PARTITION / FS_TYPE_PFS */
+#undef NEWLIB_PORT_AWARE
 #include "types.h"
 #if 0
 #include "font.h"
