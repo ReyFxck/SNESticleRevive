@@ -416,15 +416,18 @@ void SNGSU::Step()
     Uint16 pc0 = m_R[15];
     Uint8 op = CodeFetch();
 
-    // dump do SETUP do B301: primeiras ~160 instrucoes apos o GO, com R4 (o
-    // contador que estoura), R5/R6/R1/R14.  Captura os 2 primeiros GOs (ambos
-    // B301).  Mostra qual opcode poe 0xE8FB no R4.
-    if (m_Runaway >= 1 && m_Runaway <= 160 && s_setupDump < 320)
+    // dump do SETUP do B301: primeiras ~200 instrucoes apos o GO, com R4 (o
+    // contador que estoura), os regs de loop (R12/R13/R2/R3) e -- crucial --
+    // o estado de PREFIXO (alt1/alt2/b) + Sreg/Dreg de CADA opcode, pra eu
+    // saber EXATAMENTE como cada op e' decodificado e qual poe 0xE8FB no R4.
+    if (m_Runaway >= 1 && m_Runaway <= 200 && s_setupDump < 400)
     {
-        DLog("[gss] %02X:%04X op=%02X R0=%04X R1=%04X R4=%04X R5=%04X R6=%04X R7=%04X R14=%04X",
+        DLog("[gss] %02X:%04X op=%02X alt=%d%d b=%d s=%X d=%X | R2=%04X R3=%04X R4=%04X R6=%04X R12=%04X R13=%04X R14=%04X",
              (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
-             (unsigned)m_R[0], (unsigned)m_R[1], (unsigned)m_R[4],
-             (unsigned)m_R[5], (unsigned)m_R[6], (unsigned)m_R[7], (unsigned)m_R[14]);
+             (int)m_bAlt1, (int)m_bAlt2, (int)m_bB,
+             (unsigned)m_Sreg, (unsigned)m_Dreg,
+             (unsigned)m_R[2], (unsigned)m_R[3], (unsigned)m_R[4],
+             (unsigned)m_R[6], (unsigned)m_R[12], (unsigned)m_R[13], (unsigned)m_R[14]);
         s_setupDump++;
     }
 
