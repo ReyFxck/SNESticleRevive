@@ -74,14 +74,17 @@ void MmceSupportSetEnabled(int enabled);
 int  MmceLoadEmbeddedIrx(void);
 
 /* Mass (USB): a stack USB sempre sobe no boot; este flag controla a
-   listagem de mass0:/mass1: e a carga do mx4sio.  Host (host:): so'
-   listagem (sem modulo).  Mx4sioLoadIfEnabled: carrega mx4sio_bd APOS a
-   config se Mass estiver ligado (chamado em mainloop_init, fora do boot). */
+   listagem de mass0:/mass1:.  Host (host:): so' listagem (sem modulo).
+   MX4SIO (SD via SIO2) tem toggle PROPRIO (Mx4sioIsEnabled/SetEnabled),
+   padrao DESLIGADO -- Mx4sioLoadIfEnabled carrega o mx4sio_bd APOS a
+   config se o toggle estiver ligado (chamado em mainloop_init). */
 int  MassStorageIsEnabled(void);
 void MassStorageSetEnabled(int enabled);
 int  HostIsEnabled(void);
 void HostSetEnabled(int enabled);
 int  Mx4sioLoadIfEnabled(void);
+int  Mx4sioIsEnabled(void);
+void Mx4sioSetEnabled(int enabled);
 
 #ifdef __cplusplus
 }

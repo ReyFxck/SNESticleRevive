@@ -395,10 +395,18 @@ extern "C" void HostSetEnabled(int e)        { s_host_enabled = e ? 1 : 0; }
  * (chamado em mainloop_init), e so' se o suporte a Mass estiver ligado.
  * Carga unica. */
 static int s_mx4sio_loaded = 0;
+/* MX4SIO num toggle PROPRIO (separado do Mass/USB), padrao DESLIGADO.  O
+ * mx4sio_bd.irx fica sondando o SIO2 atras de um cartao SD; quem nao tem o
+ * adaptador nao deve carregar (evita o flood de "Trying to init card" e os
+ * "Unhandled SIO mode" do emulador).  USB Mass (usbmass_bd) e' independente. */
+static int s_mx4sio_enabled = 0;
+
+extern "C" int  Mx4sioIsEnabled(void)        { return s_mx4sio_enabled; }
+extern "C" void Mx4sioSetEnabled(int en)     { s_mx4sio_enabled = en ? 1 : 0; }
 
 extern "C" int Mx4sioLoadIfEnabled(void)
 {
-    if (!s_mass_enabled) return -1;   /* mass desligado: nao carrega */
+    if (!s_mx4sio_enabled) return -1; /* toggle MX4SIO desligado (padrao) */
     if (s_mx4sio_loaded) return 0;    /* ja carregado */
 
 #ifdef HAVE_MX4SIO
