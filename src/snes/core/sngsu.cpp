@@ -27,6 +27,7 @@ static int s_r4log = 0;     /* trap: quando R4 vira valor grande (lixo) */
 static int s_bllog = 0;     /* trace do loop B4B2-B4C2 que monta R4 */
 static int s_gblog = 0;     /* trace dos GETB (bytes-fonte lidos da ROM) */
 static int s_r12log = 0;    /* trap: onde R12 (nº de bits) e' carregado */
+static int s_dclog = 0;     /* trace da arvore de decode do token (dispatch) */
 #define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
@@ -439,7 +440,7 @@ void SNGSU::Step()
     // estao sendo shiftados), R12/R13 (contador/alvo do LOOP) e CY a cada
     // passo -- pra ver se a visita que monta R4=EC07 recebe R2/R3 ja' errados
     // (bug de leitura) ou se o loop conta demais (R12/R13/BEQ).
-    if (pc0 >= 0xB4B2 && pc0 <= 0xB4E2 && s_bllog < 600)
+    if (pc0 >= 0xB4B2 && pc0 <= 0xB4E2 && s_bllog < 90)
     {
         DLog("[gsbl] %04X op=%02X R2=%04X R3=%04X R4=%04X R12=%04X R13=%04X CY=%d a=%d%d b=%d s=%X d=%X",
              (unsigned)pc0, (unsigned)op,
@@ -451,6 +452,25 @@ void SNGSU::Step()
 
     Uint16 dbg_r4 = m_R[4];   /* p/ trap: detecta quando R4 vira lixo grande */
     Uint16 dbg_r12 = m_R[12]; /* p/ trap: detecta onde R12 (nº de bits) e' carregado */
+
+    /* trace da ARVORE DE DECODE do token: o codigo acumulado (R4) e' testado
+       por CMP/branches em B33E-B47F pra escolher qual handler de token rodar
+       (B337/B3C6/B3F0/B40D/B45E).  Loga op + regs + flags pra ver QUAL branch
+       manda pro handler errado (B45E=16bits).  Exclui o loop de saida
+       (B384-B392) e o refill (B39E-B3AF) que floodariam. */
+    if (pc0 >= 0xB33E && pc0 <= 0xB47F &&
+        !(pc0 >= 0xB380 && pc0 <= 0xB392) &&
+        !(pc0 >= 0xB39E && pc0 <= 0xB3AF) &&
+        s_dclog < 400)
+    {
+        DLog("[gsdc] %04X op=%02X a=%d%d b=%d s=%X d=%X | R0=%04X R1=%04X R4=%04X R5=%04X R7=%04X | S=%d Z=%d CY=%d OV=%d",
+             (unsigned)pc0, (unsigned)op, (int)m_bAlt1, (int)m_bAlt2, (int)m_bB,
+             (unsigned)m_Sreg, (unsigned)m_Dreg,
+             (unsigned)m_R[0], (unsigned)m_R[1], (unsigned)m_R[4],
+             (unsigned)m_R[5], (unsigned)m_R[7],
+             (int)m_bS, (int)m_bZ, (int)m_bCY, (int)m_bOV);
+        s_dclog++;
+    }
 
     Bool  bIsPrefix = FALSE;
     Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
