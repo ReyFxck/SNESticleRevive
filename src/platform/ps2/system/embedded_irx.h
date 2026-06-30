@@ -86,6 +86,11 @@ int  Mx4sioLoadIfEnabled(void);
 int  Mx4sioIsEnabled(void);
 void Mx4sioSetEnabled(int enabled);
 
+/* HD interno (APA): traduz "hdd0:/PART/resto" -> "pfs0:/resto" montando a
+   particao.  Retorna 2=lista de particoes, 1=traduziu, -1=falha, 0=nao-hdd.
+   Ver implementacao em embedded_irx.cpp. */
+int  HddMapPath(const char *uiPath, char *out, int outsz);
+
 #ifdef __cplusplus
 }
 #endif

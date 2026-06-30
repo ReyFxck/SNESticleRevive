@@ -19,6 +19,7 @@
 #include "audmixbuffer.h"
 #include "emumovie.h"
 #include "mainloop_load.h"
+#include "embedded_irx.h"   /* HddMapPath (hdd0:/PART -> pfs0:) */
 
 extern "C" {
 #include "miniz_compat.h"
@@ -205,6 +206,13 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 	{
 		return FALSE;
 	}
+
+	/* HD interno (APA): traduz "hdd0:/PARTICAO/.../rom" -> "pfs0:/.../rom"
+	   (monta a particao em pfs0:).  Para os demais dispositivos e' no-op,
+	   entao pFileName segue inalterado. */
+	char hddPath[1024];
+	if (HddMapPath(pFileName, hddPath, sizeof(hddPath)) == 1)
+		pFileName = hddPath;
 
 	// make copy of filename
 	snprintf(FileName, sizeof(FileName), "%s", pFileName);

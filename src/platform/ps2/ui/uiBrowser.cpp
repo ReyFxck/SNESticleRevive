@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <fileXio_rpc.h>   /* HDD APA: fileXioDopen/Dread (listar particoes) */
+#include <libhdd.h>        /* ATTR_MAIN_PARTITION / FS_TYPE_PFS */
 #include "types.h"
 #if 0
 #include "font.h"
@@ -1172,14 +1174,23 @@ void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 void CBrowserScreen::SetDir(const Char *pDir)
 {
     DIR *dir;
+    Char openBuf[1024];
+    const Char *openPath = pDir;
+    /* 0=nao-hdd, 1=dentro de particao (pfs0:), 2=lista de particoes, -1=falha */
+    int hddKind = 0;
 
     // DLog("[ui] MenuDir: '%s'", pDir);
 
 	/* Carga PREGUICOSA do HD interno: ao entrar em hdd0: (ou qualquer
-	   subpasta dele), carrega dev9/ps2atad/ps2hdd AGORA -- nunca no boot.
-	   No-op se o suporte a HDD estiver desligado ou ja carregado. */
+	   subpasta dele), carrega dev9/ps2atad/ps2hdd/ps2fs AGORA -- nunca no
+	   boot.  Depois traduz o caminho da UI ("hdd0:/PART/...") para o PFS
+	   real ("pfs0:/..."), montando a particao.  No-op se HDD desligado. */
 	if (pDir[0] == 'h' && pDir[1] == 'd' && pDir[2] == 'd')
+	{
 		HddLoadEmbeddedIrx();
+		hddKind = HddMapPath(pDir, openBuf, sizeof(openBuf));
+		if (hddKind == 1) openPath = openBuf;   /* "pfs0:/..." */
+	}
 
 	/* Idem para MMCE (MemCard PRO2 / SD2PSX): carrega mmceman ao entrar
 	   em mmce0:/mmce1:, nunca no boot. */
@@ -1198,9 +1209,36 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	ForceDraw();
 
 
-	if (strlen(pDir) > 0)
+	if (hddKind == 2)
 	{
-		dir = opendir(pDir);
+		/* Lista de particoes APA via fileXioDopen("hdd0:").  O opendir do
+		   glue do fileXio nao enumera particoes; o fileXioDopen sim (jeito
+		   do wLaunchELF/OPL).  Cada particao vira um "diretorio". */
+		int hfd = fileXioDopen("hdd0:");
+		if (hfd >= 0)
+		{
+			iox_dirent_t hde;
+			while (fileXioDread(hfd, &hde) > 0)
+			{
+				if (hde.name[0] == '\0') continue;
+				/* So' particoes PFS PRINCIPAIS (igual wLaunchELF): pula
+				   sub-particoes e particoes de sistema (__mbr, __net...),
+				   que nao sao montaveis/navegaveis como pfs0:. */
+				if (hde.stat.attr != ATTR_MAIN_PARTITION ||
+				    hde.stat.mode != FS_TYPE_PFS)
+					continue;
+				AddEntry(hde.name, BROWSER_ENTRYTYPE_DIR, 0);
+			}
+			fileXioDclose(hfd);
+		}
+	}
+	else if (hddKind < 0)
+	{
+		/* falha ao montar a particao -> lista vazia (sem crashar) */
+	}
+	else if (strlen(openPath) > 0)
+	{
+		dir = opendir(openPath);
 		// DLog("[ui] opendir('%s') -> %p (errno=%d)", pDir, (void *)dir, dir ? 0 : errno);
 		if (dir != NULL)
 		{
@@ -1234,7 +1272,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 				if (!typeKnown)
 				{
 					snprintf(childPath, sizeof(childPath),
-					         "%s%s", m_Dir, de->d_name);
+					         "%s%s", openPath, de->d_name);
 					if (stat(childPath, &st) == 0)
 					{
 						bIsDir = S_ISDIR(st.st_mode) ? true : false;
@@ -1257,7 +1295,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					if (nSize == 0)
 					{
 						snprintf(childPath, sizeof(childPath),
-						         "%s%s", m_Dir, de->d_name);
+						         "%s%s", openPath, de->d_name);
 						if (stat(childPath, &st) == 0)
 							nSize = (Int32)st.st_size;
 					}

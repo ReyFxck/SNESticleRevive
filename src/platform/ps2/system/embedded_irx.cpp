@@ -6,6 +6,7 @@
 #include <kernel.h>
 #include <loadfile.h>
 #include <sifrpc.h>
+#include <fileXio_rpc.h>
 
 #include "embedded_irx.h"
 
@@ -351,6 +352,52 @@ extern "C" int HddLoadEmbeddedIrx(void)
 
     s_hdd_loaded = 1;
     return 0;
+}
+
+/* Traduz um caminho da UI no formato "hdd0:/PARTICAO/resto" para o caminho
+ * real do PFS, montando pfs0: na particao (remonta se a particao mudou).
+ *   - "hdd0:" ou "hdd0:/"  -> escreve "" em out e retorna 2 (LISTA de
+ *     particoes; o chamador deve usar fileXioDopen("hdd0:")).
+ *   - "hdd0:/PART/sub"     -> monta pfs0:=hdd0:PART, escreve "pfs0:/sub",
+ *     retorna 1.
+ *   - falha ao montar      -> retorna -1.
+ *   - nao e' caminho hdd0: -> retorna 0 (out inalterado).
+ * Mantem uma unica particao montada de cada vez (pfs0:). */
+extern "C" int HddMapPath(const char *uiPath, char *out, int outsz)
+{
+    static char s_mounted[128] = { 0 };
+
+    if (!uiPath || strncmp(uiPath, "hdd0:", 5) != 0)
+        return 0;
+
+    const char *p = uiPath + 5;          /* depois de "hdd0:" */
+    while (*p == '/') p++;               /* pula barras -> "PART/..." ou "" */
+    if (*p == 0)                         /* lista de particoes */
+    {
+        if (out && outsz) out[0] = 0;
+        return 2;
+    }
+
+    char part[128];
+    int i = 0;
+    while (p[i] && p[i] != '/' && i < (int)sizeof(part) - 1) { part[i] = p[i]; i++; }
+    part[i] = 0;
+    const char *rest = p + i;            /* "/sub/..." ou "" */
+
+    if (strcmp(s_mounted, part) != 0)    /* montar/remontar pfs0: */
+    {
+        if (s_mounted[0]) { fileXioUmount("pfs0:"); s_mounted[0] = 0; }
+        char dev[160];
+        snprintf(dev, sizeof(dev), "hdd0:%s", part);
+        if (fileXioMount("pfs0:", dev, FIO_MT_RDWR) < 0)
+            return -1;
+        strncpy(s_mounted, part, sizeof(s_mounted) - 1);
+        s_mounted[sizeof(s_mounted) - 1] = 0;
+    }
+
+    if (out && outsz)
+        snprintf(out, outsz, "pfs0:%s", (*rest) ? rest : "/");
+    return 1;
 }
 
 /* MMCE (MemCard PRO2 / SD2PSX via mmceman) -- carga PREGUICOSA e opcional,
