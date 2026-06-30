@@ -7,6 +7,7 @@
 #include <loadfile.h>
 #include <sifrpc.h>
 #define NEWLIB_PORT_AWARE          /* libera fileXio no port newlib (igual main.cpp) */
+#include <io_common.h>             /* FIO_MT_RDWR (guard proprio newlib) */
 #include <fileXio.h>
 #include <fileXio_rpc.h>
 #undef NEWLIB_PORT_AWARE
