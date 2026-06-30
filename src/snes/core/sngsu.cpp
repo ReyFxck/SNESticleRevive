@@ -24,6 +24,30 @@ extern "C" void DLog(const char *fmt, ...);
 static int s_gsuLog = 0;
 #define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
+// Dedup de log: quando a MESMA rotina (pbr:r15) roda em loop sem plotar nada
+// (ex.: Yoshi preso em 8AFB), agrupamos as linhas GO/STOP repetidas num unico
+// resumo "repetiu +N vezes" para o log nao saturar e continuar legivel.
+static Uint32 s_lastGoKey    = 0xFFFFFFFF;  // (pbr<<16)|r15 do ultimo GO
+static Uint32 s_repeatCount  = 0;           // repeticoes seguidas da mesma rotina
+static Bool   s_suppressStop = FALSE;       // suprime o STOP da repeticao atual
+
+// Trace do polling do SNES no SFR enquanto o GSU esta PARADO: revela em que
+// flag o jogo fica preso depois do ultimo STOP (ex.: Star Fox preto/travado).
+// Deduplicado por (addr<<8|valor) para nao inundar o log.
+static Uint32 s_lastPollKey  = 0xFFFFFFFF;
+static Uint32 s_pollRepeat   = 0;
+static void GsuPollTrace(Uint16 a, Uint8 v, Bool bRunning)
+{
+    if (bRunning) return;                       // so' interessa quando parado
+    Uint32 key = ((Uint32)a << 8) | v;
+    if (key == s_lastPollKey) { s_pollRepeat++; return; }
+    if (s_pollRepeat > 0)
+        GSU_LOG("[gsu]  ^-- poll anterior x%u", (unsigned)s_pollRepeat);
+    s_pollRepeat  = 0;
+    s_lastPollKey = key;
+    GSU_LOG("[gsu] POLL $%04X=%02X (gsu parado)", (unsigned)a, (unsigned)v);
+}
+
 SNGSU::SNGSU()
 {
     m_pRom = NULL; m_uRomSize = 0; m_uRomMask = 0;
@@ -204,8 +228,8 @@ Uint8 SNGSU::ReadReg(Uint16 uAddrLow)
 
     switch (a)
     {
-    case 0x3030: return SfrLow();
-    case 0x3031: { Uint8 v = SfrHigh(); m_bIrq = FALSE; return v; } // leitura limpa IRQ
+    case 0x3030: { Uint8 v = SfrLow();  GsuPollTrace(0x3030, v, m_bGo); return v; }
+    case 0x3031: { Uint8 v = SfrHigh(); GsuPollTrace(0x3031, v, m_bGo); m_bIrq = FALSE; return v; } // leitura limpa IRQ
     case 0x3034: return m_PBR;
     case 0x3036: return m_ROMBR;
     case 0x3037: return m_CFGR;
@@ -237,9 +261,28 @@ void SNGSU::WriteReg(Uint16 uAddrLow, Uint8 uData)
             m_bGo = TRUE;
             m_Runaway = 0;      // reinicia o watchdog a cada novo START
             m_PlotCount = 0;    // diag: conta PLOTs desta rotina
-            GSU_LOG("[gsu] GO pbr=%02X r15=%04X scmr=%02X scbr=%02X",
-                    (unsigned)m_PBR, (unsigned)m_R[15],
-                    (unsigned)m_SCMR, (unsigned)m_SCBR);
+            {
+                Uint32 goKey = ((Uint32)m_PBR << 16) | m_R[15];
+                if (goKey == s_lastGoKey)
+                {
+                    // mesma rotina de novo: acumula e suprime GO+STOP
+                    s_repeatCount++;
+                    s_suppressStop = TRUE;
+                }
+                else
+                {
+                    // rotina nova: descarrega o resumo da anterior (se houve)
+                    if (s_repeatCount > 0)
+                        GSU_LOG("[gsu]  ^-- rotina anterior repetiu +%u vezes",
+                                (unsigned)s_repeatCount);
+                    s_repeatCount  = 0;
+                    s_suppressStop = FALSE;
+                    s_lastGoKey    = goKey;
+                    GSU_LOG("[gsu] GO pbr=%02X r15=%04X scmr=%02X scbr=%02X",
+                            (unsigned)m_PBR, (unsigned)m_R[15],
+                            (unsigned)m_SCMR, (unsigned)m_SCBR);
+                }
+            }
         }
         return;
     }
@@ -407,6 +450,10 @@ void SNGSU::Step()
     // bem antes disto.
     if (++m_Runaway > 2000000)
     {
+        if (s_repeatCount > 0)
+            GSU_LOG("[gsu]  ^-- rotina anterior repetiu +%u vezes",
+                    (unsigned)s_repeatCount);
+        s_repeatCount = 0;
         GSU_LOG("[gsu] RUNAWAY! r15=%04X pbr=%02X", (unsigned)m_R[15], (unsigned)m_PBR);
         m_bGo = FALSE; m_bIrq = TRUE; m_Runaway = 0;
         return;
@@ -683,10 +730,20 @@ void SNGSU::Step()
     }
     else if (op == 0x00)                     // STOP
     {
-        GSU_LOG("[gsu] STOP steps=%u plots=%u r15=%04X scmr=%02X scbr=%02X cfgr=%02X",
-                (unsigned)m_Runaway, (unsigned)m_PlotCount,
-                (unsigned)m_R[15], (unsigned)m_SCMR, (unsigned)m_SCBR,
-                (unsigned)m_CFGR);
+        // Se a rotina e' uma repeticao identica e nao plotou nada, suprime o
+        // STOP (vai contar no resumo "repetiu +N vezes").  Se plotou, registra
+        // mesmo repetida, pois e' progresso de render que vale ver.
+        if (s_suppressStop && m_PlotCount == 0)
+        {
+            /* silencioso: acumulado em s_repeatCount */
+        }
+        else
+        {
+            GSU_LOG("[gsu] STOP steps=%u plots=%u r15=%04X scmr=%02X scbr=%02X cfgr=%02X",
+                    (unsigned)m_Runaway, (unsigned)m_PlotCount,
+                    (unsigned)m_R[15], (unsigned)m_SCMR, (unsigned)m_SCBR,
+                    (unsigned)m_CFGR);
+        }
         m_bGo = FALSE;
         // IRQ ao SNES so' se NAO mascarado em CFGR.irq (bit7).  Igual hardware
         // /bsnes: instructionSTOP so' levanta irq quando cfgr.irq==0.  Setar
