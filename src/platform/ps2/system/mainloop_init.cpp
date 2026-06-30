@@ -403,7 +403,35 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 	// init menu
 	_MainLoop_pBrowserScreen = new CBrowserScreen(6000);
 	_MainLoop_pBrowserScreen->SetMsgFunc(_MainLoopBrowserEvent);
-	_MainLoop_pBrowserScreen->SetDir(MENU_STARTDIR);
+
+	/* Diretorio inicial: se o ELF foi carregado de um dispositivo navegavel
+	   (mass/USB, memory card, host), o browser comeca NA PASTA do proprio
+	   ELF -- convencao dos homebrews ("achar onde o ELF esta no dispositivo").
+	   Para boot por CD/desconhecido, cai na lista de drives (MENU_STARTDIR).
+	   Devices complexos (hdd/pfs) ficam de fora para nao conflitar com o
+	   mount do OSD; o usuario entra em hdd0: manualmente. */
+	{
+		const char *bd = MainGetBootDir();
+		Char startDir[256];
+		startDir[0] = 0;
+		if (bd && (strncmp(bd, "mass", 4) == 0 ||
+		           strncmp(bd, "mc0:", 4) == 0 ||
+		           strncmp(bd, "mc1:", 4) == 0 ||
+		           strncmp(bd, "host", 4) == 0))
+		{
+			int n = 0;
+			while (bd[n] && n < (int)sizeof(startDir) - 2)
+			{
+				startDir[n] = (bd[n] == '\\') ? '/' : bd[n];  /* normaliza '\' */
+				n++;
+			}
+			startDir[n] = 0;
+			if (n > 0 && startDir[n - 1] != '/') { startDir[n] = '/'; startDir[n + 1] = 0; }
+		}
+		BOOTLOG("[boot] browser start dir = '%s' (bootdir='%s')\n",
+		        startDir, bd ? bd : "(null)");
+		_MainLoop_pBrowserScreen->SetDir(startDir[0] ? startDir : MENU_STARTDIR);
+	}
 
 	_MainLoop_pNetworkScreen = new CNetworkScreen();
 	_MainLoop_pNetworkScreen->SetMsgFunc(_MainLoopNetworkEvent);

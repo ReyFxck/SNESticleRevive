@@ -42,6 +42,7 @@
 #include "types.h"
 #include "texture.h"
 #include "poly.h"
+#include "embedded_irx.h"   /* HddMapPath (capas no HD: hdd0:->pfs0:) */
 
 extern "C" {
 #include "gs.h"
@@ -130,6 +131,12 @@ static char    s_curRom[COVER_KEY_MAX] = "";
 static void _SplitRomPath(const char *romPath, char *dir, size_t dirSz,
                           char *base, size_t baseSz)
 {
+	/* HD interno (APA): traduz "hdd0:/PART/..." -> "pfs0:/..." (particao ja'
+	   montada pelo browser) para que as pastas de capa resolvam no HD. */
+	char hddPath[1024];
+	if (HddMapPath(romPath, hddPath, sizeof(hddPath)) == 1)
+		romPath = hddPath;
+
 	const char *slash = strrchr(romPath, '/');
 	const char *fname = slash ? slash + 1 : romPath;
 	size_t dlen = slash ? (size_t)(fname - romPath) : 0;
