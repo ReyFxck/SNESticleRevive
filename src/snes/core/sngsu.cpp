@@ -26,6 +26,7 @@ static int s_setupDump = 0;
 static int s_r4log = 0;     /* trap: quando R4 vira valor grande (lixo) */
 static int s_bllog = 0;     /* trace do loop B4B2-B4C2 que monta R4 */
 static int s_gblog = 0;     /* trace dos GETB (bytes-fonte lidos da ROM) */
+static int s_r12log = 0;    /* trap: onde R12 (nº de bits) e' carregado */
 #define GSU_LOG(...) do { if (s_gsuLog < 1200) { DLog(__VA_ARGS__); s_gsuLog++; } } while (0)
 
 SNGSU::SNGSU()
@@ -438,7 +439,7 @@ void SNGSU::Step()
     // estao sendo shiftados), R12/R13 (contador/alvo do LOOP) e CY a cada
     // passo -- pra ver se a visita que monta R4=EC07 recebe R2/R3 ja' errados
     // (bug de leitura) ou se o loop conta demais (R12/R13/BEQ).
-    if (pc0 >= 0xB4B2 && pc0 <= 0xB4E2 && s_bllog < 320)
+    if (pc0 >= 0xB4B2 && pc0 <= 0xB4E2 && s_bllog < 600)
     {
         DLog("[gsbl] %04X op=%02X R2=%04X R3=%04X R4=%04X R12=%04X R13=%04X CY=%d a=%d%d b=%d s=%X d=%X",
              (unsigned)pc0, (unsigned)op,
@@ -449,6 +450,7 @@ void SNGSU::Step()
     }
 
     Uint16 dbg_r4 = m_R[4];   /* p/ trap: detecta quando R4 vira lixo grande */
+    Uint16 dbg_r12 = m_R[12]; /* p/ trap: detecta onde R12 (nº de bits) e' carregado */
 
     Bool  bIsPrefix = FALSE;
     Bool  doBranch  = m_BranchPending;   // delay slot do salto anterior
@@ -761,6 +763,18 @@ void SNGSU::Step()
              (unsigned)m_Sreg, (unsigned)m_Dreg,
              (unsigned)m_R[14], (unsigned)m_ROMBR, (unsigned)m_RAMBR);
         s_r4log++;
+    }
+
+    // trap: onde R12 (o contador "ler N bits" do descompressor) e' CARREGADO
+    // (exclui o LOOP 0x3C que so' decrementa).  A visita ruim entra com
+    // R12=0x10; aqui descobrimos qual instrucao poe esse valor e de onde.
+    if (m_R[12] != dbg_r12 && op != 0x3C && s_r12log < 40)
+    {
+        DLog("[gsr12] %02X:%04X op=%02X R12 %04X->%04X | s=%X d=%X R14=%04X",
+             (unsigned)m_PBR, (unsigned)pc0, (unsigned)op,
+             (unsigned)dbg_r12, (unsigned)m_R[12],
+             (unsigned)m_Sreg, (unsigned)m_Dreg, (unsigned)m_R[14]);
+        s_r12log++;
     }
 
     // delay slot: aplica o salto pendente DEPOIS de executar a instrucao
