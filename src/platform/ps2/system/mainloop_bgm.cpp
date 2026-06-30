@@ -8,8 +8,10 @@
  * o menu o core do SNES/NES nao roda, entao o BGM e' o unico produtor
  * de audio -- nao briga com o AudMixBuffer do jogo.
  *
- * Descoberta de arquivo: procura a 1a faixa .mod/.xm em BGM_PATH (define
- * do Makefile) e em pastas padrao.  Carrega uma faixa e toca em loop.
+ * Descoberta de arquivo: procura todas as faixas .mod/.xm em BGM_PATH
+ * (define do Makefile) e em pastas padrao, indexa-as e toca como uma
+ * playlist: ao terminar uma faixa avanca para a proxima (e ao sair de uma
+ * ROM, via BgmNext, tambem avanca para dar variedade).
  *
  * Players de terceiros:
  *   jar_mod.h  - dominio publico (unlicense), Joshua Reisenauer/mackron
@@ -48,6 +50,9 @@ extern "C" {
     void jar_xm_generate_samples_16bit(jar_xm_context_t *ctx, short *output,
                                        size_t numsamples);
     void jar_xm_set_max_loop_count(jar_xm_context_t *ctx, unsigned char loopcnt);
+    /* numero de vezes que o modulo ja' deu a volta inteira (loop).  Usado
+       para detectar fim de faixa e avancar para a proxima (playlist). */
+    unsigned char jar_xm_get_loop_count(jar_xm_context_t *ctx);
 }
 
 #include "mainloop_bgm.h"
@@ -307,17 +312,39 @@ static void _TryLoad(void)
 
 /* ---- API ------------------------------------------------------------- */
 
-/* Libera o decoder e o buffer do arquivo.  Chamado SO' quando a trilha e'
-   desligada (BgmSetVolume(0)) -- nao no fluxo de abrir jogo, para o menu
-   reabrir sem reler do disco. */
-static void _BgmFree(void)
+/* Libera APENAS o decoder e o buffer do arquivo, deixando o estado pronto
+   para o proximo BgmUpdate recarregar (s_state = UNTRIED).  NAO mexe na
+   logica de volume/dreno da sessao de menu (s_volSet/s_drainWait) -- assim
+   o auto-advance (trocar de faixa no meio do menu) toca a proxima na hora,
+   sem re-esperar o dreno da cauda do jogo. */
+static void _BgmFreeDecoder(void)
 {
     if (s_state == BGM_MOD) jar_mod_unload(&s_mod);
     if (s_state == BGM_XM && s_xm) { jar_xm_free_context(s_xm); s_xm = NULL; }
     if (s_xmBuf) { free(s_xmBuf); s_xmBuf = NULL; }
     s_state  = BGM_UNTRIED;
+}
+
+/* Libera o decoder e o buffer do arquivo E re-arma a logica de
+   volume/dreno.  Chamado quando a trilha e' desligada (BgmSetVolume(0)) ou
+   ao abrir o menu (BgmNext): nesses casos queremos esperar a cauda de
+   audio do jogo drenar antes de soltar o tracker de novo. */
+static void _BgmFree(void)
+{
+    _BgmFreeDecoder();
     s_volSet = FALSE;
     s_drainWait = 0;
+}
+
+/* Avanca para a proxima faixa do indice (sequencial, circular) e libera o
+   decoder atual SEM re-armar o dreno -- usado pelo auto-advance quando a
+   faixa atual termina uma passada inteira.  Com 0/1 faixa nao ha "outra":
+   deixa a faixa atual seguir em loop (sem reload, sem hitch). */
+static void _BgmAdvance(void)
+{
+    if (s_indexCount <= 1) return;
+    s_trackIdx = (s_trackIdx + 1) % s_indexCount;
+    _BgmFreeDecoder();   /* mantem s_volSet: proxima faixa toca na hora */
 }
 
 void BgmStop(void)
@@ -497,4 +524,18 @@ void BgmUpdate(void)
        acima, apos a cauda do jogo drenar. */
 
     Aud_Enqueue(s_left, s_right, n, 0); /* wait=0: best-effort, nao trava */
+
+    /* Auto-advance (playlist): quando a faixa atual completa uma passada
+       inteira, pula para a proxima do indice.  jar_mod/jar_xm continuam
+       em loop infinito por si so'; aqui detectamos a volta (loopcount) e
+       trocamos.  _BgmAdvance e' no-op com 0/1 faixa, entao nesse caso a
+       faixa unica simplesmente segue em loop.  A nova faixa carrega no
+       proximo BgmUpdate -- a cauda ja' enfileirada acima cobre o breve
+       hitch de leitura do disco. */
+    {
+        Bool ended = FALSE;
+        if      (s_state == BGM_MOD)            ended = (s_mod.loopcount > 0);
+        else if (s_state == BGM_XM && s_xm)     ended = (jar_xm_get_loop_count(s_xm) > 0);
+        if (ended) _BgmAdvance();
+    }
 }
