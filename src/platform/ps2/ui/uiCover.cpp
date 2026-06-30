@@ -54,6 +54,12 @@ extern "C" {
 
 extern "C" void DLog(const char *fmt, ...);
 
+/* Pasta de onde o ELF foi carregado (exportada pelo entrypoint do app);
+   usada para achar a pasta "covers" ao lado do ELF.  Declarada em escopo
+   de arquivo: linkage spec 'extern "C"' nao e' permitida em escopo de
+   bloco (dentro de funcao). */
+extern "C" char *MainGetBootDir();
+
 /* Flush the GS texture cache before the next textured primitive (the
    "first texture shows, later ones don't" PS2 bug). */
 extern "C" void GSK_InvalidateTextureCache(void);
@@ -318,7 +324,6 @@ static void _EnsureIndex(const char *romDir)
 	   junto do ELF no dispositivo, sem recompilar com COVERS_PATH.  Fallback
 	   apos as capas ao lado da propria ROM. */
 	{
-		extern "C" char *MainGetBootDir();
 		const char *bd = MainGetBootDir();
 		if (bd && bd[0])
 		{
