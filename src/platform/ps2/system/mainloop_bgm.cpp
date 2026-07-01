@@ -62,6 +62,11 @@ extern "C" {
 #include "mainloop_bgm.h"
 
 
+/* Diagnostico de boot/menu: DLog escreve no EE SIO (visivel no log do
+   NetherSX2/PCSX2), definido em modules/sjpcm/sjpcm_rpc.c. */
+extern "C" void DLog(const char *fmt, ...);
+
+
 /* ---- configuracao ---------------------------------------------------- */
 
 /* Taxa de SINTESE do tracker.  A saida do audsrv e' fixa em 48 kHz; o PCM
@@ -233,7 +238,9 @@ static void _BuildIndex(void)
 
         if (!scanDir || !scanDir[0]) continue;
 
+        DLog("[bgm] scan opendir('%s')...", scanDir);
         pDir = opendir(scanDir);
+        DLog("[bgm] scan opendir('%s') -> %p", scanDir, (void *)pDir);
         if (!pDir) continue;
 
         while ((pEnt = readdir(pDir)) != NULL && s_indexCount < BGM_INDEX_MAX)
@@ -258,6 +265,7 @@ static void _BuildIndex(void)
         unsigned int seed = (unsigned int)clock();
         s_trackIdx = (int)(seed % (unsigned int)s_indexCount);
     }
+    DLog("[bgm] index built: %d track(s)", s_indexCount);
 }
 
 /* Le um arquivo inteiro para um buffer malloc'd.  Retorna NULL em erro. */
@@ -301,6 +309,8 @@ static void _TryLoad(void)
 
     path = s_index[s_trackIdx].path;
     kind = s_index[s_trackIdx].kind;
+
+    DLog("[bgm] load track[%d] kind=%d '%s'", s_trackIdx, kind, path);
 
     if (kind == 1) /* MOD */
     {
@@ -470,6 +480,9 @@ void BgmCycleRate(int dir)
 void BgmUpdate(void)
 {
     int avail, n, synthN, j;
+
+    static Bool s_logged = FALSE;
+    if (!s_logged) { DLog("[bgm] BgmUpdate first call: vol=%d", s_volume); s_logged = TRUE; }
 
     if (s_volume <= 0)         return;   /* OFF: nem carrega, nem usa RAM */
     if (!Aud_IsInitialized())  return;

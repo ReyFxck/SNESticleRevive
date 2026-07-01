@@ -1182,7 +1182,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
     /* 0=nao-hdd, 1=dentro de particao (pfs0:), 2=lista de particoes, -1=falha */
     int hddKind = 0;
 
-    // DLog("[ui] MenuDir: '%s'", pDir);
+    DLog("[ui] SetDir enter: '%s'", pDir);
 
 	/* Carga PREGUICOSA do HD interno: ao entrar em hdd0: (ou qualquer
 	   subpasta dele), carrega dev9/ps2atad/ps2hdd/ps2fs AGORA -- nunca no
@@ -1242,7 +1242,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	else if (strlen(openPath) > 0)
 	{
 		dir = opendir(openPath);
-		// DLog("[ui] opendir('%s') -> %p (errno=%d)", pDir, (void *)dir, dir ? 0 : errno);
+		DLog("[ui] opendir('%s') -> %p (errno=%d)", openPath, (void *)dir, dir ? 0 : errno);
 		if (dir != NULL)
 		{
 			struct dirent *de;
@@ -1342,7 +1342,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 
 	SortEntries();
 
-    // DLog("[ui] BrowserEntries: %d (dir='%s')", m_nEntries, m_Dir);
+    DLog("[ui] SetDir done: %d entries (dir='%s')", m_nEntries, m_Dir);
 }
 
 void CBrowserScreen::Chdir(const Char *pSubDir)
