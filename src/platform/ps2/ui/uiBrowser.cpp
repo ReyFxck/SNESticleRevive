@@ -27,6 +27,10 @@
 
 extern "C" void DLog(const char *fmt, ...);
 
+/* Deixa o disco de CD/DVD pronto (sondagem sceCd* estilo OPL) antes do 1o
+   opendir no cdfs:.  Definida em app/main.cpp. */
+extern "C" int CdDiscReady(void);
+
 extern "C" {
 #include "mcsave_ee.h"
 };
@@ -1241,6 +1245,11 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	}
 	else if (strlen(openPath) > 0)
 	{
+		/* Boot por ISO: prepara o disco (sondagem sceCd*) antes do 1o
+		   opendir em cdfs:/cdrom: -- senao trava no PS2 real. */
+		if (strncmp(openPath, "cdfs", 4) == 0 || strncmp(openPath, "cdrom", 5) == 0)
+			CdDiscReady();
+
 		dir = opendir(openPath);
 		DLog("[ui] opendir('%s') -> %p (errno=%d)", openPath, (void *)dir, dir ? 0 : errno);
 		if (dir != NULL)

@@ -201,14 +201,15 @@ static Bool _HasExt(const char *name, const char *ext)
    LADO do ELF. */
 char *MainGetBootDir();
 
-/* Um caminho aponta pro DRIVE de CD/DVD?  O primeiro acesso a cdfs:/cdrom:
-   logo no boot por ISO (num PS2 real) TRAVA: o menu abre e congela na tela
-   de selecao de dispositivo, porque o mecha ainda esta identificando o
-   disco (pos-SifIopReset + sceCdInit SCECdINoD, que nao espera disco).  A
-   varredura automatica da trilha de menu era o unico acesso ao disco nessa
-   tela, entao ela pula o disco -- o browser le o cdfs: so' quando o usuario
-   entra nele (segundos depois, drive ja' assentado).  BGM de mc0:/mass:
-   continua normal. */
+/* Deixa o disco de CD/DVD pronto (sondagem sceCd* estilo OPL) antes de ler.
+   Definida em app/main.cpp.  Retorna 1 se ha' disco pronto, 0 senao. */
+extern "C" int CdDiscReady(void);
+
+/* Um caminho aponta pro DRIVE de CD/DVD?  Ler cdfs:/cdrom: cedo demais no
+   boot por ISO (num PS2 real) TRAVA -- o mecha ainda esta identificando o
+   disco.  Por isso, ANTES de abrir um caminho de disco, chamamos
+   CdDiscReady() (sondagem sceCd* BOUNDED, jeito do OPL): so' abrimos o
+   cdfs: depois que o mecha confirma o disco.  BGM de mc0:/mass: nao espera. */
 static Bool _IsDiscPath(const char *p)
 {
     if (!p) return FALSE;
@@ -253,11 +254,12 @@ static void _BuildIndex(void)
 
         if (!scanDir || !scanDir[0]) continue;
 
-        /* Nunca toca o drive de CD/DVD automaticamente na tela de menu
-           (trava o boot por ISO no PS2 real -- ver _IsDiscPath). */
-        if (_IsDiscPath(scanDir))
+        /* Caminho no CD/DVD: prepara o disco via sceCd* (BOUNDED) ANTES de
+           abrir.  Se nao houver disco pronto, pula (sem musica do disco,
+           mas nunca trava). */
+        if (_IsDiscPath(scanDir) && !CdDiscReady())
         {
-            DLog("[bgm] scan skip disc path '%s'", scanDir);
+            DLog("[bgm] scan skip disc path '%s' (sem disco pronto)", scanDir);
             continue;
         }
 
