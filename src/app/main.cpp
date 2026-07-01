@@ -88,48 +88,6 @@ char *MainGetBootPath()
 	return _Main_pBootPath;
 }
 
-/* Sondagem do disco no estilo do OPL (src/system.c, AFL-3.0): pergunta o
-   estado DIRETO pro mecha via sceCd*, que responde na hora -- ao contrario
-   de stat()/opendir() no cdfs: (que passam pelo RPC do iomanX e BLOQUEIAM
-   enquanto o disco nao esta identificado, o que travava o boot por ISO).
-   Bootamos com sceCdInit(SCECdINoD) (sem checar disco, pra nao dar tela
-   preta); esta funcao confirma e PREPARA o disco de forma BOUNDED (nunca
-   trava) antes do 1o acesso ao cdfs:.  Retorna 1 se ha' disco pronto pra
-   ler, 0 senao.  Cacheia so' o sucesso (o disco nao "des-fica" pronto). */
-extern "C" int CdDiscReady(void)
-{
-	static int s_ok = 0;
-	int type, i;
-
-	if (s_ok)
-		return 1;
-
-	/* espera o mecha parar de "detectando" -- com teto rigido */
-	for (i = 0; i < 2000; i++) {
-		type = sceCdGetDiskType();
-		if (type != SCECdDETCT && type != SCECdDETCTCD &&
-		    type != SCECdDETCTDVDS && type != SCECdDETCTDVDD &&
-		    type != SCECdUNKNOWN)
-			break;
-		nopdelay();
-	}
-
-	type = sceCdGetDiskType();
-	DLog("[cd] CdDiscReady diskType=%d tries=%d", type, i);
-
-	/* So' segue se o mecha resolveu num disco REAL.  Qualquer estado de
-	   "detectando"/desconhecido/sem-disco -> nao pronto (nao cacheia,
-	   deixa tentar de novo depois). */
-	if (type != SCECdPSCD && type != SCECdPSCDDA &&
-	    type != SCECdPS2CD && type != SCECdPS2CDDA &&
-	    type != SCECdPS2DVD && type != SCECdCDDA && type != SCECdDVDV)
-		return 0;
-
-	sceCdDiskReady(0);  /* deixa o drive pronto pra ler (jeito do OPL) */
-	s_ok = 1;
-	return 1;
-}
-
 void MainSetBootDir(const char *pPath)
 {
 	int i;
