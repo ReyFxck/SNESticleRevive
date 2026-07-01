@@ -27,10 +27,6 @@
 
 extern "C" void DLog(const char *fmt, ...);
 
-/* Espera o cdfs: ficar pronto antes do 1o opendir no boot por ISO (PS2
-   real).  Definida em mainloop_iop.cpp. */
-extern "C" int CdfsWaitReady(void);
-
 extern "C" {
 #include "mcsave_ee.h"
 };
@@ -1245,11 +1241,6 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	}
 	else if (strlen(openPath) > 0)
 	{
-		/* Boot por ISO: espera o disco ficar legivel antes do 1o opendir
-		   em cdfs:/cdrom: (senao TRAVA no PS2 real -- ver CdfsWaitReady). */
-		if (strncmp(openPath, "cdfs", 4) == 0 || strncmp(openPath, "cdrom", 5) == 0)
-			CdfsWaitReady();
-
 		dir = opendir(openPath);
 		DLog("[ui] opendir('%s') -> %p (errno=%d)", openPath, (void *)dir, dir ? 0 : errno);
 		if (dir != NULL)

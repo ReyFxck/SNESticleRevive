@@ -39,38 +39,6 @@ extern "C" void DLog(const char *fmt, ...);
 #include "rendersurface.h"
 #include "file.h"
 
-/* Espera BOUNDED o cdfs: ficar legivel antes do 1o acesso ao disco no boot
-   por ISO.  Mesma tecnica do waitUntilDeviceIsReady() do ps2_drivers/
-   picodrive: stat() em loop ate' o dispositivo responder, com teto rigido.
-   Necessario porque nosso boot inicializa o CD SEM esperar o disco
-   (sceCdInit SCECdINoD, pra nao dar tela preta); sem esta espera o primeiro
-   opendir em cdfs: TRAVA num PS2 real, pois o mecha ainda esta lendo a TOC
-   do DVD.  Cacheia so' o SUCESSO (o disco nao "des-fica" pronto na sessao);
-   em falha nao cacheia, permitindo tentar de novo mais tarde. */
-extern "C" int CdfsWaitReady(void)
-{
-    static int s_ready = 0;
-    struct stat st;
-    int ret = -1, tries;
-
-    if (s_ready) return 1;
-
-    for (tries = 0; tries < 1500 && ret != 0; tries++)
-    {
-        ret = stat("cdfs:/", &st);
-        if (ret != 0) nopdelay();
-    }
-
-    if (ret == 0)
-    {
-        s_ready = 1;
-        BOOTLOG("[cd] cdfs pronto (tries=%d)", tries);
-        return 1;
-    }
-    BOOTLOG("[cd] cdfs NAO ficou pronto apos %d tentativas", tries);
-    return 0;
-}
-
 /* Boot import log (resumo limpo IOP imported OK/BAD) -- ver mainloop_ui.cpp */
 extern "C" void BootImport(const char *pName, int ret);
 extern "C" void BootImportFlush(void);
