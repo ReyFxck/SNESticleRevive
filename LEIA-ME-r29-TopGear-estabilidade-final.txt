@@ -1,0 +1,39 @@
+SNESticle Revive r29 - Top Gear: estabilidade final
+====================================================
+
+Esta revisão consolida apenas os ganhos confirmados pelos logs no PS2:
+
+- mantém o cache físico de CHR para sprites (OBJ), que elimina a conversão
+  repetida dos carros quando os mesmos tiles são reutilizados;
+- mantém o agendamento exato de áudio para 32 kHz / 60 Hz;
+- restaura o renderizador Mode 7 anterior. O experimento da r28 deixou a
+  abertura aproximadamente 5% mais lenta; por isso ele não faz parte desta
+  versão estável;
+- mantém desligado o cache BG. Na medição r28, isso reduziu o bloco BG CHR
+  em cerca de 8% e explicou o ganho total de aproximadamente 2% na corrida;
+- não inclui mudanças especulativas em HDMA/PPU Sync.
+
+Configuração normal de release
+------------------------------
+
+  SNES_DIAGNOSTICS=0
+  SNES_OBJ_CACHE=1
+  SNES_BG_CACHE=0
+  PROFILE=0
+  DSP4_CAPTURE=0
+  DSP4_STUB=0
+
+Os diagnósticos continuam disponíveis no fonte para futuras medições, mas
+com SNES_DIAGNOSTICS=0 são removidos da compilação e não geram emulog.
+
+Testes host-side
+----------------
+
+  cd tools/pputest
+  ./build.sh
+  ./obj_test
+  ./oam_test
+  ./chrcache_test
+  ./audioschedule_test
+
+Os quatro programas devem imprimir PASS.
