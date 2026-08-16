@@ -322,6 +322,7 @@ LIBS := \
 	-lpoweroff -lfileXio -lcdvd \
 	-lmc -lpad -lnetman -lps2ip \
 	-laudsrv \
+	-lelf-loader \
 	-lpatches \
 	-lcglue \
 	-ldebug -lkernel -lc -lm -lstdc++ -lgcc

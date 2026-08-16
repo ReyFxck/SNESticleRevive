@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sifrpc.h>
 #include <loadfile.h>
+#include <elf-loader.h>
 #include <kernel.h>
 #include <iopcontrol.h>
 #include <sbv_patches.h>
@@ -129,11 +130,27 @@ void MainSetBootDir(const char *pPath)
 void MainResetEmulator(void)
 {
     const char *pBootPath = MainGetBootPath();
+    int ret;
 
     if (!pBootPath || !pBootPath[0])
         return;
 
-    LoadExecPS2(pBootPath, 0, NULL);
+    /*
+     * Do not use LoadExecPS2 here. It goes through EELOAD and resets
+     * the IOP before loading the target, losing non-ROM filesystem
+     * drivers such as USB/BDM.
+     *
+     * PS2SDK's elf-loader first installs a small loader below 0x00100000.
+     * That loader can read the current ELF while the existing mass/mmce/
+     * fileXio drivers are still alive, then resets the IOP only after
+     * the ELF has been loaded into EE RAM.
+     */
+    DLog("[reset] reloading ELF: %s", pBootPath);
+
+    ret = LoadELFFromFile(pBootPath, 0, NULL);
+
+    /* Success transfers execution and never normally gets here. */
+    DLog("[reset] LoadELFFromFile failed: %d (%s)", ret, pBootPath);
 }
 
 /* Your program's main entry point */
