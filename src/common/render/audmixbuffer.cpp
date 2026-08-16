@@ -21,7 +21,7 @@ extern "C" {
    0 mutes:  gainPct = s_gameVolume * BASE / 100.  This single AudMixBuffer
    instance (_AudMix) is shared by SNES and NES, so the control applies to
    both. */
-#define AUDMIXBUFFER_BASE_GAIN_PCT 398
+#define AUDMIXBUFFER_BASE_GAIN_PCT 200
 
 static int s_gameVolume = 100;   /* 0..100 (Video Config); 100 = base gain */
 
