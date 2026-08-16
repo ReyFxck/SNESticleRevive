@@ -1,6 +1,3 @@
-[submodule "src/third_party/fceumm"]
-	path = src/third_party/fceumm
-	url = https://github.com/itsveenee/libretro-fceumm.git
 [submodule "src/third_party/quicknes"]
 	path = src/third_party/quicknes
 	url = https://github.com/itsveenee/QuickNES_Core.git
