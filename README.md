@@ -22,6 +22,24 @@ build and study today.
 On top of the SNES core, the project now also integrates **InfoNES** to bring
 **NES** emulation to the **PlayStation 2**.
 
+<p align="center">
+  <img alt="MIPS Assembly" src="https://img.shields.io/badge/MIPS_ASSEMBLY-0071C5?style=for-the-badge&logo=playstation2&logoColor=white">
+  <img alt="C" src="https://img.shields.io/badge/C-A8B9CC?style=for-the-badge&logo=c&logoColor=black">
+  <img alt="C++" src="https://img.shields.io/badge/C%2B%2B-00599C?style=for-the-badge&logo=cplusplus&logoColor=white">
+  <img alt="Python" src="https://img.shields.io/badge/PYTHON-3776AB?style=for-the-badge&logo=python&logoColor=white">
+  <img alt="Shell" src="https://img.shields.io/badge/SHELL-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white">
+  <img alt="Makefile" src="https://img.shields.io/badge/MAKEFILE-555555?style=for-the-badge&logo=gnu&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="https://github.com/ReyFxck/SNESticleRevive/releases">
+    <img alt="Total de downloads" src="https://img.shields.io/github/downloads/ReyFxck/SNESticleRevive/total?style=for-the-badge&logo=github&logoColor=white&label=DOWNLOADS%20TOTAL&color=181717">
+  </a>
+  <a href="https://t.me/+_NextL8xFv4zYWEx">
+    <img alt="Grupo do Telegram" src="https://img.shields.io/badge/TELEGRAM-ENTRAR_NO_GRUPO-26A5E4?style=for-the-badge&logo=telegram&logoColor=white">
+  </a>
+</p>
+
 ---
 
 ## 📚 Table of Contents
