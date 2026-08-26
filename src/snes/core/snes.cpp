@@ -578,7 +578,17 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
             return uData;
         }
     case 0x4212:	// HVBJOY
-        return pIO->m_Regs.hvbjoy;
+        {
+            /* Aero the Acro-Bat 2 polls VBlank around the frame wrap.
+               Line 0 is not part of VBlank even though the PPU does not draw
+               it.  Derive bit 7 from the live vertical counter so a stale
+               latched status (for example after restoring state) cannot keep
+               the game waiting forever. */
+            Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0x80;
+            if (SNES_LINE_IN_VBLANK(pSnes->m_uLine))
+                uData |= 0x80;
+            return uData;
+        }
 
     case 0x4213:	// RDIO
         return 0;
@@ -1390,6 +1400,10 @@ void SnesSystem::ExecuteLine()
 void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, CMixBuffer *pSound, ModeE eMode)
 {
     m_uLine = 0;
+
+	/* The hidden frame-wrap line is line 0, not a continuation of VBlank.
+	   Keep the internal HDMA gate in sync with the live $4212 value too. */
+	m_IO.m_Regs.hvbjoy &= ~0x80;
 
 #if SNDBG_LOG
 	#if SNDBG_DEEP
