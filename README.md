@@ -9,17 +9,6 @@
   </font></b>
 </p>
 
-⚠️Temporarily Closed⚠️
-I don't have much free time left in my life, and it's not yielding much return anymore; hours and hours for little result...
-Don't worry, it's nobody's fault. Of course, some people are kind of "playing the critic," but this isn't an emulator meant to run everything, since it was created for only one specific game.
-And it wasn't made exclusively for Playstation 2©, but also for the GameCube, which, if I remember correctly, is a bit more powerful. Remember, this is a project just for fun and was also leaked by the author himself, Ardu.
-I'll come back to this someday :) Don't worry, and maybe the NES will get a worthy treatment (even though I don't care much for the NES).
-For now, have fun with the Fork below! By @Itsveenee
-
-https://github.com/itsveenee/SNESticleAurora
-
----
-
 Revived and actively-maintained source of **SNESticle**, the long-rumored
 **Super Nintendo (SNES) emulator** written by **Icer Addis (iaddis)**.
 
