@@ -31,7 +31,7 @@ extern "C" {
 #include "mcsave_ee.h"
 };
 
-#include "embedded_irx.h"   /* HddSupportIsEnabled / HddLoadEmbeddedIrx */
+#include "embedded_irx.h"   /* lazy storage stacks (USB/CDFS/HDD/MMCE) */
 
 static const char *_MenuEntries[]=
 {
@@ -78,6 +78,18 @@ static Bool BrowserIsSramDirectoryName(const Char *pName)
 static Bool BrowserIsSmbPath(const Char *pPath)
 {
 	return pPath && strncasecmp(pPath, "smb:", 4) == 0;
+}
+
+static Bool BrowserIsMassPath(const Char *pPath)
+{
+	return pPath && strncasecmp(pPath, "mass", 4) == 0;
+}
+
+static Bool BrowserIsDiscPath(const Char *pPath)
+{
+	return pPath &&
+	       (strncasecmp(pPath, "cdfs:", 5) == 0 ||
+	        strncasecmp(pPath, "cdrom", 5) == 0);
 }
 
 /* Resolve the rare DT_UNKNOWN equivalent without slowing down normal ROM
@@ -140,9 +152,39 @@ static int BrowserOpenDirectory(const Char *pPath)
 	int dfd;
 	int attempt;
 	Bool bSmb;
+	Bool bMass;
+	Bool bDisc;
 
 	if (!pPath)
 		return -1;
+
+	/* Optional storage must never run in main() before the GS exists.  Start
+	   it only for the drive the user selected, with a visible marker.  If an
+	   old Fat/Slim-specific module wait ever stalls, it can no longer produce
+	   an unexplained OPL black/white boot screen. */
+	bMass = BrowserIsMassPath(pPath);
+	if (bMass && !UsbBdmIsLoaded() && !Mx4sioIsLoaded())
+	{
+		MainLoopModalPrintf(1, "USB: Starting driver...");
+		if (UsbBdmLoadEmbeddedIrx() < 0)
+		{
+			MainLoopModalPrintf(180, "USB: Driver failed (%d)",
+			                    UsbBdmGetLastError());
+			return -1;
+		}
+	}
+
+	bDisc = BrowserIsDiscPath(pPath);
+	if (bDisc && !CdfsIsLoaded())
+	{
+		MainLoopModalPrintf(1, "CD/DVD: Starting driver...");
+		if (CdfsLoadEmbeddedIrx() < 0)
+		{
+			MainLoopModalPrintf(180, "CD/DVD: Driver failed (%d)",
+			                    CdfsGetLastError());
+			return -1;
+		}
+	}
 
 	/* Network, DHCP, authentication and smbman are all lazy. Nothing touches
 	   DEV9 during boot; the explicit selection of smb: is the trigger. */
@@ -157,7 +199,7 @@ static int BrowserOpenDirectory(const Char *pPath)
 		SmbReportBrowseError(dfd);
 	else if (bSmb)
 		SmbReportBrowseSuccess();
-	if (dfd >= 0 || strncasecmp(pPath, "mass", 4) != 0)
+	if (dfd >= 0 || !bMass)
 		return dfd;
 
 	for (attempt = 0; attempt < BROWSER_MASS_OPEN_RETRIES; ++attempt)

@@ -45,6 +45,10 @@ int  MemCardLoadEmbeddedIrx(void);
    this variant does not copy a directory into a fixed 256-entry table, so
    ISO folders of any size remain enumerable. */
 int  CdfsLoadEmbeddedIrx(void);
+/* Query helpers never start a module.  They let boot-time consumers skip
+   optional filesystems until the user explicitly opens that device. */
+int  CdfsIsLoaded(void);
+int  CdfsGetLastError(void);
 
 /* Loads the modern PS2SDK pad stack (padman.irx + mtapman.irx) onto
    the IOP from the buffers embedded in this ELF.  Designed to stack
@@ -69,6 +73,8 @@ int  SmbLoadEmbeddedIrx(void);
 /* USB + BDM fixado: FreeUsbd/usbd_mini + bdm + FatFs + usbmass_bd,
    lendo FAT/exFAT/MBR/GPT e enumerando massN: por drive. */
 int  UsbBdmLoadEmbeddedIrx(void);
+int  UsbBdmIsLoaded(void);
+int  UsbBdmGetLastError(void);
 
 /* HD INTERNO (APA): dev9 + ps2atad + ps2hdd.  Carga PREGUICOSA -- NUNCA
    no boot (a init desses modulos e' sincrona e pode travar consoles sem
@@ -98,9 +104,9 @@ int  MmceIsLoaded(void);
 int  MmceGetLastError(void);
 int  MmceNeedsRestart(void);
 
-/* Mass (USB): a stack USB sempre sobe no boot; este flag controla a
-   listagem de mass0:/mass1:. SMB (smb:) e' listado por opcao, mas sua rede e
-   seu driver so' carregam quando o usuario abre o dispositivo.
+/* Mass (USB): a stack USB sobe no primeiro acesso a mass:/; este flag
+   controla a listagem de mass0:/mass1:. SMB (smb:) e' listado por opcao,
+   mas sua rede e seu driver so' carregam quando o usuario abre o dispositivo.
    MX4SIO (SD via SIO2) tem toggle PROPRIO (Mx4sioIsEnabled/SetEnabled),
    padrao DESLIGADO -- Mx4sioLoadIfEnabled carrega o mx4sio_bd APOS a
    config se o toggle estiver ligado (chamado em mainloop_init). */

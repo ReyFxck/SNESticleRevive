@@ -259,7 +259,7 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	#endif
 
 	/* SIO2MAN + MCMAN + MCSERV are loaded by MemCardLoadEmbeddedIrx()
-	   in app/main.cpp before we ever get here. The modern PS2SDK
+	   in MainLoopInit immediately before we get here. The modern PS2SDK
 	   copies register with iomanX so newlib stdio fopen("mc0:/...")
 	   routes through them. */
 	/* Controller bring-up.
@@ -348,9 +348,9 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 
 	/* The custom CDVD.IRX (and CDVD_Init / CDVD_FlushCache RPC) was
 	   the iaddis project's legacy cdfs replacement. It is no longer
-	   loaded here because CdfsLoadEmbeddedIrx() in app/main.cpp has
-	   already brought up the streaming cdfs.irx, which registers the
-	   "cdfs:" device. The browser and ROM loader now
+	   loaded here. The browser starts CdfsLoadEmbeddedIrx() only when the
+	   user enters cdfs:, after video is alive; it registers the "cdfs:"
+	   device. The browser and ROM loader then
 	   reach the disc through plain newlib stdio (opendir("cdfs:/"),
 	   fopen("cdfs:/ROMS/foo.sfc", "rb"), ...) instead of the bespoke
 	   RPC. CDVD_FlushCache call-sites have been replaced with no-ops

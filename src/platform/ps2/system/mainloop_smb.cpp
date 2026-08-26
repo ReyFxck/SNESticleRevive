@@ -323,7 +323,9 @@ static int SmbLoadConfig(SmbConfigT *config)
     /* A console without a usable memory card can keep the emulator-owned
        config on USB/MX4SIO or MMCE. Probe only storage the user enabled, and
        only after SMB was explicitly requested, so boot remains lazy. */
-    if (MassStorageIsEnabled() || Mx4sioIsEnabled())
+    if ((MassStorageIsEnabled() || Mx4sioIsEnabled()) &&
+        (UsbBdmIsLoaded() || Mx4sioIsLoaded() ||
+         (MassStorageIsEnabled() && UsbBdmLoadEmbeddedIrx() >= 0)))
     {
         for (index = 0; s_mass_config_paths[index]; ++index)
         {
@@ -360,9 +362,15 @@ static int SmbLoadConfig(SmbConfigT *config)
 
     /* ISO config is last because it is read-only and cannot be replaced by
        the setup screen. This probe only occurs after the user requests SMB. */
-    result = SmbTryConfig("cdfs:/SMB.CNF", config);
-    if (result != 0)
-        return result;
+    if (CdfsIsLoaded() ||
+        ((!strncasecmp(_MainLoop_BootDir, "cdfs:", 6) ||
+          !strncasecmp(_MainLoop_BootDir, "cdrom", 5)) &&
+         CdfsLoadEmbeddedIrx() >= 0))
+    {
+        result = SmbTryConfig("cdfs:/SMB.CNF", config);
+        if (result != 0)
+            return result;
+    }
     return 0;
 }
 

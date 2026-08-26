@@ -35,11 +35,11 @@ extern "C" {
 #include "hw.h"
 };
 
-/* USB is now brought up by UsbBdmLoadEmbeddedIrx() (see
-   embedded_irx.cpp): we embed a pinned BDM stack (FreeUsbd/usbd_mini +
-   bdm + bdmfs_fatfs + usbmass_bd) instead of inheriting whichever usbd
-   happens to be installed in the builder's PS2SDK.  Internal HDD support
-   stays on its separate lazy path. */
+/* Optional storage is brought up on demand after the menu is visible.
+   embedded_irx.cpp still owns the pinned USB BDM and streaming CDFS stacks,
+   but main() must not synchronously start either one before GS init: a module
+   _start() that waits forever on one hardware revision would otherwise leave
+   an OPL-launched ELF on the loader's last black/white background. */
 
 /* DLog: writes to EE SIO TX FIFO (defined in modules/sjpcm/sjpcm_rpc.c).
    Plain printf on the EE never reaches PCSX2/NetherSX2's emulator log
@@ -182,12 +182,13 @@ int main(int argc, char **argv)
 	sbv_patch_disable_prefix_check();
 	DLog("[boot] sbv patches applied");
 
-	/* Bring up the modern PS2DEV filesystem stack: iomanX, fileXio,
-	   poweroff, mcman/mcserv, cdfs, usb.  Once this is done, newlib
+	/* Bring up the modern PS2DEV filesystem base: iomanX, fileXio,
+	   poweroff and mcman/mcserv.  Once this is done, newlib
 	   stdio (fopen/fread/fwrite/fclose/mkdir/opendir) routes through
 	   iomanX, so paths like "mc0:/SNESticle/<rom>.srm",
 	   "cdfs:/ROMS/foo.sfc", "mass:/bar/baz" all work as standard POSIX
-	   file paths from the EE side.
+	   file paths from the EE side after their optional device driver has
+	   been loaded.
 
 	   The legacy rom0:FILEIO RPC was the original I/O path in this
 	   codebase (fioOpen / fioDopen / fioRead).  It silently dropped a
@@ -246,44 +247,14 @@ int main(int argc, char **argv)
 	     (void *)_libcglue_fdman_path_ops,
 	     (void *)&__fileXio_fdman_path_ops);
 
-	/* Memory-card IRX stack (sio2man + mcman + mcserv) is now loaded
-	   from the buffers embedded in this ELF rather than from
-	   ps2_drivers' init_memcard_driver(true), which embeds the same
-	   three IRXs in libps2_drivers.a.  Doing the load explicitly here
-	   pins the IRX versions to whatever the in-tree PS2SDK supplies,
-	   makes the load order visible in source, and matches the pattern
-	   used by picodrive / OPL / hugorsgarcia/PS2SNESticle. */
-	DLog("[boot] MemCardLoadEmbeddedIrx: enter");
-	{
-		int mcret = MemCardLoadEmbeddedIrx();
-		DLog("[boot] MemCardLoadEmbeddedIrx: done (ret=%d)", mcret);
-		(void)mcret;
-	}
-
-	DLog("[boot] UsbBdmLoadEmbeddedIrx: enter");
-	/* USB via stack BDM fixada (FreeUsbd mini + FAT/exFAT/MBR/GPT),
-	   no lugar do init_usb_driver() do ps2_drivers.  Nao usa dev9, entao
-	   nao corre o risco de travar boot do HD interno. */
-	UsbBdmLoadEmbeddedIrx();
-	DLog("[boot] UsbBdmLoadEmbeddedIrx: done");
-
-	DLog("[boot] CdfsLoadEmbeddedIrx: enter");
-	{
-		int cdfsret = CdfsLoadEmbeddedIrx();
-		DLog("[boot] CdfsLoadEmbeddedIrx: done (ret=%d)", cdfsret);
-		(void)cdfsret;
-	}
-
-	/* Inicia o cdvd SEM checar disco (SCECdINoD), nao SCECdINIT.  No boot
-	   por DISCO num PS2 real, o drive ainda esta assentando/girando e o
-	   SCECdINIT (que espera o disco) pode TRAVAR -> tela preta (so' no
-	   hardware; no emulador o drive ja' esta pronto).  SCECdINoD inicia o
-	   subsistema sem o check, evitando o lockup -- mesma defesa do
-	   wLaunchELF (loadCdModules).  O tipo do disco e' consultado depois,
-	   quando o browser entra em cdfs: (drive ja' pronto). */
-	DLog("[boot] sceCdInit(INoD): enter");
-	sceCdInit(SCECdINoD);
-	DLog("[boot] sceCdInit(INoD): done (diskType=%d)", sceCdGetDiskType());
+	/* Memory card, USB and CDFS deliberately do not start here.  The memory
+	   card stack starts inside MainLoopInit after the boot screen exists;
+	   USB and CDFS are loaded by the browser on the first explicit
+	   mass:/cdfs: access.  State settings
+	   and BGM discovery also check the loaded-state getters before touching
+	   those devices.  This keeps synchronous SifExecModuleBuffer and CDVD RPC
+	   waits out of the invisible pre-video boot path used by OPL Apps and ISO
+	   launches on real Fat/Slim consoles. */
 
 	/* Probes de boot DESATIVADOS (#if 0): faziam opendir/stat/fileXioDopen
 	   em cdfs: durante a inicializacao (codigo de debug -- os DLog ja'

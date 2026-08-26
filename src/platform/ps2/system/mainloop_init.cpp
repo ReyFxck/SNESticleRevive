@@ -318,10 +318,23 @@ Bool MainLoopInit()
 
 	// set boot dir
 	strcpy(_MainLoop_BootDir, MainGetBootDir());
+
+	/* Keep the last mandatory embedded-module stack out of main()'s invisible
+	   OPL hand-off. Pad initialization below depends on this sio2man, so load
+	   sio2man/mcman/mcserv here after GS + the log screen are alive and before
+	   _MainLoopLoadModules(). If a VMC/BIOS-specific module start stalls, the
+	   real console now stops on this explicit marker instead of an inherited
+	   black/white loader background. */
+	BootMark("[IOP] memory card...");
+	{
+		int mcret = MemCardLoadEmbeddedIrx();
+		BOOTLOG("[boot] MemCardLoadEmbeddedIrx: done (ret=%d)", mcret);
+		(void)mcret;
+	}
     _MainLoopLoadModules(_MainLoop_IOPModulePaths);
 
-    /* Video settings live on the memory card, which only comes up inside
-       _MainLoopLoadModules.  Load them now and apply: the display offset
+    /* Video settings live on the memory card, whose stack came up immediately
+       before _MainLoopLoadModules. Load them now and apply: the display offset
        is live (no realloc); a non-default video mode needs a one-shot GS
        re-init + font re-upload, since the first GSK_Init already ran at
        480i before the card was available.  Default (480i) users take the

@@ -740,6 +740,34 @@ static Bool _MainLoopStateConfigPathIsWritable(const Char *pPath)
            strncmp(pPath, "rom", 3);
 }
 
+/* Optional filesystems are not resident during boot anymore.  Reads must be
+   side-effect free (state.cfg discovery must never start USB); writes happen
+   only after an explicit user action and may start the selected USB stack. */
+static Bool _MainLoopStatePathDeviceReady(const Char *pPath, Bool bStart)
+{
+    if (!pPath)
+    {
+        return FALSE;
+    }
+
+    if (!strncmp(pPath, "mass", 4))
+    {
+        if (UsbBdmIsLoaded() || Mx4sioIsLoaded())
+        {
+            return TRUE;
+        }
+        return bStart && MassStorageIsEnabled() &&
+               UsbBdmLoadEmbeddedIrx() >= 0;
+    }
+
+    if (!strncmp(pPath, "cdfs:", 6) || !strncmp(pPath, "cdrom", 5))
+    {
+        return CdfsIsLoaded() ? TRUE : FALSE;
+    }
+
+    return TRUE;
+}
+
 static Bool _MainLoopStateConfigMapPath(
     const Char *pPath,
     Char *pMapped,
@@ -791,7 +819,8 @@ static Bool _MainLoopStateConfigRead(
     FILE *pFile;
     size_t nRead;
 
-    if (!_MainLoopStateConfigMapPath(
+    if (!_MainLoopStatePathDeviceReady(pPath, FALSE) ||
+        !_MainLoopStateConfigMapPath(
             pPath,
             MappedPath,
             sizeof(MappedPath)))
@@ -831,6 +860,7 @@ static Bool _MainLoopStateConfigWrite(
     Bool bOK;
 
     if (!_MainLoopStateConfigPathIsWritable(pPath) ||
+        !_MainLoopStatePathDeviceReady(pPath, TRUE) ||
         !_MainLoopStateConfigMapPath(
             pPath,
             MappedPath,
@@ -1479,6 +1509,7 @@ static Int32 _MainLoopStateBuildRoots(
     Int32 nRoots = 0;
     Char Root[16];
     Bool bAuto = eDevice == MAINLOOP_STATEDEVICE_AUTO;
+    Bool bMassReady = UsbBdmIsLoaded() || Mx4sioIsLoaded();
     Int32 iMMCESlots = 0;
 
     if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_MMCE) &&
@@ -1545,7 +1576,7 @@ static Int32 _MainLoopStateBuildRoots(
         );
     }
 
-    if (bAuto || eDevice == MAINLOOP_STATEDEVICE_USB)
+    if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
     {
         _MainLoopStateAddRoot(pRoots, &nRoots, "mass0:", "mass0:", FALSE);
         _MainLoopStateAddRoot(pRoots, &nRoots, "mass1:", "mass1:", FALSE);
@@ -1934,6 +1965,15 @@ Bool _MainLoopLoadState()
         return FALSE;
     }
 
+    if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_USB &&
+        !UsbBdmIsLoaded() && !Mx4sioIsLoaded() &&
+        UsbBdmLoadEmbeddedIrx() < 0)
+    {
+        _MainLoopStateSetMessage("USB driver failed (%d).",
+                                 UsbBdmGetLastError());
+        return FALSE;
+    }
+
     if (!_MainLoopStateGetRomIdentity(&uRomCRC, &nRomBytes, &uRomFlags))
     {
         _MainLoopStateSetMessage("Cannot identify the loaded ROM.");
@@ -2061,6 +2101,15 @@ Bool _MainLoopSaveState()
     if (!_MainLoopStateCheckAvailability(Reason, sizeof(Reason)))
     {
         _MainLoopStateSetMessage("%s", Reason);
+        return FALSE;
+    }
+
+    if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_USB &&
+        !UsbBdmIsLoaded() && !Mx4sioIsLoaded() &&
+        UsbBdmLoadEmbeddedIrx() < 0)
+    {
+        _MainLoopStateSetMessage("USB driver failed (%d).",
+                                 UsbBdmGetLastError());
         return FALSE;
     }
 

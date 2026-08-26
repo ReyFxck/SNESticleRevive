@@ -182,7 +182,10 @@ enum BgmDiscScanE {
 static int          s_discScanState   = BGM_DISC_PENDING;
 static unsigned int s_discScanFrames  = 0;
 static int          s_discStablePolls = 0;
+static Bool         s_discEeReady     = FALSE;
 static char         s_bootBgm[256];
+static Bool         s_massWasReady    = FALSE;
+static Bool         s_massScanDone    = FALSE;
 static Bool         s_mmceWasEnabled  = FALSE;
 static Bool         s_mmceScanDone    = FALSE;
 static Bool         s_hddWasEnabled   = FALSE;
@@ -261,6 +264,11 @@ static Bool _IsDiscPath(const char *p)
     if (!p) return FALSE;
     return (strncmp(p, "cdfs",  4) == 0 ||
             strncmp(p, "cdrom", 5) == 0) ? TRUE : FALSE;
+}
+
+static Bool _IsMassPath(const char *p)
+{
+    return (p && strncmp(p, "mass", 4) == 0) ? TRUE : FALSE;
 }
 
 /* Retorna o slot fisico de um caminho MMCE, ou -1 para outro device.
@@ -488,6 +496,42 @@ static void _WakeAfterNewSource(int before)
     }
 }
 
+/* USB is deliberately absent from the boot-critical path.  Once the browser
+   has started the USB BDM stack (or MX4SIO registered a massN: device), scan
+   the mass BGM directories exactly once and wake a previously empty player. */
+static void _MassScanStep(void)
+{
+    int ready = UsbBdmIsLoaded() || Mx4sioIsLoaded();
+    int enabled = MassStorageIsEnabled() || Mx4sioIsEnabled();
+    int before;
+    size_t d;
+
+    if (!enabled || !ready)
+    {
+        s_massWasReady = FALSE;
+        s_massScanDone = FALSE;
+        return;
+    }
+
+    if (!s_massWasReady)
+    {
+        s_massWasReady = TRUE;
+        s_massScanDone = FALSE;
+    }
+    if (s_massScanDone) return;
+
+    before = s_indexCount;
+    if (_IsMassPath(s_bootBgm))
+        _ScanDir(s_bootBgm, 0);
+
+    for (d = 0; d < BGM_NUM_DIRS && s_indexCount < BGM_INDEX_MAX; d++)
+        if (_IsMassPath(s_dirs[d]))
+            _ScanDir(s_dirs[d], 0);
+
+    s_massScanDone = TRUE;
+    _WakeAfterNewSource(before);
+}
+
 /* MMCE e' carregado sob demanda e, ao contrario de mc:/mass:/, pode ser
    ativado depois que o indice inicial do BGM ja existe. Faz uma unica
    sondagem por ativacao, escaneia somente portas que responderam ao PING e
@@ -659,6 +703,9 @@ static void _BuildIndex(void)
     s_discScanState = BGM_DISC_PENDING;
     s_discScanFrames = 0;
     s_discStablePolls = 0;
+    s_discEeReady = FALSE;
+    s_massWasReady = FALSE;
+    s_massScanDone = FALSE;
     s_mmceWasEnabled = FALSE;
     s_mmceScanDone = FALSE;
     s_hddWasEnabled = FALSE;
@@ -668,16 +715,18 @@ static void _BuildIndex(void)
     /* Primeiro escaneia caminhos que nao dependem de CD/DVD, MMCE ou HDD.
        Os dispositivos especiais possuem etapas proprias abaixo. */
     if (s_bootBgm[0] && !_IsDiscPath(s_bootBgm) &&
-        _MmcePathSlot(s_bootBgm) < 0 && !_IsHddPath(s_bootBgm))
+        !_IsMassPath(s_bootBgm) && _MmcePathSlot(s_bootBgm) < 0 &&
+        !_IsHddPath(s_bootBgm))
         _ScanDir(s_bootBgm, 0);
 
     for (d = 0; d < BGM_NUM_DIRS && s_indexCount < BGM_INDEX_MAX; d++)
-        if (!_IsDiscPath(s_dirs[d]) && _MmcePathSlot(s_dirs[d]) < 0 &&
-            !_IsHddPath(s_dirs[d]))
+        if (!_IsDiscPath(s_dirs[d]) && !_IsMassPath(s_dirs[d]) &&
+            _MmcePathSlot(s_dirs[d]) < 0 && !_IsHddPath(s_dirs[d]))
             _ScanDir(s_dirs[d], 0);
 
     /* Config persistida ja pode ter habilitado MMCE no boot. Esta chamada
        tambem fica barata quando o recurso esta desligado. */
+    _MassScanStep();
     _MmceScanStep();
     _HddScanStep();
 
@@ -702,6 +751,21 @@ static void _DiscScanStep(void)
     DIR *root;
 
     if (s_discScanState == BGM_DISC_DONE) return;
+
+    /* Do not start CDFS merely because menu music is enabled.  The browser's
+       explicit cdfs: selection owns that potentially blocking module load.
+       This is what keeps direct OPL App/USB boots independent of the drive. */
+    if (!CdfsIsLoaded()) return;
+
+    if (!s_discEeReady)
+    {
+        if (!sceCdInit(SCECdINoD))
+        {
+            s_discScanState = BGM_DISC_DONE;
+            return;
+        }
+        s_discEeReady = TRUE;
+    }
 
     s_discScanFrames++;
     if (s_discScanFrames < BGM_DISC_GRACE_FRAMES) return;
@@ -1007,7 +1071,8 @@ int BgmIsSearching(void)
 {
     int result;
     _BgmLock();
-    result = (s_indexCount < 0 || s_discScanState == BGM_DISC_PENDING) ? 1 : 0;
+    result = (s_indexCount < 0 ||
+              (CdfsIsLoaded() && s_discScanState == BGM_DISC_PENDING)) ? 1 : 0;
     _BgmUnlock();
     return result;
 }
@@ -1083,6 +1148,7 @@ static void _BgmUpdateLocked(Bool allowFilesystem)
     }
     if (allowFilesystem)
     {
+        _MassScanStep();
         _MmceScanStep();
         _HddScanStep();
         _DiscScanStep();

@@ -235,6 +235,16 @@ extern "C" int CdfsLoadEmbeddedIrx(void)
     return s_cdfs_loaded_result;
 }
 
+extern "C" int CdfsIsLoaded(void)
+{
+    return s_cdfs_loaded_result == 0;
+}
+
+extern "C" int CdfsGetLastError(void)
+{
+    return s_cdfs_loaded_result < 0 ? s_cdfs_loaded_result : 0;
+}
+
 /* Memory-card stack bring-up.
  *
  * Order matches ps2_drivers::init_memcard_driver(true) and every other
@@ -396,6 +406,16 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
 
     s_usb_bdm_loaded_result = 0;
     return s_usb_bdm_loaded_result;
+}
+
+extern "C" int UsbBdmIsLoaded(void)
+{
+    return s_usb_bdm_loaded_result == 0;
+}
+
+extern "C" int UsbBdmGetLastError(void)
+{
+    return s_usb_bdm_loaded_result < 0 ? s_usb_bdm_loaded_result : 0;
 }
 
 /* HD INTERNO (APA) -- carga PREGUICOSA e opcional.
@@ -658,11 +678,12 @@ extern "C" int MmceNeedsRestart(void)
 /* ------------------------------------------------------------------------
  * Toggles de dispositivos SEM modulo proprio de carga preguicosa:
  *
- *  - Mass (USB): a stack USB (usbd_mini/bdm/bdmfs_fatfs/usbmass_bd) SEMPRE sobe
- *    no boot -- e' o armazenamento principal e seguro, e gatear isso no
- *    boot mexeria no caminho critico que causava a tela preta.  Este flag
- *    so' controla a LISTAGEM de mass0:/mass1: no browser e a carga do
- *    mx4sio (abaixo).  Padrao LIGADO.
+ *  - Mass (USB): a stack USB (usbd_mini/bdm/bdmfs_fatfs/usbmass_bd) sobe
+ *    SOB DEMANDA quando o usuario abre massN:.  Tirar SifExecModuleBuffer do
+ *    boot invisivel impede que uma espera especifica de hardware deixe o ELF
+ *    preso na tela preta/branca herdada do OPL.  Este flag controla a
+ *    LISTAGEM de mass0:/mass1: no browser e a carga do mx4sio (abaixo).
+ *    Padrao LIGADO.
  *  - SMB (smb:): compartilhamento de rede para ROMs. O toggle controla a
  *    listagem; a rede, o smbman e a autenticacao so' sobem quando o usuario
  *    abre smb:. Padrao DESLIGADO.

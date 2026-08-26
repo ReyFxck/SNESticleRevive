@@ -94,6 +94,7 @@ extern "C" Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
 #include "emurom.h"
 
 #include "mainloop_install.h"
+#include "embedded_irx.h"
 
 int _MainLoopInstallCallback(char *pDestName, char *pSrcName, int Position, int Total)
 {
@@ -145,6 +146,19 @@ void _AddTitleDB(char *pPath)
 	/* Modern cdfs.irx flushes its directory cache automatically when
 	   the disc is reopened; no explicit CDVD_FlushCache() RPC is
 	   needed. */
+
+	/* Install Menu can be opened without visiting the ROM browser first, so
+	   this explicit disc action must also trigger the lazy CDFS stack. */
+	if (!CdfsIsLoaded())
+	{
+		MainLoopModalPrintf(1, "CD/DVD: Starting driver...");
+		if (CdfsLoadEmbeddedIrx() < 0)
+		{
+			MainLoopModalPrintf(60*3, "CD/DVD driver failed (%d).",
+			                    CdfsGetLastError());
+			return;
+		}
+	}
 
 	pFile = fopen("cdfs:/SYSTEM.CNF", "rt");
 //	pFile = fopen("host:/SYSTEM.CNF", "rt");

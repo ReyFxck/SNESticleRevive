@@ -64,9 +64,9 @@ extern "C" void ScrPrintf(const Char *pFormat, ...)
  * BootMark(label): marcador de etapa impresso NA HORA -- sobrevive a um
  *   travamento, entao a ultima linha na tela mostra onde o boot parou.
  *
- * Por que acumular: memory card e USB sao carregados em main.cpp ANTES da
- * tela de log existir; se imprimissem na hora, sumiriam.  Acumula-se tudo
- * e despeja no flush, quando a tela ja esta pronta. */
+ * Memory card agora e' carregado depois que a tela existe; USB/CDFS sao sob
+ * demanda. A lista continua acumulada para que o flush apresente um unico
+ * resumo de todos os modulos obrigatorios ao fim do boot. */
 #define BOOT_MAXLOG 32
 static const char *s_BootName[BOOT_MAXLOG];
 static int         s_BootRet [BOOT_MAXLOG];
