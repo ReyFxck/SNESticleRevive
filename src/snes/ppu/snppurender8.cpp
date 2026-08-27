@@ -9,6 +9,7 @@
 #include "snppu.h"
 #include "snppurender.h"
 #include "snppuchrcache.h"
+#include "snppumode7.h"
 #include "rendersurface.h"
 #include "snmask.h"
 #include "prof.h"
@@ -2100,67 +2101,32 @@ static void _FetchMode7Opaque(Uint8 *pMask, Uint8 *pLine, Int32 nPixels)
 static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque)
 {
 	const SnesPPURegsT *pRegs = pPPU->GetRegs();
-	Int32 x1, y1,x,y;
-	Int32 m7a,m7b,m7c,m7d,m7x,m7y;
+	SnesPPUMode7LineT Line;
 	Uint8 *pVram;
 
 	pVram = (Uint8 *)pPPU->GetVramPtr(0);
-
-	// get x/y scroll position
-	x1 = pRegs->m7hofs.w;
-	y1 = pRegs->m7vofs.w;
-
-	// sign extend to 13-bit
-	x1<<= 32- 13; x1>>= 32- 13;
-	y1<<= 32- 13; y1>>= 32- 13;
-
-	// advance scrolly to current line
-	y1 += iLine;
-
-	// fetch matrix parameters
-	m7a = (Int16)pRegs->m7a.w;
-	m7b = (Int16)pRegs->m7b.w;
-	m7c = (Int16)pRegs->m7c.w;
-	m7d = (Int16)pRegs->m7d.w;
-	m7x = pRegs->m7x.w;
-	m7y = pRegs->m7y.w;
-
-	// sign extend to 13-bit
-	m7x<<= 32- 13; m7x>>= 32- 13;
-	m7y<<= 32- 13; m7y>>= 32- 13;
-
-	// do matrix multiply for left pixel of line
-	x = (x1 - m7x) * m7a + (y1 - m7y) * m7b + (m7x << 8);
-	y = (x1 - m7x) * m7c + (y1 - m7y) * m7d + (m7y << 8);
-
-
-	if (pRegs->m7sel & 0x1)
-	{
-		x +=  256 * m7a;  // translate to right of screen
-		y +=  256 * m7c;
-		m7a = -m7a;
-		m7c = -m7c;
-	}
-
-	if (pRegs->m7sel & 0x2)
-	{
-		x +=  262 * m7b;  // translate to bottom of screen
-		y +=  262 * m7d;
-		m7b = -m7b;
-		m7d = -m7d;
-	}
+	Line = SnesPPUMode7MakeLine(
+		pRegs->m7hofs.w, pRegs->m7vofs.w,
+		pRegs->m7x.w, pRegs->m7y.w,
+		(Int16)pRegs->m7a.w, (Int16)pRegs->m7b.w,
+		(Int16)pRegs->m7c.w, (Int16)pRegs->m7d.w,
+		pRegs->m7sel, iLine);
 
 	switch (pRegs->m7sel>>6)
 	{
 	case 0: // screen repetition if outside of screen area
-		_FetchMode7_Repeat(pLine, 256, pVram, x, y, m7a, m7c);
+	case 1: // mode 1 also wraps like mode 0
+		_FetchMode7_Repeat(pLine, 256, pVram,
+			Line.x, Line.y, Line.dx, Line.dy);
 		break;
 	case 3: // character 0x00 repetition if outside of screen area
-		_FetchMode7_Clamp(pLine, 256, pVram, x, y, m7a, m7c);
+		_FetchMode7_Clamp(pLine, 256, pVram,
+			Line.x, Line.y, Line.dx, Line.dy);
 		break;
-	default:
 	case 2: // outside of the screen area is the back drop screen in single color
-		_FetchMode7_Black(pLine, 256, pVram, x, y, m7a, m7c);
+	default:
+		_FetchMode7_Black(pLine, 256, pVram,
+			Line.x, Line.y, Line.dx, Line.dy);
 		break;
 	}
 
