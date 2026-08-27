@@ -905,7 +905,10 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 		Uint32 crc = _SNRomCRC32(m_pRomData, m_uRomBytes);
 		if (crc == 0x266C44EDu || crc == 0x77871727u ||
 		    crc == 0xDEF45776u)
+		{
 			m_Flags |= SNROM_FLAG_DSP1_TARGET_Y_SUBTRACT;
+			m_Flags |= SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ;
+		}
 
 		if (crc == 0x266C44EDu || crc == 0x77871727u)
 			m_Flags |= SNROM_FLAG_DSP1_ORIGINAL_OP28;

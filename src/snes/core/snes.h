@@ -108,6 +108,17 @@ private:
 	SNSpcDspMixSilent	m_SpcDspSilentMixer;    // deterministic mixer
 
 	Uint32		m_uSramSize;
+
+	/* Pilotwings rewrites the H/V timer while a scanline is already running.
+	   These fields are transient scheduler state and are intentionally not
+	   part of save states. */
+	Bool		m_bDynamicHVIRQ;
+	Bool		m_bLineIRQActive;
+	Bool		m_bLineIRQReschedule;
+	Bool		m_bLineIRQFired;
+	Bool		m_bLineIRQInstant;
+	Int32		m_nLineIRQCycle;
+	Int32		m_nLineIRQClock;
 	Uint8		m_Ram[SNES_RAMSIZE] _ALIGN(16);
 	Uint8		m_SRam[SNES_SRAMSIZE] _ALIGN(16);
 
@@ -151,6 +162,8 @@ private:
 
 	void	SyncSPC(Int32 uExtra = 0);
 	void	SyncPPU();
+	Int32	CalculateLineIRQCycle();
+	void	RescheduleLineIRQ(Bool bAllowImmediate);
 	void	ExecuteLine();
     void    ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles);
     void    ExecuteCPU(Int32 nExecCycles);
@@ -160,4 +173,3 @@ void SnesDebugBegin(SnesSystem *pSnes, const char *pFileName);
 void SnesDebugEnd();
 
 #endif
-

@@ -43,6 +43,8 @@ static Uint32 g_TmgWinSumHDMATable = 0;
 static Int32  g_TmgIrqLineMin = 9999;
 static Int32  g_TmgIrqLineMax = -1;
 static Uint32 g_TmgIrqCount   = 0;   // total de H-IRQs na janela
+static Uint32 g_TmgIrqRearms  = 0;   // timer H/V reprogramado na linha ativa
+static Uint32 g_TmgIrqInstant = 0;   // novo compare ja ficou atras do feixe
 static Uint32 g_TmgFrameNo    = 0;
 // acumuladores por frame (externados, alimentados em snppurender8.cpp)
 Uint32 g_TmgCycM7  = 0;
@@ -679,6 +681,8 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
             break;
 
         case 0x4200:	// nmitimen
+        {
+			Uint8 uOldNmitimen = pIO->m_Regs.nmitimen;
             pIO->m_Regs.nmitimen = uData;
 
             // unconfirmed:
@@ -708,7 +712,10 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
             // set new nmi signal
             SNCPUSignalNMI(pCpu, pIO->m_Regs.rdnmi & pIO->m_Regs.nmitimen & 0x80);
+			if ((uOldNmitimen ^ uData) & 0x30)
+				pSnes->RescheduleLineIRQ(TRUE);
             break;
+		}
 
         case 0x4201:	// wrio (programmable i/o port)
             // confirmed:
@@ -749,15 +756,19 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
         case 0x4207:	// htmel (video horizontal IRQ beam position)
             pIO->m_Regs.htime.b.l = uData;
+			pSnes->RescheduleLineIRQ(FALSE);
             break;
         case 0x4208:	// htmeh (video horizontal IRQ beam position)
             pIO->m_Regs.htime.b.h = uData & 1;
+			pSnes->RescheduleLineIRQ(FALSE);
             break;
         case 0x4209:	// vtmel (video vertical IRQ beam position)
             pIO->m_Regs.vtime.b.l = uData;
+			pSnes->RescheduleLineIRQ(FALSE);
             break;
         case 0x420A:	// vtmeh (video vertical IRQ beam position)
             pIO->m_Regs.vtime.b.h = uData & 1;
+			pSnes->RescheduleLineIRQ(FALSE);
             break;
 
 		case 0x420B:	// mdmaen (DMA enable register)
@@ -990,6 +1001,13 @@ SnesSystem::SnesSystem()
 	m_Cpu.pUserData = (void *)this;
 
 	m_uSramSize = 0;
+	m_bDynamicHVIRQ = FALSE;
+	m_bLineIRQActive = FALSE;
+	m_bLineIRQReschedule = FALSE;
+	m_bLineIRQFired = FALSE;
+	m_bLineIRQInstant = FALSE;
+	m_nLineIRQCycle = -1;
+	m_nLineIRQClock = 0;
 
 	// setup spc
 	SNSPCNew(&m_Spc);
@@ -1077,6 +1095,12 @@ void SnesSystem::Reset()
 
 	m_uFrame=0;
 	m_uLine =0;
+	m_bLineIRQActive = FALSE;
+	m_bLineIRQReschedule = FALSE;
+	m_bLineIRQFired = FALSE;
+	m_bLineIRQInstant = FALSE;
+	m_nLineIRQCycle = -1;
+	m_nLineIRQClock = 0;
 }
 
 void SnesSystem::SoftReset()
@@ -1104,11 +1128,15 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 	m_DSP1.SetTargetYSubtract(FALSE);
 	m_DSP1.SetOriginalDistanceBug(FALSE);
 #endif 
+	m_bDynamicHVIRQ = FALSE;
 	// set rom
 	m_pRom = pRom;
 
 	if (m_pRom)
 	{
+		m_bDynamicHVIRQ =
+			(m_pRom->m_Flags & SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ)
+				? TRUE : FALSE;
 		#ifdef SNES_DSP1
 		m_DSP1.SetTargetYSubtract(
 			(m_pRom->m_Flags & SNROM_FLAG_DSP1_TARGET_Y_SUBTRACT)
@@ -1132,6 +1160,42 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 
+
+
+Int32 SnesSystem::CalculateLineIRQCycle()
+{
+	const Bool bH = (m_IO.m_Regs.nmitimen & 0x10) ? TRUE : FALSE;
+	const Bool bV = (m_IO.m_Regs.nmitimen & 0x20) ? TRUE : FALSE;
+
+	if (bV)
+	{
+		if (m_uLine != m_IO.m_Regs.vtime.w)
+			return -1;
+		return bH ? SNES_HIRQ_CYCLES(m_IO.m_Regs.htime.w)
+		          : SNES_VIRQ_CYCLES;
+	}
+
+	return bH ? SNES_HIRQ_CYCLES(m_IO.m_Regs.htime.w) : -1;
+}
+
+
+void SnesSystem::RescheduleLineIRQ(Bool bAllowImmediate)
+{
+	/* Pilotwings changes $4200/$4207-$420A after ExecuteLine() already
+	   calculated the timer event. Stop the CPU batch and give its unused
+	   clocks back so the new compare can take effect on this scanline. */
+	if (!m_bDynamicHVIRQ || !m_bLineIRQActive)
+		return;
+
+	m_nLineIRQCycle = CalculateLineIRQCycle();
+	m_bLineIRQFired = FALSE;
+	m_bLineIRQInstant = bAllowImmediate;
+	m_bLineIRQReschedule = TRUE;
+#if SNDBG_LOG
+	g_TmgIrqRearms++;
+#endif
+	SNCPUAbort(&m_Cpu);
+}
 
 
 void SnesSystem::ExecuteCPU(Int32 nCycles)
@@ -1277,6 +1341,8 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
         // run CPU!
         SNCPUExecute(&m_Cpu);
+		if (m_bLineIRQActive && m_bLineIRQReschedule)
+			break;
     }
 }
 
@@ -1284,6 +1350,95 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
 void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 {
+	if (m_bLineIRQActive)
+	{
+		Int32 nRemaining = nCycles;
+
+		while (nRemaining > 0)
+		{
+			Int32 nNow = m_nLineIRQClock;
+
+			/* Toggling H/V IRQ mode after the compare point raises TIMEUP
+			   immediately. Merely rewriting HTIME/VTIME to a stale point does
+			   not manufacture a second IRQ on this scanline. */
+			if (!m_bLineIRQFired && m_nLineIRQCycle >= 0 &&
+				m_nLineIRQCycle <= nNow)
+			{
+				m_bLineIRQFired = TRUE;
+				m_nLineIRQCycle = -1;
+				if (m_bLineIRQInstant)
+				{
+					m_IO.m_Regs.timeup |= 0x80;
+					SNCPUSetIRQDelay(&m_Cpu, 0);
+					SNCPUSignalIRQ(&m_Cpu, 1);
+#if SNDBG_LOG
+					g_TmgIrqInstant++;
+#endif
+				}
+				continue;
+			}
+
+			Int32 nRun = nRemaining;
+			Bool bReachIRQ = FALSE;
+
+			if (!m_bLineIRQFired && m_nLineIRQCycle >= 0)
+			{
+				Int32 nToIRQ = m_nLineIRQCycle - nNow;
+				if (nToIRQ > 0 && nToIRQ <= nRun)
+				{
+					nRun = nToIRQ;
+					bReachIRQ = TRUE;
+				}
+			}
+
+			m_bLineIRQReschedule = FALSE;
+			ExecuteCPU(nRun);
+
+			if (m_bLineIRQReschedule)
+			{
+				/* SNCPUAbort returns the clocks that were reserved but not run.
+				   Remove them from both the live budget and every counter before
+				   rebuilding the timer split. */
+				Int32 nUnspent = m_Cpu.Cycles;
+				if (nUnspent < 0)
+					nUnspent = 0;
+				if (nUnspent > nRun)
+					nUnspent = nRun;
+
+				if (nUnspent > 0)
+				{
+					m_Cpu.Cycles -= nUnspent;
+					for (Int32 i = 0; i < SNCPU_COUNTER_NUM; ++i)
+						m_Cpu.Counter[i] -= nUnspent;
+				}
+
+				Int32 nSpent = nRun - nUnspent;
+				if (nSpent < 0)
+					nSpent = 0;
+				m_nLineIRQClock += nSpent;
+				nRemaining -= nSpent;
+				m_bLineIRQReschedule = FALSE;
+				continue;
+			}
+
+			m_nLineIRQClock += nRun;
+			nRemaining -= nRun;
+
+			if (bReachIRQ && !m_bLineIRQFired &&
+				m_nLineIRQCycle >= 0)
+			{
+				m_bLineIRQFired = TRUE;
+				m_nLineIRQCycle = -1;
+				m_IO.m_Regs.timeup |= 0x80;
+				SNCPUSetIRQDelay(&m_Cpu, 0);
+				SNCPUSignalIRQ(&m_Cpu, 1);
+			}
+		}
+
+		nIRQCycles -= nCycles;
+		return;
+	}
+
     if (nIRQCycles >= 0 && nIRQCycles < nCycles)
     {
         // execute up to h-irq
@@ -1359,6 +1514,13 @@ void SnesSystem::ExecuteLine()
 		nHIRQCycles = SNES_HIRQ_CYCLES(m_IO.m_Regs.htime.w);
 	}
 
+	m_bLineIRQActive = m_bDynamicHVIRQ;
+	m_bLineIRQReschedule = FALSE;
+	m_bLineIRQFired = FALSE;
+	m_bLineIRQInstant = TRUE;
+	m_nLineIRQCycle = nHIRQCycles;
+	m_nLineIRQClock = 0;
+
 #if SNDBG_LOG
 	// rastreia a scanline em que um H-IRQ esta agendado (divisao de tela).
 	// Se min..max variam muito frame a frame, a divisao "treme".
@@ -1427,6 +1589,11 @@ void SnesSystem::ExecuteLine()
 
 	// clear h-blank enable flag
 	m_IO.m_Regs.hvbjoy&= ~0x40;
+	m_bLineIRQActive = FALSE;
+	m_bLineIRQReschedule = FALSE;
+	m_bLineIRQInstant = FALSE;
+	m_nLineIRQCycle = -1;
+	m_nLineIRQClock = SNES_CYCLESPERLINE;
 	PROF_LEAVE("ExecLine");
 }
 
@@ -1758,12 +1925,14 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)pCPU, (unsigned)pPPU, (unsigned)pGSU,
 				(unsigned)pAPU, (unsigned)pMix, (unsigned)pMDMA,
 				(unsigned)pHDMA);
-			DLog("[snes-render] bg+compose=%u%% mode7=%u%% obj=%u%% blend=%u%% dsp=%u/%u hirq=%d..%d n=%u",
+			DLog("[snes-render] bg+compose=%u%% mode7=%u%% obj=%u%% blend=%u%% dsp=%u/%u hirq=%d..%d n=%u rearm/instant=%u/%u",
 				(unsigned)pPPUOther, (unsigned)pM7, (unsigned)pObj,
 				(unsigned)pBlend,
 				(unsigned)g_TmgDspRd, (unsigned)g_TmgDspWr,
 				(int)g_TmgIrqLineMin, (int)g_TmgIrqLineMax,
-				(unsigned)g_TmgIrqCount);
+				(unsigned)g_TmgIrqCount,
+				(unsigned)g_TmgIrqRearms,
+				(unsigned)g_TmgIrqInstant);
 			DLog("[snes-hot-bg] schema=topgear-r29 pct sync/info/off/map/chr/main/sub/cmath=%u/%u/%u/%u/%u/%u/%u/%u",
 				(unsigned)pPPUSync, (unsigned)pBGInfo,
 				(unsigned)pBGOffset, (unsigned)pBGMap,
@@ -1923,6 +2092,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			g_TmgDspRd      = 0;
 			g_TmgDspWr      = 0;
 			g_TmgIrqCount   = 0;
+			g_TmgIrqRearms  = 0;
+			g_TmgIrqInstant = 0;
 			g_TmgIrqLineMin = 9999;
 			g_TmgIrqLineMax = -1;
 			g_DbgOAMWrites = 0;
