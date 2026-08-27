@@ -168,6 +168,36 @@ static bool CheckInterruptSemantics(SNCpuT *cpu, Uint8 *memory)
 	ok &= cpu->Cycles == 100 - 2 * SNCPU_CYCLE_FAST;
 	ok &= cpu->uTestCycles == 2;
 
+	/* Aero 2's line-zero V-IRQ must let two polling opcodes retire before
+	   the opcode-based core vectors.  The delay is bypassed for an existing
+	   WAI and is discarded when the IRQ line is lowered. */
+	memory[haltPc] = 0xEA;
+	memory[haltPc + 1] = 0xEA;
+	memory[haltPc + 2] = 0xEA;
+	cpu->Regs.rPC = haltPc;
+	cpu->Regs.rP = SNCPU_FLAG_M | SNCPU_FLAG_X;
+	cpu->Regs.rE = 1;
+	cpu->uSignal = 0;
+	cpu->Cycles = 100;
+	cpu->uTestCycles = 0;
+	SNCPUSetIRQDelay(cpu, 2);
+	SNCPUSignalIRQ(cpu, 1);
+	ok &= SNCPUExecuteIRQDelay(cpu);
+	ok &= cpu->Regs.rPC == haltPc + 1 && cpu->uIrqPending == 1;
+	ok &= SNCPUExecuteIRQDelay(cpu);
+	ok &= cpu->Regs.rPC == haltPc + 2 && cpu->uIrqPending == 0;
+	ok &= !SNCPUExecuteIRQDelay(cpu);
+
+	cpu->uSignal = SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_WAI;
+	SNCPUSetIRQDelay(cpu, 2);
+	ok &= !SNCPUExecuteIRQDelay(cpu) && cpu->uIrqPending == 0;
+	SNCPUIRQ(cpu);
+	ok &= !(cpu->uSignal & SNCPU_SIGNAL_WAI);
+
+	SNCPUSetIRQDelay(cpu, 2);
+	SNCPUSignalIRQ(cpu, 0);
+	ok &= cpu->uIrqPending == 0;
+
 	memory[SNCPU_VECTORE_NMI] = memory[SNCPU_VECTORE_NMI + 1] = 0;
 	memory[SNCPU_VECTOR_IRQ] = memory[SNCPU_VECTOR_IRQ + 1] = 0;
 	memory[0x01FD] = memory[0x01FE] = memory[0x01FF] = memory[0x0200] = 0;

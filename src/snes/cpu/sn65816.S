@@ -39,7 +39,7 @@
 #define SNCPU_bRunning      48(R_pCpu)
 #define SNCPU_uSignal       49(R_pCpu)
 #define SNCPU_uNmiDmaDelay  50(R_pCpu)
-#define SNCPU_uPad1         51(R_pCpu)
+#define SNCPU_uIrqPending   51(R_pCpu)
 
 #define SNCPU_MemIO			52
 

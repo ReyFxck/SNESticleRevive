@@ -100,6 +100,7 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_Cpu.nAbortCycles = 0;
 	m_Cpu.uSignal    = pState->CPU.uSignal;
 	m_Cpu.uNmiDmaDelay = 0;
+	m_Cpu.uIrqPending = 0;
 
 	m_Spc.Regs = pState->SPC.Regs;
 	m_Spc.Cycles = pState->SPC.Cycles;

@@ -1244,6 +1244,12 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
             } else
             if (m_Cpu.uSignal & SNCPU_SIGNAL_IRQ)
             {
+				/* Opcode-based cores cannot observe a timer edge in the middle
+				   of an instruction.  A game-specific line-zero V-IRQ may leave
+				   a short pending window so the polling opcode(s) retire first. */
+				if (SNCPUExecuteIRQDelay(&m_Cpu))
+					continue;
+
                 // attempt irq
                 // irqs will always be attempted until signal has been cleared
                 SNCPUIRQ(&m_Cpu);
@@ -1275,6 +1281,26 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 
         // set irq flag 
         m_IO.m_Regs.timeup |= 0x80;
+
+		/* Aero the Acro-Bat 2 waits for $4212.VBlank to clear while its
+		   V-only timer targets line 0.  The real timer edge occurs inside an
+		   opcode; entering the handler before that polling opcode retires
+		   leaves the game in the black-screen loop after the intro.  Snes9x's
+		   opcode core uses the same two-opcode deferral for this title. */
+		const char *pTitle = m_pRom ? m_pRom->GetRomTitle() : NULL;
+		if (m_uLine == 0 &&
+			(m_IO.m_Regs.nmitimen & 0x30) == 0x20 &&
+			m_IO.m_Regs.vtime.w == 0 &&
+			pTitle &&
+			(strcmp(pTitle, "Aero the AcroBat 2") == 0 ||
+			 strcmp(pTitle, "AERO THE ACROBAT 2") == 0))
+		{
+			SNCPUSetIRQDelay(&m_Cpu, 2);
+		}
+		else
+		{
+			SNCPUSetIRQDelay(&m_Cpu, 0);
+		}
         SNCPUSignalIRQ(&m_Cpu, 1);
 
         // execute rest of way

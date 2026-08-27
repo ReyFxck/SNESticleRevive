@@ -77,6 +77,10 @@ typedef struct SNCpu_t
 	/* Remaining master clocks before an NMI captured during MDMA may enter.
 	   This reuses the old padding byte, so the PS2 assembly layout is stable. */
 	Uint8				uNmiDmaDelay;
+	/* Number of whole opcodes to retire before accepting a newly asserted
+	   timer IRQ.  This occupies the final byte of the original 4-byte signal
+	   word, so SNCpuT's PS2 assembly offsets remain unchanged. */
+	Uint8				uIrqPending;
 
 #if defined(SNCPU_TEST) && SNCPU_TEST
 	/* Host-only instruction-vector accounting.  Kept out of release builds so
@@ -102,6 +106,8 @@ void SNCPUAbort(SNCpuT *pCpu);
 void SNCPUSignalIRQ(SNCpuT *pCpu, Uint32 bEnable);
 void SNCPUSignalNMI(SNCpuT *pCpu, Uint32 bEnable);
 void SNCPUSignalDMA(SNCpuT *pCpu, Uint32 bEnable);
+void SNCPUSetIRQDelay(SNCpuT *pCpu, Uint8 nOpcodes);
+Bool SNCPUExecuteIRQDelay(SNCpuT *pCpu);
 
 void SNCPUSetBank(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint8 *pMem, Bool bRAM);
 void SNCPUSetTrap(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, SNCpuReadTrapFuncT pReadTrap, SNCpuWriteTrapFuncT pWriteTrap);
