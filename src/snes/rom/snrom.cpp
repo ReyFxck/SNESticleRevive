@@ -893,9 +893,10 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 		m_eMapping = SNROM_MAPPING_EXLOROM;
 	}
 
-	/* Experimental Aurora DSP-1 Target-Y convention, restricted to exact
-	   normalized Pilotwings dumps.  Keeping this as a ROM flag makes every
-	   other DSP-1 game retain the established SNESticle calculation.
+	/* DSP revision quirks, restricted to exact normalized Pilotwings dumps.
+	   Target-Y follows the real DSP microcode in all three revisions below.
+	   USA/Japan shipped with the original DSP-1/1A op28 interpolation bug;
+	   the preserved European board uses the corrected DSP-1B behavior.
 	     266C44ED = Pilotwings (USA)
 	     77871727 = Pilotwings (Japan)
 	     DEF45776 = Pilotwings (Europe) */
@@ -905,6 +906,9 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 		if (crc == 0x266C44EDu || crc == 0x77871727u ||
 		    crc == 0xDEF45776u)
 			m_Flags |= SNROM_FLAG_DSP1_TARGET_Y_SUBTRACT;
+
+		if (crc == 0x266C44EDu || crc == 0x77871727u)
+			m_Flags |= SNROM_FLAG_DSP1_ORIGINAL_OP28;
 	}
 
 	m_bLoaded   = true;

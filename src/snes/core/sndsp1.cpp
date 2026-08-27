@@ -443,6 +443,7 @@ SNDSP1::SNDSP1()
 {
     g_pSNDSP1_Instance = this;
     m_bTargetYSubtract = FALSE;
+    m_bOriginalDistanceBug = FALSE;
     Reset();
 }
 
@@ -527,7 +528,7 @@ static void DSP1_DoRange2(Int16 *in, Int16 *out)
 }
 
 // ---- 0x28 Distance ----  sqrt(X^2+Y^2+Z^2) usando tabela interna
-static void DSP1_DoDistance(Int16 *in, Int16 *out)
+static void DSP1_DoDistance(Int16 *in, Int16 *out, Bool bOriginalBug)
 {
     Int16 X = in[0], Y = in[1], Z = in[2];
     Int32 R = (Int32)X*X + (Int32)Y*Y + (Int32)Z*Z;
@@ -541,7 +542,19 @@ static void DSP1_DoDistance(Int16 *in, Int16 *out)
     Int16 N1 = (Int16)g_DataRom[0x00D5 + Pos];
     Int16 N2 = (Int16)g_DataRom[0x00D6 + Pos];
 
-    Int16 d = (Int16)((((Int32)(N2 - N1)) * (C & 0x1FF) >> 9) + N1);
+    Int16 d;
+    if (bOriginalBug)
+    {
+        /* DSP-1/DSP-1A op28 bug: the interpolation fraction is used as
+           the signed 16-bit value C<<6.  DSP-1B masks the sign bit and
+           thereby produces the mathematically corrected distance. */
+        Int16 fraction = (Int16)((Uint16)C << 6);
+        d = (Int16)((((Int32)(N2 - N1)) * fraction >> 15) + N1);
+    }
+    else
+    {
+        d = (Int16)((((Int32)(N2 - N1)) * (C & 0x1FF) >> 9) + N1);
+    }
     d = (Int16)(d >> (E >> 1));
     out[0] = d;
 }
@@ -707,7 +720,7 @@ void SNDSP1::Execute(Uint8 uCmd)
     case 0x08: DSP1_DoRadius(in, out); break;
     case 0x18: DSP1_DoRange (in, out); break;
     case 0x38: DSP1_DoRange2(in, out); break;
-    case 0x28: DSP1_DoDistance(in, out); break;
+    case 0x28: DSP1_DoDistance(in, out, m_bOriginalDistanceBug); break;
     case 0x0C: case 0x2C: DSP1_DoRotate(in, out); break;
     case 0x1C: case 0x3C: DSP1_DoPolar (in, out); break;
     case 0x10: case 0x30: DSP1_DoInverse(in, out); break;

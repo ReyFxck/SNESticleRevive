@@ -45,6 +45,12 @@ public:
     }
     Bool GetTargetYSubtract() const { return m_bTargetYSubtract; }
 
+    void SetOriginalDistanceBug(Bool bEnable)
+    {
+        m_bOriginalDistanceBug = bEnable ? TRUE : FALSE;
+    }
+    Bool GetOriginalDistanceBug() const { return m_bOriginalDistanceBug; }
+
     static SNDSP1 *GetInstance();
 
 private:
@@ -69,6 +75,7 @@ private:
     Uint16  m_uDataCounter;    // indice da palavra atual no buffer
     Uint8   m_bFreeze;         // op1A/2A/3A: trava o chip
     Bool    m_bTargetYSubtract; // compatibilidade restrita a Pilotwings
+    Bool    m_bOriginalDistanceBug; // op28 do DSP-1/1A anterior ao DSP-1B
 
     // -------- buffers de palavras --------
     // 7 entradas e' o max usado por qualquer comando do DSP-1
