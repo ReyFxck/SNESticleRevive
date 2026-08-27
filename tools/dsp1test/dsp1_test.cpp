@@ -27,6 +27,7 @@ static int16_t readWord(SNDSP1 &d) {
 
 int main() {
     SNDSP1 dsp;
+    int failures = 0;
 
     // ---------- sanity: Multiply (op 0x00), 2 in, 1 out ----------
     // Esperado: (a * b) >> 15.  0x4000 * 0x4000 >> 15 = 0x2000.
@@ -220,5 +221,55 @@ int main() {
                (abs(px-0x2000)<=8 && abs(py-0x1000)<=8 && abs(pz-0x0800)<=8) ? "OK (~entrada)" : "<-- DIVERGE");
     }
 
-    return 0;
+    // ========== Gate experimental do Target-Y para Pilotwings ==========
+    // O caminho padrao precisa permanecer bit-a-bit igual para Mario Kart e
+    // todos os outros jogos DSP-1. Somente a instancia explicitamente marcada
+    // usa a convencao de sinal do Aurora no termo horizontal do eixo Y.
+    {
+        SNDSP1 gated;
+
+        sendByte(gated, 0x02);  // Parameter
+        sendWord(gated, 0x0000); // Fx
+        sendWord(gated, 0x0000); // Fy
+        sendWord(gated, 0x0000); // Fz
+        sendWord(gated, 0x0600); // Lfe
+        sendWord(gated, 0x0200); // Les
+        sendWord(gated, 0x2000); // Aas = 45 graus
+        sendWord(gated, 0x1000); // Azs
+        (void)readWord(gated); (void)readWord(gated);
+        (void)readWord(gated); (void)readWord(gated);
+
+        // Default: calculo historico do Revive (usado por Mario Kart).
+        sendByte(gated, 0x0E);
+        sendWord(gated, 32); sendWord(gated, 48);
+        int16_t defaultX = readWord(gated);
+        int16_t defaultY = readWord(gated);
+
+        // Gate ligado: convencao experimental portada do Aurora.
+        gated.SetTargetYSubtract(TRUE);
+        sendByte(gated, 0x0E);
+        sendWord(gated, 32); sendWord(gated, 48);
+        int16_t pilotX = readWord(gated);
+        int16_t pilotY = readWord(gated);
+
+        // Desligar deve restaurar exatamente o resultado anterior.
+        gated.SetTargetYSubtract(FALSE);
+        sendByte(gated, 0x0E);
+        sendWord(gated, 32); sendWord(gated, 48);
+        int16_t restoredX = readWord(gated);
+        int16_t restoredY = readWord(gated);
+
+        bool ok = !gated.GetTargetYSubtract() &&
+                  defaultX == -43 && defaultY == 171 &&
+                  pilotX == -43 && pilotY == 41 &&
+                  restoredX == defaultX && restoredY == defaultY;
+
+        printf("\n[Pilotwings gate] default=(%d,%d) experimental=(%d,%d) "
+               "restored=(%d,%d)  %s\n",
+               defaultX, defaultY, pilotX, pilotY, restoredX, restoredY,
+               ok ? "OK" : "FALHOU");
+        if (!ok) failures++;
+    }
+
+    return failures == 0 ? 0 : 1;
 }

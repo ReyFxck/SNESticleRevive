@@ -442,6 +442,7 @@ static SNDSP1 *g_pSNDSP1_Instance = 0;
 SNDSP1::SNDSP1()
 {
     g_pSNDSP1_Instance = this;
+    m_bTargetYSubtract = FALSE;
     Reset();
 }
 
@@ -983,7 +984,10 @@ void SNDSP1::Execute(Uint8 uCmd)
         DSP1_Normalize(C1, C, E);
         C = (Int16)(((Int32)DSP1_DenormalizeAndClip(C, E) * H) >> 15);
         Int16 X = (Int16)(m_CentreX + (Int16)(((Int32)C * m_CosAas) >> 15));
-        Int16 Y = (Int16)(m_CentreY + (Int16)(((Int32)C * m_SinAas) >> 15));
+        Int16 yHorizontal = (Int16)(((Int32)C * m_SinAas) >> 15);
+        Int16 Y = m_bTargetYSubtract
+            ? (Int16)(m_CentreY - yHorizontal)
+            : (Int16)(m_CentreY + yHorizontal);
 
         V = (Int16)(V << 8);
         DSP1_Normalize((Int16)(((Int32)C1 * m_SecAZS_C1) >> 15), C, E1);

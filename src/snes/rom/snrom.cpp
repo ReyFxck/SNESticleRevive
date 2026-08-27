@@ -7,6 +7,21 @@
 #include "dataio.h"
 #include "sndbglog.h"
 
+/* Standard CRC32 of the normalized, headerless ROM image.  Compatibility
+   quirks are gated by exact clean dumps so they cannot leak into another
+   DSP-1 title such as Super Mario Kart. */
+static Uint32 _SNRomCRC32(const Uint8 *pData, Uint32 nBytes)
+{
+	Uint32 crc = 0xFFFFFFFFu;
+	while (nBytes--)
+	{
+		crc ^= *pData++;
+		for (Uint32 bit = 0; bit < 8; bit++)
+			crc = (crc >> 1) ^ ((crc & 1) ? 0xEDB88320u : 0u);
+	}
+	return crc ^ 0xFFFFFFFFu;
+}
+
 /* Pontua um header LoROM candidato em 'base' (deslocamento do $FFC0 da
    metade). Usado para descobrir QUAL metade de uma ROM ExLoROM contem o
    header/vetores reais, para normalizar a ordem (igual ao scoring do
@@ -878,6 +893,20 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 		m_eMapping = SNROM_MAPPING_EXLOROM;
 	}
 
+	/* Experimental Aurora DSP-1 Target-Y convention, restricted to exact
+	   normalized Pilotwings dumps.  Keeping this as a ROM flag makes every
+	   other DSP-1 game retain the established SNESticle calculation.
+	     266C44ED = Pilotwings (USA)
+	     77871727 = Pilotwings (Japan)
+	     DEF45776 = Pilotwings (Europe) */
+	if ((m_Flags & SNROM_FLAG_DSP1) && m_pRomData && m_uRomBytes)
+	{
+		Uint32 crc = _SNRomCRC32(m_pRomData, m_uRomBytes);
+		if (crc == 0x266C44EDu || crc == 0x77871727u ||
+		    crc == 0xDEF45776u)
+			m_Flags |= SNROM_FLAG_DSP1_TARGET_Y_SUBTRACT;
+	}
+
 	m_bLoaded   = true;
 	return LOADERROR_NONE;
 }
@@ -893,6 +922,7 @@ void SnesRom::Unload()
 	m_pCartInfo = NULL;
 	m_pRomData = NULL;
 	m_uRomBytes = 0;
+	m_Flags = SNROM_FLAG_ROM;
 	m_bLoaded   = false;
 	memset(m_Name, 0, sizeof(m_Name));
 }

@@ -39,6 +39,12 @@ public:
     Uint8 ReadData (Uint32 uAddr);
     Uint8 ReadStatus(Uint32 uAddr);
 
+    void SetTargetYSubtract(Bool bEnable)
+    {
+        m_bTargetYSubtract = bEnable ? TRUE : FALSE;
+    }
+    Bool GetTargetYSubtract() const { return m_bTargetYSubtract; }
+
     static SNDSP1 *GetInstance();
 
 private:
@@ -62,6 +68,7 @@ private:
     Uint8   m_uCommand;        // opcode atual em execucao
     Uint16  m_uDataCounter;    // indice da palavra atual no buffer
     Uint8   m_bFreeze;         // op1A/2A/3A: trava o chip
+    Bool    m_bTargetYSubtract; // compatibilidade restrita a Pilotwings
 
     // -------- buffers de palavras --------
     // 7 entradas e' o max usado por qualquer comando do DSP-1

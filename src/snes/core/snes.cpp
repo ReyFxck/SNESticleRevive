@@ -1101,12 +1101,18 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 	}
 #ifdef SNES_DSP1
 	m_pDsp = NULL;
+	m_DSP1.SetTargetYSubtract(FALSE);
 #endif 
 	// set rom
 	m_pRom = pRom;
 
 	if (m_pRom)
 	{
+		#ifdef SNES_DSP1
+		m_DSP1.SetTargetYSubtract(
+			(m_pRom->m_Flags & SNROM_FLAG_DSP1_TARGET_Y_SUBTRACT)
+				? TRUE : FALSE);
+		#endif
 		// setup memory mapping for this rom
 		MapMem(m_pRom->m_eMapping, m_pRom->m_Flags);
 	} 
