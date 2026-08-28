@@ -35,9 +35,6 @@ On top of the SNES core, the project now also integrates **InfoNES** to bring
   <a href="https://github.com/ReyFxck/SNESticleRevive/releases">
     <img alt="Downloads" src="https://img.shields.io/github/downloads/ReyFxck/SNESticleRevive/total?style=for-the-badge&logo=github&logoColor=white&label=DOWNLOADS%20TOTAL&color=181717">
   </a>
-  <a href="https://t.me/+_NextL8xFv4zYWEx">
-    <img alt="GROUP" src="https://img.shields.io/badge/TELEGRAM-ENTRAR_NO_GRUPO-26A5E4?style=for-the-badge&logo=telegram&logoColor=white">
-  </a>
 </p>
 
 ---
