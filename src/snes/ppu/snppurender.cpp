@@ -176,7 +176,10 @@ void SnesPPURender::RenderLine16(Int32 iLine)
 
 void SnesPPURender::UpdateCGRAM(Uint32 uAddr, Uint16 uData)
 {
-	if (m_pRenderInfo && m_pBlend)
+	/* A video-skipped frame still updates emulated CGRAM in SnesPPU.  The
+	   following rendered frame begins with UPDATE_ALL and uploads the complete
+	   palette, so touching GS/CLUT state here would be pure duplicate work. */
+	if (m_pTarget && m_pRenderInfo && m_pBlend)
 	{
 		m_pBlend->UpdatePaletteEntry(&m_pRenderInfo->BlendInfo, uAddr, uData, m_pPPU->GetIntensity());
 	}
@@ -426,7 +429,8 @@ void SnesPPURender::BeginRender(CRenderSurface *pTarget)
 void SnesPPURender::EndRender()
 {
     #if CODE_PLATFORM == CODE_PS2
-    DmaSyncSprToRam();
+	if (m_pTarget)
+		DmaSyncSprToRam();
     #endif
 
 	if (m_pTarget)

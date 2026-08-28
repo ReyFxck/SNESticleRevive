@@ -6,6 +6,7 @@
 #include "snmask.h"
 #include "snppurenderi.h"
 #include "snqueue.h"
+#include "sndbglog.h"
 
 #define SNPPU_WRITEQUEUE (TRUE)
 
@@ -177,8 +178,20 @@ public:
 	Uint32                  GetIntensity()  const                       {return m_Regs.inidisp & 0xF;}
 
 	#if SNPPU_WRITEQUEUE
-	Bool                    EnqueueWrite(Uint32 uLine, Uint32 uAddr, Uint8 uData,
-	                                    Bool bCountFailure = TRUE);
+	_INLINE Bool            EnqueueWrite(Uint32 uLine, Uint32 uAddr, Uint8 uData,
+	                                    Bool bCountFailure = TRUE)
+	{
+		Bool bQueued = m_Queue.Enqueue(uLine, uAddr, uData);
+#if SNDBG_LOG
+		if (bQueued)
+			g_DbgPPUQueuedWrites++;
+		else if (bCountFailure)
+			g_DbgPPUQueueFull++;
+#else
+		(void)bCountFailure;
+#endif
+		return bQueued;
+	}
 	#endif
 	void                    Sync(Uint32 uLine);
 
@@ -221,7 +234,7 @@ private:
     ISnesPPURender *        m_pRender;
 
 #if SNPPU_WRITEQUEUE
-    SNQueue			        m_Queue;	// write queue
+    SNPPUQueue			    m_Queue;	// raster write queue
 #endif
 
     void                    UpdateMatMul();

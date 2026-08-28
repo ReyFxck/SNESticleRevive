@@ -74,6 +74,17 @@ static _INLINE Bool SnesHDMATryQueuePPUWrite(
 	return FALSE;
 }
 
+/* SNCPURead8 lives in a separate C translation unit, so GCC cannot inline its
+   very small direct-memory fast path into the per-scanline HDMA loops.  Keep
+   trap semantics identical while avoiding thousands of calls per second for
+   ordinary ROM/WRAM table reads. */
+static _INLINE Uint8 SnesHDMARead8(SNCpuT *pCPU, Uint32 uAddr)
+{
+	SNCpuBankT *pBank = &pCPU->Bank[uAddr >> SNCPU_BANK_SHIFT];
+	Uint8 *pMem = pBank->pMem;
+	return pMem ? pMem[uAddr] : pBank->pReadTrapFunc(pCPU, uAddr);
+}
+
 #if SNDBG_DEEP
 struct SNDmaOAMCaptureT
 {
@@ -781,7 +792,7 @@ void SnesDMAC::BeginHDMA()
 
 		pChan = &m_Channels[uChan];
 		pChan->a2ax = pChan->a1tx;
-		pChan->ntlrx = SNCPURead8(m_pCPU,
+		pChan->ntlrx = SnesHDMARead8(m_pCPU,
 			(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 		SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
 		pChan->a2ax++;
@@ -792,7 +803,7 @@ void SnesDMAC::BeginHDMA()
 
 		if (pChan->dmapx & 0x40)
 		{
-			uLow = SNCPURead8(m_pCPU,
+			uLow = SnesHDMARead8(m_pCPU,
 				(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 			SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
 			pChan->a2ax++;
@@ -805,7 +816,7 @@ void SnesDMAC::BeginHDMA()
 			}
 			else
 			{
-				pChan->dasx = uLow | (SNCPURead8(m_pCPU,
+				pChan->dasx = uLow | (SnesHDMARead8(m_pCPU,
 					(Uint16)pChan->a2ax | (pChan->a1bx << 16)) << 8);
 				SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
 				pChan->a2ax++;
@@ -841,12 +852,12 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 
 		if (pChan->dmapx & 0x80)
 		{
-			uData = SNCPURead8(m_pCPU, uAddrB);
+			uData = SnesHDMARead8(m_pCPU, uAddrB);
 			SNCPUWrite8(m_pCPU, uAddrA, uData);
 		}
 		else
 		{
-			uData = SNCPURead8(m_pCPU, uAddrA);
+			uData = SnesHDMARead8(m_pCPU, uAddrA);
 			if (!SnesHDMATryQueuePPUWrite(
 			        m_pPPU, uLine, uPortB, uData))
 			{
@@ -954,7 +965,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 
 		/* The S-CPU performs this table read on every active scanline.  Its
 		   value is discarded until the seven-bit line counter reaches zero. */
-		uNewCounter = SNCPURead8(m_pCPU,
+		uNewCounter = SnesHDMARead8(m_pCPU,
 			(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 		SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
 
@@ -970,7 +981,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 					!((m_HDMAEnable & ~m_HDMAEnded) & uHigherMask);
 				Uint8 uLow;
 
-				uLow = SNCPURead8(m_pCPU,
+				uLow = SnesHDMARead8(m_pCPU,
 					(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 				SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
 				pChan->a2ax++;
@@ -983,7 +994,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 				}
 				else
 				{
-					pChan->dasx = uLow | (SNCPURead8(m_pCPU,
+					pChan->dasx = uLow | (SnesHDMARead8(m_pCPU,
 						(Uint16)pChan->a2ax |
 						(pChan->a1bx << 16)) << 8);
 					SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);

@@ -16,29 +16,29 @@ static void Check(const char *pName, int nGot, int nExpected)
 
 int main()
 {
-	SNQueue queue;
+	SNQueueT<8> queue;
 	SNQueueElementT *pElement;
 	int i;
 
-	for (i = 0; i < SNQUEUE_SIZE; ++i)
+	for (i = 0; i < 8; ++i)
 		Check("initial fill", queue.Enqueue((Uint32)i, 0x2100, (Uint8)i), TRUE);
 	Check("genuine full queue", queue.Enqueue(900, 0x2100, 0), FALSE);
 
-	for (i = 0; i < 300; ++i)
+	for (i = 0; i < 5; ++i)
 	{
 		pElement = queue.Dequeue();
-		Check("dequeue before compact", pElement ? (int)pElement->uCycle : -1, i);
+		Check("dequeue before wrap", pElement ? (int)pElement->uCycle : -1, i);
 	}
 
-	Check("enqueue compacts consumed prefix",
-	      queue.Enqueue(999, 0x2122, 0x5A), TRUE);
-	for (i = 300; i < SNQUEUE_SIZE; ++i)
+	for (i = 8; i < 13; ++i)
+		Check("enqueue wraps into consumed prefix",
+		      queue.Enqueue((Uint32)i, 0x2122, (Uint8)i), TRUE);
+	Check("wrapped queue is full", queue.Enqueue(999, 0x2122, 0x5A), FALSE);
+	for (i = 5; i < 13; ++i)
 	{
 		pElement = queue.Dequeue();
-		Check("FIFO survives compact", pElement ? (int)pElement->uCycle : -1, i);
+		Check("FIFO survives wrap", pElement ? (int)pElement->uCycle : -1, i);
 	}
-	pElement = queue.Dequeue();
-	Check("new element remains last", pElement ? (int)pElement->uCycle : -1, 999);
 	Check("queue empty after drain", queue.IsEmpty(), TRUE);
 
 	queue.Enqueue(10, 0x2100, 0);

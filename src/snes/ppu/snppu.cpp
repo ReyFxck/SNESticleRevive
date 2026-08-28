@@ -868,21 +868,6 @@ void SnesPPU::EndFrame()
 }
 
 
-Bool SnesPPU::EnqueueWrite(Uint32 uLine, Uint32 uAddr, Uint8 uData,
-	Bool bCountFailure)
-{
-	Bool bQueued = m_Queue.Enqueue(uLine, uAddr, uData);
-#if SNDBG_LOG
-	if (bQueued)
-		g_DbgPPUQueuedWrites++;
-	else if (bCountFailure)
-		g_DbgPPUQueueFull++;
-#else
-	(void)bCountFailure;
-#endif
-	return bQueued;
-}
-
 void SnesPPU::Sync(Uint32 uLine)
 {
 	SNQueueElementT *pElement;
