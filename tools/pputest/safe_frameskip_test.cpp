@@ -25,25 +25,32 @@ int main()
 	scheduler.AfterFlip(4000, FALSE);
 	Check("calibrated period", scheduler.GetPeriod(), 1000);
 
-	// Two gameplay flips establish continuity; 1.6 periods misses VBlank.
+	// The first gameplay flip establishes continuity.
 	scheduler.AfterFlip(5000, TRUE);
-	Check("healthy frame renders", scheduler.Take(), FALSE);
-	scheduler.AfterFlip(6600, TRUE);
-	Check("miss requests one skip", scheduler.Take(), TRUE);
-	Check("skip forces following render", scheduler.Take(), FALSE);
+	Check("healthy frame needs no catchup", scheduler.TakeCatchupFrames(), 0);
+	scheduler.AfterFlip(7000, TRUE);
+	Check("two VBlanks request one hidden frame",
+	      scheduler.TakeCatchupFrames(), 1);
+	scheduler.AfterFlip(9000, TRUE);
+	Check("steady two-VBlank load keeps one hidden frame",
+	      scheduler.TakeCatchupFrames(), 1);
+	scheduler.AfterFlip(12000, TRUE);
+	Check("three VBlanks request two hidden frames",
+	      scheduler.TakeCatchupFrames(), 2);
+	scheduler.AfterFlip(16000, TRUE);
+	Check("four VBlanks reach catchup cap",
+	      scheduler.TakeCatchupFrames(), 3);
 
-	// Another miss can request recovery only after that real rendered frame.
-	scheduler.AfterFlip(8200, TRUE);
-	Check("second miss can recover", scheduler.Take(), TRUE);
-	scheduler.AfterFlip(9200, TRUE);
-	Check("healthy cadence clears debt", scheduler.Take(), FALSE);
+	// One healthy presentation immediately stops catch-up work.
+	scheduler.AfterFlip(17000, TRUE);
+	Check("healthy cadence clears catchup", scheduler.TakeCatchupFrames(), 0);
 
 	// A debugger/I/O-sized discontinuity is not treated as video debt.
-	scheduler.AfterFlip(15000, TRUE);
-	Check("long discontinuity is ignored", scheduler.Take(), FALSE);
+	scheduler.AfterFlip(23000, TRUE);
+	Check("long discontinuity is ignored", scheduler.TakeCatchupFrames(), 0);
 
 	scheduler.CancelRecovery();
-	Check("cancel leaves renderer enabled", scheduler.Take(), FALSE);
+	Check("cancel leaves renderer enabled", scheduler.TakeCatchupFrames(), 0);
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;

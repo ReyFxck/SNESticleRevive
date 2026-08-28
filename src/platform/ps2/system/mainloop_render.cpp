@@ -55,16 +55,16 @@ static Uint32 _uVblankCycle;
 
 static MainLoopSafeFrameskipScheduler _SafeFrameskip;
 
-Bool MainLoopSafeFrameskipTake(Bool bAllowed)
+Uint32 MainLoopSafeFrameskipTake(Bool bAllowed)
 {
 #if SNESTICLE_SAFE_FRAMESKIP
 	if (bAllowed)
-		return _SafeFrameskip.Take();
+		return _SafeFrameskip.TakeCatchupFrames();
 #else
 	(void)bAllowed;
 #endif
 	_SafeFrameskip.CancelRecovery();
-	return FALSE;
+	return 0;
 }
 
 void MainLoopSafeFrameskipAfterFlip()

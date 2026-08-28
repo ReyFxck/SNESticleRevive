@@ -227,23 +227,27 @@ Bool MainLoopProcess()
             }
             else
             {
-				/* Recover after a missed host VBlank by retaining the previous
-				   texture for one presentation.  ExecuteFrame still advances the
-				   complete emulated machine and produces normal audio. */
+				/* Recover after missed host VBlanks by running the missing SNES
+				   frames without video before drawing the newest one.  Unlike merely
+				   presenting the old texture, these hidden frames do not perform a
+				   GS flip/wait, so CPU, SPC and input can regain real-time cadence. */
 				Bool bFrameskipAllowed =
 					(NetInput.eGameState == NETPLAY_GAMESTATE_IDLE &&
 					 !s_pMovieClip->IsPlaying() &&
 					 !s_pMovieClip->IsRecording()) ? TRUE : FALSE;
-				Bool bSkipVideo =
+				Uint32 uCatchupFrames =
 					MainLoopSafeFrameskipTake(bFrameskipAllowed);
+				for (Uint32 uCatchup = 0; uCatchup < uCatchupFrames; ++uCatchup)
+				{
 #if SNDBG_LOG
-				if (bSkipVideo)
 					g_DbgVideoSkippedFrames++;
-				else
-					g_DbgVideoRenderedFrames++;
 #endif
-				_ExecuteSnes(bSkipVideo ? NULL : pSurface,
-				             pMixBuffer, &Input, eMode);
+					_ExecuteSnes(NULL, pMixBuffer, &Input, eMode);
+				}
+#if SNDBG_LOG
+				g_DbgVideoRenderedFrames++;
+#endif
+				_ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
             }
 		    _iframetex^=1;
         }

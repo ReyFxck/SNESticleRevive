@@ -2,10 +2,15 @@
 
 #include "types.h"
 
+#ifndef SNESTICLE_MAX_CATCHUP_FRAMES
+#define SNESTICLE_MAX_CATCHUP_FRAMES 3
+#endif
+
 /* Host-only recovery scheduler.  It observes completed GS flips and requests
-   one video-only skip after a missed VBlank.  CPU, SPC, input and every PPU
-   register/DMA still advance; the caller merely passes a null render surface.
-   A mandatory rendered frame after every skip prevents consecutive drops. */
+   hidden catch-up frames after missed VBlanks.  The caller executes those
+   complete emulated frames with a null render surface, then renders one visible
+   frame before the next flip.  Unlike presenting the old texture for another
+   VBlank, hidden frames do not wait for the GS, so emulated time can catch up. */
 class MainLoopSafeFrameskipScheduler
 {
 public:
@@ -16,9 +21,8 @@ public:
 
 	void Reset()
 	{
-		m_bPending = FALSE;
-		m_bMustRender = FALSE;
 		m_bWasGameplay = FALSE;
+		m_uPendingCatchup = 0;
 		m_uLastFlip = 0;
 		m_uPeriod = 0;
 		m_uSampleCount = 0;
@@ -28,23 +32,14 @@ public:
 
 	void CancelRecovery()
 	{
-		m_bPending = FALSE;
-		m_bMustRender = FALSE;
+		m_uPendingCatchup = 0;
 	}
 
-	Bool Take()
+	Uint32 TakeCatchupFrames()
 	{
-		if (m_bMustRender)
-		{
-			m_bMustRender = FALSE;
-			return FALSE;
-		}
-		if (!m_bPending)
-			return FALSE;
-
-		m_bPending = FALSE;
-		m_bMustRender = TRUE;
-		return TRUE;
+		Uint32 uFrames = m_uPendingCatchup;
+		m_uPendingCatchup = 0;
+		return uFrames;
 	}
 
 	void AfterFlip(Uint32 uNow, Bool bGameplay)
@@ -69,16 +64,23 @@ public:
 
 					if (bGameplay && m_bWasGameplay &&
 					    m_uSampleCount >= 3u && m_uPeriod != 0 &&
-					    (Uint64)uDelta * 1000u >
-					    (Uint64)m_uPeriod * 1500u)
+					    (Uint64)uDelta * 2u >
+					    (Uint64)m_uPeriod * 3u)
 					{
-						m_bPending = TRUE;
+						/* Completed flips are phase-locked to VBlank, so the
+						   nearest period count tells us how many emulated frames
+						   must run before the next visible one. */
+						Uint32 uPeriods = (uDelta + m_uPeriod / 2u) / m_uPeriod;
+						Uint32 uCatchup = uPeriods > 1u ? uPeriods - 1u : 0u;
+						if (uCatchup > SNESTICLE_MAX_CATCHUP_FRAMES)
+							uCatchup = SNESTICLE_MAX_CATCHUP_FRAMES;
+						m_uPendingCatchup = uCatchup;
 					}
-					else if (bGameplay && m_bPending && m_uPeriod != 0 &&
-					         (Uint64)uDelta * 1000u <=
-					         (Uint64)m_uPeriod * 1500u)
+					else if (bGameplay && m_uPeriod != 0 &&
+					         (Uint64)uDelta * 2u <=
+					         (Uint64)m_uPeriod * 3u)
 					{
-						m_bPending = FALSE;
+						m_uPendingCatchup = 0;
 					}
 				}
 			}
@@ -136,9 +138,8 @@ private:
 			                    m_uSamples[2]);
 	}
 
-	Bool m_bPending;
-	Bool m_bMustRender;
 	Bool m_bWasGameplay;
+	Uint32 m_uPendingCatchup;
 	Uint32 m_uLastFlip;
 	Uint32 m_uPeriod;
 	Uint32 m_uSamples[3];
@@ -146,5 +147,5 @@ private:
 	Uint32 m_uSamplePos;
 };
 
-Bool MainLoopSafeFrameskipTake(Bool bAllowed);
+Uint32 MainLoopSafeFrameskipTake(Bool bAllowed);
 void MainLoopSafeFrameskipAfterFlip(void);
