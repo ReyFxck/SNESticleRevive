@@ -334,28 +334,20 @@ static void _MosaicBGPlanar(Uint8 *pLine, Int32 nTotalPixels, Uint32 uMosaic)
 
 void _ClearLine8(Uint8 *pLine8, Uint8 *pLineP, Int32 nPixels, Uint8 uColor, Uint32 uBGMask)
 {
-	while (nPixels > 0)
+	if (nPixels > 0)
 	{
-		pLine8[0] = uColor;
-		pLineP[0] = uBGMask;
-
-		pLine8++;
-		pLineP++;
-		nPixels--;
+		/* As duas saidas sao planos de bytes. O Makefile desliga a
+		   transformacao automatica de loops em memset, entao a chamada
+		   explicita usa a rotina otimizada do PS2SDK. */
+		memset(pLine8, uColor, (size_t)nPixels);
+		memset(pLineP, (Uint8)uBGMask, (size_t)nPixels);
 	}
-
 }
 
 void _ClearLine8(Uint8 *pLine8, Int32 nPixels, Uint8 uColor)
 {
-	while (nPixels > 0)
-	{
-		pLine8[0] = uColor;
-
-		pLine8++;
-		nPixels--;
-	}
-
+	if (nPixels > 0)
+		memset(pLine8, uColor, (size_t)nPixels);
 }
 
 #if !SNPPURENDER_CHR64
@@ -1303,6 +1295,7 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 		Uint8 *pHFlip;
 #endif
 		Uint32 uTile;
+		const Uint32 uPalette = _SnesPPU_Obj4PalLookup[pObj->uPal];
 
 #if !SNPPU_OBJ_CACHE
 		if (pObj->bHFlip)
@@ -1385,9 +1378,6 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 				if (bSecondTable)
 					uTileAddr += uNameSelect;
 				Uint32 uRowAddr = (uTileAddr & 0x7FFF) + uYoff;
-				Uint32 uPalette;
-				// get palette bits
-				uPalette = _SnesPPU_Obj4PalLookup[pObj->uPal];
 
 #if SNPPU_OBJ_CACHE
 				{
@@ -1493,6 +1483,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	SnesRenderObj8T ObjLine[SNPPU_MAXOBJCHR];
 	Int32 nObjLine;
 	const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
+	const Uint8 uBGMode = pRegs->bgmode & 7;
 	Uint8 tm = pRegs->tm & _tm;
 	Uint8 tmw = pRegs->tmw & _tmw;
 	Uint32 cgadsub =  (pRegs->cgadsub & 0x3F);
@@ -1526,7 +1517,21 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 
 	PROF_ENTER("DecodeBGInfo");
-	DecodeBGInfo(BGInfo);
+	if (uBGMode == 7)
+	{
+		/* _FetchMode7 le os registradores diretamente. Depois da busca, o
+		   compositor generico usa somente estes campos de BG1. */
+		BGInfo[0].uBitDepth = 8;
+		BGInfo[0].uScrollX = 0;
+		BGInfo[0].Priority = 7;
+		BGInfo[1].uBitDepth = 0;
+		BGInfo[2].uBitDepth = 0;
+		BGInfo[3].uBitDepth = 0;
+	}
+	else
+	{
+		DecodeBGInfo(BGInfo);
+	}
 	PROF_LEAVE("DecodeBGInfo");
 #if SNDBG_LOG
 	g_TmgCycBGInfo += ProfCtrGetCycle() - _tBGInfo;
@@ -1744,6 +1749,17 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 	}
 
+#if CODE_PLATFORM == CODE_PS2
+	/* O caminho direto do GS, escolhido logo depois por RenderLine(), usa
+	   apenas a tela principal. Evite montar uma subtela que sera descartada. */
+	if (cgadsub == 0 && (pRegs->cgwsel & 0xC0) == 0 &&
+	    m_pPPU->GetIntensity() == 15)
+	{
+		PROF_LEAVE("RenderBG");
+		return;
+	}
+#endif
+
 #if SNDBG_LOG
 	Uint32 _tBGSub = ProfCtrGetCycle();
 #endif
@@ -1814,128 +1830,6 @@ void RenderLine8Mode7(Int32 iLine,  SnesRender8pInfoT *pRenderInfo)
 
 
 
-static void _FetchMode7_Repeat(Uint8 *pLine, Int32 nPixels, Uint8 *pVram, Int32 x, Int32 y, Int32 dx, Int32 dy)
-{
-	Int32 x2,y2;
-	Uint32 uTileAddr;
-	Uint32 uChrAddr;
-	Uint8 uChrData;
-
-	while (nPixels >0)
-	{
-		// do matrix multiply
-		x2 = x >> 8;
-		y2 = y >> 8;
-
-		// increment x/y
-		x+=dx;
-		y+=dy;
-
-		// wrap
-		x2&=0x3FF;
-		y2&=0x3FF;
-
-		// get tile address
-		uTileAddr = ((y2>>3)<<7) | (x2>>3);
-		uTileAddr &= 0x3FFF;
-
-		// fetch chr address
-		uChrAddr = pVram[uTileAddr * 2 + 0];
-
-		// offset into pixel of tile
-		uChrAddr <<=6;
-		uChrAddr += (x2 & 7);
-		uChrAddr += (y2 & 7) << 3;
-
-		// fetch chr data
-		uChrData = pVram[uChrAddr * 2 + 1];
-
-		nPixels--;
-		pLine[0] = uChrData;
-		pLine++;
-	}
-}
-
-static void _FetchMode7_Clamp(Uint8 *pLine, Int32 nPixels, Uint8 *pVram, Int32 x, Int32 y, Int32 dx, Int32 dy)
-{
-	Int32 x2,y2;
-	Uint32 uTileAddr;
-	Uint32 uChrAddr;
-	Uint8 uChrData;
-
-	while (nPixels >0)
-	{
-		// do matrix multiply
-		x2 = x >> 8;
-		y2 = y >> 8;
-
-		// increment x/y
-		x+=dx;
-		y+=dy;
-
-		// get tile address
-		uTileAddr = ((y2>>3)<<7) | (x2>>3);
-		uTileAddr &= 0x3FFF;
-
-		// fetch chr address
-		uChrAddr = pVram[uTileAddr * 2 + 0];
-
-		if ((x2|y2) >> 10)	uChrAddr = 0;
-
-		// offset into pixel of tile
-		uChrAddr <<=6;
-		uChrAddr += (x2 & 7);
-		uChrAddr += (y2 & 7) << 3;
-
-		// fetch chr data
-		uChrData = pVram[uChrAddr * 2 + 1];
-
-		nPixels--;
-		pLine[0] = uChrData;
-		pLine++;
-	}
-}
-
-static void _FetchMode7_Black(Uint8 *pLine, Int32 nPixels, Uint8 *pVram, Int32 x, Int32 y, Int32 dx, Int32 dy)
-{
-	Int32 x2,y2;
-	Uint32 uTileAddr;
-	Uint32 uChrAddr;
-	Uint8 uChrData;
-
-	while (nPixels >0)
-	{
-		// do matrix multiply
-		x2 = x >> 8;
-		y2 = y >> 8;
-
-		// increment x/y
-		x+=dx;
-		y+=dy;
-
-		// get tile address
-		uTileAddr = ((y2>>3)<<7) | (x2>>3);
-		uTileAddr &= 0x3FFF;
-
-		// fetch chr address
-		uChrAddr = pVram[uTileAddr * 2 + 0];
-
-		// offset into pixel of tile
-		uChrAddr <<=6;
-		uChrAddr += (x2 & 7);
-		uChrAddr += (y2 & 7) << 3;
-
-		// fetch chr data
-		uChrData = pVram[uChrAddr * 2 + 1];
-
-		if ((x2|y2) >> 10)	uChrData = 0;
-
-		nPixels--;
-		pLine[0] = uChrData;
-		pLine++;
-	}
-}
-
 #if 0
 static void _FetchMode7Priority(Uint8 *pPriority, Uint8 *pLine, Int32 nPixels)
 {
@@ -1992,8 +1886,7 @@ static void _FetchMode7Priority(Uint8 *pPriority, Uint8 *pLine, Int32 nPixels)
 		uPriority|= (uPri64 >> ( 0x38 + 7)) << 7;
 
 		// remove priority bits
-		uData64 |= uMask64;
-		uData64 ^= uMask64;
+		uData64 &= ~uMask64;
 
 		// store priority
 		pPriority[0] = (Uint8)uPriority;
@@ -2116,16 +2009,16 @@ static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPrio
 	{
 	case 0: // screen repetition if outside of screen area
 	case 1: // mode 1 also wraps like mode 0
-		_FetchMode7_Repeat(pLine, 256, pVram,
+		SnesPPUMode7FetchRepeat(pLine, 256, pVram,
 			Line.x, Line.y, Line.dx, Line.dy);
 		break;
 	case 3: // character 0x00 repetition if outside of screen area
-		_FetchMode7_Clamp(pLine, 256, pVram,
+		SnesPPUMode7FetchClamp(pLine, 256, pVram,
 			Line.x, Line.y, Line.dx, Line.dy);
 		break;
 	case 2: // outside of the screen area is the back drop screen in single color
 	default:
-		_FetchMode7_Black(pLine, 256, pVram,
+		SnesPPUMode7FetchBlack(pLine, 256, pVram,
 			Line.x, Line.y, Line.dx, Line.dy);
 		break;
 	}

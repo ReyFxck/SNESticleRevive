@@ -177,7 +177,8 @@ public:
 	Uint32                  GetIntensity()  const                       {return m_Regs.inidisp & 0xF;}
 
 	#if SNPPU_WRITEQUEUE
-	Bool                    EnqueueWrite(Uint32 uLine, Uint32 uAddr, Uint8 uData);
+	Bool                    EnqueueWrite(Uint32 uLine, Uint32 uAddr, Uint8 uData,
+	                                    Bool bCountFailure = TRUE);
 	#endif
 	void                    Sync(Uint32 uLine);
 

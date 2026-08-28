@@ -41,7 +41,7 @@ public:
 
 	void                        ProcessMDMA();
 	void                        BeginHDMA();
-	void                        ProcessHDMA();
+	void                        ProcessHDMA(Uint32 uLine);
 
 	Uint8                       Read8(Uint32 uChan, Uint32 uAddr);
 	void                        Write8(Uint32 uChan, Uint32 uAddr, Uint8 uData);
@@ -64,7 +64,7 @@ private:
 	void                        TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes);
 	void                        ProcessMDMAChRead(Uint32 uChan);
 	void                        ProcessMDMAChFast(Uint32 uChan);
-	void                        ProcessHDMACh(Uint32 uChan);
+	void                        ProcessHDMACh(Uint32 uChan, Uint32 uLine);
 
     //Uint32 ProcessMDMACh(Uint32 uChan);
 };

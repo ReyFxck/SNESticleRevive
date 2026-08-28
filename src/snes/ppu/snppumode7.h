@@ -80,4 +80,116 @@ _INLINE SnesPPUMode7LineT SnesPPUMode7MakeLine(
 	return Line;
 }
 
+/*
+ * Busca escalar dos pixels do Mode 7.
+ *
+ * A VRAM nao pode mudar enquanto RenderLine() produz uma scanline. Portanto,
+ * pixels consecutivos que caem no mesmo tile 8x8 podem reutilizar o byte do
+ * tilemap sem alterar o resultado emulado. As variantes clamp/black tambem
+ * evitam leituras cujo valor o PPU descartaria por estar fora de 0..1023.
+ */
+_INLINE void SnesPPUMode7FetchRepeat(
+	Uint8 *pLine, Int32 nPixels, const Uint8 *pVram,
+	Int32 x, Int32 y, Int32 dx, Int32 dy)
+{
+	Uint32 uLastTileAddr = 0xFFFFFFFFu;
+	Uint32 uChrBase = 0;
+
+	while (nPixels-- > 0)
+	{
+		Int32 x2 = (x >> 8) & 0x3FF;
+		Int32 y2 = (y >> 8) & 0x3FF;
+		Uint32 uTileAddr = ((Uint32)(y2 >> 3) << 7) |
+		                       (Uint32)(x2 >> 3);
+
+		x += dx;
+		y += dy;
+
+		if (uTileAddr != uLastTileAddr)
+		{
+			uChrBase = (Uint32)pVram[uTileAddr * 2] << 6;
+			uLastTileAddr = uTileAddr;
+		}
+
+		Uint32 uChrAddr = uChrBase + (Uint32)(x2 & 7) +
+		                  ((Uint32)(y2 & 7) << 3);
+		*pLine++ = pVram[uChrAddr * 2 + 1];
+	}
+}
+
+_INLINE void SnesPPUMode7FetchClamp(
+	Uint8 *pLine, Int32 nPixels, const Uint8 *pVram,
+	Int32 x, Int32 y, Int32 dx, Int32 dy)
+{
+	Uint32 uLastTileAddr = 0xFFFFFFFFu;
+	Uint32 uCachedChrBase = 0;
+
+	while (nPixels-- > 0)
+	{
+		Int32 x2 = x >> 8;
+		Int32 y2 = y >> 8;
+		Uint32 uChrBase;
+
+		x += dx;
+		y += dy;
+
+		if ((Uint32)x2 > 0x3FFu || (Uint32)y2 > 0x3FFu)
+		{
+			/* Character zero is repeated outside the tilemap. */
+			uChrBase = 0;
+		}
+		else
+		{
+			Uint32 uTileAddr = ((Uint32)(y2 >> 3) << 7) |
+			                       (Uint32)(x2 >> 3);
+			if (uTileAddr != uLastTileAddr)
+			{
+				uCachedChrBase = (Uint32)pVram[uTileAddr * 2] << 6;
+				uLastTileAddr = uTileAddr;
+			}
+			uChrBase = uCachedChrBase;
+		}
+
+		Uint32 uChrAddr = uChrBase + (Uint32)(x2 & 7) +
+		                  ((Uint32)(y2 & 7) << 3);
+		*pLine++ = pVram[uChrAddr * 2 + 1];
+	}
+}
+
+_INLINE void SnesPPUMode7FetchBlack(
+	Uint8 *pLine, Int32 nPixels, const Uint8 *pVram,
+	Int32 x, Int32 y, Int32 dx, Int32 dy)
+{
+	Uint32 uLastTileAddr = 0xFFFFFFFFu;
+	Uint32 uCachedChrBase = 0;
+
+	while (nPixels-- > 0)
+	{
+		Int32 x2 = x >> 8;
+		Int32 y2 = y >> 8;
+
+		x += dx;
+		y += dy;
+
+		if ((Uint32)x2 > 0x3FFu || (Uint32)y2 > 0x3FFu)
+		{
+			*pLine++ = 0;
+		}
+		else
+		{
+			Uint32 uTileAddr = ((Uint32)(y2 >> 3) << 7) |
+			                       (Uint32)(x2 >> 3);
+			if (uTileAddr != uLastTileAddr)
+			{
+				uCachedChrBase = (Uint32)pVram[uTileAddr * 2] << 6;
+				uLastTileAddr = uTileAddr;
+			}
+
+			Uint32 uChrAddr = uCachedChrBase + (Uint32)(x2 & 7) +
+			                  ((Uint32)(y2 & 7) << 3);
+			*pLine++ = pVram[uChrAddr * 2 + 1];
+		}
+	}
+}
+
 #endif

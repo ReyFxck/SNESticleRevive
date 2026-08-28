@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 
 #include "types.h"
 #include "snppumode7.h"
@@ -67,6 +68,111 @@ static Uint32 NextRandom(Uint32 *pState)
 	return x;
 }
 
+static void ReferenceFetchRepeat(Uint8 *pLine, Int32 nPixels,
+	const Uint8 *pVram, Int32 x, Int32 y, Int32 dx, Int32 dy)
+{
+	while (nPixels-- > 0)
+	{
+		Int32 x2 = (x >> 8) & 0x3FF;
+		Int32 y2 = (y >> 8) & 0x3FF;
+		Uint32 uTileAddr = (((Uint32)y2 >> 3) << 7) |
+		                       ((Uint32)x2 >> 3);
+		Uint32 uChrAddr = (Uint32)pVram[uTileAddr * 2] << 6;
+
+		x += dx;
+		y += dy;
+		uChrAddr += (Uint32)(x2 & 7) + ((Uint32)(y2 & 7) << 3);
+		*pLine++ = pVram[uChrAddr * 2 + 1];
+	}
+}
+
+static void ReferenceFetchClamp(Uint8 *pLine, Int32 nPixels,
+	const Uint8 *pVram, Int32 x, Int32 y, Int32 dx, Int32 dy)
+{
+	while (nPixels-- > 0)
+	{
+		Int32 x2 = x >> 8;
+		Int32 y2 = y >> 8;
+		Uint32 uTileAddr = (((Uint32)(y2 >> 3) << 7) |
+		                       (Uint32)(x2 >> 3)) & 0x3FFFu;
+		Uint32 uChrAddr = pVram[uTileAddr * 2];
+
+		x += dx;
+		y += dy;
+		if ((x2 | y2) >> 10) uChrAddr = 0;
+		uChrAddr = (uChrAddr << 6) + (Uint32)(x2 & 7) +
+		           ((Uint32)(y2 & 7) << 3);
+		*pLine++ = pVram[uChrAddr * 2 + 1];
+	}
+}
+
+static void ReferenceFetchBlack(Uint8 *pLine, Int32 nPixels,
+	const Uint8 *pVram, Int32 x, Int32 y, Int32 dx, Int32 dy)
+{
+	while (nPixels-- > 0)
+	{
+		Int32 x2 = x >> 8;
+		Int32 y2 = y >> 8;
+		Uint32 uTileAddr = (((Uint32)(y2 >> 3) << 7) |
+		                       (Uint32)(x2 >> 3)) & 0x3FFFu;
+		Uint32 uChrAddr = (Uint32)pVram[uTileAddr * 2] << 6;
+
+		x += dx;
+		y += dy;
+		uChrAddr += (Uint32)(x2 & 7) + ((Uint32)(y2 & 7) << 3);
+		Uint8 uPixel = pVram[uChrAddr * 2 + 1];
+		if ((x2 | y2) >> 10) uPixel = 0;
+		*pLine++ = uPixel;
+	}
+}
+
+static void CheckFetchEquivalence()
+{
+	static Uint8 Vram[0x20000];
+	Uint8 Expected[256];
+	Uint8 Got[256];
+	Uint32 uRandom = 0x71C4A93Du;
+	Int32 i;
+
+	for (i = 0; i < (Int32)sizeof(Vram); i++)
+		Vram[i] = (Uint8)NextRandom(&uRandom);
+
+	for (i = 0; i < 10000 && !g_Failures; i++)
+	{
+		Int32 x = (Int32)(NextRandom(&uRandom) & 0x7FFFFFu) - 0x400000;
+		Int32 y = (Int32)(NextRandom(&uRandom) & 0x7FFFFFu) - 0x400000;
+		Int32 dx = (Int16)NextRandom(&uRandom);
+		Int32 dy = (Int16)NextRandom(&uRandom);
+
+		ReferenceFetchRepeat(Expected, 256, Vram, x, y, dx, dy);
+		SnesPPUMode7FetchRepeat(Got, 256, Vram, x, y, dx, dy);
+		if (std::memcmp(Expected, Got, sizeof(Got)) != 0)
+		{
+			std::printf("FAIL repeat fetch at vector %d\n", i);
+			g_Failures++;
+			break;
+		}
+
+		ReferenceFetchClamp(Expected, 256, Vram, x, y, dx, dy);
+		SnesPPUMode7FetchClamp(Got, 256, Vram, x, y, dx, dy);
+		if (std::memcmp(Expected, Got, sizeof(Got)) != 0)
+		{
+			std::printf("FAIL clamp fetch at vector %d\n", i);
+			g_Failures++;
+			break;
+		}
+
+		ReferenceFetchBlack(Expected, 256, Vram, x, y, dx, dy);
+		SnesPPUMode7FetchBlack(Got, 256, Vram, x, y, dx, dy);
+		if (std::memcmp(Expected, Got, sizeof(Got)) != 0)
+		{
+			std::printf("FAIL black fetch at vector %d\n", i);
+			g_Failures++;
+			break;
+		}
+	}
+}
+
 int main()
 {
 	Uint32 uRandom = 0x4D374B91u;
@@ -76,6 +182,7 @@ int main()
 	Check("sign13 min", SnesPPUMode7Sign13(0x1000), -4096);
 	Check("clip positive", SnesPPUMode7Clip(0x1234), 0x234);
 	Check("clip negative", SnesPPUMode7Clip(0x2001), -1023);
+	CheckFetchEquivalence();
 
 	for (i = 0; i < 1000000 && !g_Failures; i++)
 	{

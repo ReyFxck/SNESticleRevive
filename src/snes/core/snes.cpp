@@ -1556,7 +1556,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 		Uint32 _tHDMA = ProfCtrGetCycle();
 #endif
-        m_DMAC.ProcessHDMA();
+        m_DMAC.ProcessHDMA(m_uLine);
 #if SNDBG_LOG
 		g_TmgCycHDMA += ProfCtrGetCycle() - _tHDMA;
 #endif

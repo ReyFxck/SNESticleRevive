@@ -59,6 +59,21 @@ void SnesDMAWritePPUPort(SnesPPU *pPPU, Uint32 uPort, Uint8 uData)
 	pPPU->Write8(0x2100 + (uPort & 0xFF), uData);
 }
 
+/* HDMA A->B para $2100-$213F termina exatamente na mesma fila usada por
+   SnesSystem::Write2000(). Enfileirar a mesma tupla aqui evita o despacho
+   generico de banco/trap para cada byte, sem alterar ordem, scanline ou os
+   ciclos emulados. Fila cheia retorna FALSE e preserva o caminho original,
+   que sincroniza o PPU e tenta novamente. */
+static _INLINE Bool SnesHDMATryQueuePPUWrite(
+	SnesPPU *pPPU, Uint32 uLine, Uint8 uPortB, Uint8 uData)
+{
+	if (uPortB < 0x40)
+		/* O fallback generico contabiliza a unica falha real da fila. */
+		return pPPU->EnqueueWrite(
+			uLine, 0x2100u | uPortB, uData, FALSE);
+	return FALSE;
+}
+
 #if SNDBG_DEEP
 struct SNDmaOAMCaptureT
 {
@@ -799,7 +814,7 @@ void SnesDMAC::BeginHDMA()
 	}
 }
 
-void SnesDMAC::ProcessHDMACh(Uint32 uChan)
+void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 {
 	SnesDMAChT *pChan;
 	Uint8 *pTransfer;
@@ -815,8 +830,8 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan)
 	for (Uint32 i = 0; i < nBytes; i++)
 	{
 		Uint32 uAddrA;
-		Uint32 uAddrB = 0x2100 |
-			(Uint8)(pChan->bbadx + pTransfer[i]);
+		Uint8 uPortB = (Uint8)(pChan->bbadx + pTransfer[i]);
+		Uint32 uAddrB = 0x2100 | uPortB;
 		Uint8 uData;
 
 		if (pChan->dmapx & 0x40)
@@ -832,10 +847,14 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan)
 		else
 		{
 			uData = SNCPURead8(m_pCPU, uAddrA);
-			SNCPUWrite8(m_pCPU, uAddrB, uData);
+			if (!SnesHDMATryQueuePPUWrite(
+			        m_pPPU, uLine, uPortB, uData))
+			{
+				SNCPUWrite8(m_pCPU, uAddrB, uData);
+			}
 #if SNDBG_LOG
 			{
-				Uint32 uPort = uAddrB & 0xFF;
+				Uint32 uPort = uPortB;
 				if (uPort >= 0x0D && uPort <= 0x14)
 					g_DbgHDMAScrollBytes++;
 				else if (uPort == 0x22)
@@ -880,7 +899,7 @@ void SnesDMAC::ProcessMDMA()
     }
 }
 
-void SnesDMAC::ProcessHDMA()
+void SnesDMAC::ProcessHDMA(Uint32 uLine)
 {
 	Uint8 uActive = m_HDMAEnable & ~m_HDMAEnded;
 
@@ -904,7 +923,7 @@ void SnesDMAC::ProcessHDMA()
 #if SNDBG_LOG
 			g_DbgHDMATransferChannels++;
 #endif
-			ProcessHDMACh(uChan);
+			ProcessHDMACh(uChan, uLine);
 		}
 	}
 
