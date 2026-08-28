@@ -82,6 +82,11 @@ SNES_OBJ_CACHE ?= 1
 # continua disponivel somente para comparacao A/B.
 SNES_BG_CACHE ?= 0
 
+# Safe host recovery: after a missed VBlank, advance one complete emulated
+# frame without redrawing its video.  Audio/input/CPU/HDMA remain at full rate,
+# and the scheduler never skips two video frames consecutively.
+SNES_SAFE_FRAMESKIP ?= 1
+
 # Conservative flags to bridge the GCC 3.2 (2003) -> GCC 15.1 (2025)
 # gap in default optimization behavior. The original iaddis source was
 # written assuming the older compiler's much more conservative defaults,
@@ -111,13 +116,15 @@ CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
-	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE)
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
+	-DSNESTICLE_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP)
 
 CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
-	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE)
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
+	-DSNESTICLE_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP)
 
 # The official libxmp-lite embedded/core configuration keeps the MOD/XM effect
 # and loop engines while omitting desktop-only depackers and format extras,
@@ -631,7 +638,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) PROFILE=$(PROFILE) DSP4_CAPTURE=$(DSP4_CAPTURE) DSP4_STUB=$(DSP4_STUB)'; \
+	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) PROFILE=$(PROFILE) DSP4_CAPTURE=$(DSP4_CAPTURE) DSP4_STUB=$(DSP4_STUB)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -1335,6 +1342,7 @@ help:
 	printf "  SNES_DIAGNOSTICS=2           Deep OBJ/DMA/GSU capture (measurable overhead)\n"; \
 	printf "  SNES_OBJ_CACHE=0             Disable shared CHR cache for OBJ A/B only\n"; \
 	printf "  SNES_BG_CACHE=1              Enable experimental BG CHR cache for A/B only\n"; \
+	printf "  SNES_SAFE_FRAMESKIP=0        Disable missed-VBlank video recovery for A/B\n"; \
 	printf "  OUT=/path                    Copy final ELF to this folder\n"; \
 	printf "  out=/path                    Same as OUT=/path\n"; \
 	printf "  ROMS=/path                   ROM folder for ISO build\n"; \

@@ -19,6 +19,7 @@
 #include "mainloop_state.h"
 #include "mainloop_exec.h"
 #include "mainloop_iop.h"
+#include "mainloop_safe_frameskip.h"
 
 #include "types.h"
 #include "console.h"
@@ -27,6 +28,7 @@
 #include "rendersurface.h"
 #include "mixbuffer.h"
 #include "prof.h"
+#include "sndbglog.h"
 #include "emusys.h"
 #include "emumovie.h"
 
@@ -225,7 +227,23 @@ Bool MainLoopProcess()
             }
             else
             {
-                _ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
+				/* Recover after a missed host VBlank by retaining the previous
+				   texture for one presentation.  ExecuteFrame still advances the
+				   complete emulated machine and produces normal audio. */
+				Bool bFrameskipAllowed =
+					(NetInput.eGameState == NETPLAY_GAMESTATE_IDLE &&
+					 !s_pMovieClip->IsPlaying() &&
+					 !s_pMovieClip->IsRecording()) ? TRUE : FALSE;
+				Bool bSkipVideo =
+					MainLoopSafeFrameskipTake(bFrameskipAllowed);
+#if SNDBG_LOG
+				if (bSkipVideo)
+					g_DbgVideoSkippedFrames++;
+				else
+					g_DbgVideoRenderedFrames++;
+#endif
+				_ExecuteSnes(bSkipVideo ? NULL : pSurface,
+				             pMixBuffer, &Input, eMode);
             }
 		    _iframetex^=1;
         }

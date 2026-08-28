@@ -61,4 +61,11 @@ ROOT=../..
     -I "$ROOT/src/snes/core" \
     queue_test.cpp -o queue_test
 
-echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./audioschedule_test && ./mode7_test && ./queue_test"
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/platform/ps2/system" \
+    safe_frameskip_test.cpp -o safe_frameskip_test
+
+echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./safe_frameskip_test"

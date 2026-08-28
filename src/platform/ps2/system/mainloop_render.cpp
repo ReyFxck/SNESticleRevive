@@ -14,6 +14,7 @@
 #include "mainloop_shared.h"
 #include "mainloop_ui.h"
 #include "mainloop_bgm.h"
+#include "mainloop_safe_frameskip.h"
 
 #include "types.h"
 #include "console.h"
@@ -51,6 +52,29 @@ extern "C" {
 
 
 static Uint32 _uVblankCycle;
+
+static MainLoopSafeFrameskipScheduler _SafeFrameskip;
+
+Bool MainLoopSafeFrameskipTake(Bool bAllowed)
+{
+#if SNESTICLE_SAFE_FRAMESKIP
+	if (bAllowed)
+		return _SafeFrameskip.Take();
+#else
+	(void)bAllowed;
+#endif
+	_SafeFrameskip.CancelRecovery();
+	return FALSE;
+}
+
+void MainLoopSafeFrameskipAfterFlip()
+{
+#if SNESTICLE_SAFE_FRAMESKIP
+	Bool bSnesGameplay = (!_bMenu && _pSystem == _pSnes &&
+	                      !_MainLoop_BlackScreen) ? TRUE : FALSE;
+	_SafeFrameskip.AfterFlip(ProfCtrGetCycle(), bSnesGameplay);
+#endif
+}
 
 void MainLoopRender()
 {
@@ -288,6 +312,7 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle();
     GSK_SyncFlip();
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle() - _uVblankCycle;
+	MainLoopSafeFrameskipAfterFlip();
     PROF_LEAVE("WaitVBlank");
 
     /* whichdrawbuf is now decorative - gsKit owns the active

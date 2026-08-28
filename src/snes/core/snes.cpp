@@ -76,6 +76,8 @@ Uint32 g_DbgVRAMWrites = 0;
 Uint32 g_DbgCGRAMWrites = 0;
 Uint32 g_DbgCGRAMCommits = 0;
 Uint32 g_DbgCGRAMUnchanged = 0;
+Uint32 g_DbgVideoRenderedFrames = 0;
+Uint32 g_DbgVideoSkippedFrames = 0;
 Uint32 g_DbgObjEnabledLines = 0;
 Uint32 g_DbgObjOamRefs = 0;
 Uint32 g_DbgObjTiles = 0;
@@ -1986,6 +1988,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgCGRAMWrites,
 				(unsigned)g_DbgCGRAMCommits,
 				(unsigned)g_DbgCGRAMUnchanged);
+			DLog("[snes-video] rendered/skipped=%u/%u",
+				(unsigned)g_DbgVideoRenderedFrames,
+				(unsigned)g_DbgVideoSkippedFrames);
 			#if SNDBG_DEEP
 			DLog("[snes-obj-deep] opaque/empty=%u/%u pixels candidate/drawn=%u/%u edge-tiles=%u | regs obsel=%02X tm=%02X ts=%02X first=%u",
 				(unsigned)g_DbgObjOpaqueTiles, (unsigned)g_DbgObjEmptyLines,
@@ -2107,6 +2112,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			g_DbgCGRAMWrites = 0;
 			g_DbgCGRAMCommits = 0;
 			g_DbgCGRAMUnchanged = 0;
+			g_DbgVideoRenderedFrames = 0;
+			g_DbgVideoSkippedFrames = 0;
 			g_DbgObjEnabledLines = 0;
 			g_DbgObjOamRefs = 0;
 			g_DbgObjTiles = 0;
