@@ -801,7 +801,7 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 
 
 The release notes for the current version are available in
-[`CHANGELOG_v1.0.5.md`](CHANGELOG_v1.0.5.md).
+[`CHANGELOG_v1.0.6.md`](CHANGELOG_v1.0.6.md).
 
 
 - **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
@@ -898,7 +898,7 @@ The release notes for the current version are available in
   after character selection still needs confirmation on the same NetherSX2
   setup before the issue is marked fixed.
 - Some large / special‑chip titles may still freeze or misbehave.
-- **SuperFX (GSU)** remains experimental in v1.0.5: r15 corrects cache-window
+- **SuperFX (GSU)** remains experimental in v1.0.6: r15 corrects cache-window
   rotation, executable RAM banks `$60-$7F`, byte MMIO and the hot loop, but
   Star Fox/Yoshi and other boards still need game-by-game PS2 validation.
 - **Missing chip**: SA‑1 is not implemented.

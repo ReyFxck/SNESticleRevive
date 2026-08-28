@@ -190,7 +190,7 @@ def _fetch_one(task, base_url, timeout, dry_run):
     network_error = ""
     for candidate in candidates:
         url = _thumbnail_url(base_url, system, category, candidate)
-        request = Request(url, headers={"User-Agent": "SNESticleRevive/1.0.5"})
+        request = Request(url, headers={"User-Agent": "SNESticleRevive/1.0.6"})
         try:
             with urlopen(request, timeout=timeout) as response:
                 data = response.read(MAX_PNG_BYTES + 1)
