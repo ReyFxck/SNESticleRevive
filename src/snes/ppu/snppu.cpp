@@ -17,28 +17,35 @@ void SnesPPU::WriteCGDATA(Uint8 uData)
 #if SNDBG_LOG
 	g_DbgCGRAMWrites++;
 #endif
-	Uint32 uCGAddr;
+	Uint32 uCGAddr = (m_Regs.cgadd.w >> 1) &
+	                 (SNESPPU_CGRAM_NUM - 1);
 
-	uCGAddr = m_Regs.cgadd.w >> 1;
-	uCGAddr&= SNESPPU_CGRAM_NUM-1;
-	if (!(m_Regs.cgadd.w&1))
+	/* $2122 is a latched 15-bit port.  The low byte is not visible in
+	   CGRAM until the following high byte commits the complete color. */
+	if (!(m_Regs.cgadd.w & 1))
 	{
-		// lower byte
-		m_CGRAM[uCGAddr] &= 0xFF00;
-		m_CGRAM[uCGAddr] |= uData;
-	} else
+		m_CGRAMLatch = uData;
+	}
+	else
 	{
-		// upper byte
-		m_CGRAM[uCGAddr] &= 0x00FF;
-		m_CGRAM[uCGAddr] |= uData << 8;
+		Uint16 uColor = (Uint16)m_CGRAMLatch |
+		                ((Uint16)(uData & 0x7F) << 8);
+		Bool bChanged = m_CGRAM[uCGAddr] != uColor;
+
+		m_CGRAM[uCGAddr] = uColor;
+#if SNDBG_LOG
+		g_DbgCGRAMCommits++;
+		if (!bChanged)
+			g_DbgCGRAMUnchanged++;
+#endif
+		/* Preserve every emulated write/address side effect, but avoid
+		   converting and uploading a host palette entry that did not change. */
+		if (bChanged)
+			m_pRender->UpdateCGRAM(uCGAddr, uColor);
 	}
 
-	// increment color address
+	// The internal byte phase advances after every port access.
 	m_Regs.cgadd.w++;
-
-	// update palette for surface
-//	m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_PAL);
-	m_pRender->UpdateCGRAM(uCGAddr, m_CGRAM[uCGAddr]);
 }
 
 
@@ -944,6 +951,7 @@ void SnesPPU::Reset()
 	memset(&m_OAM, 0, sizeof(m_OAM));
 	m_pRender->UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
 	m_OAMLatch = 0;
+	m_CGRAMLatch = 0;
 
 	// confirmed:
 	m_Regs.stat77 =  SNPPU_VERSION_5C77;
@@ -954,6 +962,7 @@ SnesPPU::SnesPPU()
 {
 	m_pRender = NULL;
 	m_OAMLatch = 0;
+	m_CGRAMLatch = 0;
 }
 
 #ifdef SNES_DEBUG

@@ -199,6 +199,11 @@ void SnesPPU::RestoreState(struct SNStatePPUT *pState)
 	memcpy(m_VRAM,    pState->m_VRAM,  sizeof(m_VRAM));
 	m_OAM = pState->m_OAM;
 	m_OAMLatch = 0;
+	/* The legacy state format has no half-written $2122 latch.  States are
+	   normally captured at frame boundaries; use the current entry's low byte
+	   as the safest reconstruction without changing the on-disk format. */
+	m_CGRAMLatch = (Uint8)(m_CGRAM[(m_Regs.cgadd.w >> 1) &
+	                              (SNESPPU_CGRAM_NUM - 1)] & 0xFF);
 	m_pRender->UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
 	UpdateOAMPriority();
 }

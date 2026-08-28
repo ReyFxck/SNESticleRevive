@@ -13,6 +13,9 @@ public:
 	Uint32 uFirstAddress;
 	Uint32 uLastAddress;
 	Uint32 nLastWords;
+	Uint32 uCGRAMCalls;
+	Uint32 uLastCGRAMAddress;
+	Uint16 uLastCGRAMData;
 
 	TestRender()
 	{
@@ -37,6 +40,12 @@ public:
 		nLastWords = nWords;
 		uRangeCalls++;
 	}
+	void UpdateCGRAM(Uint32 uAddress, Uint16 uData)
+	{
+		uCGRAMCalls++;
+		uLastCGRAMAddress = uAddress;
+		uLastCGRAMData = uData;
+	}
 	void ClearStats()
 	{
 		uSingleCalls = 0;
@@ -44,6 +53,9 @@ public:
 		uFirstAddress = 0;
 		uLastAddress = 0;
 		nLastWords = 0;
+		uCGRAMCalls = 0;
+		uLastCGRAMAddress = 0;
+		uLastCGRAMData = 0;
 	}
 };
 
@@ -221,6 +233,22 @@ int main()
 	render.SetPPU(&ppu);
 	ppu.Reset();
 	pOAM = (Uint8 *)ppu.GetOAM();
+
+	// CGRAM commits only after the high byte and stores 15-bit colors.
+	render.ClearStats();
+	ppu.Write8(0x2121, 0x00);
+	ppu.WriteCGDATA(0x34);
+	Check("CGRAM low byte remains latched", ppu.GetCG(0), 0x0000);
+	Check("CGRAM low byte has no host update", render.uCGRAMCalls, 0);
+	ppu.WriteCGDATA(0x92);
+	Check("CGRAM pair commits 15-bit color", ppu.GetCG(0), 0x1234);
+	Check("CGRAM pair host update", render.uCGRAMCalls, 1);
+	Check("CGRAM update address", render.uLastCGRAMAddress, 0);
+	Check("CGRAM update data", render.uLastCGRAMData, 0x1234);
+	ppu.Write8(0x2121, 0x00);
+	ppu.WriteCGDATA(0x34);
+	ppu.WriteCGDATA(0x12);
+	Check("CGRAM unchanged write elided", render.uCGRAMCalls, 1);
 
 	// OAMADDL must not discard the high-table bit selected by OAMADDH.
 	ppu.Write8(0x2103, 0x01);

@@ -37,6 +37,19 @@ public:
 			Reset();
 		}
 
+		/* A linear FIFO must reclaim entries already consumed at the front.
+		   Without this compaction, reaching tail slot 512 reports a false full
+		   queue even when m_iHead has freed most of the storage.  Compact only
+		   at the boundary so the common enqueue path remains unchanged. */
+		if (m_iTail >= SNQUEUE_SIZE && m_iHead > 0)
+		{
+			Int32 nRemain = m_iTail - m_iHead;
+			for (Int32 i = 0; i < nRemain; ++i)
+				m_Elements[i] = m_Elements[m_iHead + i];
+			m_iHead = 0;
+			m_iTail = nRemain;
+		}
+
 		if (m_iTail < SNQUEUE_SIZE)
 		{
 			SNQueueElementT *pElement = &m_Elements[m_iTail++];

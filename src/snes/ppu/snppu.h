@@ -216,6 +216,7 @@ private:
     Uint16			        m_VRAM[SNESPPU_VRAM_NUMWORDS] _ALIGN(16);
     SnesOAMT		        m_OAM;
 	Uint8                   m_OAMLatch;
+	Uint8                   m_CGRAMLatch;
 
     ISnesPPURender *        m_pRender;
 

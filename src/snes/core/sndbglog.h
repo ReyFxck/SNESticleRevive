@@ -80,6 +80,8 @@ extern Uint32 g_TmgCycHDMATable;  // contador/tabela dos canais HDMA
 extern Uint32 g_DbgOAMWrites;
 extern Uint32 g_DbgVRAMWrites;
 extern Uint32 g_DbgCGRAMWrites;
+extern Uint32 g_DbgCGRAMCommits;
+extern Uint32 g_DbgCGRAMUnchanged;
 extern Uint32 g_DbgObjEnabledLines;
 extern Uint32 g_DbgObjOamRefs;
 extern Uint32 g_DbgObjTiles;
