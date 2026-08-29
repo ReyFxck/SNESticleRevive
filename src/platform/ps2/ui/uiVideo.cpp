@@ -7,6 +7,7 @@
 #include "types.h"
 #include "font.h"
 #include "poly.h"
+#include "texture.h"
 #include "uiVideo.h"
 
 extern "C" {
@@ -29,7 +30,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 18
+#define VIDEOCFG_VERSION 19
 
 typedef struct
 {
@@ -51,6 +52,8 @@ typedef struct
 	Int32  mx4sioenable; /* MX4SIO (SD via SIO2): 0=off, 1=on         */
 	Int32  colorprofile; /* SNPPU_COLOR_PROFILE_*                     */
 	Int32  frameskip;    /* recuperacao adaptativa: 0=off, 1=on       */
+	Int32  resolution;   /* 0=High (sharp), 1=Low (smooth)            */
+	Int32  effect;       /* 0=Normal, 1=Scanlines                     */
 } VideoCfgT;
 
 /* v17 added colorprofile to the v16 prefix. */
@@ -74,6 +77,29 @@ typedef struct
 	Int32  mx4sioenable;
 	Int32  colorprofile;
 } VideoCfgV17T;
+
+/* v18 added frameskip to the v17 prefix. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  frameskip;
+} VideoCfgV18T;
 
 /* v16 is the exact prefix written by v1.0.4 and by the first video-fix
    test build. Keep it readable so installing this build never resets the
@@ -133,6 +159,8 @@ void VideoSettingsSave(void)
 	cfg.mx4sioenable = Mx4sioIsEnabled() ? 1 : 0;
 	cfg.colorprofile = SNPPUColorGetProfile();
 	cfg.frameskip = MainLoopSafeFrameskipIsEnabled() ? 1 : 0;
+	cfg.resolution = g_GskResolution;
+	cfg.effect     = g_GskEffect;
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
@@ -143,6 +171,7 @@ void VideoSettingsSave(void)
 void VideoSettingsLoad(void)
 {
 	VideoCfgT cfg;
+	VideoCfgV18T oldcfg18;
 	VideoCfgV17T oldcfg17;
 	VideoCfgV16T oldcfg;
 	VideoCfgHeaderT header;
@@ -160,6 +189,18 @@ void VideoSettingsLoad(void)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
 		}
+		else if (header.version == 18)
+		{
+			memset(&oldcfg18, 0, sizeof(oldcfg18));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg18, sizeof(oldcfg18)))
+			{
+				memcpy(&cfg, &oldcfg18, sizeof(oldcfg18));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.resolution = 0;
+				cfg.effect = 0;
+				loaded = TRUE;
+			}
+		}
 		else if (header.version == 17)
 		{
 			memset(&oldcfg17, 0, sizeof(oldcfg17));
@@ -168,6 +209,8 @@ void VideoSettingsLoad(void)
 				memcpy(&cfg, &oldcfg17, sizeof(oldcfg17));
 				cfg.version = VIDEOCFG_VERSION;
 				cfg.frameskip = 0;
+				cfg.resolution = 0;
+				cfg.effect = 0;
 				loaded = TRUE;
 			}
 		}
@@ -181,6 +224,8 @@ void VideoSettingsLoad(void)
 				cfg.version = VIDEOCFG_VERSION;
 				cfg.colorprofile = SNPPU_COLOR_PROFILE_ORIGINAL;
 				cfg.frameskip = 0;
+				cfg.resolution = 0;
+				cfg.effect = 0;
 				loaded = TRUE;
 			}
 		}
@@ -218,6 +263,10 @@ void VideoSettingsLoad(void)
 			SNPPUColorSetProfile(cfg.colorprofile);
 		if (cfg.frameskip == 0 || cfg.frameskip == 1)
 			MainLoopSafeFrameskipSetEnabled(cfg.frameskip ? TRUE : FALSE);
+		if (cfg.resolution == 0 || cfg.resolution == 1)
+			g_GskResolution = cfg.resolution;
+		if (cfg.effect == 0 || cfg.effect == 1)
+			g_GskEffect = cfg.effect;
 	}
 }
 
@@ -314,7 +363,7 @@ void CVideoScreen::Draw()
 	char  buf[16];
 	int   m = _VideoModeIndex(g_GskVideoMode);
 	const char *pMode = _VideoModes[m].name;
-	bool  bDevices = (m_iSelect >= 10);  /* pagina 2/2 = dispositivos */
+	int   page = (m_iSelect >= 16) ? 2 : (m_iSelect >= 10) ? 1 : 0;
 	const char *pWide = "Off";
 	const char *pColor = (SNPPUColorGetProfile() == SNPPU_COLOR_PROFILE_COMPOSITE)
 	                   ? "Composite" : "Original";
@@ -324,10 +373,15 @@ void CVideoScreen::Draw()
 
 	FontSelect(0);
 
-	_VideoHeader(vy, bDevices ? "Video Config (2/2)" : "Video Config (1/2)");
+	if (page == 0)
+		_VideoHeader(vy, "Video Config (1/3)");
+	else if (page == 1)
+		_VideoHeader(vy, "Video Config (2/3)");
+	else
+		_VideoHeader(vy, "Video Config (3/3)");
 	vy += 18;
 
-	if (!bDevices) {
+	if (page == 0) {
 	_VideoHeader(vy, "Screen");
 	vy += 14;
 
@@ -366,7 +420,7 @@ void CVideoScreen::Draw()
 	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
 	_VideoRow(vy, 9, m_iSelect, "Frequency", buf); vy += 12;
 	}
-	else
+	else if (page == 1)
 	{
 		_VideoHeader(vy, "Performance"); vy += 14;
 
@@ -385,6 +439,16 @@ void CVideoScreen::Draw()
 		          SmbGetStatusText()); vy += 12;
 		_VideoRow(vy, 15, m_iSelect, "MX4SIO (SD)",
 		          _VideoMx4sioStatus()); vy += 12;
+	}
+	else
+	{
+		_VideoHeader(vy, "Video Effects"); vy += 14;
+
+		_VideoRow(vy, 16, m_iSelect, "Resolution",
+		          g_GskResolution ? "Low" : "High"); vy += 12;
+
+		_VideoRow(vy, 17, m_iSelect, "Effect",
+		          g_GskEffect ? "Scanlines" : "Normal"); vy += 12;
 	}
 
 	/* controls / hints (clear of the vy=215 footer) */
@@ -409,15 +473,25 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	/* Circle (O) alterna entre as 2 paginas: Video/Audio (idx 0-9) e
-	   Performance/Devices (10-15). NAO uso L1/R1 aqui de proposito -- eles ja trocam
-	   de ABA no nivel global (Browser/Network/Menu/Log/Video). */
+	/* Circle (O) cycles through 3 pages:
+	   Page 1 (idx 0-9):  Video/Audio
+	   Page 2 (idx 10-15): Performance/Devices
+	   Page 3 (idx 16-17): Video Effects */
 	if (trigger & PAD_CIRCLE)
-		m_iSelect = (m_iSelect >= 10) ? 0 : 10;
+	{
+		if (m_iSelect < 10)
+			m_iSelect = 10;
+		else if (m_iSelect < 16)
+			m_iSelect = 16;
+		else
+			m_iSelect = 0;
+	}
 
 	{
-		int lo = (m_iSelect >= 10) ? 10 : 0;
-		int hi = (m_iSelect >= 10) ? 15 : 9;
+		int lo, hi;
+		if (m_iSelect < 10)      { lo = 0;  hi = 9;  }
+		else if (m_iSelect < 16) { lo = 10; hi = 15; }
+		else                     { lo = 16; hi = 17; }
 		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
 		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
 	}
@@ -503,17 +577,15 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				MainLoopSafeFrameskipIsEnabled() ? FALSE : TRUE);
 			break;
 
-		case 11: /* Mass / USB on/off -- lista mass0:/mass1: (USB).  O USB core
-		           sobe no boot de qualquer forma (seguro); isto controla a
-		           listagem.  O MX4SIO agora tem toggle proprio (case 15). */
+		case 11: /* Mass / USB on/off */
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
 
-		case 12: /* HDD interno (hdd0:) on/off -- lista + carga preguicosa. */
+		case 12: /* HDD interno (hdd0:) on/off */
 			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
 
-		case 13: /* MMCE (mmce0/1) on/off -- lista + carga preguicosa. */
+		case 13: /* MMCE (mmce0/1) on/off */
 			MmceSupportSetEnabled(!MmceSupportIsEnabled());
 			if (MmceSupportIsEnabled())
 			{
@@ -523,7 +595,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 
-		case 14: /* SMB on/off. Driver/network stay lazy until smb: is opened. */
+		case 14: /* SMB on/off */
 			if (SmbSupportIsEnabled())
 			{
 				BgmIOBegin();
@@ -537,9 +609,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 
-		case 15: /* MX4SIO (SD via SIO2) on/off -- carga preguicosa (deferida).
-		            Padrao OFF: quem nao tem o adaptador evita o flood de
-		            sondagem do SIO2.  Independente do Mass/USB. */
+		case 15: /* MX4SIO (SD via SIO2) on/off */
 			Mx4sioSetEnabled(!Mx4sioIsEnabled());
 			if (Mx4sioIsEnabled())
 			{
@@ -547,6 +617,15 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				Mx4sioLoadIfEnabled();
 				BgmIOEnd();
 			}
+			break;
+
+		case 16: /* Resolution: High (0) / Low (1) -- toggles texture filter */
+			g_GskResolution = !g_GskResolution;
+			TextureSetFilter(&_OutTex, g_GskResolution);
+			break;
+
+		case 17: /* Effect: Normal (0) / Scanlines (1) */
+			g_GskEffect = !g_GskEffect;
 			break;
 		}
 	}

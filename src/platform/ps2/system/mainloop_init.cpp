@@ -413,6 +413,7 @@ _AudMix = new AudMixBuffer(32000, TRUE);
     TextureNew(&_OutTex, 256, 256, GS_PSMCT32);
     TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
 TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
+    TextureSetFilter(&_OutTex, g_GskResolution);
 #if 0
 	_MainLoopSetPalette(NESPAL_FCEU);
 #endif
