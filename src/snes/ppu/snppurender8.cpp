@@ -1322,7 +1322,10 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 		Uint32 uRow  = ((pObj->uTile >> 4) + (ObjY >> 3)) & 0x0F;
 		Uint32 uCol0 = pObj->uTile & 0x0F;
 		Uint32 uYoff = ObjY & 7;
-		Int32  iTileX = 0;
+		Int32 iTileX;
+		Int32 nTileCount;
+		Int32 iCol;
+		Int32 iColStep;
 
 #if SNDBG_DEEP
 		if (bTrace)
@@ -1365,55 +1368,40 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 				(unsigned)uLastAddr, (unsigned)uTraceHash);
 		}
 #endif
+		_SnesPPUOBJCountedTileRange(pObj->uPosX, ObjX, pObj->uWidth,
+			&iTileX, &nTileCount);
+		ObjX += iTileX << 3;
+		uSize = nTileCount << 3;
+		if (pObj->bHFlip)
+		{
+			iCol = (pObj->uWidth >> 3) - 1 - iTileX;
+			iColStep = -1;
+		} else
+		{
+			iCol = iTileX;
+			iColStep = 1;
+		}
 
 		while (uSize > 0)
 		{
-			if (_SnesPPUOBJTileCountedX(pObj->uPosX, ObjX))
-			{
-				Int32 iCol = _SnesPPUOBJSourceColumn(iTileX,
-				                                           pObj->uWidth,
-				                                           pObj->bHFlip);
-				uTile = (uRow << 4) | ((uCol0 + iCol) & 0x0F);
-				uTileAddr = uBaseAddr + uTile * 16;
-				if (bSecondTable)
-					uTileAddr += uNameSelect;
-				Uint32 uRowAddr = (uTileAddr & 0x7FFF) + uYoff;
+			uTile = (uRow << 4) | ((uCol0 + iCol) & 0x0F);
+			uTileAddr = uBaseAddr + uTile * 16;
+			if (bSecondTable)
+				uTileAddr += uNameSelect;
+			Uint32 uRowAddr = (uTileAddr & 0x7FFF) + uYoff;
 
 #if SNPPU_OBJ_CACHE
-				{
-					Uint64 uRowData;
+			{
+				Uint64 uRowData;
 
-					if (SnesPPUChrCacheLookup4(&_SnesPPU_ChrCache,
-						uRowAddr, pObj->bHFlip, &uRowData, &uOpaque))
-					{
+				if (SnesPPUChrCacheLookup4(&_SnesPPU_ChrCache,
+					uRowAddr, pObj->bHFlip, &uRowData, &uOpaque))
+				{
 #if SNDBG_LOG
-						uCacheHits++;
+					uCacheHits++;
 #endif
-					}
-					else
-					{
-						const SnesPPUTile4T *pTile4 =
-							(const SnesPPUTile4T *)(pVram + uRowAddr);
-						Uint32 uPlane0 = pTile4->uPlane01[0][0];
-						Uint32 uPlane1 = pTile4->uPlane01[0][1];
-						Uint32 uPlane2 = pTile4->uPlane23[0][0];
-						Uint32 uPlane3 = pTile4->uPlane23[0][1];
-#if SNDBG_LOG
-						uCacheMisses++;
-#endif
-						_DecodeOBJRow4(&_SnesPPU_PlaneLookup[0],
-							_SnesPPU_HFlipLookup[1], uPlane0, uPlane1,
-							uPlane2, uPlane3, &uTile0, &uTile1, &uOpaque);
-						uRowData = (Uint64)uTile0 | ((Uint64)uTile1 << 32);
-						SnesPPUChrCacheStore4(&_SnesPPU_ChrCache,
-							uRowAddr, uRowData, uOpaque);
-						if (pObj->bHFlip)
-							SnesPPUChrCacheFlipRow(&uRowData, &uOpaque);
-					}
-					uTile0 = (Uint32)uRowData;
-					uTile1 = (Uint32)(uRowData >> 32);
 				}
-#else
+				else
 				{
 					const SnesPPUTile4T *pTile4 =
 						(const SnesPPUTile4T *)(pVram + uRowAddr);
@@ -1421,33 +1409,55 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 					Uint32 uPlane1 = pTile4->uPlane01[0][1];
 					Uint32 uPlane2 = pTile4->uPlane23[0][0];
 					Uint32 uPlane3 = pTile4->uPlane23[0][1];
-					_DecodeOBJRow4(pLookup, pHFlip, uPlane0, uPlane1,
-						uPlane2, uPlane3, &uTile0, &uTile1, &uOpaque);
-				}
+#if SNDBG_LOG
+					uCacheMisses++;
 #endif
-				uTile0 |= uPalette;
-				uTile1 |= uPalette;
-
-				// store tile data
-				((Uint32 *)pObjLine->uData)[0] = uTile0;
-				((Uint32 *)pObjLine->uData)[1] = uTile1;
-				pObjLine->uData[SNPPU_BGPLANE_OPAQUE] = (Uint8)uOpaque;
-
-				// store objline
-				pObjLine->uPri  = pObj->uPri;
-				pObjLine->uPal  = pObj->uPal;
-				pObjLine->iPosX = ObjX;
-				pObjLine++;
-				nObjLine++;
-				if (nObjLine >= MaxObj8Line) goto FetchOBJDone;
+					_DecodeOBJRow4(&_SnesPPU_PlaneLookup[0],
+						_SnesPPU_HFlipLookup[1], uPlane0, uPlane1,
+						uPlane2, uPlane3, &uTile0, &uTile1, &uOpaque);
+					uRowData = (Uint64)uTile0 | ((Uint64)uTile1 << 32);
+					SnesPPUChrCacheStore4(&_SnesPPU_ChrCache,
+						uRowAddr, uRowData, uOpaque);
+					if (pObj->bHFlip)
+						SnesPPUChrCacheFlipRow(&uRowData, &uOpaque);
+				}
+				uTile0 = (Uint32)uRowData;
+				uTile1 = (Uint32)(uRowData >> 32);
 			}
+#else
+			{
+				const SnesPPUTile4T *pTile4 =
+					(const SnesPPUTile4T *)(pVram + uRowAddr);
+				Uint32 uPlane0 = pTile4->uPlane01[0][0];
+				Uint32 uPlane1 = pTile4->uPlane01[0][1];
+				Uint32 uPlane2 = pTile4->uPlane23[0][0];
+				Uint32 uPlane3 = pTile4->uPlane23[0][1];
+				_DecodeOBJRow4(pLookup, pHFlip, uPlane0, uPlane1,
+					uPlane2, uPlane3, &uTile0, &uTile1, &uOpaque);
+			}
+#endif
+			uTile0 |= uPalette;
+			uTile1 |= uPalette;
+
+			// store tile data
+			((Uint32 *)pObjLine->uData)[0] = uTile0;
+			((Uint32 *)pObjLine->uData)[1] = uTile1;
+			pObjLine->uData[SNPPU_BGPLANE_OPAQUE] = (Uint8)uOpaque;
+
+			// store objline
+			pObjLine->uPri  = pObj->uPri;
+			pObjLine->uPal  = pObj->uPal;
+			pObjLine->iPosX = ObjX;
+			pObjLine++;
+			nObjLine++;
+			if (nObjLine >= MaxObj8Line) goto FetchOBJDone;
 
 			/* OBJ fetch always advances left-to-right. H-flip mirrors the
 			   source column, not the fetch position; this matters when the
 			   hardware stops at the 34-tile scanline limit. */
 			ObjX += 8;
 			uSize -= 8;
-			iTileX++;
+			iCol += iColStep;
 		}
 		}
 

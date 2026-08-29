@@ -70,6 +70,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	SNMaskT *pAddSubMask, Bool bAddSubMask)
 {
 	SNMaskT ObjMask;
+	SNMaskT PriorityMask[4];
 	Int32 iWord;
 
 	if (nObjLine <= 0)
@@ -86,13 +87,25 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	   (o caso quente). Somente os dois recortes de borda usam o caminho por
 	   pixel, evitando tanto o acesso fora do buffer quanto uma regressao de
 	   desempenho para todos os OBJ da scanline. */
-	for (iWord = 0; iWord < 8; iWord++)
-	{
-		Uint32 uMask = pWindow ? pWindow->uMask32[iWord] : 0;
-		if (pMask)
-			uMask |= pMask->uMask32[iWord];
-		ObjMask.uMask32[iWord] = uMask;
-	}
+	/* SNMask usa dois qwords MMI no EE. Alem de ser mais curto que oito
+	   loads/stores escalares, mantem a mascara inteira alinhada no caminho
+	   quente de jogos com muitos OBJ. O recorte seguro continua abaixo. */
+	if (pWindow)
+		SNMaskCopy(&ObjMask, pWindow);
+	else
+		SNMaskClear(&ObjMask);
+	if (pMask)
+		SNMaskOR(&ObjMask, &ObjMask, pMask);
+
+	/* As quatro prioridades usam sempre as mesmas combinacoes dos dois
+	   planos de BG. Calcula-las uma vez com MMI evita repetir OR/AND e o
+	   switch para cada um dos ate 34 tiles OBJ da scanline. */
+	SNMaskOR(&PriorityMask[0], &pLine[SNPPU_BGPLANE_LAYER0],
+		&pLine[SNPPU_BGPLANE_LAYER1]);
+	SNMaskCopy(&PriorityMask[1], &pLine[SNPPU_BGPLANE_LAYER1]);
+	SNMaskAND(&PriorityMask[2], &pLine[SNPPU_BGPLANE_LAYER0],
+		&pLine[SNPPU_BGPLANE_LAYER1]);
+	SNMaskClear(&PriorityMask[3]);
 
 	while (--nObjLine >= 0)
 	{
@@ -108,6 +121,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 
 		if (pObj->iPosX >= 0 && pObj->iPosX <= 248)
 		{
+			const SNMaskT *pPriorityMask = &PriorityMask[pObj->uPri];
 			Uint32 uShift = pObj->iPosX & 31;
 			Uint32 uInvShift = 32 - uShift;
 			Uint32 uMask0 = uOpaque << uShift;
@@ -127,30 +141,9 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 			if (uMask1)
 				ObjMask.uMask32[iWord + 1] |= uMask1;
 
-			switch (pObj->uPri)
-			{
-			case 0:
-				uBlocked0 |= pLine[SNPPU_BGPLANE_LAYER0].uMask32[iWord] |
-				             pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord];
-				if (uMask1)
-					uBlocked1 |= pLine[SNPPU_BGPLANE_LAYER0].uMask32[iWord + 1] |
-					             pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord + 1];
-				break;
-			case 1:
-				uBlocked0 |= pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord];
-				if (uMask1)
-					uBlocked1 |= pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord + 1];
-				break;
-			case 2:
-				uBlocked0 |= pLine[SNPPU_BGPLANE_LAYER0].uMask32[iWord] &
-				             pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord];
-				if (uMask1)
-					uBlocked1 |= pLine[SNPPU_BGPLANE_LAYER0].uMask32[iWord + 1] &
-					             pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord + 1];
-				break;
-			case 3:
-				break;
-			}
+			uBlocked0 |= pPriorityMask->uMask32[iWord];
+			if (uMask1)
+				uBlocked1 |= pPriorityMask->uMask32[iWord + 1];
 
 			uMask0 &= ~uBlocked0;
 			uMask1 &= ~uBlocked1;
@@ -188,6 +181,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 			if (uVisible & 0x80) pDest8[7] = pObj->uData[7];
 		} else
 		{
+			const SNMaskT *pPriorityMask = &PriorityMask[pObj->uPri];
 			Int32 iPixel;
 #if SNDBG_DEEP
 			g_DbgObjClippedTiles++;
@@ -210,22 +204,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 				uBlocked = ObjMask.uMask32[iWord] & uBit;
 				ObjMask.uMask32[iWord] |= uBit;
 
-				switch (pObj->uPri)
-				{
-				case 0:
-					uBlocked |= (pLine[SNPPU_BGPLANE_LAYER0].uMask32[iWord] |
-					             pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord]) & uBit;
-					break;
-				case 1:
-					uBlocked |= pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord] & uBit;
-					break;
-				case 2:
-					uBlocked |= (pLine[SNPPU_BGPLANE_LAYER0].uMask32[iWord] &
-					             pLine[SNPPU_BGPLANE_LAYER1].uMask32[iWord]) & uBit;
-					break;
-				case 3:
-					break;
-				}
+				uBlocked |= pPriorityMask->uMask32[iWord] & uBit;
 
 				if (uBlocked)
 					continue;

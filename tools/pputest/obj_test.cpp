@@ -15,6 +15,87 @@ Bool _SnesPPUOBJTileCountedX(Uint16 uObjectX, Int32 iTileX);
 
 static int g_Failures;
 
+static Uint32 NextRandom(Uint32 *pState)
+{
+	Uint32 x = *pState;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	*pState = x;
+	return x;
+}
+
+static Bool MaskBit(const SNMaskT *pMask, Int32 iX)
+{
+	return pMask && ((pMask->uMask32[iX >> 5] >> (iX & 31)) & 1u);
+}
+
+static void RenderOBJReference(Uint8 *pLine8, const SNMaskT *pLine,
+	const SnesRenderObj8T *pObjLine, Int32 nObjLine,
+	const SNMaskT *pWindow, const SNMaskT *pMask,
+	SNMaskT *pAddSubMask, Bool bAddSubMask)
+{
+	Uint8 blocked[256];
+	Int32 iX;
+
+	for (iX = 0; iX < 256; iX++)
+		blocked[iX] = (Uint8)(MaskBit(pWindow, iX) || MaskBit(pMask, iX));
+
+	while (--nObjLine >= 0)
+	{
+		const SnesRenderObj8T *pObj = pObjLine + nObjLine;
+		Uint32 uOpaque = pObj->uData[SNPPU_BGPLANE_OPAQUE];
+		Int32 iPixel;
+
+		for (iPixel = 0; iPixel < 8; iPixel++)
+		{
+			Bool bBGBlocked;
+			Uint32 uBit;
+
+			if (!(uOpaque & (1u << iPixel)))
+				continue;
+			iX = pObj->iPosX + iPixel;
+			if ((Uint32)iX >= 256u)
+				continue;
+
+			uBit = 1u << (iX & 31);
+			switch (pObj->uPri)
+			{
+			case 0:
+				bBGBlocked = MaskBit(&pLine[SNPPU_BGPLANE_LAYER0], iX) ||
+				             MaskBit(&pLine[SNPPU_BGPLANE_LAYER1], iX);
+				break;
+			case 1:
+				bBGBlocked = MaskBit(&pLine[SNPPU_BGPLANE_LAYER1], iX);
+				break;
+			case 2:
+				bBGBlocked = MaskBit(&pLine[SNPPU_BGPLANE_LAYER0], iX) &&
+				             MaskBit(&pLine[SNPPU_BGPLANE_LAYER1], iX);
+				break;
+			default:
+				bBGBlocked = FALSE;
+				break;
+			}
+
+			if (blocked[iX])
+				continue;
+			blocked[iX] = TRUE;
+			if (bBGBlocked)
+				continue;
+
+			pLine8[iX] = pObj->uData[iPixel];
+			if (pAddSubMask)
+			{
+				if ((bAddSubMask & 1) &&
+				    ((pObj->uPal | bAddSubMask) & 0x4))
+					pAddSubMask->uMask32[iX >> 5] |= uBit;
+				else
+					pAddSubMask->uMask32[iX >> 5] &= ~uBit;
+			}
+		}
+	}
+}
+
 static void Check(const char *pName, int nGot, int nExpected)
 {
     if (nGot != nExpected)
@@ -110,6 +191,45 @@ int main()
 	Check("hflip left fetches right", _SnesPPUOBJSourceColumn(0, 32, TRUE), 3);
 	Check("hflip right fetches left", _SnesPPUOBJSourceColumn(3, 32, TRUE), 0);
 
+	/* A faixa recortada deve ser bit-a-bit equivalente ao teste antigo para
+	   todo X de 9 bits e todos os tamanhos horizontais do SNES. */
+	{
+		static const Uint8 widths[] = { 8, 16, 32, 64 };
+		Int32 iRawX;
+		Int32 iWidth;
+		for (iRawX = 0; iRawX < 512; iRawX++)
+		{
+			Int32 iSignedX = (iRawX & 0x100) ? iRawX - 512 : iRawX;
+			for (iWidth = 0; iWidth < 4; iWidth++)
+			{
+				Int32 iFirst;
+				Int32 nCount;
+				Int32 iTile;
+				Int32 nExpected = 0;
+				Int32 iExpectedFirst = widths[iWidth] >> 3;
+
+				_SnesPPUOBJCountedTileRange((Uint16)iRawX, iSignedX,
+					widths[iWidth], &iFirst, &nCount);
+				for (iTile = 0; iTile < (widths[iWidth] >> 3); iTile++)
+				{
+					if (_SnesPPUOBJTileCountedX((Uint16)iRawX,
+						iSignedX + (iTile << 3)))
+					{
+						if (!nExpected) iExpectedFirst = iTile;
+						nExpected++;
+					}
+				}
+				if (iFirst != iExpectedFirst || nCount != nExpected)
+				{
+					std::printf("FAIL tile range x=%d width=%u: %d/%d != %d/%d\n",
+						iRawX, (unsigned)widths[iWidth], iFirst, nCount,
+						iExpectedFirst, nExpected);
+					g_Failures++;
+				}
+			}
+		}
+	}
+
     // Tiles parcialmente fora da tela nao podem tocar os buffers vizinhos.
     // Final Fight 2 mantem OBJ em X negativo durante o gameplay.
     {
@@ -190,6 +310,71 @@ int main()
 		Check("word split add/sub high", guardedAddSub[1].uMask32[1],
 		      0x0000001D);
     }
+
+	/* Compara o compositor otimizado com um modelo por pixel independente.
+	   Isso cobre prioridades, sobreposicao OBJ, janela, BG3 e add/sub. */
+	{
+		Uint32 state = 0x4F424A38u;
+		Int32 iCase;
+		for (iCase = 0; iCase < 1000; iCase++)
+		{
+			SnesRenderObj8T obj[SNPPU_MAXOBJCHR];
+			SNMaskT planes[SNPPU_BGPLANE_NUM];
+			SNMaskT window;
+			SNMaskT mask;
+			SNMaskT addSubGot;
+			SNMaskT addSubExpected;
+			Uint8 lineGot[256];
+			Uint8 lineExpected[256];
+			Int32 nObj = (Int32)(NextRandom(&state) %
+				(SNPPU_MAXOBJCHR + 1));
+			Int32 i;
+			const SNMaskT *pWindow = (NextRandom(&state) & 1) ? &window : NULL;
+			const SNMaskT *pMask = (NextRandom(&state) & 1) ? &mask : NULL;
+			SNMaskT *pAddSubGot = (NextRandom(&state) & 1) ? &addSubGot : NULL;
+			SNMaskT *pAddSubExpected = pAddSubGot ? &addSubExpected : NULL;
+			static const Uint8 addSubModes[] = { 0, 1, 5 };
+			Uint8 uAddSubMode = addSubModes[NextRandom(&state) % 3];
+
+			for (i = 0; i < 8; i++)
+			{
+				planes[SNPPU_BGPLANE_LAYER0].uMask32[i] = NextRandom(&state);
+				planes[SNPPU_BGPLANE_LAYER1].uMask32[i] = NextRandom(&state);
+				window.uMask32[i] = NextRandom(&state);
+				mask.uMask32[i] = NextRandom(&state);
+				addSubGot.uMask32[i] = NextRandom(&state);
+			}
+			std::memcpy(&addSubExpected, &addSubGot, sizeof(addSubGot));
+			for (i = 0; i < 256; i++)
+				lineGot[i] = (Uint8)NextRandom(&state);
+			std::memcpy(lineExpected, lineGot, sizeof(lineGot));
+
+			for (i = 0; i < nObj; i++)
+			{
+				Int32 iPixel;
+				obj[i].iPosX = (Int16)((Int32)(NextRandom(&state) % 280) - 12);
+				obj[i].uPri = (Uint8)(NextRandom(&state) & 3);
+				obj[i].uPal = (Uint8)(NextRandom(&state) & 7);
+				for (iPixel = 0; iPixel < 8; iPixel++)
+					obj[i].uData[iPixel] = (Uint8)NextRandom(&state);
+				obj[i].uData[SNPPU_BGPLANE_OPAQUE] = (Uint8)NextRandom(&state);
+			}
+
+			RenderOBJReference(lineExpected, planes, obj, nObj,
+				pWindow, pMask, pAddSubExpected, uAddSubMode);
+			_SnesPPURenderOBJ8(lineGot, planes, obj, nObj,
+				pWindow, pMask, pAddSubGot, uAddSubMode);
+
+			if (std::memcmp(lineGot, lineExpected, sizeof(lineGot)) ||
+			    (pAddSubGot && std::memcmp(pAddSubGot, pAddSubExpected,
+			                              sizeof(*pAddSubGot))))
+			{
+				std::printf("FAIL randomized OBJ compositor case %d\n", iCase);
+				g_Failures++;
+				break;
+			}
+		}
+	}
 
     std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
     return g_Failures ? 1 : 0;

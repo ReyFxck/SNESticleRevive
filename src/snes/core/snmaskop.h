@@ -4,8 +4,15 @@
 #define _SNMASKOP_H
 
 
+#ifndef SNMASKOP_INLINE
 #define SNMASKOP_INLINE (TRUE)
-#define SNMASKOP_ASSEMBLY (TRUE)
+#endif
+
+/* Keep the EE's two-qword MMI implementation in release builds, while host
+   correctness/performance tests use the equivalent portable implementation. */
+#ifndef SNMASKOP_ASSEMBLY
+#define SNMASKOP_ASSEMBLY (CODE_PLATFORM == CODE_PS2)
+#endif
 
 void SNMaskRange(SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert);
 void SNMaskRight(SNMaskT *pMask, Int32 iPos);
@@ -33,37 +40,27 @@ void SNMaskBool(SNMaskT *pDest, const SNMaskT *pSrc, bool bVal);
 
 static inline void SNMaskClear(SNMaskT *pDest)
 {
-    __asm__ __volatile__ (
-    	"sq        $0,0x00(%0)     \n"
-    	"sq        $0,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest)
-        : "memory"
-     );    
+	pDest->uMask64[0] = 0;
+	pDest->uMask64[1] = 0;
+	pDest->uMask64[2] = 0;
+	pDest->uMask64[3] = 0;
 }
 
 static inline void SNMaskSet(SNMaskT *pDest)
 {
-    __asm__ __volatile__ (
-        "pnor      $8,$0,$0        \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $8,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest)
-        : "$8", "memory"
-     );    
+	pDest->uMask64[0] = ~(Uint64)0;
+	pDest->uMask64[1] = ~(Uint64)0;
+	pDest->uMask64[2] = ~(Uint64)0;
+	pDest->uMask64[3] = ~(Uint64)0;
 }
 
 
 static inline void SNMaskCopy(SNMaskT *pDest,  const SNMaskT *pSrc)
 {
-	Uint128 a,b;
-
-	a = pSrc->uMask128[0];
-	b = pSrc->uMask128[1];
-
-	pDest->uMask128[0] = a;
-	pDest->uMask128[1] = b;
+	pDest->uMask64[0] = pSrc->uMask64[0];
+	pDest->uMask64[1] = pSrc->uMask64[1];
+	pDest->uMask64[2] = pSrc->uMask64[2];
+	pDest->uMask64[3] = pSrc->uMask64[3];
 }
 
 
@@ -73,16 +70,10 @@ static inline void SNMaskNOT(SNMaskT *pDest,  const SNMaskT *pSrc)
 	// 1  0
 	// 0
 
-	Uint128 a,b;
-
-	a = pSrc->uMask128[0];
-	b = pSrc->uMask128[1];
-
-	a = ~a;
-	b = ~b;
-
-	pDest->uMask128[0] = a;
-	pDest->uMask128[1] = b;
+	pDest->uMask64[0] = ~pSrc->uMask64[0];
+	pDest->uMask64[1] = ~pSrc->uMask64[1];
+	pDest->uMask64[2] = ~pSrc->uMask64[2];
+	pDest->uMask64[3] = ~pSrc->uMask64[3];
 }
 
 static inline void SNMaskAND(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -91,20 +82,10 @@ static inline void SNMaskAND(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMas
 	// 01 0
 	// 10 0
 	// 11 1
-	Uint128 a0,a1,b0,b1;
-	Uint128 c0,c1;
-
-	a0 = pSrcA->uMask128[0];
-	a1 = pSrcA->uMask128[1];
-
-	b0 = pSrcB->uMask128[0];
-	b1 = pSrcB->uMask128[1];
-
-	c0 = a0 & b0;
-	c1 = a1 & b1;
-
-	pDest->uMask128[0] = c0;
-	pDest->uMask128[1] = c1;
+	pDest->uMask64[0] = pSrcA->uMask64[0] & pSrcB->uMask64[0];
+	pDest->uMask64[1] = pSrcA->uMask64[1] & pSrcB->uMask64[1];
+	pDest->uMask64[2] = pSrcA->uMask64[2] & pSrcB->uMask64[2];
+	pDest->uMask64[3] = pSrcA->uMask64[3] & pSrcB->uMask64[3];
 }
 
 static inline void SNMaskANDN(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -114,20 +95,10 @@ static inline void SNMaskANDN(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMa
 	// 10 1
 	// 11 0
 
-	Uint128 a0,a1,b0,b1;
-	Uint128 c0,c1;
-
-	a0 = pSrcA->uMask128[0];
-	a1 = pSrcA->uMask128[1];
-
-	b0 = pSrcB->uMask128[0];
-	b1 = pSrcB->uMask128[1];
-
-	c0 = (a0 | b0) ^ b0;
-	c1 = (a1 | b1) ^ b1;
-
-	pDest->uMask128[0] = c0;
-	pDest->uMask128[1] = c1;
+	pDest->uMask64[0] = pSrcA->uMask64[0] & ~pSrcB->uMask64[0];
+	pDest->uMask64[1] = pSrcA->uMask64[1] & ~pSrcB->uMask64[1];
+	pDest->uMask64[2] = pSrcA->uMask64[2] & ~pSrcB->uMask64[2];
+	pDest->uMask64[3] = pSrcA->uMask64[3] & ~pSrcB->uMask64[3];
 }
 
 
@@ -137,20 +108,10 @@ static inline void SNMaskOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMask
 	// 01 1
 	// 10 1
 	// 11 1
-	Uint128 a0,a1,b0,b1;
-	Uint128 c0,c1;
-
-	a0 = pSrcA->uMask128[0];
-	a1 = pSrcA->uMask128[1];
-
-	b0 = pSrcB->uMask128[0];
-	b1 = pSrcB->uMask128[1];
-
-	c0 = (a0 | b0);
-	c1 = (a1 | b1);
-
-	pDest->uMask128[0] = c0;
-	pDest->uMask128[1] = c1;
+	pDest->uMask64[0] = pSrcA->uMask64[0] | pSrcB->uMask64[0];
+	pDest->uMask64[1] = pSrcA->uMask64[1] | pSrcB->uMask64[1];
+	pDest->uMask64[2] = pSrcA->uMask64[2] | pSrcB->uMask64[2];
+	pDest->uMask64[3] = pSrcA->uMask64[3] | pSrcB->uMask64[3];
 }
 
 static inline void SNMaskXOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -159,20 +120,10 @@ static inline void SNMaskXOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMas
 	// 01 1
 	// 10 1
 	// 11 0
-	Uint128 a0,a1,b0,b1;
-	Uint128 c0,c1;
-
-	a0 = pSrcA->uMask128[0];
-	a1 = pSrcA->uMask128[1];
-
-	b0 = pSrcB->uMask128[0];
-	b1 = pSrcB->uMask128[1];
-
-	c0 = (a0 ^ b0);
-	c1 = (a1 ^ b1);
-
-	pDest->uMask128[0] = c0;
-	pDest->uMask128[1] = c1;
+	pDest->uMask64[0] = pSrcA->uMask64[0] ^ pSrcB->uMask64[0];
+	pDest->uMask64[1] = pSrcA->uMask64[1] ^ pSrcB->uMask64[1];
+	pDest->uMask64[2] = pSrcA->uMask64[2] ^ pSrcB->uMask64[2];
+	pDest->uMask64[3] = pSrcA->uMask64[3] ^ pSrcB->uMask64[3];
 }
 
 static inline void SNMaskXNOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -181,21 +132,10 @@ static inline void SNMaskXNOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMa
 	// 01 0
 	// 10 0
 	// 11 1
-    __asm__ __volatile__ (
-        "lq         $8,0x00(%1)        \n"
-        "lq         $9,0x10(%1)        \n"
-        "lq        $10,0x00(%2)        \n"
-        "lq        $11,0x10(%2)        \n"
-        "pxor       $8,$8,$10         \n"
-        "pxor       $9,$9,$11         \n"
-        "pnor      $8,$8,$0         \n"
-        "pnor      $9,$9,$0         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
-        : "$8", "$9", "$10", "$11", "memory"
-     );    
+	pDest->uMask64[0] = ~(pSrcA->uMask64[0] ^ pSrcB->uMask64[0]);
+	pDest->uMask64[1] = ~(pSrcA->uMask64[1] ^ pSrcB->uMask64[1]);
+	pDest->uMask64[2] = ~(pSrcA->uMask64[2] ^ pSrcB->uMask64[2]);
+	pDest->uMask64[3] = ~(pSrcA->uMask64[3] ^ pSrcB->uMask64[3]);
 }
 
 static inline void SNMaskBool(SNMaskT *pDest,  const SNMaskT *pSrc, bool bVal)
