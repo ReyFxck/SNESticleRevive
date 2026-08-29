@@ -786,9 +786,9 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 | `BGM_RATE=hz` | Default menu‑music synthesis rate (e.g. `32000`). |
 | `SMB_CONFIG=/path/SMB.CNF` | Copy a single-share SMB configuration into an ISO root without printing its credentials. |
 
-> Note: changing a flag like `PROFILE=1` does **not** force a recompile on its
-> own (make only tracks file timestamps). Run `make clean` first when toggling
-> compile flags.
+> Note: the build records compile-affecting options such as `PROFILE`,
+> `SNES_DIAGNOSTICS`, cache switches and `APP_VERSION`. Changing one of them
+> automatically rebuilds the affected objects; `make clean` is not required.
 
 </details>
 
@@ -801,7 +801,7 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 
 
 The release notes for the current version are available in
-[`CHANGELOG_v1.0.6.md`](CHANGELOG_v1.0.6.md).
+[`CHANGELOG_v1.0.7.md`](CHANGELOG_v1.0.7.md).
 
 
 - **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
@@ -898,7 +898,7 @@ The release notes for the current version are available in
   after character selection still needs confirmation on the same NetherSX2
   setup before the issue is marked fixed.
 - Some large / special‑chip titles may still freeze or misbehave.
-- **SuperFX (GSU)** remains experimental in v1.0.6: r15 corrects cache-window
+- **SuperFX (GSU)** remains experimental in v1.0.7: r15 corrects cache-window
   rotation, executable RAM banks `$60-$7F`, byte MMIO and the hot loop, but
   Star Fox/Yoshi and other boards still need game-by-game PS2 validation.
 - **Missing chip**: SA‑1 is not implemented.

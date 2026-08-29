@@ -319,8 +319,8 @@ static Bool _SNRomIsValidCartInfo(SNRomInfoT *pCartInfo)
    copier Type-1 deinterleaving.  Checking the map byte alone is unsafe: an
    ordinary game can contain a coincidental checksum/complement pair at the
    other header address.  Pinocchio (USA), a clean 3 MiB HiROM, is one such
-   case; the old code treated the false LoROM candidate as Type-1 and
-   scrambled the real header before the SNES reset.
+   case; the inherited checksum-only selection accepted that false LoROM
+   candidate as Type-1 and scrambled the real header before the SNES reset.
 
    The reset-vector/opcode tests mirror the conservative parts of the header
    scoring used by current reference emulators.  A bad reset vector rejects
