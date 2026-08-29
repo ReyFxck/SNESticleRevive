@@ -315,6 +315,95 @@ static Bool _SNRomIsValidCartInfo(SNRomInfoT *pCartInfo)
 	return pCartInfo && ((pCartInfo->InverseChecksum ^ pCartInfo->Checksum) == 0xFFFF);
 }
 
+/* Score a checksum-valid candidate before deciding whether the image needs
+   copier Type-1 deinterleaving.  Checking the map byte alone is unsafe: an
+   ordinary game can contain a coincidental checksum/complement pair at the
+   other header address.  Pinocchio (USA), a clean 3 MiB HiROM, is one such
+   case; the old code treated the false LoROM candidate as Type-1 and
+   scrambled the real header before the SNES reset.
+
+   The reset-vector/opcode tests mirror the conservative parts of the header
+   scoring used by current reference emulators.  A bad reset vector rejects
+   the candidate for normal selection, while the legacy Type-1 fallback below
+   remains available when neither physical location can be scored yet. */
+static Int32 _SNRomHeaderScore(const Uint8 *pRom, Uint32 uRomBytes,
+	Uint32 uHeaderOffset, Bool bLoHeader)
+{
+	const SNRomInfoT *pCartInfo;
+	Uint16 uReset;
+	Uint32 uResetBase;
+	Uint32 uOpcodeOffset;
+	Uint8 uOpcode;
+	Uint8 uMapLow;
+	Int32 nPrintable = 0;
+	Int32 nScore = 0;
+	Int32 i;
+
+	if (!pRom || uHeaderOffset + 0x40 > uRomBytes)
+		return -1000;
+
+	pCartInfo = (const SNRomInfoT *)(pRom + uHeaderOffset);
+	if (!_SNRomIsValidCartInfo((SNRomInfoT *)pCartInfo))
+		return -1000;
+
+	/* Zero/FFFF is technically complementary but is much weaker evidence
+	   than the non-zero checksum pair found in commercial dumps. */
+	if (pCartInfo->Checksum && pCartInfo->InverseChecksum)
+		nScore += 8;
+	else
+		nScore += 1;
+
+	uMapLow = pCartInfo->RomMakeup & 0x0F;
+	if ((bLoHeader && (uMapLow == 0 || uMapLow == 2 || uMapLow == 3)) ||
+	    (!bLoHeader && (uMapLow == 1 || uMapLow == 5)))
+		nScore += 4;
+
+	if (pCartInfo->RomType < 0x08) nScore++;
+	if (pCartInfo->RomSize < 0x10) nScore++;
+	if (pCartInfo->SRAMSize < 0x08) nScore++;
+	if (pCartInfo->Country < 14) nScore++;
+
+	for (i = 0; i < 21; i++)
+	{
+		Uint8 c = pCartInfo->Title[i];
+		if (c >= 0x20 && c < 0x7F) nPrintable++;
+	}
+	if (nPrintable >= 16) nScore += 4;
+	else if (nPrintable >= 8) nScore += 1;
+
+	uReset = (Uint16)(pRom[uHeaderOffset + 0x3C] |
+	                  (pRom[uHeaderOffset + 0x3D] << 8));
+	if (uReset < 0x8000)
+		return -1000;
+
+	uResetBase = bLoHeader ? 0 : 0x8000;
+	uOpcodeOffset = uResetBase + (uReset & 0x7FFF);
+	if (uOpcodeOffset >= uRomBytes)
+		return -1000;
+
+	uOpcode = pRom[uOpcodeOffset];
+	switch (uOpcode)
+	{
+	/* CLC, SEI, JMP, JML, JSR, JSL, STZ */
+	case 0x18: case 0x78: case 0x4C: case 0x5C:
+	case 0x20: case 0x22: case 0x9C:
+		nScore += 8;
+		break;
+	/* REP, SEP, LDA, LDX, LDY */
+	case 0xC2: case 0xE2: case 0xA9: case 0xA2: case 0xA0:
+		nScore += 4;
+		break;
+	/* BRK, erased ROM, unlikely CPY immediate */
+	case 0x00: case 0xFF: case 0xCC:
+		nScore -= 8;
+		break;
+	default:
+		break;
+	}
+
+	return nScore;
+}
+
 /* A type-1 interleaved image places a header which claims the opposite
    mapper at the otherwise valid header location.  The checksum guard keeps
    random ROM data from being mistaken for a header. */
@@ -821,13 +910,46 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 	SNRomInfoT *pLoCartInfo;
 	SNRomInfoT *pHiCartInfo;
 
-	/* Look at both header positions before choosing a mapper.  If a valid
-	   header claims the opposite location, normalize a copier type-1 image
-	   and then rescan the now-linear ROM. */
+	/* Score both physical header positions first.  Only the best plausible
+	   candidate may request Type-1 conversion; accepting either candidate
+	   unconditionally corrupted clean HiROM images such as Pinocchio. */
 	pLoCartInfo = GetCartInfo(32704);
 	pHiCartInfo = GetCartInfo(65472);
-	if (_SNRomHeaderSaysType1(pLoCartInfo, TRUE) ||
-	    _SNRomHeaderSaysType1(pHiCartInfo, FALSE))
+	Int32 nLoScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 32704, TRUE);
+	Int32 nHiScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 65472, FALSE);
+	Bool bBestIsLo = (nLoScore >= nHiScore);
+	SNRomInfoT *pBestCartInfo = bBestIsLo ? pLoCartInfo : pHiCartInfo;
+
+	/* Some genuine Type-1 images do not expose a usable reset opcode until
+	   after conversion.  Preserve the old checksum/map fallback, but only
+	   when neither normal candidate could be scored. */
+	if (nLoScore <= -1000 && nHiScore <= -1000)
+	{
+		if (_SNRomHeaderSaysType1(pLoCartInfo, TRUE))
+		{
+			bBestIsLo = TRUE;
+			pBestCartInfo = pLoCartInfo;
+		}
+		else if (_SNRomHeaderSaysType1(pHiCartInfo, FALSE))
+		{
+			bBestIsLo = FALSE;
+			pBestCartInfo = pHiCartInfo;
+		}
+		else
+		{
+			pBestCartInfo = NULL;
+		}
+	}
+
+#if SNDBG_LOG
+	DLog("[rom-map] raw lo=%d hi=%d selected=%s type1=%d",
+	     (int)nLoScore, (int)nHiScore,
+	     pBestCartInfo ? (bBestIsLo ? "Lo" : "Hi") : "none",
+	     pBestCartInfo && _SNRomHeaderSaysType1(pBestCartInfo, bBestIsLo));
+#endif
+
+	if (pBestCartInfo &&
+	    _SNRomHeaderSaysType1(pBestCartInfo, bBestIsLo))
 	{
 		if (_SNRomDeinterleaveType1(m_pRomData, m_uRomBytes))
 		{
@@ -836,26 +958,45 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 		}
 	}
 
-	// get cart info for rom
-	pCartInfo = pLoCartInfo;
-	if (_SNRomIsValidCartInfo(pCartInfo))
+	/* Rescore because Type-1 conversion moves both the header and reset
+	   opcode.  Fall back to the historical checksum-only choice for unusual
+	   homebrew/copier headers which are valid but use an uncommon reset prologue. */
+	nLoScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 32704, TRUE);
+	nHiScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 65472, FALSE);
+	if (nLoScore > -1000 || nHiScore > -1000)
 	{
-		// cart mapping found in lo-rom
-		m_eMapping = SNROM_MAPPING_LOROM;
-	} else
-	{
-		// try to get cart info for hi-rom
-		pCartInfo = pHiCartInfo;
-		if (_SNRomIsValidCartInfo(pCartInfo))
+		if (nLoScore >= nHiScore)
 		{
-			// cart mapping found in hi-rom
+			pCartInfo = pLoCartInfo;
+			m_eMapping = SNROM_MAPPING_LOROM;
+		}
+		else
+		{
+			pCartInfo = pHiCartInfo;
 			m_eMapping = SNROM_MAPPING_HIROM;
-		} else
-		{
-			// cart info not found
-			pCartInfo = NULL;
 		}
 	}
+	else if (_SNRomIsValidCartInfo(pLoCartInfo))
+	{
+		pCartInfo = pLoCartInfo;
+		m_eMapping = SNROM_MAPPING_LOROM;
+	}
+	else if (_SNRomIsValidCartInfo(pHiCartInfo))
+	{
+		pCartInfo = pHiCartInfo;
+		m_eMapping = SNROM_MAPPING_HIROM;
+	}
+	else
+	{
+		pCartInfo = NULL;
+	}
+
+#if SNDBG_LOG
+	DLog("[rom-map] final lo=%d hi=%d mapper=%s title='%.21s'",
+	     (int)nLoScore, (int)nHiScore,
+	     pCartInfo ? (m_eMapping == SNROM_MAPPING_HIROM ? "HiROM" : "LoROM") : "none",
+	     pCartInfo ? (const char *)pCartInfo->Title : "");
+#endif
 
 	SetCartInfo(pCartInfo);
 
@@ -968,5 +1109,18 @@ char *SnesRom::GetExtName(Uint32 uExt)
 /* virtual */
 char   *SnesRom::GetMapperName()
 {
-	return NULL;
+	if (!m_pCartInfo)
+		return NULL;
+
+	switch (m_eMapping)
+	{
+	case SNROM_MAPPING_LOROM:
+		return (char *)"LoROM";
+	case SNROM_MAPPING_HIROM:
+		return (char *)"HiROM";
+	case SNROM_MAPPING_EXLOROM:
+		return (char *)"ExLoROM";
+	default:
+		return NULL;
+	}
 }
