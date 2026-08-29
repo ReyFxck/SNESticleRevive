@@ -54,11 +54,36 @@ extern "C" {
 static Uint32 _uVblankCycle;
 
 static MainLoopSafeFrameskipScheduler _SafeFrameskip;
+static Bool _bSafeFrameskipEnabled = FALSE;
+
+Bool MainLoopSafeFrameskipIsEnabled()
+{
+#if SNESTICLE_SAFE_FRAMESKIP
+	return _bSafeFrameskipEnabled;
+#else
+	return FALSE;
+#endif
+}
+
+void MainLoopSafeFrameskipSetEnabled(Bool bEnabled)
+{
+#if SNESTICLE_SAFE_FRAMESKIP
+	Bool bNewValue = bEnabled ? TRUE : FALSE;
+	if (_bSafeFrameskipEnabled != bNewValue)
+	{
+		_bSafeFrameskipEnabled = bNewValue;
+		_SafeFrameskip.Reset();
+	}
+#else
+	(void)bEnabled;
+	_bSafeFrameskipEnabled = FALSE;
+#endif
+}
 
 Uint32 MainLoopSafeFrameskipTake(Bool bAllowed)
 {
 #if SNESTICLE_SAFE_FRAMESKIP
-	if (bAllowed)
+	if (_bSafeFrameskipEnabled && bAllowed)
 		return _SafeFrameskip.TakeCatchupFrames();
 #else
 	(void)bAllowed;
@@ -70,6 +95,9 @@ Uint32 MainLoopSafeFrameskipTake(Bool bAllowed)
 void MainLoopSafeFrameskipAfterFlip()
 {
 #if SNESTICLE_SAFE_FRAMESKIP
+	if (!_bSafeFrameskipEnabled)
+		return;
+
 	Bool bSnesGameplay = (!_bMenu && _pSystem == _pSnes &&
 	                      !_MainLoop_BlackScreen) ? TRUE : FALSE;
 	_SafeFrameskip.AfterFlip(ProfCtrGetCycle(), bSnesGameplay);

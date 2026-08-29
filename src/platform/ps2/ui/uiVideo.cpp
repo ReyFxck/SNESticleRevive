@@ -16,6 +16,7 @@ extern "C" {
 #include "uiCover.h"
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
+#include "mainloop_safe_frameskip.h"
 #include "audmixbuffer.h"
 #include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
 #include "snppucolor.h"
@@ -28,7 +29,7 @@ extern Char _SramPath[256];
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 17
+#define VIDEOCFG_VERSION 18
 
 typedef struct
 {
@@ -49,7 +50,30 @@ typedef struct
 	Int32  smbenable;  /* historical host slot; now smb: 0=off, 1=on */
 	Int32  mx4sioenable; /* MX4SIO (SD via SIO2): 0=off, 1=on         */
 	Int32  colorprofile; /* SNPPU_COLOR_PROFILE_*                     */
+	Int32  frameskip;    /* recuperacao adaptativa: 0=off, 1=on       */
 } VideoCfgT;
+
+/* v17 added colorprofile to the v16 prefix. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+} VideoCfgV17T;
 
 /* v16 is the exact prefix written by v1.0.4 and by the first video-fix
    test build. Keep it readable so installing this build never resets the
@@ -108,6 +132,7 @@ void VideoSettingsSave(void)
 	cfg.smbenable  = SmbSupportIsEnabled() ? 1 : 0;
 	cfg.mx4sioenable = Mx4sioIsEnabled() ? 1 : 0;
 	cfg.colorprofile = SNPPUColorGetProfile();
+	cfg.frameskip = MainLoopSafeFrameskipIsEnabled() ? 1 : 0;
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
@@ -118,6 +143,7 @@ void VideoSettingsSave(void)
 void VideoSettingsLoad(void)
 {
 	VideoCfgT cfg;
+	VideoCfgV17T oldcfg17;
 	VideoCfgV16T oldcfg;
 	VideoCfgHeaderT header;
 	char      path[300];
@@ -134,6 +160,17 @@ void VideoSettingsLoad(void)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
 		}
+		else if (header.version == 17)
+		{
+			memset(&oldcfg17, 0, sizeof(oldcfg17));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg17, sizeof(oldcfg17)))
+			{
+				memcpy(&cfg, &oldcfg17, sizeof(oldcfg17));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.frameskip = 0;
+				loaded = TRUE;
+			}
+		}
 		else if (header.version == 16)
 		{
 			memset(&oldcfg, 0, sizeof(oldcfg));
@@ -143,6 +180,7 @@ void VideoSettingsLoad(void)
 				memcpy(&cfg, &oldcfg, sizeof(oldcfg));
 				cfg.version = VIDEOCFG_VERSION;
 				cfg.colorprofile = SNPPU_COLOR_PROFILE_ORIGINAL;
+				cfg.frameskip = 0;
 				loaded = TRUE;
 			}
 		}
@@ -178,6 +216,8 @@ void VideoSettingsLoad(void)
 		if (cfg.mx4sioenable == 0 || cfg.mx4sioenable == 1) Mx4sioSetEnabled(cfg.mx4sioenable);
 		if (cfg.colorprofile >= 0 && cfg.colorprofile < SNPPU_COLOR_PROFILE_COUNT)
 			SNPPUColorSetProfile(cfg.colorprofile);
+		if (cfg.frameskip == 0 || cfg.frameskip == 1)
+			MainLoopSafeFrameskipSetEnabled(cfg.frameskip ? TRUE : FALSE);
 	}
 }
 
@@ -328,17 +368,22 @@ void CVideoScreen::Draw()
 	}
 	else
 	{
+		_VideoHeader(vy, "Performance"); vy += 14;
+
+		_VideoRow(vy, 10, m_iSelect, "Frameskip",
+		          MainLoopSafeFrameskipIsEnabled() ? "On" : "Off"); vy += 12;
+
 		_VideoHeader(vy, "Storage / Devices"); vy += 14;
 
-		_VideoRow(vy, 10, m_iSelect, "Mass / USB",
+		_VideoRow(vy, 11, m_iSelect, "Mass / USB",
 		          MassStorageIsEnabled() ? "On" : "Off"); vy += 12;
-		_VideoRow(vy, 11, m_iSelect, "HDD Support",
+		_VideoRow(vy, 12, m_iSelect, "HDD Support",
 		          HddSupportIsEnabled() ? "On" : "Off"); vy += 12;
-		_VideoRow(vy, 12, m_iSelect, "MMCE Cards",
+		_VideoRow(vy, 13, m_iSelect, "MMCE Cards",
 		          _VideoMmceStatus()); vy += 12;
-		_VideoRow(vy, 13, m_iSelect, "SMB (Network)",
+		_VideoRow(vy, 14, m_iSelect, "SMB (Network)",
 		          SmbGetStatusText()); vy += 12;
-		_VideoRow(vy, 14, m_iSelect, "MX4SIO (SD)",
+		_VideoRow(vy, 15, m_iSelect, "MX4SIO (SD)",
 		          _VideoMx4sioStatus()); vy += 12;
 	}
 
@@ -365,14 +410,14 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 	int dir = 0;
 
 	/* Circle (O) alterna entre as 2 paginas: Video/Audio (idx 0-9) e
-	   Devices (10-14). NAO uso L1/R1 aqui de proposito -- eles ja trocam
+	   Performance/Devices (10-15). NAO uso L1/R1 aqui de proposito -- eles ja trocam
 	   de ABA no nivel global (Browser/Network/Menu/Log/Video). */
 	if (trigger & PAD_CIRCLE)
 		m_iSelect = (m_iSelect >= 10) ? 0 : 10;
 
 	{
 		int lo = (m_iSelect >= 10) ? 10 : 0;
-		int hi = (m_iSelect >= 10) ? 14 : 9;
+		int hi = (m_iSelect >= 10) ? 15 : 9;
 		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
 		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
 	}
@@ -453,17 +498,22 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			BgmCycleRate(dir);
 			break;
 
-		case 10: /* Mass / USB on/off -- lista mass0:/mass1: (USB).  O USB core
+		case 10: /* adaptive frameskip on/off (live, persisted on save) */
+			MainLoopSafeFrameskipSetEnabled(
+				MainLoopSafeFrameskipIsEnabled() ? FALSE : TRUE);
+			break;
+
+		case 11: /* Mass / USB on/off -- lista mass0:/mass1: (USB).  O USB core
 		           sobe no boot de qualquer forma (seguro); isto controla a
-		           listagem.  O MX4SIO agora tem toggle proprio (case 14). */
+		           listagem.  O MX4SIO agora tem toggle proprio (case 15). */
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
 
-		case 11: /* HDD interno (hdd0:) on/off -- lista + carga preguicosa. */
+		case 12: /* HDD interno (hdd0:) on/off -- lista + carga preguicosa. */
 			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
 
-		case 12: /* MMCE (mmce0/1) on/off -- lista + carga preguicosa. */
+		case 13: /* MMCE (mmce0/1) on/off -- lista + carga preguicosa. */
 			MmceSupportSetEnabled(!MmceSupportIsEnabled());
 			if (MmceSupportIsEnabled())
 			{
@@ -473,7 +523,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 
-		case 13: /* SMB on/off. Driver/network stay lazy until smb: is opened. */
+		case 14: /* SMB on/off. Driver/network stay lazy until smb: is opened. */
 			if (SmbSupportIsEnabled())
 			{
 				BgmIOBegin();
@@ -487,7 +537,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 
-		case 14: /* MX4SIO (SD via SIO2) on/off -- carga preguicosa (deferida).
+		case 15: /* MX4SIO (SD via SIO2) on/off -- carga preguicosa (deferida).
 		            Padrao OFF: quem nao tem o adaptador evita o flood de
 		            sondagem do SIO2.  Independente do Mass/USB. */
 			Mx4sioSetEnabled(!Mx4sioIsEnabled());

@@ -149,3 +149,5 @@ private:
 
 Uint32 MainLoopSafeFrameskipTake(Bool bAllowed);
 void MainLoopSafeFrameskipAfterFlip(void);
+Bool MainLoopSafeFrameskipIsEnabled(void);
+void MainLoopSafeFrameskipSetEnabled(Bool bEnabled);
