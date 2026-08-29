@@ -33,7 +33,9 @@ extern "C" {
 
 typedef char SNPPUScratchLayoutCheck[
 	(sizeof(SnesRender8pInfoT) <= SNPPU_DMA_BLENDINFO_OFFSET &&
-	 SNPPU_DMA_BLENDINFO_OFFSET + sizeof(SNPPUBlendInfoT) <= 16 * 1024)
+	 SNPPU_DMA_BLENDINFO_OFFSET + sizeof(SNPPUBlendInfoT) <=
+		PS2MEM_SNES_LOOKUP_OFFSET &&
+	 PS2MEM_SNES_LOOKUP_OFFSET + PS2MEM_SNES_LOOKUP_SIZE <= 16 * 1024)
 		? 1 : -1];
 
 #if SNDBG_LOG
@@ -104,8 +106,6 @@ static void _SNPPUGSValidateStage(const SNPPUBlendInfoT *pInfo)
 
 #define SNPPUBLEND_PAL32 (TRUE)
 
-extern SnesChrLookupT _SnesPPU_PlaneLookup[2];
-
 static Uint32 _SNPPUBlend_AttribMainPal[8] _ALIGN(16) =
 {                   // HSM
     0x00000000,     // 000
@@ -136,7 +136,10 @@ static Uint32 _SNPPUBlend_AttribSubPal[8] _ALIGN(16) =
 static void _PlanarTo3(Uint8 *pDest, SNMaskT *pSrc0, SNMaskT *pSrc1, SNMaskT *pSrc2)
 {
 	Uint32 nBytes = 256 / 8;
-	SnesChrLookup64T *pLookup64 = (SnesChrLookup64T *)&_SnesPPU_PlaneLookup[1];
+	SnesChrLookupT *pPlaneLookup =
+		(SnesChrLookupT *)PS2MEM_SNES_LOOKUP_ADDR;
+	SnesChrLookup64T *pLookup64 =
+		(SnesChrLookup64T *)&pPlaneLookup[1];
 	Uint64 *pDest64 = (Uint64 *)pDest;
 
 

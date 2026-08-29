@@ -124,6 +124,8 @@ Uint32 g_DbgHDMATransferChannels = 0;
 Uint32 g_DbgBGActiveLayers = 0;
 Uint32 g_DbgBGMapReloads = 0;
 Uint32 g_DbgBGChrRows = 0;
+Uint32 g_DbgBGChrBlankRows = 0;
+Uint32 g_DbgBGChrRepeatRows = 0;
 Bool   g_DbgCaptureActive = FALSE;
 Uint32 g_DbgCaptureFrameNo = 0;
 // contagem de acessos ao DSP por janela (diagnostico de carga)
@@ -1968,6 +1970,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGActiveLayers,
 				(unsigned)g_DbgBGMapReloads,
 				(unsigned)g_DbgBGChrRows);
+			DLog("[snes-bg-rows] total/blank/repeat=%u/%u/%u",
+				(unsigned)g_DbgBGChrRows,
+				(unsigned)g_DbgBGChrBlankRows,
+				(unsigned)g_DbgBGChrRepeatRows);
 			DLog("[snes-obj] ports oam=%u vram=%u cgram=%u | lines=%u refs=%u tiles=%u range/time=%u/%u",
 				(unsigned)g_DbgOAMWrites, (unsigned)g_DbgVRAMWrites,
 				(unsigned)g_DbgCGRAMWrites, (unsigned)g_DbgObjEnabledLines,
@@ -2156,6 +2162,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			g_DbgBGActiveLayers = 0;
 			g_DbgBGMapReloads = 0;
 			g_DbgBGChrRows = 0;
+			g_DbgBGChrBlankRows = 0;
+			g_DbgBGChrRepeatRows = 0;
 			m_GSU.ClearDiagWindow();
 		}
 		g_DbgCaptureActive = FALSE;

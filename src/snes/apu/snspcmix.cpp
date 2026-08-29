@@ -1227,6 +1227,11 @@ struct SNSpcDspDataT
 	SNSpcEchoSampleT Echo[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 };
 
+#if CODE_PLATFORM == CODE_PS2
+typedef char SNSpcScratchLookupLayoutCheck[
+	(sizeof(SNSpcDspDataT) <= PS2MEM_SNES_LOOKUP_OFFSET) ? 1 : -1];
+#endif
+
 
 #if 0
 Int32 _MixTemp(Int32 level, Int16 *pSamples, Int32 nSamples)

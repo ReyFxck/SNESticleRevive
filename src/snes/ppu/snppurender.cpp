@@ -116,6 +116,17 @@ static void _BuildPlaneLookup()
 		_SnesPPU_HFlipLookup[0][i] = i;
 		_SnesPPU_HFlipLookup[1][i] = _HFlipBits(i);
 	}
+
+	#if CODE_PLATFORM == CODE_PS2
+	/* Estes lookups somam exatamente 4,5 KiB e permanecem acima do buffer
+	   temporario do mixer SPC. O caminho BG passa a le-los no scratchpad,
+	   deixando o pequeno D-cache da EE disponivel para VRAM e estado PPU. */
+	memcpy((void *)PS2MEM_SNES_LOOKUP_ADDR,
+		_SnesPPU_PlaneLookup, sizeof(_SnesPPU_PlaneLookup));
+	memcpy((void *)(PS2MEM_SNES_LOOKUP_ADDR +
+			sizeof(_SnesPPU_PlaneLookup)),
+		_SnesPPU_HFlipLookup, sizeof(_SnesPPU_HFlipLookup));
+	#endif
 }
 
 void _DrawMask(Uint32 *pDest, SNMaskT *pMask, Int32 nPixels)

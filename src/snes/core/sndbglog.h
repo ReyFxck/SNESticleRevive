@@ -134,6 +134,8 @@ extern Uint32 g_DbgHDMATransferChannels;
 extern Uint32 g_DbgBGActiveLayers;
 extern Uint32 g_DbgBGMapReloads;
 extern Uint32 g_DbgBGChrRows;
+extern Uint32 g_DbgBGChrBlankRows;
+extern Uint32 g_DbgBGChrRepeatRows;
 
 // Periodicamente uma build diagnostica captura dois scanlines OBJ e suas
 // fontes em VRAM. O dump e' pequeno para nao bloquear o SIO do NetherSX2.
