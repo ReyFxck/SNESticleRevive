@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the profctr interface for shared debugging support.
+ */
 
 #ifndef _PROFCTR_H
 #define _PROFCTR_H
@@ -14,37 +20,30 @@ void ProfCtrReset();
 //#define ProfCtrGetCycle() (0)
 
 static inline Uint32 ProfCtrGetCycle()
-{                                            
-    Uint32 uCycle;                          
-	__asm__ volatile ("mfc0  %0, $9" : "=r" (uCycle) : );    
-    return uCycle;                          
+{
+    Uint32 uCycle;
+	__asm__ volatile ("mfc0  %0, $9" : "=r" (uCycle) : );
+    return uCycle;
 }
 
-
 static inline Uint32 ProfCtrGetCounter0()
-{                                            
-    Uint32 uCount;                          
-	__asm__ volatile ("mfpc  %0, 0" : "=r" (uCount) : );    
-    return uCount;                          
+{
+    Uint32 uCount;
+	__asm__ volatile ("mfpc  %0, 0" : "=r" (uCount) : );
+    return uCount;
 }
 
 static inline Uint32 ProfCtrGetCounter1()
-{                                            
-    Uint32 uCount;                          
-	__asm__ volatile ("mfpc  %0, 1" : "=r" (uCount) : );    
-    return uCount;                          
+{
+    Uint32 uCount;
+	__asm__ volatile ("mfpc  %0, 1" : "=r" (uCount) : );
+    return uCount;
 }
 
-
-
 #define PROFCTR_CYCLEMULTIPLY 1
-
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
 #endif
-
-
-

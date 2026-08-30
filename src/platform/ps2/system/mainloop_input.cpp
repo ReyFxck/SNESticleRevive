@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop input behavior for the PlayStation 2 application runtime.
+ */
+
 #include "types.h"
 #include <stdio.h>
 #include <string.h>
@@ -18,7 +26,6 @@
 extern "C" {
 #include "audio.h"
 }
-
 
 #define MENU_REPEAT (16)
 
@@ -65,20 +72,8 @@ Uint16 _MainLoopInput(Uint32 pad)
     {
         return 0;
     }
-#if 0
-    if (_pSystem==_pSnes)
-    {
-        return _MainLoopSnesInput(pad);
-    } else
-    if (_pSystem==_pNes)
-    {
-        return _MainLoopNesInput(pad);
-    }
-	   return 0;
-#else
- 	return _MainLoopSnesInput(pad);
-#endif
- 
+	return _MainLoopSnesInput(pad);
+
 }
 
 static void _MainLoopQuickStateAction(Bool bSave)
@@ -142,7 +137,6 @@ void _MainLoopInputProcess(Uint32 buttons)
 	static Bool bStateHotkeyHeld = FALSE;
 	Uint32 trigger;
 
-
 	if (_MainLoop_bSuppressGameInputUntilRelease &&
 	    !(buttons & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT |
 	                 PAD_CROSS | PAD_CIRCLE | PAD_START)))
@@ -155,7 +149,6 @@ void _MainLoopInputProcess(Uint32 buttons)
 		repeat=0;
 	}
 
-	// 
 	repeat++;
 	if (repeat > MENU_REPEAT)
 	{
@@ -251,12 +244,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 		if (_pSystem == _pSnes)
 			SnesDbgRequestCapture(SNDBG_CAPTURE_MANUAL);
 		#endif
-//		BMPWriteFile("/pc/mnt/c/out.bmp", &_fbTexture[0]);
 	}
-
-
-
-
 
     #ifdef DEBUG // CODE_DEBUG
 	if (trigger & PAD_L2)
@@ -279,10 +267,8 @@ void _MainLoopInputProcess(Uint32 buttons)
             }
 
         }
-//		BMPWriteFile("/pc/mnt/c/out.bmp", &_fbTexture[0]);
 	}
     #endif
-
 
     #ifdef DEBUG // CODE_DEBUG
 	if (buttons & PAD_L2)
@@ -295,7 +281,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 
         if (trigger&PAD_L3)
 		{
-			
+
 	        // stop recording if we are recording
 	        if (s_pMovieClip->IsRecording())
 	        {
@@ -323,14 +309,14 @@ void _MainLoopInputProcess(Uint32 buttons)
 	        {
 	            printf("Movie: Record End\n");
 	            s_pMovieClip->RecordEnd();
-	        } 
+	        }
 
 	        // stop playing if we are playing
 	        if (s_pMovieClip->IsPlaying())
 	        {
 	            printf("Movie: Play End\n");
 	            s_pMovieClip->PlayEnd();
-	        } 
+	        }
 	        if (_pSystem)
 	        {
 	            s_pMovieClip->PlayBegin(_pSystem);
@@ -384,22 +370,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 
 			  */
 
-
-
     #endif
-
-
-	#if 0
-	if (
-	 	((trigger & PAD_R2) && (buttons & PAD_L2)) ||
-	 	((trigger & PAD_L2) && (buttons & PAD_R2)) 
-	   )
-	{
-		// toggle menu
-		 _MenuEnable(!_bMenu);
-		 return;
-	}
-	#endif
 
 	if (trigger & PAD_L2)
 	{
@@ -410,7 +381,6 @@ void _MainLoopInputProcess(Uint32 buttons)
 	{
 		_MenuTriggerTimeout[1]=5;
 	}
-
 
 	if (_MenuTriggerTimeout[0] > 0)
 	{
@@ -435,7 +405,6 @@ void _MainLoopInputProcess(Uint32 buttons)
 		}
 		_MenuTriggerTimeout[1]--;
 	}
-
 
 	if (_bMenu)
 	{
@@ -481,48 +450,6 @@ void _MainLoopInputProcess(Uint32 buttons)
 				_MainLoop_BlackScreen^=1;
 			}
 		}
-
-#if 0
-		// perform cheesy non-deterministic disk switching
-		if (trigger & (PAD_R1|PAD_L1) )
-		{
-			if (_pNesFDSDisk->IsLoaded())
-			{
-				if (_MainLoop_bDiskInserted)
-				{
-					// eject disk!
-					_MainLoop_bDiskInserted = FALSE;
-					_pNes->GetMMU()->InsertDisk(-1);
-
-					MainLoopStatusPrintf(60, "NESFDS Disk Ejected");
-
-					// pick next disk
-					if (trigger & PAD_R1)
-						_MainLoop_iDisk++;
-					else
-						_MainLoop_iDisk--;
-				} else
-				{
-					// wrap the number of disks
-					if (_MainLoop_iDisk < 0)
-					{
-						_MainLoop_iDisk = _pNesFDSDisk->GetNumDisks()-1;
-					}
-
-					if (_MainLoop_iDisk >= _pNesFDSDisk->GetNumDisks())
-					{
-						_MainLoop_iDisk = 0;
-					}
-					// insert disk
-					_pNes->GetMMU()->InsertDisk(_MainLoop_iDisk);
-					_MainLoop_bDiskInserted = TRUE;
-
-
-					MainLoopStatusPrintf(60, "NESFDS Disk %d Inserted", _MainLoop_iDisk);
-				}
-			}
-		}
-#endif
 
 	}
 #endif

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snstate behavior for SNES save-state serialization.
+ */
 
 #include <string.h>
 #include <stdio.h>
@@ -26,8 +33,6 @@ Int32 SnesSystem::GetStateSize()
 {
     return sizeof(SnesStateT);
 }
-
-
 
 void SnesSystem::SaveState(SnesStateT *pState)
 {
@@ -108,7 +113,6 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_Spc.Counter[1] = pState->SPC.Counter[1];
 	m_Spc.uPad = 0;
 
-
 	m_PPU.RestoreState(&pState->PPU);
 	m_DMAC.RestoreState(&pState->DMAC);
 	m_IO.RestoreState(&pState->IO);
@@ -132,7 +136,6 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	memcpy(m_Spc.Mem, pState->SpcRam, SNSPC_MEM_SIZE);
     SNSPCSetRomEnable(&m_Spc, pState->SPC.bRomEnable);
 
-
 	// set fast or slow rom
 	if (m_IO.m_Regs.memsel & 1)
 	{
@@ -144,7 +147,6 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 
 	return TRUE;
 }
-
 
 void SnesIO::SaveState(struct SNStateIOT *pState)
 {
@@ -208,7 +210,6 @@ void SnesPPU::RestoreState(struct SNStatePPUT *pState)
 	UpdateOAMPriority();
 }
 
-
 void SNSpcDsp::SaveState(struct SNStateSPCDSPT *pState)
 {
 	memcpy(pState->m_Regs, m_Regs, sizeof(m_Regs));
@@ -228,7 +229,6 @@ void SNSpcDspMix::RestoreState(struct SNStateSPCDSPT *pState)
 {
 	memcpy(m_Channels, pState->m_Channels, sizeof(m_Channels));
 }
-
 
 void _SNStateMemDiff(const char *pTag, Uint8 *pA, Uint8 *pB, Int32 nBytes)
 {

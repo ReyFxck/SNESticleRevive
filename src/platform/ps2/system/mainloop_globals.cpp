@@ -1,16 +1,9 @@
-/* mainloop_globals.cpp
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Single home for the *definitions* of every cross-file symbol that
- * the rest of the mainloop_*.cpp tree reaches for through
- * mainloop_shared.h.
- *
- * No logic lives here -- only object definitions. Anything with
- * file-static linkage stays inside the .cpp that uses it (e.g.
- * mainloop_init.cpp, mainloop_process.cpp), and #if 0 dead code from
- * the original mainloop.cpp stays in mainloop.cpp.
- *
- * Extracted from mainloop.cpp during the Batch 3 split. No values,
- * initialisers, or attribute lists changed.
+ * Description:
+ *   Implements mainloop globals behavior for the PlayStation 2 application runtime.
  */
 
 #include "types.h"
@@ -35,10 +28,8 @@
 #include "uiLog.h"
 #include "uiScreen.h"
 
-
 /* MAINLOOP_MEMCARD lives in mainloop_shared.h (included above) and
    gates the memcard variants of _SramPath / _MainLoop_SaveTitle below. */
-
 
 /* ---- UI screens --------------------------------------------------- */
 
@@ -52,7 +43,6 @@ CMenuScreen    *_MainLoop_pMemCardFormatScreen;
 CLogScreen     *_MainLoop_pLogScreen;
 CVideoScreen   *_MainLoop_pVideoScreen;
 CScreen        *_MainLoop_pScreen = NULL;
-
 
 /* ---- Emulator core handles ---------------------------------------- */
 
@@ -85,7 +75,6 @@ Char _SramPath[256] = "host0:/cygdrive/d/emu/";
 
 Emu::System *_pSystem;
 
-
 /* ---- ROM / framebuffer / audio buffers ---------------------------- */
 
 CRenderSurface *_fbTexture[2];
@@ -107,7 +96,6 @@ NesStateT		_NesState;
 
 Emu::MovieClip *s_pMovieClip;
 
-
 /* ---- SRAM / save bookkeeping -------------------------------------- */
 
 Uint32 _MainLoop_SRAMChecksum;
@@ -118,7 +106,6 @@ Bool   _bStateSaved            = FALSE;
 Float32 _MainLoop_fOutputIntensity = 0.8f;
 
 AudMixBuffer *_AudMix;
-
 
 /* ---- Flags / counters --------------------------------------------- */
 

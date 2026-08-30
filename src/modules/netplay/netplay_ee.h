@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the netplay ee interface for the emulator netplay frontend.
+ */
 
 #ifndef _NETPLAY_RPCCLIENT_H
 #define _NETPLAY_RPCCLIENT_H

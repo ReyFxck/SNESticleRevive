@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the memspace interface for shared rendering and audio buffers.
+ */
 
 #ifndef _MEMSPACE_H
 #define _MEMSPACE_H
@@ -46,6 +53,5 @@ public:
 	void	SaveState(Uint8 *pData, Uint32 uDataSize);
 	void	RestoreState(Uint8 *pData, Uint32 uDataSize);
 };
-
 
 #endif

@@ -1,17 +1,9 @@
-/* gs.c
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Original SNESticle code talked to the Graphics Synthesiser through
- * raw memory-mapped registers and a hand-rolled GIF chain. As of the
- * Fase 1 GS->gsKit migration, the public API in gs.h is preserved
- * but every entry point routes through gsKit (see gskit_backend.[ch]).
- *
- * The SNES per-scanline blender (snes/ppu/snppublend_gs.cpp) still
- * builds its own GIF chains and kicks DMA on the GIF channel
- * directly; gsKit is forced to drain via GSK_DrainAndWait() before
- * the blender runs, and the blender restores the FRAME / XYOFFSET
- * registers via GS_GetFrameReg() / GS_GetOffsetReg() once it is
- * done. Both helpers now read the gsKit GSGLOBAL state instead of
- * the old draw_env structures.
+ * Description:
+ *   Implements gs behavior for the PlayStation 2 Graphics Synthesizer backend.
  */
 
 #include <tamtypes.h>

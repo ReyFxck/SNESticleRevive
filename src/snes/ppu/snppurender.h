@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppurender interface for SNES picture processing.
+ */
 
 #ifndef _SNPPURENDER_H
 #define _SNPPURENDER_H
@@ -8,7 +15,6 @@
 #include "palette.h"
 
 class CRenderSurface;
-
 
 enum
 {
@@ -36,7 +42,7 @@ enum
 #define SNPPU_BGFLAGS_FETCHPAL (2)
 #define SNPPU_BGFLAGS_OFFSET (4)
 
-enum 
+enum
 {
     SNPPU_BGWINDOW_BG1,
     SNPPU_BGWINDOW_BG2,
@@ -48,9 +54,8 @@ enum
     SNPPU_BGWINDOW_NUM
 };
 
-
 // maximum number of lines (224 + first dummy line)
-#define SNPPU_MAXLINE   225 
+#define SNPPU_MAXLINE   225
 
 // maximum number of obj's per line
 #define SNPPU_MAXOBJ    32
@@ -58,11 +63,7 @@ enum
 // maximum number of obj 8-pixel chr's per line
 #define SNPPU_MAXOBJCHR 34
 
-
 #define SNPPU_BGPLANE_SIZE 48
-
-//
-//
 
 struct SnesRenderObjT
 {
@@ -74,7 +75,7 @@ struct SnesRenderObjT
 	Uint8	uVXOR;		// v-flip (usa width-1 nos modos retangulares)
 	Uint8	uWidth;
 	Uint8	uHeight;
-	Uint8	uPri;		
+	Uint8	uPri;
 	Uint8	uPal;
 };
 
@@ -120,7 +121,6 @@ _INLINE Int32 _SnesPPUOBJSourceColumn(Int32 iTileX, Uint8 uWidth,
 	return bHFlip ? ((Int32)(uWidth >> 3) - 1 - iTileX) : iTileX;
 }
 
-
 struct SnesRenderTileT
 {
 	Uint16	uTile;		// tile index
@@ -129,7 +129,6 @@ struct SnesRenderTileT
 	Uint8   uOffsetY;
 	Uint8	uPad;
 };
-
 
 struct SnesBGInfoT
 {
@@ -148,7 +147,6 @@ struct SnesBGInfoT
 typedef Uint32 SnesChrLookupT[256][2];
 typedef Uint64 SnesChrLookup64T[256];
 
-
 struct SnesRenderObj8T
 {
 	Int16	iPosX;
@@ -166,8 +164,6 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	const SnesRenderObj8T *pObjLine, Int32 nObjLine,
 	const SNMaskT *pWindow, const SNMaskT *pMask,
 	SNMaskT *pAddSubMask, Bool bAddSubMask);
-
-
 
 struct SnesRender8pInfoT
 {
@@ -191,16 +187,7 @@ struct SnesRender8pInfoT
 
 	Uint8  uObjY[128];
     Uint8  uObjSize[128];
-};                     
-
-
-
-
-
-//
-//
-//
-
+};
 
 class SnesPPURender : public ISnesPPURender
 {
@@ -248,8 +235,6 @@ public:
 	void UpdateVRAMRange(Uint32 uVramAddr, Uint32 nWords);
 	void UpdateCGRAM(Uint32 uAddr, Uint16 uData);
 };
-
-
 
 extern SnesChrLookupT _SnesPPU_PlaneLookup[2];
 extern Uint8 _SnesPPU_HFlipLookup[2][256];

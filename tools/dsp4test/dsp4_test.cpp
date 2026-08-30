@@ -1,5 +1,12 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Exercises dsp4 test behavior in the dsp4test regression suite.
+ */
+
 // Bancada host-side do DSP-4 HLE (src/snes/core/sndsp4.cpp + dsp4emu.cpp).
-//
 // Agora que o HLE do ZSNES (GPLv2) esta portado, validamos:
 //   - Status sempre pronto (0x80 = RQM).
 //   - Transfers de 16 bits LSB-first.

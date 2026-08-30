@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the uiBrowser interface for the PlayStation 2 user interface.
+ */
 
 #ifndef _UIBROWSER_H
 #define _UIBROWSER_H
@@ -88,4 +95,3 @@ public:
 };
 
 #endif
-

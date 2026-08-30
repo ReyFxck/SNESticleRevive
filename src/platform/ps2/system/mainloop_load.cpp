@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop load behavior for the PlayStation 2 application runtime.
+ */
+
 #include <string.h>
 #include <stdio.h>
 #define NEWLIB_PORT_AWARE
@@ -165,7 +173,6 @@ Bool _MainLoopLoadSnesPalette(const char *pFileName)
         return _MainLoopReadBinaryData((Uint8 *)pPalData, SNPPUCOLOR_NUM * sizeof(Uint32), pFileName) > 0;
 }
 
-
 void _MainLoopUnloadRom()
 {
 
@@ -174,13 +181,13 @@ void _MainLoopUnloadRom()
     {
         printf("Movie: Record End\n");
         s_pMovieClip->RecordEnd();
-    } 
+    }
     // stop playing if we are playing
     if (s_pMovieClip->IsPlaying())
     {
         printf("Movie: Play End\n");
         s_pMovieClip->PlayEnd();
-    } 
+    }
 
 	// unload old rom
 	_pSnes->SetRom(NULL);
@@ -200,7 +207,6 @@ void _MainLoopUnloadRom()
 	_fbTexture[0]->Clear();
 	_fbTexture[1]->Clear();
 }
-
 
 Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 {
@@ -241,7 +247,7 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 	if (!PathExtResolve(FileName, &eType, TRUE))
 	{
 		return FALSE;
-  	}
+	}
 
 	if (eType == MAINLOOP_ENTRYTYPE_SNESPALETTE)
 	{
@@ -379,12 +385,11 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
                             Char *pFileName;
 				snprintf(diskrompath, sizeof(diskrompath), "%s", FileName);
 				pFileName = strrchr(diskrompath, '/');
-				if (!pFileName) 
+				if (!pFileName)
 					pFileName = strrchr(diskrompath, ':');
 				if (!pFileName)
 					return FALSE;
 
-				// 
 				strcpy(pFileName + 1, "disksys.rom");
 
 				printf("FDSRom: '%s'\n", diskrompath);
@@ -425,7 +430,7 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 		{
 			_pSnes->SetSnesRom(_pSnesRom);
 		}
-	} 
+	}
 	else
 	{
 		pSystem->SetRom(pRom);

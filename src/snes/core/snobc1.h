@@ -1,15 +1,11 @@
 /*
- * snobc1.h - OBC1 coprocessor (Metal Combat: Falcon's Revenge)
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * O OBC1 nao e' um DSP: e' um controladorzinho que ajuda o jogo a montar
- * a tabela de OAM (sprites). Ele expoe 8KB de RAM em $6000-$7FFF, com
- * alguns registradores no topo ($7FF0-$7FF6) que dao uma "janela" para
- * escrever os dados de um sprite por vez; o jogo depois faz DMA dessa RAM
- * para a OAM.
- *
- * Implementacao clean-room a partir do comportamento documentado.
- * Unico jogo: Metal Combat.
+ * Description:
+ *   Declares the snobc1 interface for the SNES emulation core.
  */
+
 #ifndef _SNOBC1_H
 #define _SNOBC1_H
 

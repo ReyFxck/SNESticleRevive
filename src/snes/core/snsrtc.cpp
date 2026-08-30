@@ -1,8 +1,9 @@
 /*
- * snsrtc.cpp - S-RTC (Sharp Real-Time Clock) coprocessor HLE
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Veja snsrtc.h. Implementacao clean-room a partir do comportamento
- * documentado do chip (engenharia reversa publica, byuu).
+ * Description:
+ *   Implements snsrtc behavior for the SNES emulation core.
  */
 
 #include "types.h"

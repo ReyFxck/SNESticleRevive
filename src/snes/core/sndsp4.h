@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sndsp4 interface for the SNES emulation core.
+ */
+
+/*
  * sndsp4.h - DSP-4 (NEC uPD7725) coprocessor HLE
  *
  * The DSP-4 is used ONLY by "Top Gear 3000" (USA) and "The Planet's Champ

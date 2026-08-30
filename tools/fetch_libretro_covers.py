@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Downloads and indexes matching Libretro artwork for ROM collections.
+
 """Download matching Libretro artwork for SNES/NES ROM folders.
 
 The destination mirrors the ROM directory tree and uses the folders already
@@ -26,7 +32,6 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
-
 
 DEFAULT_BASE_URL = "https://thumbnails.libretro.com"
 MAX_PNG_BYTES = 8 * 1024 * 1024
@@ -74,12 +79,10 @@ REGION_ALIASES = (
     ("(W)", "(World)"),
 )
 
-
 def _add_unique(items, value):
     value = value.strip()
     if value and value not in items:
         items.append(value)
-
 
 def _archive_info(path):
     """Return (systems, member bases) for supported files inside a ZIP."""
@@ -99,7 +102,6 @@ def _archive_info(path):
     except (OSError, zipfile.BadZipFile, RuntimeError):
         return set(), []
     return systems, member_bases
-
 
 def _rom_info(path, forced_system):
     suffix = path.suffix.lower()
@@ -152,7 +154,6 @@ def _rom_info(path, forced_system):
 
     return system, candidates
 
-
 def _valid_png_bytes(data):
     if len(data) < 29 or data[:8] != b"\x89PNG\r\n\x1a\n":
         return False, "not a PNG"
@@ -162,7 +163,6 @@ def _valid_png_bytes(data):
         return False, "Adam7/interlaced PNG is unsupported"
     return True, ""
 
-
 def _valid_png_file(path):
     try:
         with path.open("rb") as handle:
@@ -171,7 +171,6 @@ def _valid_png_file(path):
         return False
     return _valid_png_bytes(header)[0]
 
-
 def _thumbnail_url(base_url, system, category, candidate):
     return "%s/%s/%s/%s" % (
         base_url.rstrip("/"),
@@ -179,7 +178,6 @@ def _thumbnail_url(base_url, system, category, candidate):
         quote(category, safe=""),
         quote(candidate + ".png", safe=""),
     )
-
 
 def _fetch_one(task, base_url, timeout, dry_run):
     rom_key, system, category, destination, candidates = task
@@ -237,7 +235,6 @@ def _fetch_one(task, base_url, timeout, dry_run):
         return rom_key, category, "error", str(destination), network_error
     return rom_key, category, "missing", str(destination), ""
 
-
 def _find_roms(root):
     supported = set(ROM_SYSTEM_BY_SUFFIX)
     supported.update((".zip", ".gz"))
@@ -245,7 +242,6 @@ def _find_roms(root):
         path for path in root.rglob("*")
         if path.is_file() and path.suffix.lower() in supported
     )
-
 
 def _write_cover_indexes(rom_root, output_root, roms):
     """Write one compact runtime index beside the ROMs in each directory.
@@ -312,7 +308,6 @@ def _write_cover_indexes(rom_root, output_root, roms):
         entry_count += len(records)
 
     return index_count, entry_count
-
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -412,7 +407,6 @@ def main(argv=None):
         )
     )
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Tests the snesdiag-v1 text-log analyzer.
 
 import unittest
 
 from analyze import analyze_lines
-
 
 class AnalyzeTest(unittest.TestCase):
     def test_prefixed_log_and_anomalies(self):
@@ -34,7 +38,6 @@ class AnalyzeTest(unittest.TestCase):
     def test_missing_window_is_reported(self):
         report = analyze_lines(["ordinary emulator log\n"])
         self.assertEqual(report["findings"][0]["code"], "no-window")
-
 
 if __name__ == "__main__":
     unittest.main()

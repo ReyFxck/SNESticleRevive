@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop net behavior for the PlayStation 2 application runtime.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -117,12 +125,8 @@ char *_MainLoop_NetConfigPaths[]=
     NULL
 };
 
-
-
-
 static Bool _MainLoopLoadNetConfig(t_ip_info *pConfig, const char *pConfigPath)
 {
-	// 
 	printf("netconfigload: %s\n", pConfigPath);
 	return FALSE;
 }
@@ -152,7 +156,7 @@ Bool _MainLoopConfigureNetwork(char **ppSearchPaths, char *pConfigFileName)
 		{
 		    char Path[1024];
 
-        	sprintf(Path, "%s%s", *ppSearchPaths, pConfigFileName);
+	sprintf(Path, "%s%s", *ppSearchPaths, pConfigFileName);
 
 			// attempt to load configuration information
 			if (_MainLoopLoadNetConfig(&config, Path))
@@ -218,7 +222,6 @@ Bool _MainLoopInitNetwork(Char **ppSearchPaths)
     ret = NetIfLoadEmbeddedIrx();
     if (ret < 0)
     {
-        // printf("[boot] NetIfLoadEmbeddedIrx failed (%d) - no network\n", ret);
         s_network_init_result = -1;
         return FALSE;
     }
@@ -230,9 +233,7 @@ Bool _MainLoopInitNetwork(Char **ppSearchPaths)
     ip4_addr_set_zero(&NM);
     ip4_addr_set_zero(&GW);
 
-    // printf("[boot] ps2ipInit\n");
     ret = ps2ipInit(&IP, &NM, &GW);
-    // printf("[boot] ps2ipInit done\n");
 
     if (ret < 0)
     {

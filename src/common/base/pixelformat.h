@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the pixelformat interface for shared base utilities.
+ */
 
 #ifndef _PIXELFORMAT_H
 #define _PIXELFORMAT_H
-
 
 // enum of some default pixel formats
 enum PixelFormatE
@@ -19,7 +25,7 @@ enum PixelFormatE
 	PIXELFORMAT_RGBA8,
 };
 
-// struct representing pixel format 
+// struct representing pixel format
 struct PixelFormatT
 {
 	PixelFormatE	eFormat;

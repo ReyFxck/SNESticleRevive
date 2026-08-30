@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements netplay ee behavior for the emulator netplay frontend.
+ */
+
 #include <tamtypes.h>
 #include <kernel.h>
 #include <stdio.h>
@@ -36,13 +44,13 @@ void NetPlayPuts(char *format, ...)
 static int _ClientCallback(NetClientT *pClient, NetPlayCallbackE eMsg, void *arg)
 {
     NetSysSemaWait(_clientcallback_sema);
-    
+
     // For local EE, we can just invoke the callback directly
     if (_user_callback)
     {
         _user_callback(eMsg, (char*)arg, arg ? strlen((char*)arg) + 1 : 0);
     }
-    
+
     NetSysSemaSignal(_clientcallback_sema);
 
 	switch (eMsg)
@@ -135,16 +143,16 @@ int NetPlayGetStatus(NetPlayRPCStatusT *pStatus)
     pStatus->eClientStatus = _client.eStatus;
     pStatus->eGameState    = _client.eGameState;
     pStatus->eServerStatus = _server.eStatus;
-    
+
     for (iPeer=0; iPeer < 4; iPeer++)
     {
         NetPlayRPCPeerStatusT *pPeerStatus = &pStatus->peer[iPeer];
-        
+
         pPeerStatus->eStatus =    _client.Peers[iPeer].eStatus;
         pPeerStatus->eGameState = _client.Peers[iPeer].eGameState;
         pPeerStatus->ipaddr  = _client.Peers[iPeer].Addr.sin_addr;
         pPeerStatus->udpport = _client.Peers[iPeer].Addr.sin_port;
-        
+
         pPeerStatus->InputSize  = NetQueueGetCount(&_client.Peers[iPeer].InputQueue);
         pPeerStatus->OutputSize = NetQueueGetCount(&_client.Peers[iPeer].OutputQueue);
     }
@@ -156,7 +164,7 @@ int NetPlayGetStatus(NetPlayRPCStatusT *pStatus)
 void NetPlayClientSendLoadReq(char *pStr)
 {
 	if(!netplay_inited) return;
-    
+
     NetClientSendLoadReq(&_client, pStr);
 }
 
@@ -178,13 +186,13 @@ void NetPlayClientInput(NetPlayRPCInputT *pInput)
     }
 
 	NetSysSemaWait(_netplay_sema);
-    
+
     pInput->uFrame = _client.uFrame + 1;
-    
+
     if (_client.eStatus == NETPLAY_STATUS_CONNECTED)
     {
         int iPeer;
-    
+
 		// transmit/recv input data now
 		if (NetClientProcess(&_client, pInput->InputSend, NETPLAY_RPC_NUMPEERS, pInput->InputRecv))
 		{
@@ -193,7 +201,7 @@ void NetPlayClientInput(NetPlayRPCInputT *pInput)
 		{
             pInput->eGameState = NETPLAY_GAMESTATE_PAUSE;
 		}
-        
+
         for (iPeer=0; iPeer < 4; iPeer++)
         {
             pInput->InputSize[iPeer]  = NetQueueGetCount(&_client.Peers[iPeer].InputQueue);

@@ -1,8 +1,13 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snesreg behavior for the SNES emulation core.
+ */
 
 #include "types.h"
 #include "snesreg.h"
-
 
 void SnesReg16FT::Write8(Uint8 uData)
 {
@@ -34,7 +39,3 @@ void SnesReg16FT::Reset()
 {
 	bFlip = 0;
 }
-
-
-
-

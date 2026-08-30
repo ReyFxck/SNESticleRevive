@@ -1,8 +1,14 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements dataio behavior for shared base utilities.
+ */
 
 #include <string.h>
 #include "types.h"
 #include "dataio.h"
-
 
 CDataIO::CDataIO()
 {
@@ -147,4 +153,3 @@ Uint8 *CMemFileIO::ReadPtr(Int32 nBytes)
     m_uPos += nBytes;
 	return pPtr;
 }
-

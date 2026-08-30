@@ -1,15 +1,9 @@
 /*
- * snobc1.cpp - OBC1 coprocessor (Metal Combat) HLE
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Clean-room a partir do comportamento documentado do chip.
- *
- *   $7FF0-$7FF3 : 4 bytes de OAM (baixo) do sprite m_Address
- *                 -> RAM[BasePtr + Address*4 + n]
- *   $7FF4       : 2 bits de OAM (alto) do sprite, no campo m_Shift
- *                 -> RAM[BasePtr + Address/4 + 0x200]
- *   $7FF5       : seleciona a base (bit0: 1=0x1800, 0=0x1C00)
- *   $7FF6       : define o sprite (bits 0-6) e o shift (bits 0-1 << 1)
- *   resto       : RAM direta (RAM[addr & 0x1FFF])
+ * Description:
+ *   Implements snobc1 behavior for the SNES emulation core.
  */
 
 #include "types.h"

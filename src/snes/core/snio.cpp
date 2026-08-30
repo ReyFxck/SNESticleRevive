@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snio behavior for the SNES emulation core.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -49,8 +55,8 @@ Uint8 SnesIO::ReadSerial1()
 
 	// if joypads 2,3,4 are all disconnected then assume no multitap is installed
 	if (
-		m_Input.uPad[2]==EMUSYS_DEVICE_DISCONNECTED && 
-		m_Input.uPad[3]==EMUSYS_DEVICE_DISCONNECTED && 
+		m_Input.uPad[2]==EMUSYS_DEVICE_DISCONNECTED &&
+		m_Input.uPad[3]==EMUSYS_DEVICE_DISCONNECTED &&
 		m_Input.uPad[4]==EMUSYS_DEVICE_DISCONNECTED
 		)
 	{
@@ -85,7 +91,7 @@ Uint8 SnesIO::ReadSerial1()
 			{
 				// use controllers 2 and 3
 				uData  = ReadSerialPad(1) << 0;
-				uData |= ReadSerialPad(2) << 1; 
+				uData |= ReadSerialPad(2) << 1;
 
 				ShiftSerialPad(1);
 				ShiftSerialPad(2);
@@ -93,7 +99,7 @@ Uint8 SnesIO::ReadSerial1()
 			{
 				// use controllers 4 and 5
 				uData  = ReadSerialPad(3) << 0;
-				uData |= ReadSerialPad(4) << 1; 
+				uData |= ReadSerialPad(4) << 1;
 
 				ShiftSerialPad(3);
 				ShiftSerialPad(4);
@@ -165,7 +171,6 @@ void SnesIO::UpdateJoyPads()
 		ReadSerial1();
 	}
 }
-
 
 SnesIO::SnesIO()
 {

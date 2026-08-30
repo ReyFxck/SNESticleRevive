@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppublend mm behavior for SNES picture processing.
+ */
 
 #include <stdlib.h>
 #include "types.h"
@@ -8,14 +14,7 @@
 #include "snppurender.h"
 #include "snppublend_mm.h"
 
-
 extern SnesChrLookupT _SnesPPU_PlaneLookup[2];
-
-
-
-//
-//
-//
 
 static void _Color8to32(Uint32 *pDest32, Uint8 *pSrc8, Uint32 *pPal32, Int32 nPixels, SNMaskT *pColorMask, SNMaskT *pHalfColorMask)
 {
@@ -29,23 +28,23 @@ static void _Color8to32(Uint32 *pDest32, Uint8 *pSrc8, Uint32 *pPal32, Int32 nPi
 		"pcpyld    %0,%0,%0     \n"
 		: "=r" (uLookup)
 		: "r" (pLookup)
-		);    
+		);
 
 	__asm__ __volatile__ (
 		".set noreorder \n"
 		".align 3           \n"
 		"_Color8To32_Loop:           \n"
-		"lbu		 $15,0x00(%5)    \n"     // $15 = load color mask 
+		"lbu		 $15,0x00(%5)    \n"     // $15 = load color mask
 		"addiu		 %5,%5,1		 \n"
-		"lbu		 $16,0x00(%6)    \n"     // $16 = load halfcolor mask 
+		"lbu		 $16,0x00(%6)    \n"     // $16 = load halfcolor mask
 		"addiu		 %6,%6,1		 \n"
 		"ld          $8,0x00(%0)     \n"    // load 8 pixels
-		"addiu       %0,%0,8         \n"   
+		"addiu       %0,%0,8         \n"
 
 		"sll		$15,$15,3		 \n"    // color mask *8
 		"sll		$16,$16,3		 \n"    // halfcolor mask *8
-		"addu		$15,$15,%4       \n"     
-		"addu		$16,$16,%4       \n"     
+		"addu		$15,$15,%4       \n"
+		"addu		$16,$16,%4       \n"
 		"ld			$15,0x00($15)    \n"    // load color mask bits
 		"ld			$16,0x00($16)    \n"    // load halfcolor mask bits
 		"dsll		$15,$15,1        \n"    // shift color mask << 1
@@ -55,24 +54,24 @@ static void _Color8to32(Uint32 *pDest32, Uint8 *pSrc8, Uint32 *pPal32, Int32 nPi
 		"psllh       $8,$8,2         \n"    // pixels << 2
 		"pextlh      $9,%3,$8        \n"    // $9 = 700000ee 700000ff 700000gg 700000hh
 		"pextuh     $10,%3,$8        \n"    // $10= 700000aa 700000bb 700000cc 700000dd
-		"lw         $11,0x00($9)     \n"    // 
-		"dsrl32      $9,$9,0         \n"    // 
-		"lw         $12,0x00($9)     \n"    // 
+		"lw         $11,0x00($9)     \n"    //
+		"dsrl32      $9,$9,0         \n"    //
+		"lw         $12,0x00($9)     \n"    //
 		"pcpyud      $9,$9,$9        \n"
-		"lw         $13,0x00($9)     \n"    // 
-		"dsrl32      $9,$9,0         \n"    // 
-		"lw         $14,0x00($9)     \n"    // 
+		"lw         $13,0x00($9)     \n"    //
+		"dsrl32      $9,$9,0         \n"    //
+		"lw         $14,0x00($9)     \n"    //
 
 		"pextlw     $15,$12,$11      \n"
 		"pextlw     $16,$14,$13      \n"
 
-		"lw         $11,0x00($10)    \n"    // 
-		"dsrl32     $10,$10,0        \n"    // 
-		"lw         $12,0x00($10)    \n"    // 
+		"lw         $11,0x00($10)    \n"    //
+		"dsrl32     $10,$10,0        \n"    //
+		"lw         $12,0x00($10)    \n"    //
 		"pcpyud     $10,$10,$10      \n"
-		"lw         $13,0x00($10)    \n"    // 
-		"dsrl32     $10,$10,0        \n"    // 
-		"lw         $14,0x00($10)    \n"    // 
+		"lw         $13,0x00($10)    \n"    //
+		"dsrl32     $10,$10,0        \n"    //
+		"lw         $14,0x00($10)    \n"    //
 
 		"pextlw     $11,$12,$11      \n"
 		"sd         $15,0x00(%1)     \n"
@@ -88,38 +87,37 @@ static void _Color8to32(Uint32 *pDest32, Uint8 *pSrc8, Uint32 *pPal32, Int32 nPi
 		: "+r" (pSrc8), "+r" (pDest32), "+r" (nPixels)
 		: "r" (uLookup), "r" (pPlaneLookup), "r" (pColorMask), "r" (pHalfColorMask)
 		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$16"
-		);    
+		);
 }
-
 
 static void _ColorAdd(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels)
 {
 	while (nPixels > 0)
 	{
 
-    	__asm__ (
-    	    "lq          $8,0x00(%1)     \n"
-    	    "lq          $9,0x10(%1)     \n"
-    	    "lq         $10,0x20(%1)     \n"
-    	    "lq         $11,0x30(%1)     \n"
+	__asm__ (
+	    "lq          $8,0x00(%1)     \n"
+	    "lq          $9,0x10(%1)     \n"
+	    "lq         $10,0x20(%1)     \n"
+	    "lq         $11,0x30(%1)     \n"
 
-    	    "lq         $12,0x00(%2)     \n"
-    	    "lq         $13,0x10(%2)     \n"
-    	    "paddub     $8, $8,$12        \n"
-    	    "lq         $14,0x20(%2)     \n"
+	    "lq         $12,0x00(%2)     \n"
+	    "lq         $13,0x10(%2)     \n"
+	    "paddub     $8, $8,$12        \n"
+	    "lq         $14,0x20(%2)     \n"
 			"paddub     $9, $9,$13        \n"
-    	    "lq         $15,0x30(%2)     \n"
+	    "lq         $15,0x30(%2)     \n"
 			"paddub     $10, $10,$14        \n"
-    	    "sq         $8,0x00(%0)     \n"
+	    "sq         $8,0x00(%0)     \n"
 			"paddub     $11, $11,$15        \n"
-    	    "sq         $9,0x10(%0)     \n"
-    	    "sq         $10,0x20(%0)     \n"
-    	    "sq         $11,0x30(%0)     \n"
+	    "sq         $9,0x10(%0)     \n"
+	    "sq         $10,0x20(%0)     \n"
+	    "sq         $11,0x30(%0)     \n"
 
-    	    : 
-    	    : "r" (pDest), "r" (pMain), "r" (pSub)
+	    :
+	    : "r" (pDest), "r" (pMain), "r" (pSub)
             : "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
-    	 );    
+	 );
 
 		pMain  +=16;
 		pSub   +=16;
@@ -127,36 +125,35 @@ static void _ColorAdd(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels
 		nPixels-=16;
 	}
 }
-
 
 static void _ColorSub(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels)
 {
 	while (nPixels > 0)
 	{
 
-    	__asm__ (
-    	    "lq          $8,0x00(%1)     \n"
-    	    "lq          $9,0x10(%1)     \n"
-    	    "lq         $10,0x20(%1)     \n"
-    	    "lq         $11,0x30(%1)     \n"
+	__asm__ (
+	    "lq          $8,0x00(%1)     \n"
+	    "lq          $9,0x10(%1)     \n"
+	    "lq         $10,0x20(%1)     \n"
+	    "lq         $11,0x30(%1)     \n"
 
-    	    "lq         $12,0x00(%2)     \n"
-    	    "lq         $13,0x10(%2)     \n"
-    	    "psubub     $8, $8,$12        \n"
-    	    "lq         $14,0x20(%2)     \n"
+	    "lq         $12,0x00(%2)     \n"
+	    "lq         $13,0x10(%2)     \n"
+	    "psubub     $8, $8,$12        \n"
+	    "lq         $14,0x20(%2)     \n"
 			"psubub     $9, $9,$13        \n"
-    	    "lq         $15,0x30(%2)     \n"
+	    "lq         $15,0x30(%2)     \n"
 			"psubub     $10, $10,$14        \n"
-    	    "sq         $8,0x00(%0)     \n"
+	    "sq         $8,0x00(%0)     \n"
 			"psubub     $11, $11,$15        \n"
-    	    "sq         $9,0x10(%0)     \n"
-    	    "sq         $10,0x20(%0)     \n"
-    	    "sq         $11,0x30(%0)     \n"
+	    "sq         $9,0x10(%0)     \n"
+	    "sq         $10,0x20(%0)     \n"
+	    "sq         $11,0x30(%0)     \n"
 
-    	    : 
-    	    : "r" (pDest), "r" (pMain), "r" (pSub)
+	    :
+	    : "r" (pDest), "r" (pMain), "r" (pSub)
             : "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
-    	 );    
+	 );
 
 		pMain  +=16;
 		pSub   +=16;
@@ -164,8 +161,6 @@ static void _ColorSub(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels
 		nPixels-=16;
 	}
 }
-
-
 
 void SNPPUBlendMM::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub, Uint32 uIntensity)
 {
@@ -207,5 +202,3 @@ void SNPPUBlendMM::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 	PROF_LEAVE("SubmitLine");
 
 }
-
-

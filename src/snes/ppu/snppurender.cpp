@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppurender behavior for SNES picture processing.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -61,24 +67,14 @@ Uint8 _tmw = 0x3F;
 Uint8 _ts = 0x3F;
 Uint8 _tsw = 0x3F;
 
-
 #if CODE_PLATFORM == CODE_PS2
 #define PS2_RENDERINFOADDR  (PS2MEM_SCRATCHPAD +  0*1024)
 #endif
-
-//
-//
-//
-
 
 SnesChrLookupT _SnesPPU_PlaneLookup[2] _ALIGN(32);
 Uint8 _SnesPPU_HFlipLookup[2][256] _ALIGN(32);
 
 static Bool _SnesPPU_bInitialized=FALSE;
-
-//
-//
-//
 
 static Uint8 _HFlipBits(Uint8 Bits)
 {
@@ -97,7 +93,7 @@ static void _BuildPlaneLookup()
 	for (i=0; i < 256; i++)
 	{
 		Uint8 *pBits;
-		
+
 		pBits = (Uint8 *)&_SnesPPU_PlaneLookup[0][i];
 		for (iBit=0; iBit < 8; iBit++)
 		{
@@ -174,7 +170,7 @@ void SnesPPURender::RenderLine(Int32 iLine)
 			RenderLine16(iLine);
 			break;
 		case 32:
-	   		RenderLine32(iLine, 0);
+			RenderLine32(iLine, 0);
 			break;
 
 		}
@@ -237,7 +233,6 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 	pRenderInfo = m_pRenderInfo;
     pBlendInfo = &pRenderInfo->BlendInfo;
 
-
 #if CODE_DEBUG && CODE_PLATFORM==CODE_PS2
 static Bool bPrint = TRUE;
 	if (bPrint)
@@ -297,9 +292,9 @@ static Bool bPrint = TRUE;
 		    (SNESPPURENDER_UPDATE_BGSCR | SNESPPURENDER_UPDATE_BGCHR))
 		{
             pRenderInfo->uBGVramAddr[0] = 0xFFFFFFFF;
-            pRenderInfo->uBGVramAddr[1] = 0xFFFFFFFF; 
-            pRenderInfo->uBGVramAddr[2] = 0xFFFFFFFF; 
-            pRenderInfo->uBGVramAddr[3] = 0xFFFFFFFF; 
+            pRenderInfo->uBGVramAddr[1] = 0xFFFFFFFF;
+            pRenderInfo->uBGVramAddr[2] = 0xFFFFFFFF;
+            pRenderInfo->uBGVramAddr[3] = 0xFFFFFFFF;
 
 			m_UpdateFlags &= ~(SNESPPURENDER_UPDATE_BGSCR |
 			                   SNESPPURENDER_UPDATE_BGCHR);
@@ -307,8 +302,8 @@ static Bool bPrint = TRUE;
 
 	    if (m_UpdateFlags & SNESPPURENDER_UPDATE_WINDOW)
         {
-    		DecodeWindows(pRenderInfo->WindowMask, pRenderInfo->BGWindow);
-    		m_UpdateFlags &= ~SNESPPURENDER_UPDATE_WINDOW;
+		DecodeWindows(pRenderInfo->WindowMask, pRenderInfo->BGWindow);
+		m_UpdateFlags &= ~SNESPPURENDER_UPDATE_WINDOW;
         }
 
 		// render line
@@ -408,7 +403,6 @@ static Bool bPrint = TRUE;
 	}
 }
 
-
 #if CODE_PLATFORM == CODE_PS2
 #include "snppublend_gs.h"
 /* TBPs of the blender scratchpad slab and the SNES output texture, both
@@ -428,9 +422,7 @@ static SNPPUBlendC _Blend;
 static SnesRender8pInfoT _RenderInfo;
 #endif
 
-//#include "snppublend_mm.h"
 //static SNPPUBlendMM _Blend;
-
 
 void SnesPPURender::BeginRender(CRenderSurface *pTarget)
 {
@@ -468,7 +460,6 @@ void SnesPPURender::BeginRender(CRenderSurface *pTarget)
     }
 }
 
-
 void SnesPPURender::EndRender()
 {
     #if CODE_PLATFORM == CODE_PS2
@@ -486,8 +477,6 @@ void SnesPPURender::EndRender()
     m_pRenderInfo=NULL;
 	m_pTarget=NULL;
 }
-
-
 
 void SnesPPURender::UpdateVRAM(Uint32 uVramAddr)
 {

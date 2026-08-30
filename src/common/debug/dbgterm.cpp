@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements dbgterm behavior for shared debugging support.
+ */
+
 #include "dbgterm.h"
 
 /* #include <debug.h> removed by v4 */

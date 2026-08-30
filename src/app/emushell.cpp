@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements emushell behavior for the emulator application layer.
+ */
 
 #include <string.h>
 #include <stdio.h>
@@ -72,7 +79,7 @@ static void _EmuShellGetName(Char *pName, Char *pPath)
 	if (Path[i]=='.')
 	{
 		Path[i]= 0;
-	}	
+	}
 
 	while (i > 0 &&  Path[i]!='/')
 	{
@@ -107,36 +114,35 @@ int CEmuShell::ReadFileData(Uint8 *pBuffer, Int32 nBufferBytes, char *pRomFile, 
 
 	if (pRomFile)
 	{
-    	if (bCompressed)
-    	{
-    	    nBytes = MinizReadGZToBuffer(pRomFile, pBuffer, nBufferBytes);
-    	    if (nBytes < 0)
-    	    {
-    	        printf("ERROR: Cannot open romgz %s", pRomFile);
-    	        return -1;
-    	    }
+	if (bCompressed)
+	{
+	    nBytes = MinizReadGZToBuffer(pRomFile, pBuffer, nBufferBytes);
+	    if (nBytes < 0)
+	    {
+	        printf("ERROR: Cannot open romgz %s", pRomFile);
+	        return -1;
+	    }
 
-    	    printf("GZ ROM data read: %s (%d bytes)\n", pRomFile, nBytes);
-    	} else
-    	{
-    	    FILE *pFile;
+	    printf("GZ ROM data read: %s (%d bytes)\n", pRomFile, nBytes);
+	} else
+	{
+	    FILE *pFile;
 
-    	    pFile = fopen(pRomFile, "rb");
-    	    if (!pFile)
-    	    {
-    	        printf("ERROR: Cannot open rom %s", pRomFile);
-    	        return -1;
-    	    }
-    	    nBytes= fread(pBuffer,  1, nBufferBytes, pFile);
-    	    fclose(pFile);
+	    pFile = fopen(pRomFile, "rb");
+	    if (!pFile)
+	    {
+	        printf("ERROR: Cannot open rom %s", pRomFile);
+	        return -1;
+	    }
+	    nBytes= fread(pBuffer,  1, nBufferBytes, pFile);
+	    fclose(pFile);
 
-    	    printf("Uncompressed ROM data read: %s (%d bytes)\n", pRomFile, nBytes);
-    	}
+	    printf("Uncompressed ROM data read: %s (%d bytes)\n", pRomFile, nBytes);
+	}
 	}
 
 	return nBytes;
 }
-
 
 static void _EmuShellTruncName(Char *pOut, Char *pStr, Int32 nMaxChars)
 {
@@ -161,7 +167,6 @@ static void _EmuShellTruncName(Char *pOut, Char *pStr, Int32 nMaxChars)
 	}
 }
 
-
 void CEmuShell::SetRomFileName(Char *pRomFile)
 {
 	_EmuShellGetName(m_RomName, pRomFile);
@@ -178,7 +183,6 @@ CEmuShell::CEmuShell()
 	m_nMaxSaveChars = 32;
 	m_nSystems = 0;
 }
-
 
 CEmuShell::~CEmuShell()
 {
@@ -244,7 +248,6 @@ EmuShellSysT *CEmuShell::FindSysByExt(char *pExt)
 	return NULL;
 }
 
-
 void CEmuShell::UnloadRom()
 {
 	if (m_pSystem)
@@ -252,7 +255,6 @@ void CEmuShell::UnloadRom()
 
 	if (m_pRom)
 		m_pRom->Unload();
-//    _bStateSaved = FALSE;
 }
 
 Bool CEmuShell::LoadRom(Char *pRomFile, Uint8 *pBuffer, Uint32 nBufferBytes)
@@ -267,7 +269,7 @@ Bool CEmuShell::LoadRom(Char *pRomFile, Uint8 *pBuffer, Uint32 nBufferBytes)
 	m_pRom   =NULL;
 #ifdef WIP
 	eType = ResolveSysByPath(pRomFile, &bCompressed);
-	if (eType == EMUSHELL_SYSID_INVALID) 
+	if (eType == EMUSHELL_SYSID_INVALID)
 	{
 		// unknown system type
 		return FALSE;
@@ -295,12 +297,9 @@ Bool CEmuShell::LoadRom(Char *pRomFile, Uint8 *pBuffer, Uint32 nBufferBytes)
 		eType = (Int32)(pSys - m_Systems);
 	}
 #endif
-	// set current system 
+	// set current system
 	m_pSystem = m_Systems[eType].pSystem;
 	m_pRom    = m_Systems[eType].pRom;
-
-    //_MainLoopResetHistory();
-	//_MainLoopResetInputChecksums();
 
 	if (m_pRom)
 	{
@@ -341,19 +340,13 @@ Bool CEmuShell::LoadRom(Char *pRomFile, Uint8 *pBuffer, Uint32 nBufferBytes)
 	return TRUE;
 }
 
-
-
-
-
   /*
-
 
 class CSnesShell : public CEmuShell
 {
 public:
 	CSnesShell(EmuDefT *pEmuDef);
 };
-
 
 CSnesShell::CSnesShell(EmuDefT *pEmuDef)
 		: CEmuShell(pEmuDef)
@@ -362,11 +355,3 @@ CSnesShell::CSnesShell(EmuDefT *pEmuDef)
 	m_pRom    = new SnesRom();
 }
 */
-
-
-
-
-
-
-
-

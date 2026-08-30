@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Builds the superfxtest host-side regression suite.
+
 # Bancada host-side para o core SuperFX/GSU.
 # Compila o codigo REAL (src/snes/core/sngsu.cpp) num binario de PC e roda
 # os testes deterministicos do core.

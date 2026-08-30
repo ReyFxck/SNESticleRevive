@@ -1,4 +1,10 @@
 #!/bin/sh
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Builds the cputest host-side regression suite.
+
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)

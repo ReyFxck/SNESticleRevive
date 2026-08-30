@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the palette interface for shared base utilities.
+ */
 
 #ifndef _PALETTE_H
 #define _PALETTE_H

@@ -1,8 +1,13 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspcrom behavior for SNES audio processing.
+ */
 
 #include "types.h"
 #include "snspcrom.h"
-
 
 static Uint8 _SNSPCRom_RomData [SNSPCROM_ROMSIZE] =
 {
@@ -16,9 +21,7 @@ static Uint8 _SNSPCRom_RomData [SNSPCROM_ROMSIZE] =
 	0x5D,0xD0,0xDB,0x1F,0x00,0x00,0xC0,0xFF
 };
 
-
 Uint8 *SNSpcRomGetRomData(void)
 {
 	return _SNSPCRom_RomData;
 }
-

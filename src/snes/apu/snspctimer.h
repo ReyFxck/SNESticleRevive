@@ -1,8 +1,13 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snspctimer interface for SNES audio processing.
+ */
 
 #ifndef _SNSPCTIMER_H
 #define _SNSPCTIMER_H
-
 
 typedef struct SNSpcTimer_t
 {
@@ -14,7 +19,7 @@ typedef struct SNSpcTimer_t
 	Uint32	uCyclesPerTick;		// clock cycles per tick (low-counter)
 	Uint8	uCompare;			// low-counter compare
 	Uint8	uUpCounter;			// 4-bit hi-counter value
-	Bool	bEnabled;	
+	Bool	bEnabled;
 } SNSpcTimerT;
 
 void SNSpcTimerReset(SNSpcTimerT *pTimer, Uint32 uCyclesPerTick);

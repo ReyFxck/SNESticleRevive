@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the surface interface for shared rendering and audio buffers.
+ */
 
 #ifndef _SURFACE_H
 #define _SURFACE_H
@@ -35,7 +42,7 @@ public:
 
 	Uint8	*GetLinePtr(Int32 iLine);
 	void	ClearLine(Int32 iLine);
-	void	Clear();	
+	void	Clear();
 
     void    Set(Uint8 *pData, Uint32 uWidth, Uint32 uHeight, Uint32 uPitch, PixelFormatT *pFormat);
     void    Alloc(Uint32 uWidth, Uint32 uHeight, PixelFormatT *pFormat);
@@ -45,5 +52,3 @@ public:
 typedef CSurface CMemSurface;
 
 #endif
-
-

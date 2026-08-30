@@ -1,7 +1,10 @@
-
-
-
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sndebug interface for the SNES emulation core.
+ */
 
 #ifndef _SNDEBUG_H
 #define _SNDEBUG_H
@@ -26,11 +29,8 @@ extern Bool Snes_bDebugINT         ;
 extern Bool g_bStateDebug;
 #endif
 
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-
 
 #endif

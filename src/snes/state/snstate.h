@@ -1,8 +1,13 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snstate interface for SNES save-state serialization.
+ */
 
 #ifndef _SNSTATE_H
 #define _SNSTATE_H
-
 
 struct SNStateCPUT
 {
@@ -35,8 +40,6 @@ struct SNStateDMACT
 	Uint8		m_HDMADoTransfer;
 };
 
-
-
 struct SNStateSPCIOT
 {
 	SNSpcIORegsT		Regs;
@@ -56,7 +59,6 @@ struct SNStateSPCDSPT
 	Uint8			m_Regs[SNSPCDSP_REG_NUM];
 	SNSpcChannelT	m_Channels[SNSPCDSP_CHANNEL_NUM];
 };
-
 
 struct SnesStateT
 {
@@ -78,6 +80,5 @@ struct SnesStateT
 };
 
 void SNStateCompare(SnesStateT *pStateA, SnesStateT *pStateB);
-
 
 #endif

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppucolor interface for SNES picture processing.
+ */
 
 #ifndef _SNPPUCOLOR_H
 #define _SNPPUCOLOR_H
@@ -21,6 +28,5 @@ void SNPPUColorSetProfile(Int32 iProfile);
 Int32 SNPPUColorGetProfile(void);
 void SNPPUColorSetColors(const Uint32 *pColors, Int32 nColors);
 Uint32 *SNPPUColorGetPalette();
-
 
 #endif

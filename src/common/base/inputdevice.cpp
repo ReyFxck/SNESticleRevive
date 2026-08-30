@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements inputdevice behavior for shared base utilities.
+ */
 
 #include <string.h>
 #include "types.h"
@@ -36,22 +43,10 @@ Uint32 CInputDevice::GetBits()
 	return Bits;
 }
 
-
 void CInputDevice::Poll()
 {
 
 }
-
-
-
-
-
-
-
-
-//
-//
-//
 
 CInputMap::CInputMap()
 {
@@ -96,7 +91,7 @@ void CInputMap::Poll()
 			// remap button
 			m_bButtons[iButton] = m_pDevice->GetButtonState(m_ButtonMap[iButton]);
 		}
-	} 
+	}
 	else
 	{
 		m_nAxes = 0;
@@ -104,14 +99,3 @@ void CInputMap::Poll()
 		m_eStatus = INPUT_STATUS_BADDEVICE;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-

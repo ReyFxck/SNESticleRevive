@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements memspace behavior for shared rendering and audio buffers.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,12 +75,10 @@ bool CMemSpace::WriteFile(FILE *pFile)
 	return fwrite(m_pMem, 1, m_uSize, pFile) == m_uSize;
 }
 
-
 bool CMemSpace::ReadFile(CDataIO *pFile)
 {
 	return pFile->Read(m_pMem, m_uSize) == m_uSize;
 }
-
 
 bool CMemSpace::ReadAllocFile(CDataIO *pFile, Uint32 nBytes)
 {
@@ -96,8 +100,6 @@ bool CMemSpace::WriteFile(CDataIO *pFile)
 	return pFile->Write(m_pMem, m_uSize) == m_uSize;
 }
 
-
-
 void CMemSpace::SaveState(Uint8 *pData, Uint32 uDataSize)
 {
 	if (uDataSize >= m_uSize) uDataSize = m_uSize;
@@ -109,7 +111,3 @@ void CMemSpace::RestoreState(Uint8 *pData, Uint32 uDataSize)
 	if (uDataSize >= m_uSize) uDataSize = m_uSize;
 	memcpy(m_pMem, pData, uDataSize);
 }
-
-
-
-

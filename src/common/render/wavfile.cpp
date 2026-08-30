@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements wavfile behavior for shared rendering and audio buffers.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -80,7 +86,6 @@ void CWavFile::Close()
 	}
 }
 
-
 Int32 CWavFile::Open(char *pFileName, Uint32 uSampleRate, Uint32 nSampleBits, Uint32 nChannels)
 {
 	WavFileHeaderT *pHeader = &m_Header;
@@ -123,8 +128,6 @@ Int32 CWavFile::Open(char *pFileName, Uint32 uSampleRate, Uint32 nSampleBits, Ui
 	return 0;
 }
 
-
-
 Int32 CWavFile::GetOutputSamples()
 {
 	return m_Header.Format.nSamplesPerSec / 60;
@@ -136,4 +139,3 @@ void CWavFile::GetFormat(Uint32 *puSampleRate, Uint32 *pnSampleBits, Uint32 *pnC
 	*pnSampleBits = m_Header.Format.nBitsPerSample;
 	*pnChannels   = m_Header.Format.nChannels;
 }
-

@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppublend gs behavior for SNES picture processing.
+ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -128,7 +134,6 @@ static Uint32 _SNPPUBlend_AttribMainPal[8] _ALIGN(16) =
     0x40000000,     // 111
 };
 
-
 static Uint32 _SNPPUBlend_AttribSubPal[8] _ALIGN(16) =
 {                   // HSM
     0x00000000,     // 000
@@ -141,8 +146,6 @@ static Uint32 _SNPPUBlend_AttribSubPal[8] _ALIGN(16) =
     0x40000000,     // 111
 };
 
-
-
 static void _PlanarTo3(Uint8 *pDest, SNMaskT *pSrc0, SNMaskT *pSrc1, SNMaskT *pSrc2)
 {
 	Uint32 nBytes = 256 / 8;
@@ -152,15 +155,13 @@ static void _PlanarTo3(Uint8 *pDest, SNMaskT *pSrc0, SNMaskT *pSrc1, SNMaskT *pS
 		(SnesChrLookup64T *)&pPlaneLookup[1];
 	Uint64 *pDest64 = (Uint64 *)pDest;
 
-
 	while (nBytes > 0)
 	{
 		Uint64 uData;
 
-		uData  = (*pLookup64)[pSrc0->uMask8[0]] << 0;	
-		uData |= (*pLookup64)[pSrc1->uMask8[0]] << 1;	
-		uData |= (*pLookup64)[pSrc2->uMask8[0]] << 2;	
-
+		uData  = (*pLookup64)[pSrc0->uMask8[0]] << 0;
+		uData |= (*pLookup64)[pSrc1->uMask8[0]] << 1;
+		uData |= (*pLookup64)[pSrc2->uMask8[0]] << 2;
 
 		pSrc0  = (SNMaskT *) (((Uint8 *)pSrc0) + 1);
 		pSrc1  = (SNMaskT *) (((Uint8 *)pSrc1) + 1);
@@ -252,7 +253,7 @@ void SNPPUBlendGS::UpdatePaletteEntry(SNPPUBlendInfoT *pInfo, Uint32 uAddr, Uint
 	if (uAddr > 0)
 	{
 		uData |= 0x80000000;
-	} 
+	}
 
 	// swap 8 and 0x10 of addr
 	uAddr = (uAddr & ~0x18) | ((uAddr & 0x10) >> 1) | ((uAddr & 0x08) << 1);
@@ -304,14 +305,13 @@ static Uint32 SNPPUColorConvert15to32(SnesColor16T uColor16)
 	return uColor32;
 }
 
-
 void SNPPUBlendGS::UpdatePaletteEntry(SNPPUBlendInfoT *pInfo, Uint32 uAddr, Uint32 uData, Uint32 uIntensity)
 {
     PaletteT *pPal = pInfo->Pal;
 	if (uAddr > 0)
 	{
 		uData |= 0x8000;
-	} 
+	}
 	if (pPal->Color16[uAddr] != uData)
 	{
 		pPal->Color16[uAddr] = uData;
@@ -326,7 +326,6 @@ void SNPPUBlendGS::UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 
 
 	PROF_ENTER("SNPPUBlendUpdatePalette");
 
-
 	pPal->Color16[0] = pCGRam[0];
 	for (iEntry=1; iEntry < 256; iEntry++)
 	{
@@ -338,10 +337,7 @@ void SNPPUBlendGS::UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 
 	PROF_LEAVE("SNPPUBlendUpdatePalette");
 }
 
-
-
 #endif
-
 
 static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfmt, void *tex, int wpxls, int hpxls)
 {
@@ -363,9 +359,9 @@ static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfm
     GSGifRegAD(GS_REG_TRXPOS,GS_SET_TRXPOS(0,0,xofs,yofs,0));
     GSGifRegAD(GS_REG_TRXREG,GS_SET_TRXREG(wpxls, hpxls));
     GSGifRegAD(GS_REG_TRXDIR,GS_SET_TRXDIR(0));
-    
+
     GSGifTagCloseAD();
-    
+
     // image gif tag
     GSGifTagImage(numq);
 
@@ -375,11 +371,9 @@ static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfm
     // dma image data
     GSDmaRef((Uint128 *)tex, numq);
 
-
     // start new dma cnt
     GSDmaCntOpen();
 }
-
 
 static void _SNPPURenderTexLine(Int32 iDestLine, Int32 iSrcLine, Uint32 RGBA, int abe)
 {
@@ -400,20 +394,19 @@ static void _SNPPURenderTexLine(Int32 iDestLine, Int32 iSrcLine, Uint32 RGBA, in
     y1+=0x8000;
     x2+=0x8000;
     y2+=0x8000;
-    
+
     GSGifTagOpen(GIF_SET_TAG(1, 1, 0, 0, 1, 6), 0xF535310);
-    
+
 	GSGifReg(GS_SET_PRIM(0x06, 0, 1, 0, abe, 0, 1, 0, 0));
 	GSGifReg(RGBA);
 	GSGifReg(GS_SET_UV(u1, v1));
 	GSGifReg(GS_SET_XYZ(x1,y1,0));
 	GSGifReg(GS_SET_UV(u2, v2));
 	GSGifReg(GS_SET_XYZ(x2,y2,0));
-    
+
     GSGifTagClose();
 
 }
-
 
 static void _SNPPURenderLine(Int32 iDestLine, int abe)
 {
@@ -428,18 +421,16 @@ static void _SNPPURenderLine(Int32 iDestLine, int abe)
     x2+=0x8000;
     y1+=0x8000;
     y2+=0x8000;
-  
+
     GSGifTagOpen(GIF_SET_TAG(1, 1, 0, 0, 1, 4), 0xF550);
-    
+
 	GSGifReg(GS_SET_PRIM(0x06, 0, 0, 0, abe, 0, 1, 0, 0));
 	GSGifReg(GS_SET_XYZ(x1,y1,0));
 	GSGifReg(GS_SET_XYZ(x2,y2,0));
 	GSGifReg(0);
-    
+
     GSGifTagClose();
 }
-  
-
 
 void SNPPUBlendGS::Begin(CRenderSurface *pTarget)
 {
@@ -500,7 +491,6 @@ void SNPPUBlendGS::Begin(CRenderSurface *pTarget)
         m_bAttribPalettesUploaded = TRUE;
     }
 
-
     GSGifTagOpenAD();
 
 	GSGifRegAD(GS_REG_TEXCLUT,256/64);
@@ -514,7 +504,6 @@ void SNPPUBlendGS::Begin(CRenderSurface *pTarget)
     GSGifRegAD(GS_REG_TEX1_1, 0x000);
 
     GSGifTagCloseAD();
-
 
     GPFifoPause();
 }
@@ -602,9 +591,6 @@ void SNPPUBlendGS::End()
     m_pTarget = NULL;
 }
 
-
-
-
 static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 	SNPPUBlendInfoT *pInfo, Uint32 uOutAddr, Bool bUploadPalette,
 	Bool bApplyIntensity, Bool bDirectMain)
@@ -626,31 +612,30 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 	#if SNPPUBLEND_PAL32
 	// upload as 16x16 psmct32 for use as csm1
     _GPFifoUploadTexture(
-         pList->uPalAddr * 0x100, 
-         1, 0, 0, 
-         GS_PSMCT32, 
-         (void *)(((Uint32)pPal) | 0x80000000), 
-         16, 
+         pList->uPalAddr * 0x100,
+         1, 0, 0,
+         GS_PSMCT32,
+         (void *)(((Uint32)pPal) | 0x80000000),
+         16,
          16);
 	#else
 	// upload as 256x1 psmct16 for use as csm2
     _GPFifoUploadTexture(
-         pList->uPalAddr * 0x100, 
-         256, 0, 0, 
-         GS_PSMCT16, 
-         (void *)(((Uint32)pPal) | 0x80000000), 
+         pList->uPalAddr * 0x100,
+         256, 0, 0,
+         GS_PSMCT16,
+         (void *)(((Uint32)pPal) | 0x80000000),
 		 256,
 		 1);
 	#endif
 	}
 
-
     _GPFifoUploadTexture(
-         pList->uInputAddr * 0x100, 
-         256, 0, 0, 
-         GS_PSMT8, 
-         (void *)(((Uint32)pInfo->uMain8) | 0x80000000), 
-         256, 
+         pList->uInputAddr * 0x100,
+         256, 0, 0,
+         GS_PSMT8,
+         (void *)(((Uint32)pInfo->uMain8) | 0x80000000),
+         256,
          1);
 
 	if (bDirectMain)
@@ -685,22 +670,20 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 	}
 
     _GPFifoUploadTexture(
-         pList->uInputAddr * 0x100, 
-         256, 0, 1, 
-         GS_PSMT8, 
-         (void *)(((Uint32)pInfo->uSub8) | 0x80000000), 
-         256, 
+         pList->uInputAddr * 0x100,
+         256, 0, 1,
+         GS_PSMT8,
+         (void *)(((Uint32)pInfo->uSub8) | 0x80000000),
+         256,
          1);
 
     _GPFifoUploadTexture(
-         pList->uInputAddr * 0x100, 
-         256, 0, 2, 
-         GS_PSMT8, 
-         (void *)(((Uint32)pInfo->uAttrib8) | 0x80000000), 
-         256, 
+         pList->uInputAddr * 0x100,
+         256, 0, 2,
+         GS_PSMT8,
+         (void *)(((Uint32)pInfo->uAttrib8) | 0x80000000),
+         256,
          1);
-
-
 
     GSGifTagOpenAD();
 
@@ -713,7 +696,6 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 	GSGifRegAD(GS_REG_XYOFFSET_1, GS_SET_XYOFFSET(0x8000, 0x8000));
 
     GSGifTagCloseAD();
-
 
     // setup src texture
 
@@ -740,46 +722,35 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
     // render sub8 -> temp32[1] (alpha=0 means use fixed color)
     _SNPPURenderTexLine(1, 1, 0x80808080, 1);
 
-
-    //
     // render attribs
-    //
-
-
 
     GSGifTagOpenAD();
 
 	// tex0_1
 	GSGifRegAD(GS_REG_TEX0_1,GS_SET_TEX0(pList->uInputAddr, 256/64, GS_PSMT8, 8, 3,    1, 0, pList->uAttribMainPal, GS_PSMCT32, 0, 0, 1));
 
-
     // alpha_1: A = Cs, B = Cd, C = As, D = Cd
     // (a - b) * c + d
     GSGifRegAD(GS_REG_ALPHA_1,GS_SET_ALPHA(1,2,0,2, 0x20));
-    
+
     GSGifTagCloseAD();
 
     // render attrib main8 -> temp32 line 0
     _SNPPURenderTexLine(0, 2, 0x80808080, 1);
-
-       
 
     GSGifTagOpenAD();
 
 	// tex0_1
 	GSGifRegAD(GS_REG_TEX0_1,GS_SET_TEX0(pList->uInputAddr, 256/64, GS_PSMT8, 8, 3,    1, 0, pList->uAttribSubPal, GS_PSMCT32, 0, 0, 1));
 
-
     // alpha_1: A = Cs, B = Cd, C = As, D = Cd
     // (a - b) * c + d
     GSGifRegAD(GS_REG_ALPHA_1,GS_SET_ALPHA(1,2,0,2, 0x80));
-    
-    GSGifTagCloseAD();
 
+    GSGifTagCloseAD();
 
     // render attrib sub8 -> temp32 line 0
     _SNPPURenderTexLine(1, 2, 0x80808080, 1);
-
 
     // texflush
     GSGifTagOpenAD();
@@ -798,7 +769,7 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 
     pList->pXYOffset = (Uint64 *)GSListGetUncachedPtr();
 	GSGifRegAD(GS_REG_XYOFFSET_1, 0);
-    
+
     GSGifTagCloseAD();
 
     // render out32 = main32 * attrib
@@ -823,20 +794,14 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 
     // close current dma cnt
     GSDmaCntClose();
-    
+
     // add end tag
     GSDmaEnd();
 
     GSListEnd();
 }
 
-
-
-
-
-
 #if 1
-
 
 static void _SNPPUBlendSetParm(SNPPUDmaListT *pList, Int32 iLine,
 	Uint32 uFixedColor16, Bool bAddSub, Uint32 uIntensity,
@@ -864,8 +829,6 @@ static void _SNPPUBlendSetParm(SNPPUDmaListT *pList, Int32 iLine,
     }
     __asm__ __volatile__ ("sync.l");
 }
-
-
 
 #include "gs.h"
 
@@ -1061,20 +1024,10 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 
 }
 
-
-
-
 void SNPPUBlendGS::Clear(SNPPUBlendInfoT *pInfo, Int32 iLine)
 {
     // render clear line
     Exec(pInfo, iLine, 0, NULL, 0, 0);
 }
-
-
-
-
-
-
-
 
 #endif

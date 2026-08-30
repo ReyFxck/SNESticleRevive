@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the memcard interface for PlayStation 2 memory-card access.
+ */
+
 #ifndef _MEMCARD_H
 #define _MEMCARD_H
 

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snrom behavior for SNES cartridge loading and mapping.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -52,12 +59,6 @@ static int _ExLoRomHeaderScore(const Uint8 *pRom, Uint32 base, Uint32 romBytes)
 	return score;
 }
 
-
-//
-//
-//
-
-
 struct SNRomCountryT
 {
 	const char *pName;
@@ -69,11 +70,6 @@ struct SNRomLicenseT
 	Uint8	uCode;
 	const char *pName;
 };
-
-
-//
-//
-//
 
 static SNRomCountryT _SNRom_Country[]=
 {
@@ -252,20 +248,12 @@ static SNRomLicenseT _SNRom_License[]=
 	{0  , NULL                               }
 };
 
-
-
-//
-//
-//
-
-                                                        
-
 static SNRomCountryT *_SNRomGetCountry(Uint8 uCode)
 {
     if (uCode < sizeof(_SNRom_Country) / sizeof(_SNRom_Country[0]))
     {
         return &_SNRom_Country[uCode];
-    }   
+    }
     else
     {
         // invalid country code
@@ -279,7 +267,7 @@ static SNRomLicenseT *_SNRomGetLicense(Uint8 uCode)
 
     while (pLicense->pName)
     {
-        if (pLicense->uCode == uCode) 
+        if (pLicense->uCode == uCode)
         {
             // found license
             return pLicense;
@@ -291,7 +279,6 @@ static SNRomLicenseT *_SNRomGetLicense(Uint8 uCode)
     // invalid license
     return NULL;
 }
-
 
 SNRomHdrTypeE SnesRom::SNRomGetHdrType(SNRomHdrU *pRomHdr)
 {
@@ -305,10 +292,6 @@ SNRomHdrTypeE SnesRom::SNRomGetHdrType(SNRomHdrU *pRomHdr)
 
 	return SNROM_HDRTYPE_UNKNOWN;
 }
-
-//
-//
-//
 
 static Bool _SNRomIsValidCartInfo(SNRomInfoT *pCartInfo)
 {
@@ -473,11 +456,6 @@ static Bool _SNRomDeinterleaveType1(Uint8 *pRom, Uint32 uRomBytes)
 	return TRUE;
 }
 
-//
-//
-//
-
-
 SnesRom::SnesRom()
 {
 	m_bLoaded	= false;
@@ -508,7 +486,7 @@ SNRomInfoT *SnesRom::GetCartInfo(Uint32 uOffset)
 			// return cartinfo at offset
 			return (SNRomInfoT *)(m_pRomData + uOffset);
 		}
-	} 
+	}
 	return NULL;
 }
 
@@ -796,13 +774,10 @@ Uint32 	SnesRom::GetRomRegionSize(Uint32 eRegion)
 	}
 }
 
-
-
 char   *SnesRom::GetRomTitle()
 {
 	return m_pCartInfo ? (char *)m_Name : NULL;
 }
-
 
 Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 nBufferBytes)
 {
@@ -822,8 +797,6 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 		return LOADERROR_BADHEADERSIZE;
 	}
 
-//	printf("%d file size\n", nFileBytes);
-
 	// determine header size
 	nHeaderBytes = (nFileBytes & 0x1FFF);
 	nRomBytes    = nFileBytes - nHeaderBytes;
@@ -832,7 +805,6 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 	if (nHeaderBytes!=0 && nHeaderBytes!=sizeof(SNRomHdrU))
 	{
 		nHeaderBytes = 0;
-//		return LOADERROR_BADHEADERSIZE;
 	}
 
 	m_eMapping = SNROM_MAPPING_LOROM;
@@ -859,7 +831,7 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 			m_eMapping = SNROM_MAPPING_LOROM;
 			break;
 		}
-	} 
+	}
 
 	// set size of ROM
 	m_uRomBytes = nRomBytes;
@@ -889,7 +861,7 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 		{
 
 			// allocate memory for rom
-			m_pRomMem = 
+			m_pRomMem =
 			m_pRomData = (Uint8 *)malloc(m_uRomBytes);
 			if (!m_pRomData)
 			{
@@ -1074,8 +1046,6 @@ void SnesRom::Unload()
 	m_bLoaded   = false;
 	memset(m_Name, 0, sizeof(m_Name));
 }
-
-
 
 Uint32 SnesRom::GetNumExts()
 {

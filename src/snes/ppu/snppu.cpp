@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppu behavior for SNES picture processing.
+ */
 
 #include <string.h>
 #include <stdio.h>
@@ -51,7 +58,6 @@ void SnesPPU::WriteCGDATA(Uint8 uData)
 	m_Regs.cgadd.w++;
 }
 
-
 Uint8 SnesPPU::ReadCGDATA()
 {
 	Uint32 uCGAddr;
@@ -75,7 +81,6 @@ Uint8 SnesPPU::ReadCGDATA()
 	return uData;
 }
 
-
 static Uint32 _SwizzleVramAddr(Uint32 uVramAddr, Uint32 uFullGraphic)
 {
 	switch (uFullGraphic)
@@ -98,7 +103,6 @@ static Uint32 _SwizzleVramAddr(Uint32 uVramAddr, Uint32 uFullGraphic)
 		return (uVramAddr & 0x7C00) | ((uVramAddr &0x7F)<<3) | ((uVramAddr>>7) & 0x07);
 	}
 }
-
 
 void SnesPPU::WriteVMDATAL(Uint8 uData)
 {
@@ -152,8 +156,6 @@ void SnesPPU::WriteVMDATAH(Uint8 uData)
 	m_pRender->UpdateVRAM(uVramAddr);
 }
 
-
-
 void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 {
 #if SNDBG_LOG
@@ -194,7 +196,6 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 	if (uVramAddr != uFirstVramAddr)
 		m_pRender->UpdateVRAM(uVramAddr);
 }
-
 
 void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 {
@@ -261,8 +262,6 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 		WriteVMDATAL(*pData);
 }
 
-
-
 Uint8 SnesPPU::ReadVMDATAL()
 {
 	Uint8 uData;
@@ -308,9 +307,6 @@ Uint8 SnesPPU::ReadVMDATAH()
 
 	return uData;
 }
-
-
-
 
 static Uint32 _MapOAMAddress(Uint32 uAddress)
 {
@@ -485,7 +481,6 @@ Uint8 SnesPPU::ReadOAMDATA()
 	return uData;
 }
 
-
 void SnesPPU::UpdateMatMul()
 {
 	Int32 iMulA, iMulB;
@@ -500,11 +495,6 @@ void SnesPPU::UpdateMatMul()
 	m_Regs.mpym = (Uint8)(iProduct  >> 8);
 	m_Regs.mpyh = (Uint8)(iProduct  >> 16);
 }
-
-
-
-
-
 
 void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 {
@@ -522,8 +512,6 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		}
 	}
 	#endif
-	//if (uAddr!= 0x2118 && uAddr!= 0x2119 && uAddr!= 0x2122  && uAddr!= 0x2104)
-	//ConDebug("write8[%06X]:ppu.%s=%02X\n", uAddr, GetRegName(uAddr), uData);
 
 	switch (uAddr)
 	{
@@ -589,7 +577,7 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		break;
 
 	case 0x2105:	// bgmode (screen mode)
-        if (m_Regs.bgmode!=uData) 
+        if (m_Regs.bgmode!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR | SNESPPURENDER_UPDATE_BGCHR);
 		m_Regs.bgmode = uData;
 		break;
@@ -599,32 +587,32 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		break;
 
 	case 0x2107:	// bg1sc (BG1 vram location)
-        if (m_Regs.bg1sc!=uData) 
+        if (m_Regs.bg1sc!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR);
 		m_Regs.bg1sc = uData;
 		break;
 	case 0x2108:	// bg2sc (BG2 vram location)
-        if (m_Regs.bg2sc!=uData) 
+        if (m_Regs.bg2sc!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR);
 		m_Regs.bg2sc = uData;
 		break;
 	case 0x2109:	// bg3sc (BG3 vram location)
-        if (m_Regs.bg3sc!=uData) 
+        if (m_Regs.bg3sc!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR);
 		m_Regs.bg3sc = uData;
 		break;
 	case 0x210A:	// bg4sc (BG4 vram location)
-        if (m_Regs.bg4sc!=uData) 
+        if (m_Regs.bg4sc!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR);
 		m_Regs.bg4sc = uData;
 		break;
 	case 0x210B:	// bg12nba (BG1 & BG2 vram location)
-        if (m_Regs.bg12nba !=uData) 
+        if (m_Regs.bg12nba !=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGCHR);
 		m_Regs.bg12nba = uData;
 		break;
 	case 0x210C:	// bg34nba (BG3 & BG4 vram location)
-        if (m_Regs.bg34nba !=uData) 
+        if (m_Regs.bg34nba !=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGCHR);
 		m_Regs.bg34nba = uData;
 		break;
@@ -647,33 +635,33 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		m_Regs.bg1vofs.w = ((uData << 8) | m_Regs.bgofslo) & 0x03FF;
 		m_Regs.bgofslo = uData;
 		break;
-	case 0x210F:	// bg2hofs 
+	case 0x210F:	// bg2hofs
 		m_Regs.bg2hofs.w = ((uData << 8) |
 			(m_Regs.bgofslo & 0xF8) | (m_Regs.bghofslo & 0x07)) & 0x03FF;
 		m_Regs.bgofslo = uData;
 		m_Regs.bghofslo = uData;
 		break;
-	case 0x2110:	// bg2vofs 
+	case 0x2110:	// bg2vofs
 		m_Regs.bg2vofs.w = ((uData << 8) | m_Regs.bgofslo) & 0x03FF;
 		m_Regs.bgofslo = uData;
 		break;
-	case 0x2111:	// bg3hofs 
+	case 0x2111:	// bg3hofs
 		m_Regs.bg3hofs.w = ((uData << 8) |
 			(m_Regs.bgofslo & 0xF8) | (m_Regs.bghofslo & 0x07)) & 0x03FF;
 		m_Regs.bgofslo = uData;
 		m_Regs.bghofslo = uData;
 		break;
-	case 0x2112:	// bg3vofs 
+	case 0x2112:	// bg3vofs
 		m_Regs.bg3vofs.w = ((uData << 8) | m_Regs.bgofslo) & 0x03FF;
 		m_Regs.bgofslo = uData;
 		break;
-	case 0x2113:	// bg4hofs 
+	case 0x2113:	// bg4hofs
 		m_Regs.bg4hofs.w = ((uData << 8) |
 			(m_Regs.bgofslo & 0xF8) | (m_Regs.bghofslo & 0x07)) & 0x03FF;
 		m_Regs.bgofslo = uData;
 		m_Regs.bghofslo = uData;
 		break;
-	case 0x2114:	// bg4vofs 
+	case 0x2114:	// bg4vofs
 		m_Regs.bg4vofs.w = ((uData << 8) | m_Regs.bgofslo) & 0x03FF;
 		m_Regs.bgofslo = uData;
 		break;
@@ -681,7 +669,6 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 	case 0x2115:	// vmain (video port control)
 		{
 			static Uint8 _SNPPU_VramInc[4]={1,32,128,128};
-			//ConDebug("write8[%06X]:ppu.%s=%02X\n", uAddr, GetRegName(uAddr), uData);
 			m_Regs.vmain = uData;
 			if (uData & 0x80)
 			{	// auto-inc on 2119
@@ -750,47 +737,47 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		break;
 
 	case 0x2123:	// window registers
-        if (m_Regs.w12sel!=uData) 
+        if (m_Regs.w12sel!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.w12sel = uData;
 		break;
-	case 0x2124:	
-        if (m_Regs.w34sel!=uData) 
+	case 0x2124:
+        if (m_Regs.w34sel!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.w34sel = uData;
 		break;
 	case 0x2125:
-        if (m_Regs.wobjsel!=uData) 
+        if (m_Regs.wobjsel!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.wobjsel = uData;
 		break;
-	case 0x2126:	
-        if (m_Regs.wh0!=uData) 
+	case 0x2126:
+        if (m_Regs.wh0!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.wh0 = uData;
 		break;
-	case 0x2127:	
-        if (m_Regs.wh1!=uData) 
+	case 0x2127:
+        if (m_Regs.wh1!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.wh1 = uData;
 		break;
-	case 0x2128:	
-        if (m_Regs.wh2!=uData) 
+	case 0x2128:
+        if (m_Regs.wh2!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.wh2 = uData;
 		break;
-	case 0x2129:	
-        if (m_Regs.wh3!=uData) 
+	case 0x2129:
+        if (m_Regs.wh3!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.wh3 = uData;
 		break;
-	case 0x212A:	
-        if (m_Regs.wbglog!=uData) 
+	case 0x212A:
+        if (m_Regs.wbglog!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.wbglog = uData;
 		break;
-	case 0x212B:	
-        if (m_Regs.wobjlog!=uData) 
+	case 0x212B:
+        if (m_Regs.wobjlog!=uData)
 		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		m_Regs.wobjlog = uData;
 		break;
@@ -808,14 +795,13 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		m_Regs.tsw = uData;
 		break;
 
-	case 0x2130:	// CGWSEL 
+	case 0x2130:	// CGWSEL
 		m_Regs.cgwsel = uData;
 		break;
-	case 0x2131:	// CGADSUB 
+	case 0x2131:	// CGADSUB
 		m_Regs.cgadsub = uData;
 		break;
-	case 0x2132:	// COLDATA 
-		//m_Regs.coldata = 0;
+	case 0x2132:	// COLDATA
 		if (uData & 0x20)
 		{
 			// red
@@ -863,8 +849,6 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 	}
 }
 
-
-
 /*
 Uint8 SnesPPU::Read8(Uint32 uAddr)
 {
@@ -899,9 +883,6 @@ Uint8 SnesPPU::Read8(Uint32 uAddr)
 }
 */
 
-
-
-
 void SnesPPU::BeginFrame()
 {
 	m_uLine   = 0;
@@ -925,7 +906,6 @@ void SnesPPU::EndFrame()
 		UpdateOAMPriority();
     }
 }
-
 
 void SnesPPU::Sync(Uint32 uLine)
 {
@@ -999,7 +979,7 @@ void SnesPPU::Reset()
 
 	// confirmed:
 	m_Regs.stat77 =  SNPPU_VERSION_5C77;
-	m_Regs.stat78 =  SNPPU_VERSION_5C78; 
+	m_Regs.stat78 =  SNPPU_VERSION_5C78;
 }
 
 SnesPPU::SnesPPU()

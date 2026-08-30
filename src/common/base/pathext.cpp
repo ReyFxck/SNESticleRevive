@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements pathext behavior for shared base utilities.
+ */
 
 #include <string.h>
 #include "types.h"
@@ -6,7 +13,7 @@
 #define PATHEXT_SIZE 		  (8)
 #define PATHEXT_MAXEXTENSIONS (16)
 
-typedef struct 
+typedef struct
 {
 	char			Ext[PATHEXT_SIZE];
 	PathExtTypeE 	Type;
@@ -20,7 +27,7 @@ static PathExtT *_PathNewExt()
 	if (_Path_nExtList < PATHEXT_MAXEXTENSIONS)
 	{
 		return &_Path_ExtList[_Path_nExtList++];
-	} 
+	}
 	return NULL;
 }
 
@@ -76,7 +83,6 @@ char *PathExtGet(char *pPath)
 	return NULL;
 }
 
-
 Bool PathExtResolve(char *pPath, PathExtTypeE *pType, Bool bTruncatePath)
 {
 	char *pExt;
@@ -105,6 +111,3 @@ Bool PathExtResolve(char *pPath, PathExtTypeE *pType, Bool bTruncatePath)
 	// no extension exists
 	return FALSE;
 }
-
-
-

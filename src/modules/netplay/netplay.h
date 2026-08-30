@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the netplay interface for the emulator netplay frontend.
+ */
 
 #ifndef _NETPLAY_H
 #define _NETPLAY_H
@@ -25,7 +31,6 @@ typedef enum
 	NETPLAY_STATUS_CONNECTED
 } NetPlayStatusE;
 
-
 typedef enum
 {
 	NETPLAY_CALLBACK_NONE,
@@ -44,5 +49,5 @@ typedef enum
     NETPLAY_LOADACK_NOTFOUND,
     NETPLAY_LOADACK_CHECKSUM,
 } NetPlayLoadAckE;
-  
+
 #endif

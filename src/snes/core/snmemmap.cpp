@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snmemmap behavior for the SNES emulation core.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -83,7 +90,6 @@ static SnesMemMapT	_SnesMemMap_HiRom[]=
 	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
 };
 
-
 #if SNES_DSP1
 static SnesMemMapT	_SnesMemMap_HiRom_DSP1[]=
 {
@@ -93,7 +99,6 @@ static SnesMemMapT	_SnesMemMap_HiRom_DSP1[]=
 	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
 };
 #endif
-
 
 #if SNES_DSP1
 static SnesMemMapT _SnesMemMap_LoRom_DSP1[]={
@@ -114,7 +119,6 @@ static SnesMemMapT _SnesMemMap_LoRom_DSP1[]={
     {0,0,0,0,SNESMEM_TYPE_NONE}
 };
 #endif
-
 
 // OBC1 (Metal Combat): 8KB de RAM + registradores em $6000-$7FFF,
 // nos bancos LoROM $00-$3F e espelho FastROM $80-$BF.
@@ -268,10 +272,9 @@ void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 	Uint32 uSize[SNESMEM_TYPE_NUM];
 	SnesRom *pRom = m_pRom;
 
-	// determine size of SRAM in bytes 
+	// determine size of SRAM in bytes
 	m_uSramSize = pRom->GetSRAMBytes();
-	if (m_uSramSize > SNES_SRAMSIZE) m_uSramSize = SNES_SRAMSIZE; 
-	//uSRAMBytes = (uSRAMBytes + SNCPU_BANK_SIZE - 1)  & ~(SNCPU_BANK_MASK);
+	if (m_uSramSize > SNES_SRAMSIZE) m_uSramSize = SNES_SRAMSIZE;
 
 	// calculate size of each map type
 	Int32 i;
@@ -305,8 +308,6 @@ void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 
 			assert(uStartAddr <= uEndAddr);
 			nBytes     = uEndAddr - uStartAddr;
-
-			//ConDebug("Mapping %06X -> %06X %06X %d\n", uStartAddr, uEndAddr, uOffset, pMemMap->eMemType);
 
 			/* ROM keeps its logical offset here: each 8 KiB CPU page is
 			   mirrored below with the cartridge address-line rule.  Other
@@ -382,7 +383,7 @@ void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 				case SNESMEM_TYPE_DSP1:
 #ifdef SNES_DSP1
 					SNCPUSetTrap(&m_Cpu, uStartAddr, nBytes, ReadDSP1, WriteDSP1);
-#endif 
+#endif
 					break;
 				case SNESMEM_TYPE_OBC1:
 					SNCPUSetTrap(&m_Cpu, uStartAddr, nBytes, ReadOBC1, WriteOBC1);
@@ -468,7 +469,6 @@ static void _MapExLoRomRegion(SNCpuT *pCpu, Uint8 *pRom, Uint32 romBytes,
 	}
 }
 
-// ----------------------------------------------------------------------
 void SnesSystem::MapMemExLoRom(void)
 {
 	SNCpuT *pCpu     = &m_Cpu;
@@ -611,14 +611,10 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 	   has been installed, preserving the 24-bit bus wrap in the ASM core. */
 	SNCPUMirror24BitBus(&m_Cpu);
 
-
-
 #if CODE_DEBUG
-//	DumpMemMap();
 #endif
 
 }
-
 
 // (Re)mapeia os bancos $C0-$FF conforme os registradores de segmento do
 // S-DD1 ($4804-$4807). Cada registrador escolhe um segmento de 1MB da ROM
@@ -669,7 +665,6 @@ void SnesSystem::RemapSDD1(void)
 #endif
 }
 
-
 void SnesSystem::SetFastRom()
 {
 	SNCPUSetRomSpeed(&m_Cpu, 0x800000, 0x800000, SNCPU_CYCLE_FAST);
@@ -679,230 +674,3 @@ void SnesSystem::SetSlowRom()
 {
 	SNCPUSetRomSpeed(&m_Cpu, 0x800000, 0x800000, SNCPU_CYCLE_SLOW);
 }
-
-#if 0
-void SnesSystem::MapLoRom()
-{
-	Uint32 uMemAddr;
-	Uint32 uRomAddr;
-	Uint8 *pRomData;
-	Uint32 uRomBytes;
-	Uint32 uSRAMBytes;
-
-	SnesRom *pRom = m_pRom;
-	SNCpuT *pCpu = &m_Cpu;
-	Uint8 *pRam = m_Ram;
-	Uint8 *pSRam = m_SRam;
-
-	uRomBytes= pRom->GetBytes();
-	pRomData = pRom->GetData();
-
-	// determine size of SRAM in bytes 
-	uSRAMBytes = pRom->GetSRAMBytes();
-	if (uSRAMBytes > SNES_SRAMSIZE) uSRAMBytes = SNES_SRAMSIZE; 
-
-//	uSRAMBytes = 1024 * 16;
-//	uSRAMBytes = SNES_SRAMSIZE;
-
-	// round up to banksize
-	uSRAMBytes = (uSRAMBytes + SNCPU_BANK_SIZE - 1)  & ~(SNCPU_BANK_MASK);
-
-	// set default traps
-	SNCPUSetTrap(pCpu,     0, SNCPU_MEM_SIZE, ReadMem, WriteMem);
-	SNCPUSetMemSpeed(pCpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_SLOW);
-
-	// map slow rom at xx8000 -> xxFFFF
-	uRomAddr=0x000000; 
-	for (uMemAddr=0x000000; uMemAddr < 0x700000; uMemAddr+=0x10000)
-	{
-		// mirror 32K at 0000->7FFFF
-		if (uMemAddr >= 0x400000)
-			SNCPUSetBank(pCpu, uMemAddr | 0x000000, 0x8000, pRomData + uRomAddr, FALSE);
-		SNCPUSetBank(pCpu, uMemAddr | 0x008000, 0x8000, pRomData + uRomAddr, FALSE);
-
-		// increment/wrap rom address
-		uRomAddr += 0x08000;
-		if (uRomAddr >= uRomBytes) uRomAddr = 0;
-	}
-
-	// map fast rom at xx8000 -> xxFFFF
-	uRomAddr=0x000000; 
-	for (uMemAddr=0x800000; uMemAddr < 0xFE0000; uMemAddr+=0x10000)
-	{
-		// mirror 32K at 0000->7FFFF
-		if (uMemAddr >= 0xC00000)
-			SNCPUSetBank(pCpu, uMemAddr | 0x000000, 0x8000, pRomData + uRomAddr,  FALSE);
-		SNCPUSetBank(pCpu, uMemAddr | 0x008000, 0x8000, pRomData + uRomAddr,  FALSE);
-
-		// increment/wrap rom address
-		uRomAddr += 0x08000;
-		if (uRomAddr >= uRomBytes) uRomAddr = 0;
-	}
-
-	// map i/o area
-	uMemAddr=0x000000; 
-	while (uMemAddr < 0x400000)
-	{
-		// map loram at xx0000 -> xx1FFF
-		SNCPUSetBank(pCpu, uMemAddr | 0x000000, 0x2000, pRam, TRUE);
-		SNCPUSetBank(pCpu, uMemAddr | 0x800000, 0x2000, pRam, TRUE);
-
-
-		SNCPUSetTrap(pCpu, uMemAddr | 0x002000, 0x2000, Read2000, Write2000);
-		SNCPUSetTrap(pCpu, uMemAddr | 0x004000, 0x2000, Read4000, Write4000);
-  
-		SNCPUSetTrap(pCpu, uMemAddr | 0x802000, 0x2000, Read2000, Write2000);
-		SNCPUSetTrap(pCpu, uMemAddr | 0x804000, 0x2000, Read4000, Write4000);
-		#if SNES_RAMFAST
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x000000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x800000, 0x2000, SNCPU_CYCLE_FAST);
-		#endif
-
-		// i/o area is fast
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x002000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x802000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x004000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x804000, 0x2000, SNCPU_CYCLE_FAST);
-
-		uMemAddr += 0x10000;
-	}
-
-	// map sram area 700000 -> 7DFFFF
-	if (uSRAMBytes > 0)
-	{
-		uMemAddr = 0x700000;
-		while (uMemAddr < 0x7E0000)
-		{
-			SNCPUSetBank(pCpu, uMemAddr, uSRAMBytes, pSRam, TRUE);
-			uMemAddr += uSRAMBytes;
-		}
-	}
-
-	// map ram at 7E0000 -> 7FFFFF
-	//SNCPUSetTrap(pCpu, 0x7E0000, 0x20000, ReadMem, WriteMem);
-	SNCPUSetBank(pCpu, 0x7E0000, 0x20000, pRam, TRUE);
-
-	#if SNES_RAMFAST
-	SNCPUSetMemSpeed(pCpu, 0x7E0000, 0x20000, SNCPU_CYCLE_FAST);
-	#endif
-
-}
-
-
-void SnesSystem::MapHiRom()
-{
-	Uint32 uMemAddr;
-	Uint32 uRomAddr;
-	Uint8 *pRomData;
-	Uint32 uRomBytes;
-	Uint32 uSRAMBytes;
-
-	SnesRom *pRom = m_pRom;
-	SNCpuT *pCpu = &m_Cpu;
-	Uint8 *pRam = m_Ram;
-///	Uint8 *pSRam = m_SRam;
-
-	uRomBytes= pRom->GetBytes();
-	pRomData = pRom->GetData();
-
-	// determine size of SRAM in bytes 
-	uSRAMBytes = pRom->GetSRAMBytes();
-	if (uSRAMBytes > SNES_SRAMSIZE) uSRAMBytes = SNES_SRAMSIZE; 
-//	uSRAMBytes = SNES_SRAMSIZE;
-
-	// round up to banksize
-	uSRAMBytes = (uSRAMBytes + SNCPU_BANK_SIZE - 1)  & ~(SNCPU_BANK_MASK);
-
-
-	// set default traps
-	SNCPUSetTrap(pCpu,     0, SNCPU_MEM_SIZE, ReadMem, WriteMem);
-	SNCPUSetMemSpeed(pCpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_SLOW);
-
-	// map 32kb slow rom at 008000 -> 3FFFFF
-	uRomAddr=0x000000; 
-	for (uMemAddr=0x000000; uMemAddr < 0x400000; uMemAddr+=0x10000)
-	{
-		SNCPUSetBank(pCpu, uMemAddr | 0x008000, 0x8000, pRomData + uRomAddr + 0x8000, FALSE);
-
-		// increment/wrap rom address
-		uRomAddr += 0x10000;
-		if (uRomAddr >= uRomBytes) uRomAddr = 0;
-	}
-
-	// map 64kb slow rom at 400000 -> xxFFFF
-	uRomAddr=0x000000; 
-	for (uMemAddr=0x400000; uMemAddr < 0x7E0000; uMemAddr+=0x10000)
-	{
-		SNCPUSetBank(pCpu, uMemAddr, 0x10000, pRomData + uRomAddr, FALSE);
-
-		// increment/wrap rom address
-		uRomAddr += 0x10000;
-		if (uRomAddr >= uRomBytes) uRomAddr = 0;
-	}
-
-
-	// map fast 32kb rom at 808000 -> BFFFFF
-	uRomAddr=0x000000; 
-	for (uMemAddr=0x800000; uMemAddr < 0xC00000; uMemAddr+=0x10000)
-	{
-		SNCPUSetBank(pCpu, uMemAddr | 0x008000, 0x8000, pRomData + uRomAddr + 0x8000,  FALSE);
-
-		// increment/wrap rom address
-		uRomAddr += 0x10000;
-		if (uRomAddr >= uRomBytes) uRomAddr = 0;
-	}
-
-
-	// map fast 64kb rom at C00000 -> FFFFFF
-	uRomAddr=0x000000; 
-	for (uMemAddr=0xC00000; uMemAddr < 0x1000000; uMemAddr+=0x10000)
-	{
-		SNCPUSetBank(pCpu, uMemAddr, 0x10000, pRomData + uRomAddr,  FALSE);
-
-		// increment/wrap rom address
-		uRomAddr += 0x10000;
-		if (uRomAddr >= uRomBytes) uRomAddr = 0;
-	}
-
-
-	// map i/o area
-	uMemAddr=0x000000; 
-	while (uMemAddr < 0x400000)
-	{
-		// map loram at xx0000 -> xx1FFF
-		SNCPUSetBank(pCpu, uMemAddr | 0x000000, 0x2000, pRam, TRUE);
-		SNCPUSetBank(pCpu, uMemAddr | 0x800000, 0x2000, pRam, TRUE);
-
-
-		SNCPUSetTrap(pCpu, uMemAddr | 0x002000, 0x2000, Read2000, Write2000);
-		SNCPUSetTrap(pCpu, uMemAddr | 0x004000, 0x2000, Read4000, Write4000);
-
-		SNCPUSetTrap(pCpu, uMemAddr | 0x802000, 0x2000, Read2000, Write2000);
-		SNCPUSetTrap(pCpu, uMemAddr | 0x804000, 0x2000, Read4000, Write4000);
-#if SNES_RAMFAST
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x000000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x800000, 0x2000, SNCPU_CYCLE_FAST);
-#endif
-
-		// i/o area is fast
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x002000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x802000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x004000, 0x2000, SNCPU_CYCLE_FAST);
-		SNCPUSetMemSpeed(pCpu, uMemAddr | 0x804000, 0x2000, SNCPU_CYCLE_FAST);
-
-		uMemAddr += 0x10000;
-	}
-
-
-/*
-
-	// map sram area 700000 -> 7?????
-	SNCPUSetBank(pCpu, 0x700000, uSRAMBytes, pSRam, TRUE);
-*/
-
-	// map ram at 7E0000 -> 7FFFFF
-	//SNCPUSetTrap(pCpu, 0x7E0000, 0x20000, ReadMem, WriteMem);
-	SNCPUSetBank(pCpu, 0x7E0000, 0x20000, pRam, TRUE);
-
-}
-#endif

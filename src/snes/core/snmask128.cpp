@@ -1,58 +1,63 @@
-                      
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snmask128 behavior for the SNES emulation core.
+ */
+
 #include "types.h"
 #include "snmask.h"
 #include "snmaskop.h"
- 
 
 void SNMaskLeft(union SNMaskT *pMask, Int32 iPos)
 {
     Int32 nWords;
     Uint32 uMask;
 	Uint32 *pDest = pMask->uMask32;
-    
+
     SNMaskClear(pMask);
     if (iPos <= 0) return;
     if (iPos > 256) iPos = 256;
-    
+
     nWords = (iPos-1) >> 5;
 	iPos  &= 31;
-    
+
     // write full masks
     while (nWords > 0)
     {
         pDest[0] = 0xFFFFFFFF;
         pDest++;
         nWords--;
-    } 
+    }
 
-    // write partial mask    
+    // write partial mask
     uMask    = 0xFFFFFFFF >> (32 - iPos);
 	pDest[0] = uMask;
 }
-
 
 void SNMaskRight(union SNMaskT *pMask, Int32 iPos)
 {
     Int32 nWords;
     Uint32 uMask;
 	Uint32 *pDest = pMask->uMask32;
-    
+
     SNMaskSet(pMask);
     if (iPos <= 0) return;
     if (iPos > 256) iPos = 256;
-    
+
     nWords = iPos >> 5;
 	iPos  &= 31;
-    
+
     // write full masks
     while (nWords > 0)
     {
         pDest[0] = 0;
         pDest++;
         nWords--;
-    } 
+    }
 
-    // write partial mask    
+    // write partial mask
     uMask    = 0xFFFFFFFF << (iPos);
 	pDest[0] = uMask;
 }
@@ -89,8 +94,6 @@ void SNMaskSHL(union SNMaskT *pDestMask,  const Uint8 *pSrcMask, Int32 nBits)
     pDestMask->uMask64[3] = uDest3;
 }
 
-
-
 void SNMaskSHR(union SNMaskT *pDestMask,  const Uint8 *pSrcMask, Int32 nBits)
 {
 	Int32 nInvBits;
@@ -121,7 +124,6 @@ void SNMaskSHR(union SNMaskT *pDestMask,  const Uint8 *pSrcMask, Int32 nBits)
     pDestMask->uMask64[2] = uDest2;
     pDestMask->uMask64[3] = uDest3;
 }
-
 
 void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert)
 {
@@ -156,35 +158,30 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
 	}
 }
 
-
-
-
-
 #if !SNMASKOP_INLINE
 
  void SNMaskClear(union SNMaskT *pDest)
 {
     __asm__ __volatile__ (
-    	"sq        $0,0x00(%0)     \n"
-    	"sq        $0,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest)
-     );    
+	"sq        $0,0x00(%0)     \n"
+	"sq        $0,0x10(%0)     \n"
+	:
+	: "r" (pDest)
+     );
 }
 
  void SNMaskSet(union SNMaskT *pDest)
 {
     __asm__ __volatile__ (
         "pnor      $8,$0,$0        \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $8,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $8,0x10(%0)     \n"
+	:
+	: "r" (pDest)
         : "$8"
-     );    
+     );
 
 }
-
 
  void SNMaskCopy(union SNMaskT *pDest,  const union SNMaskT *pSrc)
 {
@@ -192,14 +189,13 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
     __asm__ __volatile__ (
         "lq        $8,0x00(%1)        \n"
         "lq        $9,0x10(%1)        \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrc)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrc)
         : "$8", "$9"
-     );    
+     );
 }
-
 
  void SNMaskNOT(union SNMaskT *pDest,  const union SNMaskT *pSrc)
 {
@@ -211,12 +207,12 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
         "lq        $9,0x10(%1)        \n"
         "pnor      $8,$8,$0         \n"
         "pnor      $9,$9,$0         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrc)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrc)
         : "$8", "$9"
-     );    
+     );
 }
 
  void SNMaskAND(union SNMaskT *pDest,  const union SNMaskT *pSrcA,  const union SNMaskT *pSrcB)
@@ -232,12 +228,12 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
         "lq        $11,0x10(%2)        \n"
         "pand      $8,$8,$10         \n"
         "pand      $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11"
-     );    
+     );
 }
 
  void SNMaskANDN(union SNMaskT *pDest,  const union SNMaskT *pSrcA,  const union SNMaskT *pSrcB)
@@ -254,15 +250,14 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
         "lq        $11,0x10(%2)        \n"
         "pxor      $8,$8,$10         \n"
         "por       $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
+	"sq        $8,0x00(%0)     \n"
         "pxor      $9,$9,$11         \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11"
-     );    
+     );
 }
-
 
  void SNMaskOR(union SNMaskT *pDest,  const union SNMaskT *pSrcA,  const union SNMaskT *pSrcB)
 {
@@ -277,12 +272,12 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
         "lq        $11,0x10(%2)        \n"
         "por      $8,$8,$10         \n"
         "por       $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11"
-     );    
+     );
 }
 
  void SNMaskXOR(union SNMaskT *pDest,  const union SNMaskT *pSrcA,  const union SNMaskT *pSrcB)
@@ -298,12 +293,12 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
         "lq        $11,0x10(%2)        \n"
         "pxor      $8,$8,$10         \n"
         "pxor       $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11"
-     );    
+     );
 }
 
  void SNMaskXNOR(union SNMaskT *pDest,  const union SNMaskT *pSrcA,  const union SNMaskT *pSrcB)
@@ -321,12 +316,12 @@ void SNMaskRange(union SNMaskT *pMask, Uint32 uLeft, Uint32 uRight, Bool bInvert
         "pxor       $9,$9,$11         \n"
         "pnor      $8,$8,$0         \n"
         "pnor      $9,$9,$0         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11"
-     );    
+     );
 }
 
  void SNMaskBool(union SNMaskT *pDest,  const union SNMaskT *pSrc, Bool bVal)

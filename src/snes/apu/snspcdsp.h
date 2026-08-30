@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snspcdsp interface for SNES audio processing.
+ */
 
 #ifndef _SNSPCDSP_H
 #define _SNSPCDSP_H
@@ -29,7 +35,7 @@ enum SNSpcDspRegE
 	SNSPCDSP_REG_GAIN            = 0x07,
 	SNSPCDSP_REG_ENVX            = 0x08,
 	SNSPCDSP_REG_OUTX            = 0x09,
-	
+
 	SNSPCDSP_REG_MVOLL           = 0x0C,
     SNSPCDSP_REG_MVOLR           = 0x1C,
     SNSPCDSP_REG_EVOLL           = 0x2C,
@@ -77,9 +83,6 @@ enum SNSpcEnvStateE
 	SNSPCDSP_ENVSTATE_NUM,
 };
 
-
-
-
 struct SNSpcVoiceRegsT
 {
 	Int8	vol_l;
@@ -125,7 +128,6 @@ struct SNSpcEchoT
 	Uint16			uEchoAddr;
 };
 
-
 class    SNSpcDsp
 {
 	Uint8			m_Regs[SNSPCDSP_REG_NUM];
@@ -168,17 +170,4 @@ public:
 	void	RestoreState(struct SNStateSPCDSPT *pState);
 };
 
-
-
-
-
-
-
-
-
 #endif
-
-
-
-
-

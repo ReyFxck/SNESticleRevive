@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sngsu interface for the SNES emulation core.
+ */
+
+/*
  * sngsu.h - SuperFX / GSU coprocessor (Graphic Support Unit)
  *
  * RISC-like 16-bit CPU usado por Star Fox, Yoshi's Island, Stunt Race FX,

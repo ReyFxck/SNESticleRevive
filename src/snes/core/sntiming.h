@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sntiming interface for the SNES emulation core.
+ */
 
 #ifndef _SNTIMING_H
 #define _SNTIMING_H
@@ -18,6 +25,5 @@
 #define SNES_LINE_IN_VBLANK(_line) ((_line) >= SNES_VBLANK_START_LINE)
 #define SNES_SPCMINCYCLES 0
 #define SNES_CYCLESPERFRAME (SNES_CYCLESPERLINE * 262)
-
 
 #endif

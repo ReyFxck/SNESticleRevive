@@ -1,10 +1,9 @@
-/* gskit_backend.h
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * gsKit-based backend for SNESticle's GS layer. Owns the GSGLOBAL
- * pointer and exposes helpers used by gs.c, gpfifo.c, gpprim.c and
- * the SNES blender to coexist on the same DMA path.
- *
- * Fase 1 GS->gsKit migration.
+ * Description:
+ *   Declares the gskit backend interface for the PlayStation 2 Graphics Synthesizer backend.
  */
 
 #ifndef _GSKIT_BACKEND_H

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements main behavior for the emulator application layer.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -67,8 +74,6 @@ extern "C" _libcglue_fdman_path_ops_t __fileXio_fdman_path_ops;
 extern "C" void __fileXioOpsInitializeImpl(void);
 extern "C" void _ps2sdk_fileXio_init(void);
 
-
-
 /* Some launchers (and PCSX2's direct ELF loader in particular) are allowed
    to enter main() without a useful argv[0].  The old code kept a NULL
    pointer in that case and immediately passed it to strcpy(), crashing
@@ -77,7 +82,6 @@ extern "C" void _ps2sdk_fileXio_init(void);
 static char  _Main_BootPath[256] = "host:";
 static char *_Main_pBootPath     = _Main_BootPath;
 static char  _Main_BootDir[256]  = "host:";
-
 
 char *MainGetBootDir()
 {
@@ -127,7 +131,7 @@ void MainSetBootDir(const char *pPath)
 }
 
 /* Your program's main entry point */
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
     int iArg;
 
@@ -261,64 +265,6 @@ int main(int argc, char **argv)
 	   estavam comentados).  Num PS2 real bootando por disco isso tocava o
 	   drive cedo demais (antes de pronto) e podia travar/atrasar o boot.
 	   O browser le o cdfs: so' quando o usuario entra nele (drive pronto). */
-#if 0
-	/* Runtime FS probe: log opendir/stat for every top-level mount so
-	   the next boot tells us exactly where the browser breaks. The
-	   browser uses printf which never reaches the SIO log; this dup
-	   via DLog does. */
-	// DLog("[probe] fs probe begin");
-	{
-		const char *paths[] = { "cdfs:/", "cdfs:", "mc0:/", "mc0:", "mass:/", "host:/" };
-		int i;
-		for (i = 0; i < (int)(sizeof(paths) / sizeof(paths[0])); i++) {
-			DIR *d; struct stat st; int rc;
-			errno = 0; rc = stat(paths[i], &st);
-			// DLog("[probe] stat('%s') -> %d (errno=%d, mode=0%o)",
-			//      paths[i], rc, errno, rc == 0 ? (unsigned)st.st_mode : 0);
-			(void)rc;
-			errno = 0; d = opendir(paths[i]);
-			// DLog("[probe] opendir('%s') -> %p (errno=%d)", paths[i], (void *)d, errno);
-			if (d) {
-				struct dirent *de; int n = 0;
-				while ((de = readdir(d)) != NULL && n < 8) {
-					/* DLog("[probe]   readdir[%d] = '%s'", n, de->d_name); */ n++;
-				}
-				// DLog("[probe]   total entries listed = %d", n);
-				closedir(d);
-			}
-		}
-	}
-	// DLog("[probe] fs probe end");
-
-	/* Direct fileXio probe: bypass newlib entirely. If these work
-	   where opendir() above does not, the EE newlib<->iomanX glue
-	   is the issue and the browser should call fileXio* directly. */
-	// DLog("[fxprobe] direct fileXio probe begin");
-	{
-		const char *paths[] = { "cdfs:/", "cdfs:", "mc0:/", "mass:/", "host:/" };
-		int i;
-		iox_dirent_t de;
-		iox_stat_t st;
-		for (i = 0; i < (int)(sizeof(paths) / sizeof(paths[0])); i++) {
-			int sr = fileXioGetStat(paths[i], &st);
-			// DLog("[fxprobe] fileXioGetStat('%s') -> %d (mode=0x%x)",
-			//      paths[i], sr, sr == 0 ? (unsigned)st.mode : 0);
-			(void)sr;
-			int d = fileXioDopen(paths[i]);
-			// DLog("[fxprobe] fileXioDopen('%s') -> %d", paths[i], d);
-			if (d >= 0) {
-				int n = 0;
-				while (fileXioDread(d, &de) > 0 && n < 8) {
-					// DLog("[fxprobe]   dread[%d] = '%s' (mode=0x%x)", n, de.name, (unsigned)de.stat.mode);
-					n++;
-				}
-				// DLog("[fxprobe]   total entries listed = %d", n);
-				fileXioDclose(d);
-			}
-		}
-	}
-	// DLog("[fxprobe] direct fileXio probe end");
-#endif
 
 	/* cdvdInit(CDVD_INIT_NOWAIT) used to live here.  It is intentionally
 	   gone now: it binds to RPC 0x80000592 (CDVD_INIT_BIND_RPC, see

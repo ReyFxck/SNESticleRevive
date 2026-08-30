@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop install behavior for the PlayStation 2 application runtime.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,11 +35,7 @@
 #include "dataio.h"
 #include "prof.h"
 #include "bmpfile.h"
-#if 0
 #include "font.h"
-#else
-#include "font.h"
-#endif
 #include "poly.h"
 #include "texture.h"
 #include "mixbuffer.h"
@@ -41,9 +45,6 @@
 #include "memcard.h"
 #include "pathext.h"
 #include "snppucolor.h"
-#if 0
-#include "version.h"
-#endif
 #include "emumovie.h"
 extern "C" {
 #include "cd.h"
@@ -52,9 +53,7 @@ extern "C" {
 #include "snspc_c.h"
 };
 
-//#include "nespal.h"
 #include "snes.h"
-//#include "nesstate.h"
 
 #include <sifrpc.h>
 #include <loadfile.h>
@@ -81,7 +80,6 @@ extern "C" {
 };
 
 extern "C" Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
-
 
 /* MAINLOOP_MEMCARD / NETPORT / STATEPATH / SNESSTATEDEBUG /
    NESSTATEDEBUG / HISTORY / MAXSRAMSIZE now live in
@@ -161,7 +159,6 @@ void _AddTitleDB(char *pPath)
 	}
 
 	pFile = fopen("cdfs:/SYSTEM.CNF", "rt");
-//	pFile = fopen("host:/SYSTEM.CNF", "rt");
 	if (!pFile)
 	{
 		MainLoopModalPrintf(60*3, "Unable to open SYSTEM.CNF on cd.");
@@ -200,9 +197,7 @@ void _AddTitleDB(char *pPath)
 	MainLoopModalPrintf(60*3, "Unable to find PSX ELF");
 }
 
-
 typedef int (*CopyProgressCallBackT)(char *pDestName, char *pSrcName, int Position, int Total);
-
 
 int CopyFile(char *pDest, char *pSrc, CopyProgressCallBackT pCallBack)
 {
@@ -266,7 +261,6 @@ int CopyFile(char *pDest, char *pSrc, CopyProgressCallBackT pCallBack)
 		return -3;
 	}
 }
-
 
 static Bool _bTrailingPath(const char *pPath)
 {
@@ -332,13 +326,11 @@ int InstallFiles(char *pDestPath, char *pSrcPath, char **ppInstallFiles, CopyPro
 			sprintf(DestPath, "%s/%s", pDestPath, ppInstallFiles[0]);
 		}
 
-
 		if (CopyFile(DestPath, SrcPath, pCallBack) < 0)
 		{
-			//
 		}
 
 		ppInstallFiles+=2;
-	} 
+	}
 	return 0;
 }

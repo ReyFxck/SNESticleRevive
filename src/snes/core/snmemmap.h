@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snmemmap interface for the SNES emulation core.
+ */
 
 #ifndef _SNMEMMAP_H
 #define _SNMEMMAP_H
@@ -32,7 +39,5 @@ struct SnesMemMapT
 	SnesMemTypeE	eMemType;
 	Uint32			uOffset;	// offset into data to start mapping
 };
-
-
 
 #endif

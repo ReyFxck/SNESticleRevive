@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sngsu behavior for the SNES emulation core.
+ */
+
+/*
  * sngsu.cpp - SuperFX / GSU core
  *
  * Clean-room a partir da documentacao publica (fullsnes/sneslab/nesdev).
@@ -69,9 +77,7 @@ void SNGSU::Reset()
     m_CacheValid = 0;
 }
 
-//==========================================================================
 //  SFR (Status/Flag Register)
-//==========================================================================
 Uint8 SNGSU::SfrLow() const
 {
     Uint8 v = 0;
@@ -106,9 +112,7 @@ void SNGSU::SfrWriteLow(Uint8 v)
     m_bGo = (v & 0x20) != 0;
 }
 
-//==========================================================================
 //  Memoria do cartucho (visao do GSU)
-//==========================================================================
 Uint32 SNGSU::RomOffset(Uint8 uBank, Uint16 uAddr) const
 {
     if (uBank < 0x40)
@@ -260,15 +264,11 @@ Uint8 SNGSU::Pipe()
     return b;
 }
 
-//==========================================================================
 //  Arbitragem ROM/RAM (SCMR)
-//==========================================================================
 Bool SNGSU::SnesCanAccessRom() const { return (m_SCMR & 0x10) == 0; }  // RON
 Bool SNGSU::SnesCanAccessRam() const { return (m_SCMR & 0x08) == 0; }  // RAN
 
-//==========================================================================
 //  MMIO do lado SNES ($3000-$34FF)
-//==========================================================================
 Uint8 SNGSU::ReadReg(Uint16 uAddrLow)
 {
     Uint16 a = uAddrLow & 0xFFFF;
@@ -390,9 +390,7 @@ void SNGSU::WriteReg(Uint16 uAddrLow, Uint8 uData)
     }
 }
 
-//==========================================================================
 //  Execucao
-//==========================================================================
 void SNGSU::ResetPrefix()
 {
     m_Sreg = 0; m_Dreg = 0;
@@ -421,9 +419,7 @@ void SNGSU::WriteRegister(Uint8 n, Uint16 val)
     if (n == 14) UpdateRomBuffer();
 }
 
-//==========================================================================
 //  Graficos (PLOT / pixel cache)
-//==========================================================================
 Int32 SNGSU::ScreenBpp() const
 {
     switch (m_SCMR & 0x03) {         // MD0-1

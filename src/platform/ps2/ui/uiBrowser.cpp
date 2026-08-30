@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements uiBrowser behavior for the PlayStation 2 user interface.
+ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -14,11 +21,7 @@
 #include <libhdd.h>        /* ATTR_MAIN_PARTITION / FS_TYPE_PFS */
 #undef NEWLIB_PORT_AWARE
 #include "types.h"
-#if 0
 #include "font.h"
-#else
-#include "font.h"
-#endif
 #include "poly.h"
 #include "uiBrowser.h"
 #include "uiCover.h"
@@ -735,7 +738,7 @@ int CBrowserScreen::GetEntryPath(char *pStr, int nChars)
 {
 	if (m_iSelect >=0 && m_iSelect < m_nEntries)
 		return snprintf(pStr, nChars, "%s%s", m_Dir, m_pDirEntries[m_iSelect].name);
-	else 
+	else
 		return 0;
 }
 
@@ -743,7 +746,7 @@ char *CBrowserScreen::GetEntryName()
 {
 	if (m_iSelect >=0 && m_iSelect < m_nEntries)
 		return m_pDirEntries[m_iSelect].name;
-	else 
+	else
 		return NULL;
 }
 
@@ -751,7 +754,7 @@ BrowserEntryTypeE CBrowserScreen::GetEntryType()
 {
 	if (m_iSelect >=0 && m_iSelect < m_nEntries)
 		return m_pDirEntries[m_iSelect].eType;
-	else 
+	else
 		return BROWSER_ENTRYTYPE_OTHER;
 }
 
@@ -817,7 +820,7 @@ int CBrowserScreen::MenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 						pExt = strrchr(strDestFileName, '.');
 						if (pExt)
 						{
-							// special case .gz extensions							
+							// special case .gz extensions
 							if (!strcmp(pExt, ".gz"))
 							{
 								*pExt = '\0';
@@ -837,10 +840,9 @@ int CBrowserScreen::MenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 						}
 						// truncate file name
 						PathTruncFileName(strDestShortName, strDestFileName, PathGetMaxFileNameLength(pBrowser->m_Dir) - strlen(strDestFileExt));
-						
+
 						snprintf(strDestPath, sizeof(strDestPath), "%s%s%s", pBrowser->m_Dir, strDestShortName, strDestFileExt);
 						snprintf(strSrcPath, sizeof(strSrcPath), "%s", pBrowser->m_SubMenu.GetText(0));
-
 
 						printf("src: %s\n", strSrcPath );
 						printf("dest: %s\n", strDestPath);
@@ -913,7 +915,6 @@ int CBrowserScreen::MenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 	return 0;
 }
 
-
 CBrowserScreen::CBrowserScreen(Uint32 uMaxEntries)
 {
 	m_Dir[0]=0;
@@ -953,8 +954,6 @@ void CBrowserScreen::ResetEntries()
 	m_bHasExecutables = FALSE;
 }
 
-
-
 static Int32 _BrowserEntryQSort(const void *pA, const void *pB)
 {
 	BrowserEntryT *pDirA, *pDirB;
@@ -964,11 +963,11 @@ static Int32 _BrowserEntryQSort(const void *pA, const void *pB)
 	if (pDirA->eType == pDirB->eType)
 	{
 		return strcasecmp(pDirA->name, pDirB->name);
-	} 
+	}
 	else
 	{
 		return pDirA->eType - pDirB->eType;
-	}	
+	}
 }
 
 void CBrowserScreen::SortEntries()
@@ -976,7 +975,6 @@ void CBrowserScreen::SortEntries()
 	if (m_nEntries > 1)
 		qsort(m_pDirEntries, m_nEntries, sizeof(m_pDirEntries[0]), _BrowserEntryQSort);
 }
-
 
 Bool CBrowserScreen::EnsureEntryCapacity(Int32 nRequired)
 {
@@ -1018,7 +1016,6 @@ Bool CBrowserScreen::EnsureEntryCapacity(Int32 nRequired)
 	return TRUE;
 }
 
-
 Bool CBrowserScreen::AddEntry(const Char *pName, BrowserEntryTypeE eType, Int32 size)
 {
 	if (!pName || m_nEntries == INT_MAX ||
@@ -1043,8 +1040,6 @@ Bool CBrowserScreen::AddEntry(const Char *pName, BrowserEntryTypeE eType, Int32 
 }
 
 extern int g_GskVideoMode;
-
-
 
 void CBrowserScreen::Draw()
 {
@@ -1123,9 +1118,7 @@ void CBrowserScreen::Draw()
 	PolyTexture(NULL);
     PolyBlend(TRUE);
 
-
-//    PolyColor4f(0.0f, 0.2f, 0.2f, 0.5f); 
-    PolyColor4f(0.0f, 0.2f, 0.2f, 0.9f); 
+    PolyColor4f(0.0f, 0.2f, 0.2f, 0.9f);
 	PolyRect(0, vy, 256, 9);
 
 	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
@@ -1346,14 +1339,13 @@ void CBrowserScreen::Draw()
 			if (iEntry == m_iSelect)
 			{
 				if (iEntry == m_iSelect)
-					PolyColor4f(0.0f, 1.0f, 0.0f, 0.5f); 
+					PolyColor4f(0.0f, 1.0f, 0.0f, 0.5f);
 					else
-					PolyColor4f(0.0f, 0.0f, 0.0f, 0.25f); 
+					PolyColor4f(0.0f, 0.0f, 0.0f, 0.25f);
 
 				Int32 selW = FontGetStrWidth(str);
 				if (selW > nameMaxPx) selW = nameMaxPx;
 				PolyRect(vx-1, vy-1, selW + 2, FontGetHeight() + 2);
-//				PolyRect(vx-2, vy-0, strlen(str) * 12 + 2, 13 + 0);
 			}
 
 			// render menu entry
@@ -1373,10 +1365,7 @@ void CBrowserScreen::Draw()
 					break;
 			}
 
-		   //			FontColor4f(0.8, 0.8f, 0.8f, 1.0f);
-
 			FontPuts(vx, vy, view);
-//			FontPuts(vx+480, vy, sizestr);
 		}
 
 		vy += FontGetHeight() + 2;
@@ -1404,7 +1393,6 @@ void CBrowserScreen::Draw()
 		}
 	}
 
-
 /*
 	FontSelect(0);
 	FontColor4f(0.5, 0.5f, 0.5f, 1.0f);
@@ -1414,15 +1402,12 @@ void CBrowserScreen::Draw()
 /*
 	FontPuts(0, 210, "+ - \"");
 
-
     PolyBlend(TRUE);
     PolyTexture(&_FontTexture);
     PolyUV(0,0,256,32);
 	PolyColor4f(1.0, 1.0, 1.0, 1.0f);
     PolyRect(0,120,256,32);
 */
-
-
 
 	FontSelect(0);
 
@@ -1481,7 +1466,6 @@ void CBrowserScreen::Process()
 {
 }
 
-
 void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	if (trigger & PAD_SELECT)
@@ -1496,9 +1480,8 @@ void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 		  /*
 		if (m_bSubMenu)
 		{
-	    	Char str[256];
+		Char str[256];
 
-//	        sprintf(str, "%s%s", m_Dir, m_pDirEntries[m_iSelect].name);
 	        sprintf(str, "%s", m_pDirEntries[m_iSelect].name);
 			m_SubMenu.SetTitle(str);
 		}
@@ -1538,7 +1521,7 @@ void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 
 	// scroll
 	if (m_iSelect < 0) m_iSelect = 0;
- 	if (m_iSelect > (m_nEntries - 1)) m_iSelect = (m_nEntries - 1);
+	if (m_iSelect > (m_nEntries - 1)) m_iSelect = (m_nEntries - 1);
 
 	// scroll
 	if (m_iSelect < m_iScroll)
@@ -1585,16 +1568,13 @@ void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 				CoverFreeCache();
 				SendMessage(1, m_pDirEntries[m_iSelect].eType, (void *)str);
 	            break;
-	            
+
 			}
 		}
 		return;
 	}
 
-
-
 }
-
 
 /* Enumerate every filesystem through fileXioDread. Unlike the newlib
    opendir/readdir adapter, iox_dirent_t already contains mode and size,
@@ -1771,7 +1751,6 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	} else
 	{
         AddEntry("cdfs:", BROWSER_ENTRYTYPE_DRIVE, 0);
-//        AddEntry("cdrom:", BROWSER_ENTRYTYPE_DRIVE, 0);
         /* User-facing host: was a ps2link/HostFS development bridge and did
            not provide trustworthy file-type metadata in several emulators.
            smb: is a real iomanX filesystem and is mounted only on selection. */
@@ -1803,7 +1782,6 @@ void CBrowserScreen::SetDir(const Char *pDir)
         }
         AddEntry("mc0:", BROWSER_ENTRYTYPE_DRIVE, 0);
         AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);
-//        AddEntry("rom:", BROWSER_ENTRYTYPE_DRIVE, 0);
 	}
 
 	SortEntries();
@@ -1861,5 +1839,3 @@ void CBrowserScreen::RefreshRootDevices()
 	if (!m_Dir[0])
 		SetDir("");
 }
-
-

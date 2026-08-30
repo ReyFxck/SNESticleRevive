@@ -1,16 +1,19 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements uiMenu behavior for the PlayStation 2 user interface.
+ */
+
 #include <stdlib.h>
 #include <string.h>
 #include <kernel.h>
 #include <libpad.h>
 #include "types.h"
-#if 0
 #include "font.h"
-#else
-#include "font.h"
-#endif
 #include "poly.h"
 #include "uiMenu.h"
-
 
 void CMenuScreen::SetEntries(char **ppStrings)
 {
@@ -31,7 +34,6 @@ CMenuScreen::CMenuScreen()
 	memset(m_strText, 0, sizeof(m_strText));
 	m_strTitle[0] = 0;
 ///	SetEntries(_TestStr);
-//	SetText(0, "crapppy");
 }
 
 void CMenuScreen::SetTitle(const char *pTitle)
@@ -58,20 +60,20 @@ void CMenuScreen::SetSelection(Int32 iSelect)
 }
 
 static void _MenuPrintAlignCenter(int x, int y, const char *str, Bool bHighlight = FALSE)
-{                
+{
     x-= FontGetStrWidth(str) / 2;
     FontPuts(x, y, str);
 
     if (bHighlight)
     {
-		PolyColor4f(0.0f, 1.0f, 0.0f, 0.5f); 
+		PolyColor4f(0.0f, 1.0f, 0.0f, 0.5f);
 		PolyRect(x-1, y-1, FontGetStrWidth(str) + 2, FontGetHeight() + 2);
     }
 }
 
 static void _MenuHeader(int vy, const char *str)
 {
-    PolyColor4f(0.0f, 0.2f, 0.2f, 0.5f); 
+    PolyColor4f(0.0f, 0.2f, 0.2f, 0.5f);
 	PolyRect(32, vy, 256-64, 9);
 	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
     _MenuPrintAlignCenter(128, vy, str);
@@ -84,7 +86,6 @@ void CMenuScreen::Draw()
 
 	FontSelect(0);
 	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
-//    FontPrintf(vx, vy, "%s", "Testing!");
 
 	vx -= 80;
 
@@ -97,19 +98,18 @@ void CMenuScreen::Draw()
 
 	for (iLine=0; iLine < m_nItems; iLine++)
 	{
-		Char *pStr = m_pEntries[iLine]; 
+		Char *pStr = m_pEntries[iLine];
 		Int32 iWidth;;
 
 		iWidth = FontGetStrWidth(pStr);
-		
+
 		if (pStr)
 		{
-//			FontPuts(vx - iWidth / 2, vy, pStr);
 			FontPuts(vx, vy, pStr);
 
 			if (iLine == m_iSelect)
 			{
-				PolyColor4f(0.0f, 1.0f, 0.0f, 0.5f); 
+				PolyColor4f(0.0f, 1.0f, 0.0f, 0.5f);
 				PolyRect(vx-1, vy-1, iWidth + 2, FontGetHeight() + 2);
 			}
 		}
@@ -125,7 +125,6 @@ void CMenuScreen::Draw()
 	for (int i=0; i < 4; i++)
 	{
 		FontColor4f(0.8, 0.8f, 0.8f, 1.0f);
-//		FontPuts(vx, vy, m_strText[i]);
 		_MenuPrintAlignCenter(128, vy,  m_strText[i]);
 		vy+=FontGetHeight() + 2;
 	}
@@ -148,7 +147,7 @@ void CMenuScreen::Input(Uint32 buttons, Uint32 trigger)
 	}
 
 	if (m_iSelect < 0) m_iSelect = 0;
- 	if (m_iSelect > (m_nItems - 1)) m_iSelect = (m_nItems - 1);
+	if (m_iSelect > (m_nItems - 1)) m_iSelect = (m_nItems - 1);
 
 	if (trigger & (PAD_CIRCLE | PAD_START))
 {
@@ -156,4 +155,3 @@ void CMenuScreen::Input(Uint32 buttons, Uint32 trigger)
 }
 
 }
-

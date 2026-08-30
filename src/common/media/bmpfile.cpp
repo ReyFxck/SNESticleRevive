@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements bmpfile behavior for shared media decoding.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include "types.h"
@@ -24,7 +32,6 @@ typedef struct tagBITMAPFILEHEADER {
         WORD    bfOffBitsHi;
 } BITMAPFILEHEADER;
 
-
 typedef struct tagBITMAPINFOHEADER{
         DWORD      biSize;
         LONG       biWidth;
@@ -45,7 +52,6 @@ typedef struct tagRGBQUAD {
         BYTE    rgbRed;
         BYTE    rgbReserved;
 } RGBQUAD;
-
 
 Bool BMPWriteFile(char *pFileName, CSurface *pSurface, PaletteT *pPalette)
 {
@@ -183,7 +189,7 @@ Bool BMPReadFile(char *pFileName, CSurface *pSurface)
 			printf("BMP ERROR: unsupported bitdepth\n");
 			fclose(pFile);
 			return FALSE;
-	} 
+	}
 
 	// allocate surface
 	pSurface->Alloc(info.biWidth, info.biHeight, PixelFormatGetByEnum(eFormat));

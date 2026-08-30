@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements memcard behavior for PlayStation 2 memory-card access.
+ */
 
 #include <kernel.h>
 #include <libmc.h>
@@ -163,7 +170,7 @@ int MemCardCreateSave(char *pDir, char *pTitle, Bool bForceWrite)
 		if (!bForceWrite)
 		{
 			printf("MemCard: CreateSave bail (mkdir failed, no force)\n");
-		 	return -1;
+			return -1;
 		}
 	}
 

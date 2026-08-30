@@ -1,27 +1,11 @@
 /*
- * snsrtc.h - S-RTC (Sharp Real-Time Clock) coprocessor HLE
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Relogio de tempo real usado em Daikaijuu Monogatari II (Super Shell
- * Monsters Story II). O jogo le data/hora reais para um ciclo dia/noite e
- * eventos baseados em tempo. Sem o chip, o jogo trava/comporta-se errado ao
- * acessar os registradores do relogio.
- *
- * Interface (bancos $00-$3F / $80-$BF):
- *   $2800 (leitura): porta de dados; sequencia de 13 nibbles de data/hora
- *   $2801 (escrita): porta de comando/dados (FSM de 4 modos)
- *
- * Protocolo (engenharia reversa publica, byuu):
- *   - escrever 0x0D em $2801: entra em modo leitura, reinicia o indice
- *   - escrever 0x0E: entra em modo comando
- *   - em modo comando: 0x00 -> modo escrita; 0x04 -> limpa/pronto
- *   - em modo escrita: os nibbles sao gravados em sequencia; o dia-da-semana
- *     e' calculado automaticamente
- *   - ler $2800 em modo leitura: devolve 0x0F (inicio), os 13 nibbles, 0x0F (fim)
- *
- * Implementacao clean-room. A fonte de tempo e' o relogio do host (time()).
- * No reset, semeia os registradores a partir de gmtime() para que o jogo veja
- * a data/hora reais (UTC); update_time avanca a partir do timestamp salvo.
+ * Description:
+ *   Declares the snsrtc interface for the SNES emulation core.
  */
+
 #ifndef _SNSRTC_H
 #define _SNSRTC_H
 

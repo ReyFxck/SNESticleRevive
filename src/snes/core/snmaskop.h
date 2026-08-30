@@ -1,8 +1,13 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snmaskop interface for the SNES emulation core.
+ */
 
 #ifndef _SNMASKOP_H
 #define _SNMASKOP_H
-
 
 #ifndef SNMASKOP_INLINE
 #define SNMASKOP_INLINE (TRUE)
@@ -54,7 +59,6 @@ static inline void SNMaskSet(SNMaskT *pDest)
 	pDest->uMask64[3] = ~(Uint64)0;
 }
 
-
 static inline void SNMaskCopy(SNMaskT *pDest,  const SNMaskT *pSrc)
 {
 	pDest->uMask64[0] = pSrc->uMask64[0];
@@ -62,7 +66,6 @@ static inline void SNMaskCopy(SNMaskT *pDest,  const SNMaskT *pSrc)
 	pDest->uMask64[2] = pSrc->uMask64[2];
 	pDest->uMask64[3] = pSrc->uMask64[3];
 }
-
 
 static inline void SNMaskNOT(SNMaskT *pDest,  const SNMaskT *pSrc)
 {
@@ -100,7 +103,6 @@ static inline void SNMaskANDN(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMa
 	pDest->uMask64[2] = pSrcA->uMask64[2] & ~pSrcB->uMask64[2];
 	pDest->uMask64[3] = pSrcA->uMask64[3] & ~pSrcB->uMask64[3];
 }
-
 
 static inline void SNMaskOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
 {
@@ -173,27 +175,26 @@ static inline void SNMaskBool(SNMaskT *pDest,  const SNMaskT *pSrc, bool bVal)
 static inline void SNMaskClear(SNMaskT *pDest)
 {
     __asm__ __volatile__ (
-    	"sq        $0,0x00(%0)     \n"
-    	"sq        $0,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest)
+	"sq        $0,0x00(%0)     \n"
+	"sq        $0,0x10(%0)     \n"
+	:
+	: "r" (pDest)
         : "memory"
-     );    
+     );
 }
 
 static inline void SNMaskSet(SNMaskT *pDest)
 {
     __asm__ __volatile__ (
         "pnor      $8,$0,$0        \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $8,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $8,0x10(%0)     \n"
+	:
+	: "r" (pDest)
         : "$8", "memory"
-     );    
+     );
 
 }
-
 
 static inline void SNMaskCopy(SNMaskT *pDest,  const SNMaskT *pSrc)
 {
@@ -201,14 +202,13 @@ static inline void SNMaskCopy(SNMaskT *pDest,  const SNMaskT *pSrc)
     __asm__ __volatile__ (
         "lq        $8,0x00(%1)        \n"
         "lq        $9,0x10(%1)        \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrc)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrc)
         : "$8", "$9", "memory"
-     );    
+     );
 }
-
 
 static inline void SNMaskNOT(SNMaskT *pDest,  const SNMaskT *pSrc)
 {
@@ -220,12 +220,12 @@ static inline void SNMaskNOT(SNMaskT *pDest,  const SNMaskT *pSrc)
         "lq        $9,0x10(%1)        \n"
         "pnor      $8,$8,$0         \n"
         "pnor      $9,$9,$0         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrc)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrc)
         : "$8", "$9", "memory"
-     );    
+     );
 }
 
 static inline void SNMaskAND(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -241,12 +241,12 @@ static inline void SNMaskAND(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMas
         "lq        $11,0x10(%2)        \n"
         "pand      $8,$8,$10         \n"
         "pand      $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11", "memory"
-     );    
+     );
 }
 
 static inline void SNMaskANDN(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -263,15 +263,14 @@ static inline void SNMaskANDN(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMa
         "lq        $11,0x10(%2)        \n"
         "pxor      $8,$8,$10         \n"
         "por       $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
+	"sq        $8,0x00(%0)     \n"
         "pxor      $9,$9,$11         \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11", "memory"
-     );    
+     );
 }
-
 
 static inline void SNMaskOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
 {
@@ -286,12 +285,12 @@ static inline void SNMaskOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMask
         "lq        $11,0x10(%2)        \n"
         "por      $8,$8,$10         \n"
         "por       $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11", "memory"
-     );    
+     );
 }
 
 static inline void SNMaskXOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -307,12 +306,12 @@ static inline void SNMaskXOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMas
         "lq        $11,0x10(%2)        \n"
         "pxor      $8,$8,$10         \n"
         "pxor       $9,$9,$11         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11", "memory"
-     );    
+     );
 }
 
 static inline void SNMaskXNOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMaskT *pSrcB)
@@ -330,12 +329,12 @@ static inline void SNMaskXNOR(SNMaskT *pDest,  const SNMaskT *pSrcA,  const SNMa
         "pxor       $9,$9,$11         \n"
         "pnor      $8,$8,$0         \n"
         "pnor      $9,$9,$0         \n"
-    	"sq        $8,0x00(%0)     \n"
-    	"sq        $9,0x10(%0)     \n"
-    	: 
-    	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
+	"sq        $8,0x00(%0)     \n"
+	"sq        $9,0x10(%0)     \n"
+	:
+	: "r" (pDest), "r" (pSrcA), "r" (pSrcB)
         : "$8", "$9", "$10", "$11", "memory"
-     );    
+     );
 }
 
 static inline void SNMaskBool(SNMaskT *pDest,  const SNMaskT *pSrc, bool bVal)

@@ -1,32 +1,17 @@
-
-
-/*!
-
-    \File    emumovie.h
-
-    \Description
-	    Description
-
-    \Notes
-	    None.
-
-    \Copyright
-	    (c) 2004 Icer Addis
-
-*/
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the emumovie interface for the emulator application layer.
+ */
 
 #ifndef _emumovie_h
 #define _emumovie_h
 
-/*-- Include files -------------------------------------------------------------------------------*/
-
 #include "emusys.h"
 
 namespace Emu {
-/*-- Preprocessor Definitions --------------------------------------------------------------------*/
-
-/*-- Type Definitions ----------------------------------------------------------------------------*/
 
 class MovieClip
 {
@@ -53,7 +38,7 @@ private:
     Uint32              m_uStateSize;
 
     // frames
-    SysInputT *			m_pFrames;      
+    SysInputT *			m_pFrames;
     Uint32              m_uMaxFrames;
 
     Bool                m_bRecording;
@@ -63,13 +48,5 @@ private:
     Uint32              m_uPlayFrame;
 };
 
-/*-- Variables -----------------------------------------------------------------------------------*/
-
-/*-- Functions -----------------------------------------------------------------------------------*/
-
 } // namespace
 #endif // _emumovie_h
-
-
-
-

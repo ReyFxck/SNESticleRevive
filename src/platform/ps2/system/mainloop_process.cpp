@@ -1,14 +1,9 @@
-/* mainloop_process.cpp
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Hosts MainLoopProcess() -- the per-frame driver that polls input,
- * runs the SNES core, drives netplay/movie clip, kicks SRAM bookkeeping
- * and finally calls into MainLoopRender().
- *
- * Owns the file-static _iframetex flip flag used to alternate between
- * the two CRenderSurface entries in _fbTexture[].
- *
- * Extracted from mainloop.cpp during the Batch 3 split. Behaviour is
- * unchanged.
+ * Description:
+ *   Implements mainloop process behavior for the PlayStation 2 application runtime.
  */
 
 #include <stdio.h>
@@ -47,7 +42,6 @@ extern "C" {
 
 static Uint32 _iframetex=0;
 
-
 Bool MainLoopProcess()
 {
     NetPlayRPCInputT NetInput;
@@ -62,7 +56,6 @@ Bool MainLoopProcess()
     InputPoll();
 
     PROF_LEAVE("InputProcess");
-
 
 	{
 	    /* OR the digital pad bits with d-pad bits synthesised from each
@@ -81,17 +74,14 @@ Bool MainLoopProcess()
 	    _MainLoopInputProcess(buttons);
 	}
 
-//	_MainLoopInputProcess(InputGetPadData(0));
-//	_MainLoopInputProcess(InputGetPadData(1));
-
     if (!_bMenu && _pSystem && !_MainLoop_BlackScreen)
     {
         CRenderSurface *pSurface;
         CMixBuffer *pMixBuffer = NULL;
         pSurface = _fbTexture[_iframetex];
-	
+
 		Emu::SysInputT Input;
-	
+
 		Int32 iPad;
 
         /*
@@ -101,10 +91,9 @@ Bool MainLoopProcess()
         } else
         {
             pMixBuffer = &_AudMix;
-        } 
-        */                        
+        }
+        */
         pMixBuffer = _AudMix;
-//                pMixBuffer = NULL;
 
 		// read inputs
 		for (iPad=0; iPad < 5; iPad++)
@@ -160,11 +149,11 @@ Bool MainLoopProcess()
 				// if controller 4 is disconnected, use controller 2 of second peer
 				Input.uPad[3] = (Uint16)(NetInput.InputRecv[1]>>16);
 			}
-		
-        }  
+
+        }
 		else
 		{
-		
+
             if (s_pMovieClip->IsPlaying())
             {
                 if (!s_pMovieClip->PlayFrame(Input))
@@ -173,7 +162,7 @@ Bool MainLoopProcess()
                     ConPrint("Movie: Play End\n");
                 }
             }
-	
+
 		}
 
         if (NetInput.eGameState != NETPLAY_GAMESTATE_PAUSE)

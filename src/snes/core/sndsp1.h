@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sndsp1 interface for the SNES emulation core.
+ */
+
+/*
  * sndsp1.h - DSP-1 / DSP-1B coprocessor emulation header
  *
  * Esta implementacao reproduz o comportamento microcoded do DSP-1
@@ -54,15 +62,12 @@ public:
     static SNDSP1 *GetInstance();
 
 private:
-    // ------------------------------------------------------------------
     // Bits do Status Register (todos referidos ao byte alto, ja que so
     // o byte alto e' visivel pela CPU)
-    //
     //   DRC bit 2 (0x04) = 1 -> transferencia de 8 bits (espera opcode)
     //                       0 -> transferencia de 16 bits (data words)
     //   DRS bit 4 (0x10) = toggle MSB/LSB dentro de uma palavra de 16
     //   RQM bit 7 (0x80) = chip pronto para troca de byte com a CPU
-    // ------------------------------------------------------------------
     enum SrFlag { SR_DRC = 0x04, SR_DRS = 0x10, SR_RQM = 0x80 };
 
     enum FsmState { FSM_WAIT_CMD = 0, FSM_READ_DATA = 1, FSM_WRITE_DATA = 2 };
@@ -83,10 +88,8 @@ private:
     Int16   m_InWords [8];
     Int16   m_OutWords[1024];
 
-    // ------------------------------------------------------------------
     // Estado matematico compartilhado entre comandos (replica o RAM
     // interno do chip).  Nomes seguem o documento de RE publico.
-    // ------------------------------------------------------------------
     Int16   m_MatA[3][3];
     Int16   m_MatB[3][3];
     Int16   m_MatC[3][3];
@@ -105,9 +108,7 @@ private:
     Int16   m_Hx, m_Hy;
     Int16   m_Vx, m_Vy, m_Vz;
 
-    // ------------------------------------------------------------------
     // FSM
-    // ------------------------------------------------------------------
     void FsmStep(bool bRead, Uint8 &rData);
     void Execute(Uint8 uCmd);
 };

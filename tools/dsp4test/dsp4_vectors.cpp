@@ -1,8 +1,14 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Supports the dsp4test development and regression tools.
+ */
+
 // dsp4_vectors.cpp - runner de vetores clean-room para o DSP-4 HLE.
-//
 // Motor de TDD para reconstruir a matematica do DSP-4 SEM ler/portar
 // codigo de outro emulador.  A ideia (clean-room observacional):
-//
 //   1. Capture os INPUTS reais: rode o Top Gear 3000 aqui no SNESticle
 //      com a HLE compilada com -DDSP4_TRACE.  Cada palavra escrita pela
 //      CPU vira uma linha "W xxxx" no log.
@@ -12,12 +18,9 @@
 //      codigo da matematica dele).  Cada palavra lida vira "R xxxx".
 //   3. Junte input+output num arquivo .vec e rode aqui.  Implemente a
 //      matematica em sndsp4.cpp ate' TODOS os vetores passarem.
-//
 // Como nada aqui deriva de codigo licenciado de terceiros (so' de I/O
 // observado, que e' fato nao-protegivel), o resultado fica limpo para a
 // licenca MIT do projeto.
-//
-// ------------------------------------------------------------------------
 // Formato do arquivo .vec (texto):
 //   W xxxx        escreve a palavra de 16 bits xxxx (hex) no Data Reg
 //   R xxxx        le' uma palavra e exige que seja igual a xxxx (hex)
@@ -26,7 +29,6 @@
 //   NAME texto    rotulo do bloco corrente (so' para o relatorio)
 //   # ...         comentario (linha inteira ignorada)
 //   (linha vazia) ignorada
-//
 // Uso:  ./dsp4_vectors arquivo1.vec [arquivo2.vec ...]
 //       (sem args, roda todos os *.vec em ./vectors/)
 

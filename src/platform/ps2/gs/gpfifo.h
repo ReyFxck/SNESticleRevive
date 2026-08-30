@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the gpfifo interface for the PlayStation 2 Graphics Synthesizer backend.
+ */
 
 #ifndef _GPFIFO_H
 #define _GPFIFO_H
-
 
 void GPFifoFlush();
 void GPFifoPause();
@@ -20,5 +26,3 @@ void GPFifoSetTex(u32 tbp, u32 tbw, u32 texwidthlog2, u32 texheightlog2, u32 tps
 void GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfmt, void *tex, int wpxls, int hpxls);
 
 #endif
-
-

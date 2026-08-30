@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the opspc700 c interface for SNES audio processing.
+ */
+
 	// NOP_
 SNSPC_OP(0x000,2);
 SNSPC_ENDOP(2)

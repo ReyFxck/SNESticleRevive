@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snrom interface for SNES cartridge loading and mapping.
+ */
 
 #ifndef _SNROM_H
 #define _SNROM_H
@@ -71,7 +78,7 @@ struct SNRomHdrSWCT
 {
 	Uint16	uSize;			// size in MegaBits * 16
 	Uint8	uImageInfo;		// image info flags
-	Uint8	Reserved[5];			
+	Uint8	Reserved[5];
 	Uint8	Tag[3];			// AA BB 04
 };
 
@@ -91,7 +98,6 @@ union SNRomHdrU
 	SNRomHdrSWCT		SWC;
 	SNRomHdrFIGT		FIG;
 };
-
 
 class SnesRom  : public Emu::Rom
 {
@@ -135,8 +141,5 @@ public:
 	virtual Char   *GetRomTitle();
 	virtual Char   *GetMapperName();
 };
-
-
-
 
 #endif

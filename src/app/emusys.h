@@ -1,36 +1,21 @@
-
-
-/*!
-
-    \File    emusys.h
-
-    \Description
-        Description
-
-    \Notes
-        None.
-
-    \Copyright
-        (c) 2004 Icer Addis
-
-*/
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the emusys interface for the emulator application layer.
+ */
 
 #ifndef _emusys_h
 #define _emusys_h
-
-/*-- Include files -------------------------------------------------------------------------------*/
 
 #include <stdlib.h>
 #include "emuinput.h"
 
 class CRenderSurface;
-class CMixBuffer; 
+class CMixBuffer;
 
 namespace Emu {
-/*-- Preprocessor Definitions --------------------------------------------------------------------*/
-
-/*-- Type Definitions ----------------------------------------------------------------------------*/
 
 class System
 {
@@ -62,7 +47,7 @@ public:
     virtual void 				SoftReset() = 0;
 
 	virtual void				ExecuteFrame(SysInputT *pInput, CRenderSurface *pTarget, CMixBuffer *pMixBuf, ModeE eMode) = 0;
-																											   
+
 	virtual Int32				GetStateSize()=0;
 	virtual void				SaveState(void *pState, Int32 nStateBytes) = 0;
 	virtual void				RestoreState(void *pState, Int32 nStateBytes) = 0;
@@ -78,13 +63,5 @@ protected:
     Uint32						m_uFrame;		// current frame
 };
 
-
-
-/*-- Variables -----------------------------------------------------------------------------------*/
-
-/*-- Functions -----------------------------------------------------------------------------------*/
-
 } // namespace
 #endif // _emusys_h
-
-

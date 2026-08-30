@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sndma behavior for the SNES emulation core.
+ */
 
 #include <string.h>
 #include <assert.h>
@@ -41,8 +48,7 @@ static Uint8 _SNDma_HDMABytes[8] =
 	1, 2, 2, 4, 4, 4, 2, 4
 };
 
-
-static Int8 _SNDma_MDMAInc[4] = 
+static Int8 _SNDma_MDMAInc[4] =
 {
 	1, 0, -1, 0
 };
@@ -138,8 +144,6 @@ static Uint32 _SNDmaHashBytes(const Uint8 *pData, Uint32 nBytes)
 }
 #endif
 
-
-
 Uint8 SnesDMAC::Read8(Uint32 uChan, Uint32 uAddr)
 {
 	SnesDMAChT *pChan;
@@ -147,37 +151,37 @@ Uint8 SnesDMAC::Read8(Uint32 uChan, Uint32 uAddr)
 
 	switch(uAddr & 0xF)
 	{
-	case 0x0: 
+	case 0x0:
 		return pChan->dmapx;
 
-	case 0x1: 
+	case 0x1:
 		return pChan->bbadx;
 
-	case 0x2: 
+	case 0x2:
 		return pChan->a1tx & 0xFF;
 
-	case 0x3: 
+	case 0x3:
 		return pChan->a1tx >> 8;
 
-	case 0x4: 
+	case 0x4:
 		return pChan->a1bx;
 
-	case 0x5: 
+	case 0x5:
 		return	pChan->dasx & 0xFF;
 
-	case 0x6: 
+	case 0x6:
 		return	pChan->dasx >> 8;
 
-	case 0x7: 
+	case 0x7:
 		return pChan->dasbx;
 
-	case 0x8: 
+	case 0x8:
 		return pChan->a2ax & 0xFF;
 
-	case 0x9: 
+	case 0x9:
 		return pChan->a2ax >> 8;
 
-	case 0xA: 
+	case 0xA:
 		return pChan->ntlrx;
 
 	case 0xB:
@@ -185,73 +189,65 @@ Uint8 SnesDMAC::Read8(Uint32 uChan, Uint32 uAddr)
 		return pChan->unknown;
 
 	default:
-		//ConDebug("read_dma8[%06X]\n", uAddr);
 		return 0x00;
 	}
 }
-
-
-
-
-
 
 void SnesDMAC::Write8(Uint32 uChan, Uint32 uAddr, Uint8 uData)
 {
 	SnesDMAChT *pChan;
 
 	pChan = &m_Channels[uChan];
-//	if (uChan==7)
-//	ConDebug("dma%d[%02X]=%02X\n", uChan, uAddr & 0xF, uData);
 
 	switch(uAddr & 0xF)
 	{
-	case 0x0: 
+	case 0x0:
 		pChan->dmapx = uData;
 		break;
 
-	case 0x1: 
+	case 0x1:
 		pChan->bbadx = uData;
 		break;
 
-	case 0x2: 
+	case 0x2:
 		pChan->a1tx &= 0xFF00;
 		pChan->a1tx |= uData << 0;
 		break;
 
-	case 0x3: 
+	case 0x3:
 		pChan->a1tx &= 0x00FF;
 		pChan->a1tx |= uData << 8;
 		break;
 
-	case 0x4: 
+	case 0x4:
 		pChan->a1bx = uData;
 		break;
 
-	case 0x5: 
+	case 0x5:
 		pChan->dasx &= 0xFF00;
 		pChan->dasx |= uData << 0;
 		break;
 
-	case 0x6: 
+	case 0x6:
 		pChan->dasx &= 0x00FF;
 		pChan->dasx |= uData << 8;
 		break;
 
-	case 0x7: 
+	case 0x7:
 		pChan->dasbx = uData;
 		break;
 
-	case 0x8: 
+	case 0x8:
 		pChan->a2ax &= 0xFF00;
 		pChan->a2ax |= uData << 0;
 		break;
 
-	case 0x9: 
+	case 0x9:
 		pChan->a2ax &= 0x00FF;
 		pChan->a2ax |= uData << 8;
 		break;
 
-	case 0xA: 
+	case 0xA:
 		pChan->ntlrx = uData;
 		break;
 
@@ -261,7 +257,6 @@ void SnesDMAC::Write8(Uint32 uChan, Uint32 uAddr, Uint8 uData)
 		break;
 
 	default:
-//		ConDebug("write_dma8[%06X]=%02X\n", uAddr, uData);
 		break;
 	}
 }
@@ -381,7 +376,6 @@ void SnesDMAC::SetHDMAEnable(Uint8 uData)
 	m_HDMAEnable = uData;
 }
 
-
 void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
 {
     SnesDMAChT *pChan;
@@ -409,7 +403,6 @@ void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
 	{
 		Uint8 uData;
 		Uint32 uAddr;
-
 
 		// get address to read from
 		uAddr = 0x2100 + pChan->bbadx + pTransfer[iTransfer & 3];
@@ -443,73 +436,6 @@ void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
         m_MDMAEnable &= ~(1 << uChan);
     }
 }
-
-#if 0
-Uint32 SnesDMAC::ProcessMDMACh(Uint32 uChan)
-{
-	SnesDMAChT *pChan;
-	Int32 uSrcDelta;
-	Uint8 *pTransfer;
-	Int32 iTransfer=0;
-
-	assert(uChan < SNESDMAC_CHANNEL_NUM);
-
-	pChan = &m_Channels[uChan];
-	
-	#if SNESDMA_DEBUG
-	ConDebug("dma%d: %02X %02X%04X -> %02X %04X (%04X)\n", uChan, 
-		pChan->dmapx,
-		pChan->a1bx, 
-		pChan->a1tx, 
-		pChan->bbadx, 
-		pChan->dasx,
-		m_pPPU->m_Regs.vmaddr.w
-		);
-	#endif
-
-
-	if (pChan->dmapx & 0x80)
-	{
-		// ppu -> mem
-		return ProcessMDMAChRead(uChan);
-	}
-
-	// determine a-bus increment
-	uSrcDelta = _SNDma_MDMAInc[(pChan->dmapx>>3) & 3];
-
-	// get transfer order
-	pTransfer = _SNDma_MDMATransfer[pChan->dmapx & 7];
-	iTransfer = 0;
-	
-	do
-	{
-		Uint8 uData;
-		Uint32 uAddr;
-
-		// read byte
-		uData = SNCPURead8(m_pCPU, pChan->a1tx | (pChan->a1bx << 16));
-
-		// increment src address (does overflow go into next bank?)
-		pChan->a1tx += uSrcDelta;
-
-		// get address to write to (b-bus)
-		uAddr = 0x2100 + pChan->bbadx + pTransfer[iTransfer & 3];
-		iTransfer++;
-
-		// write byte
-		SNCPUWrite8(m_pCPU, uAddr, uData);
-
-		// decrement cpu clock cycles
-		SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW * 1);
-
-		// decrement byte count
-		pChan->dasx--;
-	}
-	while (pChan->dasx!=0);
-
-	return 1;
-}
-#endif
 
 void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 {
@@ -608,7 +534,6 @@ void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 	}
 }
 
-
 void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 {
 	SnesDMAChT *pChan;
@@ -618,11 +543,11 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
     pChan = &m_Channels[uChan];
 
 #if SNESDMA_DEBUG
-	ConDebug("dma%d: %02X %02X%04X -> %02X %04X vram=%04X nCycles=%d\n", uChan, 
+	ConDebug("dma%d: %02X %02X%04X -> %02X %04X vram=%04X nCycles=%d\n", uChan,
 		pChan->dmapx,
-		pChan->a1bx, 
-		pChan->a1tx, 
-		pChan->bbadx, 
+		pChan->a1bx,
+		pChan->a1tx,
+		pChan->bbadx,
 		pChan->dasx,
 		m_pPPU->m_Regs.vmaddr.w,
         m_pCPU->Cycles
@@ -702,7 +627,7 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 		nBytes = pChan->dasx ? pChan->dasx : 0x10000;
 
         // clamp number of bytes to the size of our temporary buffer
-		if (nBytes > (Int32)sizeof(DmaBuffer)) 
+		if (nBytes > (Int32)sizeof(DmaBuffer))
             nBytes = sizeof(DmaBuffer);
 
         // clamp number of bytes to cycle time remaining
@@ -737,7 +662,7 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 						             DmaBuffer + nFirst, nBytes - nFirst);
 					}
 
-			        // increment src address 
+			        // increment src address
 			        pChan->a1tx = (Uint16)(pChan->a1tx + nBytes);
                 }
 			    break;
@@ -795,13 +720,6 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
         m_MDMAEnable &= ~(1 << uChan);
     }
 }
-
-
-
-
-
-
-
 
 void SnesDMAC::BeginHDMA()
 {
@@ -922,11 +840,6 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 	}
 }
 
-
-
-
-
-
 void SnesDMAC::ProcessMDMA()
 {
     Uint32 uChan = 0;
@@ -937,7 +850,7 @@ void SnesDMAC::ProcessMDMA()
         {
             // process channel
             ProcessMDMAChFast(uChan);
-        } 
+        }
         else
         {
             // next channel

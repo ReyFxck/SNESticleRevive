@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the uiLog interface for the PlayStation 2 user interface.
+ */
 
 #ifndef _UILOG_H
 #define _UILOG_H
@@ -23,6 +30,5 @@ public:
 	void Process();
 	void Input(Uint32 Buttons, Uint32 Trigger);
 };
-
 
 #endif

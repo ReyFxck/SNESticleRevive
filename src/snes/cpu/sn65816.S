@@ -1,18 +1,21 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements the sn65816 assembly path for SNES CPU emulation.
+ */
 
 #include "sncpudefs.h"
 #include "ps2reg.h"
 
-
 		.file		1 "sn65816.S"
-    	.text	
-    	.p2align	3
-    	.globl 		SNCPUExecute_ASM
+	.text
+	.p2align	3
+	.globl 		SNCPUExecute_ASM
         .globl		_SNCPU_OpTable
 
-		.set noreorder    
-
-
+		.set noreorder
 
 //
 // cpu structure offsets
@@ -43,14 +46,11 @@
 
 #define SNCPU_MemIO			52
 
-
 #define SNCPU_pMem			(SNCPU_MemIO+0)
 #define SNCPU_ReadTrap		(SNCPU_MemIO+4)
 #define SNCPU_WriteTrap		(SNCPU_MemIO+8)
 #define SNCPU_uBankCycle	(SNCPU_MemIO+12)
 #define SNCPU_bRAM			(SNCPU_MemIO+13)
-
-
 
 //
 // temporary storage on stack
@@ -66,17 +66,15 @@
 #define SP_Save2   	0x68(sp)
 #define SP_Save3   	0x6C(sp)
 #define SP_Save4   	0x70(sp)
-  
+
 #define SP_Data0   	0x78(sp)
 #define SP_Data1   	0x79(sp)
 #define SP_Data2   	0x7A(sp)
 #define SP_Data3   	0x7B(sp)
 
-
 //
 // register definitions
 //
-
 
 //
 // these registers must S0-S7
@@ -87,20 +85,17 @@
 #define	R_pCpu			$16
 
 // address/data for mem i/o
-#define R_Addr			$17	
+#define R_Addr			$17
 
 // decomposed flags
-#define R_fN			$18	
-#define R_fZ			$19	
-#define R_fC			$20	
+#define R_fN			$18
+#define R_fZ			$19
+#define R_fC			$20
 
 // temporary registers for instruction processing
 #define R_t0			$21
 #define R_t1			$22
 #define R_t2			$23
-
-
-
 
 //
 // these registers are saved/restored when a trap function is called
@@ -123,42 +118,35 @@
 
 #define R_PCCycles		$30
 
-
-
-
-
 //
 //
 //
-
 
 #define SNCPU_OP(_opcode)  	\
-		op_##_opcode:		
+		op_##_opcode:
 
 #define SNCPU_OPTABLE_BEGIN()  _SNCPU_OpTable:
 #define SNCPU_OPTABLE_OP(_opcode)  .word op_##_opcode
-#define SNCPU_OPTABLE_END()  
+#define SNCPU_OPTABLE_END()
 
 #define SNCPU_SUBCYCLES(_nCycles)		\
-		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)	
-//#define SNCPU_SUBCYCLES(_nCycles)		
-
+		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)
+//#define SNCPU_SUBCYCLES(_nCycles)
 
 #define SNCPU_ENDOP(_nCycles)		\
 		j		_SNCPUExecute_Loop	;	\
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)	\
 
-
 #define SNCPU_ABORTOP() \
 		j		_SNCPUExecute_Abort	;\
-        nop		
+        nop
 
 #define SNCPU_OP_ALL(_Opcode) \
 	SNCPU_OP(0x0##_Opcode)	\
 	SNCPU_OP(0x1##_Opcode)	\
 	SNCPU_OP(0x2##_Opcode)	\
 	SNCPU_OP(0x3##_Opcode)	\
-	SNCPU_OP(0x4##_Opcode)	
+	SNCPU_OP(0x4##_Opcode)
 
 #define SNCPU_OP_E0(_Opcode) \
 	SNCPU_OP(0x0##_Opcode)	\
@@ -167,7 +155,7 @@
 	SNCPU_OP(0x3##_Opcode)	\
 
 #define SNCPU_OP_E1(_Opcode) \
-	SNCPU_OP(0x4##_Opcode)	
+	SNCPU_OP(0x4##_Opcode)
 
 #define SNCPU_OP_X0(_Opcode) \
 	SNCPU_OP(0x0##_Opcode)	\
@@ -176,9 +164,7 @@
 #define SNCPU_OP_X1E1(_Opcode) \
 	SNCPU_OP(0x1##_Opcode)	\
 	SNCPU_OP(0x3##_Opcode)	\
-	SNCPU_OP(0x4##_Opcode)	
-
-
+	SNCPU_OP(0x4##_Opcode)
 
 //
 //
@@ -227,7 +213,6 @@
 1:		addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST ;\
 2:
 
-
 #define SNCPU_ADC8(_dest,_src)					\
 		jal		_SNCPU_ADC8						;\
         nop
@@ -243,9 +228,6 @@
 #define SNCPU_SBC16(_dest,_src)					\
 		jal		_SNCPU_SBC16					;\
         nop
-
-
-
 
 /* Stop at this instruction boundary when an asserted IRQ becomes unmasked.
    Save the cycles following the instruction so the outer scheduler vectors
@@ -284,27 +266,23 @@
 		andi	R_fZ,R_fZ,0xFFFF	;\
         sltiu	_dest,R_fZ,1		;\
 
-#define SNCPU_GETFLAG_E(_dest)   	lbu		_dest,SNCPU_rE		
+#define SNCPU_GETFLAG_E(_dest)   	lbu		_dest,SNCPU_rE
 #define SNCPU_SETFLAG_E(_src)   	\
 		jal		_SNCPU_UpdateOpTable	   ;\
-		sb		_src,SNCPU_rE		
-
+		sb		_src,SNCPU_rE
 
 #define SNCPU_SETFLAGI_V(_src)   					\
         andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFFFF  ;	\
-        or		R_P,R_P,(_src) << 6							
-
+        or		R_P,R_P,(_src) << 6
 
 #define SNCPU_SETFLAG_V(_src)   					\
 		andi	t0,_src,1 					   ;	\
         andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFFFF  ;	\
         sll		t0,t0,6						   ;	\
-        or		R_P,R_P,t0							
-
+        or		R_P,R_P,t0
 
 #define SNCPU_BREAK_TRUE(_reg)  	bne		_reg,zr,_SNCPUExecute_Loop
 #define SNCPU_BREAK_FALSE(_reg)  	beq		_reg,zr,_SNCPUExecute_Loop
-
 
 #define SNCPU_SET_X16(_src)   		andi	R_X,_src,0xFFFF
 #define SNCPU_SET_Y16(_src)   		andi	R_Y,_src,0xFFFF
@@ -314,18 +292,16 @@
 #define SNCPU_SET_A8(_src)   		\
 		andi	t0,_src,0xFF	   ;	\
 		andi	R_A,R_A,0xFF00	   ;	\
-        or		R_A,R_A,t0					
+        or		R_A,R_A,t0
 
 #define SNCPU_SET_S16(_src)   		andi	R_S,_src,0xFFFF
 #define SNCPU_SET_S8(_src)   		\
 		andi	t0,_src,0xFF	   ;	\
 		andi	R_S,R_S,0xFF00	   ;	\
-        or		R_S,R_S,t0					
-
+        or		R_S,R_S,t0
 
 #define SNCPU_GET_DB(_src)   		move	_src,R_DB
 #define SNCPU_SET_DB(_src)   		move	R_DB,_src
-
 
 #define SNCPU_GETI(_dest, _imm) 	li		_dest,_imm
 
@@ -338,7 +314,6 @@
 #define SNCPU_GET_S16(_dest)   		andi	_dest,R_S,0xFFFF
 #define SNCPU_GET_S8(_dest)   		andi	_dest,R_S,0xFF
 
-
 #define SNCPU_GET_DP(_dest)   		move	_dest,R_DP
 #define SNCPU_SET_DP(_src)   		\
 		jal		_SNCPU_UpdateDPMask	;\
@@ -347,9 +322,8 @@
 #define SNCPU_GET_P(_dest)   				\
 			jal		_SNCPU_ComposeFlags	 ;	\
             nop							 ;	\
-			move	_dest,R_P			
-            
-            	
+			move	_dest,R_P
+
 #define SNCPU_SET_P(_src)   		  		;	\
 			jal		_SNCPU_DecomposeFlags	;	\
 			move	R_P,_src
@@ -358,35 +332,33 @@
 		lwu		t0,SP_PCBank	   ;\
         subu	_dest, R_PC, t0
 
-// set lower 16-bits of PC and 8-bit PB         
+// set lower 16-bits of PC and 8-bit PB
 // PB is always stored in CPU struct
 #define SNCPU_SET_PC24(_src)   		\
 		move	R_PC,_src		   ;\
         sw		zr, SP_PCBank	   ;\
 		lui		R_PCCount,0xC000   ;\
-        sw		R_PC,SNCPU_rPC	   
+        sw		R_PC,SNCPU_rPC
 
-// set lower 16-bits of PC while preserving 8-bit PB         
+// set lower 16-bits of PC while preserving 8-bit PB
 // PB is always stored in CPU struct
 // set PCCount to force bankswitch
 #define SNCPU_SET_PC16(_src)   		\
         sh		_src,SNCPU_rPC	   ;\
         sw		zr, SP_PCBank	   ;\
 		lui		R_PCCount,0xC000   ;\
-        lwu		R_PC,SNCPU_rPC	   
-
-
+        lwu		R_PC,SNCPU_rPC
 
 // branch relative
 // add rel to PC
-// subtract rel from pccount. 
+// subtract rel from pccount.
 // if pccount >= SNCPU_BANK_SIZE then force bankswitch
 #define SNCPU_BREL_PC16(_rel)				\
         subu	R_PCCount,R_PCCount,_rel				;\
         lui		t1,0xC000								;\
         sltiu	t0, R_PCCount,SNCPU_BANK_SIZE			;\
 		addu	R_PC,R_PC,_rel							;\
-        movz	R_PCCount,t1,t0 
+        movz	R_PCCount,t1,t0
 
 /* Taken 8-bit branches cost another cycle on an emulation-mode page cross.
    Compare logical PCs, not host pointers, because the mapped bank base is not
@@ -406,7 +378,6 @@
 		sll		t0,t0,1						;\
 		subu	R_Cycles,R_Cycles,t0
 
-
 #define SNCPU_FETCH8(_dest)  		   \
 		jal		_SNCPU_Fetch8		;  \
         nop							;  \
@@ -421,7 +392,6 @@
 		jal		_SNCPU_Fetch24		;  \
         nop							;  \
         move	_dest,R_Data
-
 
 #define SNCPU_READ8(_addr,_data)  	   \
 		jal		_SNCPU_Read8		;  \
@@ -474,9 +444,6 @@
 		move	R_Addr, _addr		;  \
 		jal		_SNCPU_Write24		;  \
 		move	R_Data, _data		   \
-
-
-
 
 #define SNCPU_RESTRICT_STACK() \
 		lbu		t0,SNCPU_rE			;\
@@ -623,9 +590,6 @@
 		lw		_dest,SP_Data0		;\
 		SNCPU_RESTRICT_STACK()
 
-
-
-
 #define SNCPU_SAVEREGSTATE() 				\
 		sw		R_PCCount, SP_Save0		   ; \
 		sw		R_DPMASK, SP_Save1		   ; \
@@ -639,9 +603,7 @@
         sh		R_DP, SNCPU_rDP			   ; \
         sw		R_DB, SNCPU_rDB			   ; \
         sb		R_P, SNCPU_rP			   ; \
-		sw		R_Cycles, SNCPU_Cycles		
-
-
+		sw		R_Cycles, SNCPU_Cycles
 
 #define SNCPU_LOADREGSTATE()			    \
 		lw		R_PCCount, SP_Save0		   ; \
@@ -656,10 +618,7 @@
         lhu		R_DP, SNCPU_rDP			   ; \
         lwu		R_DB, SNCPU_rDB			   ; \
         lbu		R_P, SNCPU_rP			   ; \
-		lw		R_Cycles,SNCPU_Cycles	   
-
-
-
+		lw		R_Cycles,SNCPU_Cycles
 
 /*
 //
@@ -676,10 +635,10 @@
 */
 
 _SNCPU_Write8:
-		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank 
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank
 
 		beq		t0,zr,_SNCPU_Write8ZeroBank
-        sll		t0,t0,4									// t0 = (bank << 4) 
+        sll		t0,t0,4									// t0 = (bank << 4)
 
         addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
 
@@ -688,28 +647,27 @@ _SNCPU_Write8:
 
         bgez	t2,_SNCPU_Write8Trap					// if !RAM goto write trap
         andi	t2,t2,0xFF								// t2 = nCycles
-        
+
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 
-		jr		ra										
+		jr		ra
         sb		R_Data, 0(t0)							// load byte unsigned
-        
 
 _SNCPU_Write8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
         addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_SLOW		// zero bank is slow
         addu	t0,t0,R_Addr
-		jr		ra										
+		jr		ra
         sb		R_Data, 0(t0)							// load byte unsigned
-        
+
 _SNCPU_Write8Trap:
         lw		t1,SNCPU_WriteTrap(t0)					// t1 -> trap handler
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 
 		// save volatile and temporary registers
-		sw		ra,SP_RA1				   
-		sw		R_Data,SP_Data0				   
+		sw		ra,SP_RA1
+		sw		R_Data,SP_Data0
         SNCPU_SAVEREGSTATE()
 
 		// call trap handler
@@ -720,7 +678,7 @@ _SNCPU_Write8Trap:
 
 		// restore volatile and temporary registers
 		lw		ra,SP_RA1
-		lw		R_Data,SP_Data0				   
+		lw		R_Data,SP_Data0
         SNCPU_LOADREGSTATE()
 
 		jr		ra
@@ -742,20 +700,19 @@ _SNCPU_Write8Trap:
 //
 */
 
-
 _SNCPU_Write16_Slow:
 		sw		ra, SP_RA0
 
 		jal		_SNCPU_Write8		// write addr + 0 (00XX)
         addiu	R_Addr,R_Addr,0
-        
+
         srl		R_Data,R_Data,8
 		jal		_SNCPU_Write8		// write addr + 1 (XX00)
         addiu	R_Addr,R_Addr,1
 
 		lw		ra, SP_RA0
         addiu	R_Addr,R_Addr,-1
-        
+
         jr		ra					// return
         nop
 
@@ -763,7 +720,7 @@ _SNCPU_Write16:
 
 _SNCPU_Write16_Fast:
         addiu	t1,R_Addr,1								// t1 = addr + 1
-		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank 
+		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank
 
         srl		t1,t1,SNCPU_BANK_SHIFT					// t1 = second bank
         sll		t0,t2,4									// t0 = (bank << 4) & bank mask
@@ -776,17 +733,16 @@ _SNCPU_Write16_Fast:
 
         bgez	t2,_SNCPU_Write16Trap					// if !RAM goto write trap
         andi	t2,t2,0xFF								// t2 = nCycles
-        
+
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
         srl		t1,R_Data,8								// t1 = high byte
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 
-        sb		R_Data, 0(t0)							// store low byte 
+        sb		R_Data, 0(t0)							// store low byte
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 
-		jr		ra										
-        sb		t1, 1(t0)								// store high byte 
-
+		jr		ra
+        sb		t1, 1(t0)								// store high byte
 
 _SNCPU_Write16Trap:
         lw		t1,SNCPU_WriteTrap(t0)					// t1 -> trap handler
@@ -794,8 +750,8 @@ _SNCPU_Write16Trap:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 
 		// save volatile and temporary registers
-		sw		ra,SP_RA1				   
-		sw		R_Data,SP_Data0				   
+		sw		ra,SP_RA1
+		sw		R_Data,SP_Data0
         SNCPU_SAVEREGSTATE()
 
         sw		t1, SP_SaveTrap
@@ -806,9 +762,8 @@ _SNCPU_Write16Trap:
 		jalr	t1
         andi	a2,R_Data, 0xFF
 
-		lw		R_Data,SP_Data0				   
+		lw		R_Data,SP_Data0
         lw		t1, SP_SaveTrap
-
 
 		// call trap handler
 		move	a0, R_pCpu
@@ -818,13 +773,12 @@ _SNCPU_Write16Trap:
         andi	a2,a2, 0xFF
 
 		// restore volatile and temporary registers
-		lw		ra,SP_RA1				   
-		lw		R_Data,SP_Data0				   
+		lw		ra,SP_RA1
+		lw		R_Data,SP_Data0
         SNCPU_LOADREGSTATE()
 
 		jr		ra
         nop
-
 
 /* Store a word without allowing the high byte to carry into the next bank.
    This is the 65816 rule for 16-bit direct, stack-relative, and indirect
@@ -850,11 +804,6 @@ _SNCPU_Write16Wrap16:
 		jr		ra
 		nop
 
-
-        
-
-
-
 /*
 //
 // _SNCPU_Read8
@@ -872,8 +821,8 @@ _SNCPU_Write16Wrap16:
 */
 
 _SNCPU_Read8:
-		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank 
-        
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank
+
         beq		t0,zr,_SNCPU_Read8ZeroBank
         sll		t0,t0,4									// t0 = (bank << 4) & bank mask
 
@@ -887,25 +836,23 @@ _SNCPU_Read8:
 
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
 
-		jr		ra										
+		jr		ra
         lbu		R_Data, 0(t0)							// load byte unsigned
-
 
 _SNCPU_Read8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
         addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_SLOW		// zero bank is slow
         addu	t0,t0,R_Addr
-		jr		ra										
+		jr		ra
         lbu		R_Data, 0(t0)							// load byte unsigned
 
-        
 _SNCPU_Read8Trap:
         lw		t1,SNCPU_ReadTrap(t0)					// t1 -> trap handler
 
 		// save volatile and temporary registers
-		sw		ra,SP_RA1				   
+		sw		ra,SP_RA1
         SNCPU_SAVEREGSTATE()
-        
+
 		// call trap handler
 		move	a0, R_pCpu
 		jalr	t1
@@ -913,13 +860,11 @@ _SNCPU_Read8Trap:
 
         andi	R_Data, v0, 0xFF
 
-		lw		ra,SP_RA1				   
+		lw		ra,SP_RA1
         SNCPU_LOADREGSTATE()
 
 		jr		ra
         nop
-
-
 
 /*
 //
@@ -944,24 +889,21 @@ _SNCPU_Read16_Slow:
 		jal		_SNCPU_Read8		// read addr + 0(00XX)
         addiu	R_Addr,R_Addr,0
         sb		R_Data,SP_Data0
-        
 
 		jal		_SNCPU_Read8		// read addr + 1  (XX00)
         addiu	R_Addr,R_Addr,1
         sb		R_Data,SP_Data1
-        
+
 		lw		ra, SP_RA0
         lhu		R_Data,SP_Data0
-        
+
         jr		ra					// return
         addiu	R_Addr,R_Addr,-1
-
-
 
 _SNCPU_Read16:
 _SNCPU_Read16_Fast:
         addiu	t1,R_Addr,1								// t1 = addr + 1
-		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank 
+		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank
 
         srl		t1,t1,SNCPU_BANK_SHIFT					// t1 = second bank
         sll		t0,t2,4									// t0 = (bank << 4) & bank mask
@@ -979,22 +921,21 @@ _SNCPU_Read16_Fast:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for second memory access
 
         lwr		R_Data, 0(t0)							// load word
-        lwl		R_Data, 3(t0)							
+        lwl		R_Data, 3(t0)
 
-		jr		ra	
+		jr		ra
         andi	R_Data,R_Data,0xFFFF
-        
-        
+
 _SNCPU_Read16Trap:
         lw		t1,SNCPU_ReadTrap(t0)					// t1 -> trap handler
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for second memory access
 
 		// save volatile and temporary registers
-		sw		ra,SP_RA1				   
+		sw		ra,SP_RA1
         SNCPU_SAVEREGSTATE()
 
         sw		t1, SP_SaveTrap
-        
+
 		// read lower byte
 		move	a0, R_pCpu
 		jalr	t1
@@ -1002,22 +943,19 @@ _SNCPU_Read16Trap:
         sb		v0,SP_Data0
 
         lw		t1, SP_SaveTrap
-        
+
 		// read upper byte
 		move	a0, R_pCpu
 		jalr	t1
 		addiu	a1, R_Addr,1
         sb		v0,SP_Data1
 
-		lw		ra,SP_RA1				   
-        lhu		R_Data,SP_Data0						
+		lw		ra,SP_RA1
+        lhu		R_Data,SP_Data0
         SNCPU_LOADREGSTATE()
 
 		jr		ra
         nop
-
-
-
 
 /*
 //
@@ -1051,13 +989,12 @@ _SNCPU_Read24:
 		jal		_SNCPU_Read8		// read addr + 2  (XX0000)
         addiu	R_Addr,R_Addr,1
         sb		R_Data,SP_Data2
-        
+
 		lw		ra, SP_RA0
         lw		R_Data,SP_Data0
-        
-		jr		ra					// return
-        addiu	R_Addr,R_Addr,-2	
 
+		jr		ra					// return
+        addiu	R_Addr,R_Addr,-2
 
 /* Word and long pointer/data reads wrap the low 16 address bits while
    preserving the bank.  The normal path still uses the original fast reader;
@@ -1082,7 +1019,6 @@ _SNCPU_Read16Wrap16:
 		lw		ra,SP_RA0
 		jr		ra
 		lhu		R_Data,SP_Data0
-
 
 /* Direct-page indirect pointers additionally wrap inside D's page in
    emulation mode when DL is zero.  R_DPMASK contains both that page base and
@@ -1112,7 +1048,6 @@ _SNCPU_Read16DP:
 		lw		ra,SP_RA0
 		jr		ra
 		lhu		R_Data,SP_Data0
-
 
 _SNCPU_Read24Wrap16:
 		andi	t0,R_Addr,0xFFFF
@@ -1152,11 +1087,6 @@ _SNCPU_Read24Wrap16:
 		jr		ra
 		lw		R_Data,SP_Data0
 
-
-
-
-
-
 /*
 //
 // _SNCPU_Fetch8
@@ -1185,16 +1115,15 @@ _SNCPU_Fetch8Fast:
 		jr		ra
         subu	R_Cycles,R_Cycles,R_PCCycles
 
-
 _SNCPU_Fetch8Update:
 		lwu		t0,SP_PCBank			// restore PC to normal
 
         subu	R_PC, R_PC, t0
 
         sh		R_PC,SNCPU_rPC	  		// dont allow PB to change. It may only change by a SETPC24
-        lwu		R_PC,SNCPU_rPC	   
+        lwu		R_PC,SNCPU_rPC
 
-		srl		t0,R_PC,SNCPU_BANK_SHIFT					// t0 = pc bank 
+		srl		t0,R_PC,SNCPU_BANK_SHIFT					// t0 = pc bank
         sll		t0,t0,4										// t0 = (bank << 4) & bank mask
         addu	t0,t0,R_pCpu								// t0 -> Bank[bank]
 
@@ -1205,27 +1134,22 @@ _SNCPU_Fetch8Update:
         sw		t1,SP_PCBank								// save pcbank
 
         andi	R_PCCount, R_PC, SNCPU_BANK_MASK		// R_PCCount = PC & 0x1FFF ^ 0x1FFF
-        xori	R_PCCount, R_PCCount, SNCPU_BANK_MASK 
+        xori	R_PCCount, R_PCCount, SNCPU_BANK_MASK
 
 		j		_SNCPU_Fetch8Fast        					// refetch byte
         addu	R_PC,t1,R_PC  								// R_PC -> bank read addr +  R_PC
 
 _SNCPU_Fetch8Trap:
-		lui		R_PCCount,0xC000							// invalidate PCCount 
+		lui		R_PCCount,0xC000							// invalidate PCCount
         move	R_Addr, R_PC								// perform trap at PC address
 		j		_SNCPU_Read8
         addiu	R_PC,R_PC,1
-
-
 
 _SNCPU_Fetch8Slow:
 		move	R_Addr, R_PC
 
 		j		_SNCPU_Read8
         addiu	R_PC,R_PC,1		// increment pc
-
-
-
 
 /*
 //
@@ -1246,8 +1170,6 @@ _SNCPU_Fetch8Slow:
 //
 */
 
-
-
 _SNCPU_Fetch16:
 
 _SNCPU_Fetch16Fast:
@@ -1257,19 +1179,17 @@ _SNCPU_Fetch16Fast:
         subu	R_Cycles,R_Cycles,R_PCCycles
 
         lwr		R_Data, 0(R_PC)							// load word
-        lwl		R_Data, 3(R_PC)							
+        lwl		R_Data, 3(R_PC)
 
         addiu	R_PC,R_PC,2
         subu	R_Cycles,R_Cycles,R_PCCycles
 
-
 		jr		ra
         andi	R_Data,R_Data,0xFFFF
 
-
 _SNCPU_Fetch16Trap:
 		sw		ra, SP_RA0
-        
+
         jal		_SNCPU_Fetch8
 		addiu	R_PCCount,R_PCCount,2
 
@@ -1278,19 +1198,15 @@ _SNCPU_Fetch16Trap:
 
         lw		ra, SP_RA0
         sb		R_Data,SP_Data1
-        
+
         jr		ra
         lhu		R_Data,SP_Data0
-
-
 
 _SNCPU_Fetch16Slow:
 		move	R_Addr, R_PC
 
 		j		_SNCPU_Read16
         addiu	R_PC,R_PC,2		// increment pc
-
-
 
 /*
 //
@@ -1311,7 +1227,6 @@ _SNCPU_Fetch16Slow:
 //
 */
 
-
 _SNCPU_Fetch24:
 _SNCPU_Fetch24Fast:
 		addiu	R_PCCount,R_PCCount,-1
@@ -1322,7 +1237,7 @@ _SNCPU_Fetch24Fast:
         subu	R_Cycles,R_Cycles,R_PCCycles
 
         lwr		R_Data, 0(R_PC)							// load word
-        lwl		R_Data, 3(R_PC)							
+        lwl		R_Data, 3(R_PC)
 
         addiu	R_PC,R_PC,3
         subu	R_Cycles,R_Cycles,R_PCCycles
@@ -1335,7 +1250,7 @@ _SNCPU_Fetch24Fast:
 _SNCPU_Fetch24Trap:
 		sw		ra, SP_RA0
         sw		zr, SP_Data0
-        
+
         jal		_SNCPU_Fetch8
 		addiu	R_PCCount,R_PCCount,3
 
@@ -1347,18 +1262,15 @@ _SNCPU_Fetch24Trap:
 
         lw		ra, SP_RA0
         sb		R_Data,SP_Data2
-        
+
         jr		ra
         lw		R_Data,SP_Data0
-
-
 
 _SNCPU_Fetch24Slow:
 		move	R_Addr, R_PC
 
 		j		_SNCPU_Read24
         addiu	R_PC,R_PC,3		// increment pc
-        
 
 /*
 //
@@ -1370,10 +1282,10 @@ _SNCPU_Fetch24Slow:
 //  	R_fN = N???????
 //  	R_fZ = ZZZZZZZZ
 //  	R_fC = 0000000C
-//	
+//
 //
 //	Outputs:
-//		R_P = flags | N | Z | C	
+//		R_P = flags | N | Z | C
 //
 //  Destroyed:
 //
@@ -1396,8 +1308,6 @@ _SNCPU_ComposeFlags:
 
 		jr		ra
         movz	R_P,t1,R_fZ
-        
-
 
 /*
 //
@@ -1422,19 +1332,13 @@ _SNCPU_DecomposeFlags:
 		andi	R_fC, R_P, SNCPU_FLAG_C
 		sll		R_fN, R_P, 8
         xori	R_fZ, R_fZ, SNCPU_FLAG_Z
-        
+
         andi	t0,R_P, SNCPU_FLAG_X
         andi	t1,R_X, 0xFF
         andi	t2,R_Y, 0xFF
         movn	R_X,t1,t0
 		j		_SNCPU_UpdateOpTable
         movn	R_Y,t2,t0
-
-
-
-
-
-
 
 /*
 //
@@ -1445,7 +1349,7 @@ _SNCPU_DecomposeFlags:
 //		R_P 		= processor flags
 //		SNCPU_rE 	= E-bit
 //
-//	Outputs:		   
+//	Outputs:
 //		R_pOpTable	-> opcode table
 //
 //	if e=0
@@ -1454,7 +1358,7 @@ _SNCPU_DecomposeFlags:
 //	if e=1
 //		R_DP is preserved (XCE never clears D on a real 65C816)
 //		R_S		    = 0x01??
-//		R_P		   |= SNCPU_FLAG_M | SNCPU_FLAG_X 
+//		R_P		   |= SNCPU_FLAG_M | SNCPU_FLAG_X
 //
 //  Destroyed:
 //		t0-t2
@@ -1464,7 +1368,7 @@ _SNCPU_DecomposeFlags:
 _SNCPU_UpdateOpTable:
 		lbu		t0, SNCPU_rE				// t0 = E bit
 		andi	t1, R_P, 0x30				// t1 = M and X bits
-        
+
         bne		t0,zr, _E1
         nop
 
@@ -1476,18 +1380,16 @@ _E0:
 		j		_SNCPU_UpdateDPMask
         addu	R_pOpTable,R_pOpTable,t1
 
-
 // E=1
 _E1:
 		la		R_pOpTable, _SNCPU_OpTable	// get pointer to optable base
         addiu	R_pOpTable,R_pOpTable, 0x400*4	// point to E=1 instructions
-        ori		R_P,R_P, SNCPU_FLAG_M | SNCPU_FLAG_X 
+        ori		R_P,R_P, SNCPU_FLAG_M | SNCPU_FLAG_X
         andi	R_X,R_X,0x00FF
         andi	R_Y,R_Y,0x00FF
         andi	R_S,R_S,0x00FF
 		j		_SNCPU_UpdateDPMask
         ori		R_S,R_S,0x0100
-
 
 // Refresh cached direct-page wrapping and timing state after E or D changes.
 _SNCPU_UpdateDPMask:
@@ -1514,8 +1416,6 @@ _SNCPU_DPMaskDone:
 		jr		ra
 		nop
 
-
-
 //
 // adc sbc functions
 //
@@ -1532,7 +1432,7 @@ _SNCPU_ADC8:
         nor		t1,t1,zr						 // t1= ~(target ^ src)
         and		t1,t1,t2						 // t1 = (dest ^ target) &	~(target ^ src)
         srl		t1,t1,1							 // shift into bit position
-        andi	t1,t1,SNCPU_FLAG_V	  			
+        andi	t1,t1,SNCPU_FLAG_V
         or		R_P,R_P,t1
 
 		andi	t1,R_P,SNCPU_FLAG_D
@@ -1542,18 +1442,17 @@ _SNCPU_ADC8:
 		jr		ra
 		nop
 
-
 _SNCPU_ADC16:
-        andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF		
-		move	t0,R_t2						
-        addu	R_t2,R_t2,R_t1				
+        andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF
+		move	t0,R_t2
+        addu	R_t2,R_t2,R_t1
         addu	R_t2,R_t2,R_fC					 // dest+= carry
-        xor		t1,t0,R_t1						
-        xor		t2,t0,R_t2						
-        nor		t1,t1,zr						
-        and		t1,t1,t2						
-        srl		t1,t1,9							
-        andi	t1,t1,SNCPU_FLAG_V	  			
+        xor		t1,t0,R_t1
+        xor		t2,t0,R_t2
+        nor		t1,t1,zr
+        and		t1,t1,t2
+        srl		t1,t1,9
+        andi	t1,t1,SNCPU_FLAG_V
         or		R_P,R_P,t1
 
 		andi	t1,R_P,SNCPU_FLAG_D
@@ -1563,19 +1462,17 @@ _SNCPU_ADC16:
 		jr		ra
 		nop
 
-
-
 _SNCPU_SBC8:
-        andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF		
-		move	t0,R_t2						
-        addu	R_t2,R_t2,R_t1				
+        andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF
+		move	t0,R_t2
+        addu	R_t2,R_t2,R_t1
         addu	R_t2,R_t2,R_fC					 // dest+= carry
-        xor		t1,t0,R_t1						
-        xor		t2,t0,R_t2						
-        nor		t1,t1,zr						
-        and		t1,t1,t2						
-        srl		t1,t1,1							
-        andi	t1,t1,SNCPU_FLAG_V	  			
+        xor		t1,t0,R_t1
+        xor		t2,t0,R_t2
+        nor		t1,t1,zr
+        and		t1,t1,t2
+        srl		t1,t1,1
+        andi	t1,t1,SNCPU_FLAG_V
         or		R_P,R_P,t1
 
 		andi	t1,R_P,SNCPU_FLAG_D
@@ -1586,16 +1483,16 @@ _SNCPU_SBC8:
 		nop
 
 _SNCPU_SBC16:
-        andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF		
-		move	t0,R_t2						
-        addu	R_t2,R_t2,R_t1				
+        andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF
+		move	t0,R_t2
+        addu	R_t2,R_t2,R_t1
         addu	R_t2,R_t2,R_fC					 // dest+= carry
-        xor		t1,t0,R_t1						
-        xor		t2,t0,R_t2						
-        nor		t1,t1,zr						
-        and		t1,t1,t2						
-        srl		t1,t1,9							
-        andi	t1,t1,SNCPU_FLAG_V	  			
+        xor		t1,t0,R_t1
+        xor		t2,t0,R_t2
+        nor		t1,t1,zr
+        and		t1,t1,t2
+        srl		t1,t1,9
+        andi	t1,t1,SNCPU_FLAG_V
         or		R_P,R_P,t1
 
 		andi	t1,R_P,SNCPU_FLAG_D
@@ -1604,7 +1501,6 @@ _SNCPU_SBC16:
 
 		jr		ra
 		nop
-
 
 #define _SNCPU_DECIMAL_CALL(_helper) \
 		sw		ra,SP_RA0			;\
@@ -1647,9 +1543,6 @@ _SNCPU_SBC16_DECIMAL:
 		jr		ra
 		nop
 
-
-
-
 /*
 //
 //	 _SNCPUExecute_ASM
@@ -1668,7 +1561,6 @@ _SNCPU_SBC16_DECIMAL:
 //
 */
 
-
 SNCPUExecute_ASM:
 		addiu	sp,sp,-0x80
         sd		s0,0x00(sp)
@@ -1684,33 +1576,28 @@ SNCPUExecute_ASM:
 
 		move	R_pCpu, a0
 
-
 //
 //
 //
 
 		SNCPU_LOADREGSTATE();
 
-        
         jal		_SNCPU_DecomposeFlags		// decompose flags
         nop
-        
+
         // setup PC
 		lwu		R_PC, SNCPU_rPC
 		sw		zr,SP_PCBank
         move	R_PCCycles,zr
-		lui		R_PCCount,0xC000							// invalidate PCCount 
-  
+		lui		R_PCCount,0xC000							// invalidate PCCount
 
 //
 // interpreter loop
 //
 
-
-
 	// fetch opcode
 _SNCPUExecute_Loop:
-        
+
 		bltz	R_PCCount,_SNCPU_ExecuteFetchUpdate
 		addiu	R_PCCount,R_PCCount,-1
 
@@ -1719,64 +1606,53 @@ _SNCPUExecute_Loop:
 		blez	R_Cycles, _SNCPUExecute_Done
         addiu	R_PC,R_PC,1
 
-
 		sll		t0, R_Data, 2							// R_Data = opcode * 4
 
         addu	t0, t0, R_pOpTable  					// t0 = OpTable + opcode * 4
 
         lw		t0, 0x00(t0)							// t0 -> opcode function
         subu	R_Cycles,R_Cycles,R_PCCycles
-        
+
         jr		t0
         nop
-
 
 _SNCPU_ExecuteFetchUpdate:
 		blez	R_Cycles, _SNCPUExecute_Done
         addiu	R_PC,R_PC,1
 
-
 		jal		_SNCPU_Fetch8Update				// reads data, pc+=1
         addiu	R_PC,R_PC,-1
-        
 
 		sll		t0, R_Data, 2							// R_Data = opcode * 4
         addu	t0, t0, R_pOpTable  					// t0 = OpTable + opcode * 4
         lw		t0, 0x00(t0)							// t0 -> opcode function
         jr		t0
         nop
-        
 
-		
   /*
 
 _SNCPUExecute_Loop:
 		blez	R_Cycles, _SNCPUExecute_Done
         nop
-        
+
 		jal		_SNCPU_Fetch8
-        nop		
+        nop
 
 		sll		t0, R_Data, 2							// R_Data = opcode * 4
 
         addu	t0, t0, R_pOpTable  					// t0 = OpTable + opcode * 4
 
         lw		t0, 0x00(t0)							// t0 -> opcode function
-        
+
         jr		t0
         nop
-*/        		 
-
-
+*/
 
 _SNCPUExecute_Abort:
 
-
-
 //
 //
 //
-
 
 _SNCPUExecute_Done:
         addiu	R_PC,R_PC,-1
@@ -1788,9 +1664,8 @@ _SNCPUExecute_DoneNoRewind:
 
         jal		_SNCPU_ComposeFlags		// decompose flags
         nop
-	  
-		SNCPU_SAVEREGSTATE();
 
+		SNCPU_SAVEREGSTATE();
 
 //
 // cleanup stack frame
@@ -1808,10 +1683,6 @@ _SNCPUExecute_DoneNoRewind:
         ld		s0,0x00(sp)
 		jr		ra
 		addiu	sp,sp,0x80
-
-
-
-
 
 		// addr_imm8_SEP_
 	SNCPU_OP_E0(e2);
@@ -1844,10 +1715,8 @@ _SNCPUExecute_DoneNoRewind:
 
         addu	R_pOpTable,R_pOpTable,t1
 
-
 	SNCPU_ENDOP(1)
 
-        
 		// addr_imm8_REP_
 	SNCPU_OP_E0(c2);
 		SNCPU_FETCH8(R_t0);
@@ -1855,7 +1724,7 @@ _SNCPUExecute_DoneNoRewind:
         SNCPU_AND(R_P,R_t0);
 
 		la		R_pOpTable, _SNCPU_OpTable	// get pointer to optable base
-        
+
         // clear C flag
         and		R_fC, R_fC, R_t0
 
@@ -1875,8 +1744,6 @@ _SNCPUExecute_DoneNoRewind:
 		SNCPU_CHECKIRQ(1)
 
 	SNCPU_ENDOP(1)
-
-
 
 		// addr_imm8_SEP_
 	SNCPU_OP_E1(e2);
@@ -1903,21 +1770,19 @@ _SNCPUExecute_DoneNoRewind:
         movn	R_X,t1,t0
         movn	R_Y,t2,t0
 
-		jal		_SNCPU_UpdateOpTable		
+		jal		_SNCPU_UpdateOpTable
         nop
-
 
 	SNCPU_ENDOP(1)
 
-        
 		// addr_imm8_REP_
 	SNCPU_OP_E1(c2);
 		SNCPU_FETCH8(R_t0);
-        
+
         // clear bits of P
         SNCPU_OR(R_P,R_t0);
         SNCPU_XOR(R_P,R_t0);
-        
+
         // clear C flag
         andi 	t0,R_t0,SNCPU_FLAG_C
         or		R_fC, R_fC, t0
@@ -1932,37 +1797,32 @@ _SNCPUExecute_DoneNoRewind:
         andi 	t2,R_t0,SNCPU_FLAG_Z
         movn	R_fZ, R_t0, t2
 
-		jal		_SNCPU_UpdateOpTable		
+		jal		_SNCPU_UpdateOpTable
         nop
 		SNCPU_CHECKIRQ(1)
 
 	SNCPU_ENDOP(1)
 
-
-
-
 	SNCPU_OP_ALL(10);
 		// BPL N=0
         SNCPU_GETFLAG_N(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_TRUE(R_t1)
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
 		SNCPU_BREL8_PC16(R_t0);
 	SNCPU_ENDOP(1)
 
-
-
 	SNCPU_OP_ALL(30);
 		// BMI N=1
         SNCPU_GETFLAG_N(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_FALSE(R_t1);
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
@@ -1973,9 +1833,9 @@ _SNCPUExecute_DoneNoRewind:
 		// BEQ Z=1
         SNCPU_GETFLAG_Z(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_FALSE(R_t1);
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
@@ -1986,23 +1846,22 @@ _SNCPUExecute_DoneNoRewind:
 		// BNE Z=0
         SNCPU_GETFLAG_Z(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_TRUE(R_t1);
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
 		SNCPU_BREL8_PC16(R_t0);
 	SNCPU_ENDOP(1)
 
-
 	SNCPU_OP_ALL(90);
 		// BCC
         SNCPU_GETFLAG_C(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_TRUE(R_t1);
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
@@ -2013,9 +1872,9 @@ _SNCPUExecute_DoneNoRewind:
 		// BCS
         SNCPU_GETFLAG_C(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_FALSE(R_t1);
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
@@ -2026,9 +1885,9 @@ _SNCPUExecute_DoneNoRewind:
 		// BVC
         SNCPU_GETFLAG_V(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_TRUE(R_t1);
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
@@ -2039,15 +1898,14 @@ _SNCPUExecute_DoneNoRewind:
 		// BVS
         SNCPU_GETFLAG_V(R_t1);
 		SNCPU_FETCH8(R_t0)
-        
+
         SNCPU_BREAK_FALSE(R_t1);
-        
+
         SNCPU_SHLI(R_t0,24)
         SNCPU_SRAI(R_t0,24)
 
 		SNCPU_BREL8_PC16(R_t0);
 	SNCPU_ENDOP(1)
-
 
 	SNCPU_OP_ALL(80);
 		// BRA
@@ -2058,11 +1916,6 @@ _SNCPUExecute_DoneNoRewind:
 
 		SNCPU_BREL8_PC16(R_t0);
 	SNCPU_ENDOP(1)
-        
-
-
-
-
 
 	SNCPU_OP_ALL(82);
 
@@ -2075,7 +1928,6 @@ _SNCPUExecute_DoneNoRewind:
 		SNCPU_BREL_PC16(R_t0);
 	SNCPU_ENDOP(1)
 
-
 	SNCPU_OP_X0(54);
 
 		// MVN
@@ -2084,28 +1936,27 @@ _SNCPUExecute_DoneNoRewind:
 
         SNCPU_SHLI(R_t0,16)
         SNCPU_SHLI(R_t1,16)
-        
-        SNCPU_SET_DB(R_t0)		// set DB 
-        
+
+        SNCPU_SET_DB(R_t0)		// set DB
+
         SNCPU_OR(R_t0, R_Y)
         SNCPU_OR(R_t1, R_X)
-        
+
         SNCPU_READ8(R_t1, R_t2)
         SNCPU_WRITE8(R_t0,R_t2)
-        
+
         SNCPU_ADDI(R_X, 1)
         SNCPU_ADDI(R_Y, 1)
         SNCPU_ANDI(R_X,0xFFFF)
         SNCPU_ANDI(R_Y,0xFFFF)
-        
+
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
         movn	R_PC,t0,R_A
         movn	R_PCCount,t1,R_A
-        
+
         SNCPU_ADDI(R_A, -1)
 	SNCPU_ENDOP(2)
-        
 
 	SNCPU_OP_X1E1(54);
 
@@ -2115,28 +1966,27 @@ _SNCPUExecute_DoneNoRewind:
 
         SNCPU_SHLI(R_t0,16)
         SNCPU_SHLI(R_t1,16)
-        
-        SNCPU_SET_DB(R_t0)		// set DB 
-        
+
+        SNCPU_SET_DB(R_t0)		// set DB
+
         SNCPU_OR(R_t0, R_Y)
         SNCPU_OR(R_t1, R_X)
-        
+
         SNCPU_READ8(R_t1, R_t2)
         SNCPU_WRITE8(R_t0,R_t2)
-        
+
         SNCPU_ADDI(R_X, 1)
         SNCPU_ADDI(R_Y, 1)
         SNCPU_ANDI(R_X,0xFF)
         SNCPU_ANDI(R_Y,0xFF)
-        
+
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
         movn	R_PC,t0,R_A
         movn	R_PCCount,t1,R_A
-        
+
         SNCPU_ADDI(R_A, -1)
 	SNCPU_ENDOP(2)
-
 
 	SNCPU_OP_X0(44);
 
@@ -2146,28 +1996,27 @@ _SNCPUExecute_DoneNoRewind:
 
         SNCPU_SHLI(R_t0,16)
         SNCPU_SHLI(R_t1,16)
-        
-        SNCPU_SET_DB(R_t0)		// set DB 
-        
+
+        SNCPU_SET_DB(R_t0)		// set DB
+
         SNCPU_OR(R_t0, R_Y)
         SNCPU_OR(R_t1, R_X)
-        
+
         SNCPU_READ8(R_t1, R_t2)
         SNCPU_WRITE8(R_t0,R_t2)
-        
+
         SNCPU_ADDI(R_X, -1)
         SNCPU_ADDI(R_Y, -1)
         SNCPU_ANDI(R_X,0xFFFF)
         SNCPU_ANDI(R_Y,0xFFFF)
-        
+
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
         movn	R_PC,t0,R_A
         movn	R_PCCount,t1,R_A
-        
+
         SNCPU_ADDI(R_A, -1)
 	SNCPU_ENDOP(2)
-        
 
 	SNCPU_OP_X1E1(44);
 
@@ -2177,28 +2026,27 @@ _SNCPUExecute_DoneNoRewind:
 
         SNCPU_SHLI(R_t0,16)
         SNCPU_SHLI(R_t1,16)
-        
-        SNCPU_SET_DB(R_t0)		// set DB 
-        
+
+        SNCPU_SET_DB(R_t0)		// set DB
+
         SNCPU_OR(R_t0, R_Y)
         SNCPU_OR(R_t1, R_X)
-        
+
         SNCPU_READ8(R_t1, R_t2)
         SNCPU_WRITE8(R_t0,R_t2)
-        
+
         SNCPU_ADDI(R_X, -1)
         SNCPU_ADDI(R_Y, -1)
         SNCPU_ANDI(R_X,0xFF)
         SNCPU_ANDI(R_Y,0xFF)
-        
+
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
         movn	R_PC,t0,R_A
         movn	R_PCCount,t1,R_A
-        
+
         SNCPU_ADDI(R_A, -1)
 	SNCPU_ENDOP(2)
-
 
 	SNCPU_OP_ALL(cb);
 		lbu		t0,SNCPU_uSignal
@@ -2234,7 +2082,6 @@ _WAI_SkipIRQ:
 		SNCPU_FETCH8(R_t0)
 	SNCPU_ENDOP(0)
 
-
 	SNCPU_OP_ALL(db);
 		// STP: latch the stopped state until reset.
 		lbu		t0,SNCPU_uSignal
@@ -2243,7 +2090,5 @@ _WAI_SkipIRQ:
 		move	R_Cycles,zr
 		j		_SNCPUExecute_DoneNoRewind
 		nop
-
-
 
 #include "op65816_mips.h"

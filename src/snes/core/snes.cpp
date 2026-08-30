@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snes behavior for the SNES emulation core.
+ */
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -348,9 +356,7 @@ static void SnesDbgResetSession(void)
 
 #endif
 
-
-#define SNES_SYNCPPUEVERYLINE (CODE_DEBUG && 0) 
-
+#define SNES_SYNCPPUEVERYLINE (CODE_DEBUG && 0)
 
 void SnesSystem::SyncSPC(Int32 uExtra)
 {
@@ -359,23 +365,22 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 /*#if SNES_DEBUG
     if (g_bStateDebug)
     {
-        ConDebug("SyncSPC cpu=%06d spc=%06d\n", 
+        ConDebug("SyncSPC cpu=%06d spc=%06d\n",
             SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME),
             SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME)
             );
 
     }
-#endif */     
+#endif */
 
     Int32 CpuTime = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME);
     Int32 SpcTime = SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME);
 
-    // get cycle count 
+    // get cycle count
     nCycles = CpuTime - SpcTime - m_Spc.Cycles;
     nCycles += uExtra;
     if (nCycles > (SNSPC_CYCLE * SNES_SPCMINCYCLES))
     {
-        //SnesDebug("SNSPCExec: %d\n", nCycles);
         // execute SPC
         PROF_ENTER("SNSpcExecute");
 #if SNDBG_LOG
@@ -393,26 +398,20 @@ void SnesSystem::SyncSPC(Int32 uExtra)
     }
 
 //#if SNES_DEBUG
-//    if (g_bStateDebug)
 //    {
-//        ConDebug("DoneSyncSPC cpu=%06d spc=%06d\n", 
+//        ConDebug("DoneSyncSPC cpu=%06d spc=%06d\n",
 //            SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME),
 //            SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME)
 //            );
-//
 //    }
-//#endif      
+//#endif
 
-    
-    
-    
-    
     /*
-    // get cycle count 
+    // get cycle count
     nCycles = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME) - SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME);
     nCycles += uExtra;
 
-    // get cycle count 
+    // get cycle count
     PROF_ENTER("SNSpcExecute");
     SNSPCExecuteToCycle( &m_Spc, nCycles );
     PROF_LEAVE("SNSpcExecute");
@@ -422,14 +421,12 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 #endif
 */
 
-
     /*
-	// get cycle count 
+	// get cycle count
 	nCycles = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME) - SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME);
 	nCycles += uExtra;
 	if (nCycles > (SNSPC_CYCLE * SNES_SPCMINCYCLES))
 	{
-		//SnesDebug("SNSPCExec: %d\n", nCycles);
 		// execute SPC
         PROF_ENTER("SNSpcExecute");
 		SNSPCExecute(&m_Spc, nCycles);
@@ -441,7 +438,6 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 	}
     */
 }
-
 
 inline void SnesSystem::SyncPPU()
 {
@@ -465,7 +461,6 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000Debug(SNCpuT *pCpu, Uint32 uAddr)
     return uData;
 }
 #endif
-
 
 Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 {
@@ -518,7 +513,6 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	{
 
 	case 0x2137: // slhv
-		//SnesDebug("readppu_slhv\n");
 		pPPURegs->ophct.Reg.w = (SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_LINE) + 14) >> 2;
 		pPPURegs->opvct.Reg.w = pSnes->m_uLine & 0x1FF;
 		//pPPURegs->opvct.Reg.w |= (pPPURegs->opvct.Reg.w << 8) & 0xFE00;
@@ -656,7 +650,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	if (uAddr < 0x2140)
 	{
-		// enqueue write to ppu, if it fails (full) then force a sync 
+		// enqueue write to ppu, if it fails (full) then force a sync
 		#if SNPPU_WRITEQUEUE
 		while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
 		{
@@ -713,7 +707,6 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 Uint8 _CPUHackMem[0x10000];
 #endif
 
-
 #if SNES_DEBUG
 Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000Debug(SNCpuT *pCpu, Uint32 uAddr)
 {
@@ -746,9 +739,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 	} else
 	switch (uAddr)
 	{
-    //
     // 40XX
-    //
     case 0x4016:	// serial joystick port
         SNCPUConsumeCycles(&pSnes->m_Cpu, 2);       //access from 4000>41FF is 1.78mhz
         return pIO->ReadSerial0();
@@ -756,9 +747,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
         SNCPUConsumeCycles(&pSnes->m_Cpu, 2);       //access from 4000>41FF is 1.78mhz
         return pIO->ReadSerial1();
 
-    //
     // 42XX
-    //
     case 0x4202:	// wrmpya (multiplicand-a)
 		return 0; // ? pIO->m_Regs.wrmpya
 	case 0x4203:	// wrmpyb (multiplicand-b)
@@ -781,7 +770,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
             return uData;
         }
 
-    case 0x4211:	// TIMEUP 
+    case 0x4211:	// TIMEUP
         {
             Uint8 uData = pIO->m_Regs.timeup;
             pIO->m_Regs.timeup &= ~0x80;
@@ -1010,7 +999,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
             }
             break;
 
-		case 0x4211:	// TIMEUP 
+		case 0x4211:	// TIMEUP
 			pIO->m_Regs.timeup &= ~0x80;
 			SNCPUSignalIRQ(pCpu, 0);
 			break;
@@ -1021,7 +1010,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		case 0x4214:	// RDDIVL
 		case 0x4215:	// RDDIVH
 		case 0x4216:	// RDMPYL
-		case 0x4217:	// RDMPYH 
+		case 0x4217:	// RDMPYH
 			break; // mario ??
 
 		default:
@@ -1045,7 +1034,6 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadMem(SNCpuT *pCpu, Uint32 uAddr)
 	return 0;
 }
 
-
 void SNCPU_TRAPFUNC SnesSystem::WriteMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 //	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
@@ -1061,7 +1049,6 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadSRAM(SNCpuT *pCpu, Uint32 uAddr)
 	Uint8 *pSRAM =  pSnes->GetSRAM();
 	return pSRAM[uAddr & (pSnes->m_uSramSize-1)];
 }
-
 
 void SNCPU_TRAPFUNC SnesSystem::WriteSRAM(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
@@ -1123,7 +1110,6 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	}
 }
 
-
 void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
@@ -1145,7 +1131,6 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 #endif
 
-
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadGSU(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
@@ -1164,7 +1149,6 @@ void SNCPU_TRAPFUNC SnesSystem::WriteGSU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData
 	pSnes->m_GSU.WriteReg((Uint16)(uAddr & 0xFFFF), uData);
 }
 
-
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadOBC1(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
@@ -1182,7 +1166,6 @@ void SNCPU_TRAPFUNC SnesSystem::WriteOBC1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	#endif
 	pSnes->m_OBC1.Write(uAddr & 0xFFFF, uData);
 }
-
 
 // CX4 (Mega Man X2/X3). O chip le dados direto da ROM (vertices, sprites,
 // blocos de DMA); o callback resolve um endereco SNES de 24 bits via a CPU.
@@ -1208,22 +1191,6 @@ void SNCPU_TRAPFUNC SnesSystem::WriteCX4(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData
 	#endif
 	pSnes->m_CX4.Write(uAddr & 0xFFFF, uData);
 }
-
-
-//
-//
-//
-
-
-
-
-
-
-
-
-//
-//
-//
 
 SnesSystem::SnesSystem()
 {
@@ -1279,7 +1246,7 @@ SnesSystem::~SnesSystem()
 	SNSPCDelete(&m_Spc);
 #if SNES_DSP1
 	m_pDsp = NULL;
-#endif 
+#endif
 }
 
 void SnesSystem::Reset()
@@ -1299,7 +1266,7 @@ void SnesSystem::Reset()
 	{
 		m_pDsp->Reset();
 	}
-#endif 
+#endif
 
 	m_OBC1.Reset();
 
@@ -1351,7 +1318,6 @@ void SnesSystem::SoftReset()
 #endif
 }
 
-
 void SnesSystem::SetRom(class Emu::Rom *pRom)
 {
 	SetSnesRom((SnesRom *)pRom);
@@ -1372,7 +1338,7 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 	m_pDsp = NULL;
 	m_DSP1.SetTargetYSubtract(FALSE);
 	m_DSP1.SetOriginalDistanceBug(FALSE);
-#endif 
+#endif
 	m_bDynamicHVIRQ = FALSE;
 	// set rom
 	m_pRom = pRom;
@@ -1392,7 +1358,7 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 		#endif
 		// setup memory mapping for this rom
 		MapMem(m_pRom->m_eMapping, m_pRom->m_Flags);
-	} 
+	}
 	else
 	{
 		// reset mapping
@@ -1401,11 +1367,6 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 		m_uSramSize = 0;
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-
-
 
 Int32 SnesSystem::CalculateLineIRQCycle()
 {
@@ -1422,7 +1383,6 @@ Int32 SnesSystem::CalculateLineIRQCycle()
 
 	return bH ? SNES_HIRQ_CYCLES(m_IO.m_Regs.htime.w) : -1;
 }
-
 
 void SnesSystem::RescheduleLineIRQ(Bool bAllowImmediate)
 {
@@ -1441,7 +1401,6 @@ void SnesSystem::RescheduleLineIRQ(Bool bAllowImmediate)
 #endif
 	SNCPUAbort(&m_Cpu);
 }
-
 
 void SnesSystem::ExecuteCPU(Int32 nCycles)
 {
@@ -1502,7 +1461,7 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
                         ConDebug("interesting");
                     }
                     #endif
-                } 
+                }
 
                 // continue...dont allow CPU to run unless it has cycle time available
                 continue;
@@ -1579,8 +1538,8 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
                 SNCPUReset(&m_Cpu, FALSE);
 
                 m_Cpu.uSignal&= ~SNCPU_SIGNAL_RESET;
-            } 
-        }			
+            }
+        }
 
         assert(m_DMAC.GetMDMAEnable() == 0);
 
@@ -1590,8 +1549,6 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 			break;
     }
 }
-
-
 
 void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 {
@@ -1689,7 +1646,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
         // execute up to h-irq
         ExecuteCPU(nIRQCycles);
 
-        // set irq flag 
+        // set irq flag
         m_IO.m_Regs.timeup |= 0x80;
 
 		/* Aero the Acro-Bat 2 waits for $4212.VBlank to clear while its
@@ -1724,8 +1681,6 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 
     nIRQCycles -= nCycles;
 }
-
-
 
 void SnesSystem::ExecuteLine()
 {
@@ -1842,9 +1797,6 @@ void SnesSystem::ExecuteLine()
 	PROF_LEAVE("ExecLine");
 }
 
-
-
-
 void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, CMixBuffer *pSound, ModeE eMode)
 {
     m_uLine = 0;
@@ -1943,7 +1895,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 
 	m_PPURender.BeginRender(pTarget);
 	m_PPU.BeginFrame();
-	
+
 	for (m_uLine=0; m_uLine < (224+1); m_uLine++)
 	{
 		#if SNES_SYNCPPUEVERYLINE
@@ -1958,9 +1910,6 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 
 	m_PPU.EndFrame();
 	m_PPURender.EndRender();
-
-    //ExecuteLine();
-    //ExecuteLine();
 
 	// confirmed:
 	// nmi is triggered from hi->lo transition (edge level interrupt)
@@ -2003,9 +1952,6 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_IO.m_Regs.hvbjoy&= ~0x80;
 	PROF_LEAVE("ExecVBLANK");
 
-	//SNCPUConsumeCycles(&m_Cpu, SNES_CYCLESPERLINE);
-	//SNCPUExecute(&m_Cpu, SNES_CYCLESPERLINE);
-
 	SyncPPU();
 	SyncSPC();
 
@@ -2025,7 +1971,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #endif
 	PROF_LEAVE("SNSpcDspUpdate");
 
-	// ensure that all queued registers have been committed 
+	// ensure that all queued registers have been committed
 	m_SpcDsp.Sync();
 
 	switch (eMode)
@@ -2492,7 +2438,6 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_uFrame++;
 }
 
-
 Int32 SnesSystem::GetSRAMBytes()
 {
     if (m_pRom)
@@ -2501,7 +2446,7 @@ Int32 SnesSystem::GetSRAMBytes()
     } else
     {
         return 0;
-    }               
+    }
 }
 
 Uint8 *SnesSystem::GetSRAMData()
@@ -2512,7 +2457,7 @@ Uint8 *SnesSystem::GetSRAMData()
     } else
     {
         return 0;
-    }               
+    }
 
 }
 
@@ -2520,20 +2465,18 @@ const char *SnesSystem::GetString(StringE eString)
 {
 	switch(eString)
 	{
-		case STRING_SHORTNAME:	
+		case STRING_SHORTNAME:
 			return (char *)"SNES";
-		case STRING_FULLNAME:	
+		case STRING_FULLNAME:
 			return (char *)"Super Nintendo";
-		case STRING_SRAMEXT:	
+		case STRING_SRAMEXT:
 			return (char *)"srm";
-		case STRING_STATEEXT:	
+		case STRING_STATEEXT:
 			return (char *)"sns";
 		default:
 			return NULL;
 	}
 }
-
-
 
 #ifdef SNES_DEBUG
 

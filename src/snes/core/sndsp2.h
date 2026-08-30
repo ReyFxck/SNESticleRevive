@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sndsp2 interface for the SNES emulation core.
+ */
+
+/*
  * sndsp2.h - DSP-2 (NEC uPD7725) coprocessor HLE
  *
  * O DSP-2 e' da mesma familia do DSP-1, mas a microcode e os comandos

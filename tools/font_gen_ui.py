@@ -1,3 +1,9 @@
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Generates the embedded user-interface font assets.
+
 from PIL import Image, ImageFont, ImageDraw
 FONT="/projects/sandbox/_fontwork/m5x7.ttf"; SIZE=16; NAME="ui"; ATLAS_W=256; GAP=1
 charset=list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")

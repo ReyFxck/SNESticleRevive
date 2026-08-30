@@ -1,10 +1,15 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the audmixbuffer interface for shared rendering and audio buffers.
+ */
 
 #ifndef _AUDMIXBUFFER_H
 #define _AUDMIXBUFFER_H
 
-
 #include "mixbuffer.h"
-
 
 #define AUDMIXBUFFER_MAXENQUEUE (800*5)
 
@@ -22,7 +27,6 @@ class AudMixBuffer : public CMixBuffer
 
     Int32   ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples, Int32 *pPrevSample);
     Int32   ConvertSamplesStereo_32000(Int16 *pLeftSamples, Int16 *pRightSamples, Int16 *pOutLeft, Int16 *pOutRight, Int32 nInSamples);
-
 
 public:
     AudMixBuffer(Uint32 uSampleRate = 48000, Bool bAsync = FALSE);
@@ -42,7 +46,6 @@ public:
     virtual void Flush();
 };
 
-
 /* Game (emulator) audio volume: 0..100, where 100 = the build's base gain.
    Shared by SNES and NES (single _AudMix).  Exposed for the Video Config. */
 #ifdef __cplusplus
@@ -53,6 +56,5 @@ int  AudMixGameGetVolume(void);
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif

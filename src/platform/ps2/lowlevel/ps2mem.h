@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the ps2mem interface for low-level PlayStation 2 support.
+ */
 
 #ifndef _PS2MEM_H
 #define _PS2MEM_H
-
 
 #define PS2MEM_ADDR_SCRATCHPAD      (0x70000000)
 #define PS2MEM_ADDR_VU0MICROMEM     (0x11000000)
@@ -18,10 +24,8 @@
 #define PS2MEM_SNES_LOOKUP_ADDR     (PS2MEM_SCRATCHPAD + PS2MEM_SNES_LOOKUP_OFFSET)
 #define PS2MEM_SNES_LOOKUP_SIZE     (4608)
 
-
 #define PS2MEM_CACHED(_Addr)        (((Uint32)_Addr)&0x0FFFFFFF)
 #define PS2MEM_UNCACHED(_Addr)      (((Uint32)_Addr)|0x20000000)
 #define PS2MEM_UNCACHEDACCEL(_Addr) (((Uint32)_Addr)|0x30000000)
-
 
 #endif

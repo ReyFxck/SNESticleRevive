@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements proflog behavior for shared debugging support.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,15 +24,8 @@ typedef struct ProfLogSection_t
 	Int32	Count[PROF_COUNTER_NUM];
 } ProfLogSectionT;
 
-
 static Int32 _ProfLog_nSections;
 static ProfLogSectionT _ProfLog_Section[PROFLOG_MAXSECTIONS];
-
-
-
-//
-//
-//
 
 static void _ProfLogTabify(Int32 nTabs)
 {
@@ -34,7 +35,6 @@ static void _ProfLogTabify(Int32 nTabs)
 		nTabs--;
 	}
 }
-
 
 static Bool _ProfLogEntryEqual(ProfLogEntryT *pA, ProfLogEntryT *pB)
 {
@@ -71,7 +71,6 @@ static ProfLogSectionT *_ProfLogAddSection(char *pSectionName)
 	return pSection;
 }
 
-
 static void _ProfLogSection(Bool bPrint, Int32 nTabs, char *pSectionName, ProfLogEntryT *pBegin, ProfLogEntryT *pEnd)
 {
 	Int32 nCount[PROF_COUNTER_NUM];
@@ -98,7 +97,6 @@ static void _ProfLogSection(Bool bPrint, Int32 nTabs, char *pSectionName, ProfLo
 	}
 }
 
-
 /* Profiler output also goes to DLog (EE SIO -> NetherSX2 logs.txt), the
    reliable channel: ConPrint's on-screen console is disabled in this
    build, so DLog is the only way the summary actually reaches the user.
@@ -115,13 +113,13 @@ static void _ProfLogPrintSummary(ProfLogSectionT *pSection, Int32 nSections)
 
 	for (iSection=0; iSection < nSections; iSection++)
 	{
-		if (pSection->nEntry > 0) 
+		if (pSection->nEntry > 0)
 		{
-			ConPrint("%-24s %4d %7d %7d %7d %7d %7d %7d\n", pSection->pName, 
-                 pSection->nEntry, 
-                pSection->Count[PROF_COUNTER_COUNTER0], 
-                pSection->Count[PROF_COUNTER_COUNTER1], 
-                pSection->Count[PROF_COUNTER_CYCLE], 
+			ConPrint("%-24s %4d %7d %7d %7d %7d %7d %7d\n", pSection->pName,
+                 pSection->nEntry,
+                pSection->Count[PROF_COUNTER_COUNTER0],
+                pSection->Count[PROF_COUNTER_COUNTER1],
+                pSection->Count[PROF_COUNTER_CYCLE],
 
                 pSection->Count[PROF_COUNTER_COUNTER0] / pSection->nEntry,
                 pSection->Count[PROF_COUNTER_COUNTER1] / pSection->nEntry,
@@ -140,13 +138,6 @@ static void _ProfLogPrintSummary(ProfLogSectionT *pSection, Int32 nSections)
 	DLog("[prof] ==== end (CP0 Count ~2457600 cyc = 16.67ms at 147.456MHz) ====");
 }
 
-
-//
-//
-//
-
-
-
 void ProfLogNew(ProfLogT *pLog, Int32 MaxLogEntries)
 {
 	pLog->nEntries   = 0;
@@ -164,7 +155,6 @@ void ProfLogDelete(ProfLogT *pLog)
 		pLog->pLogStart  = NULL;
 	}
 }
-
 
 ProfLogEntryT *ProfLogBegin(ProfLogT *pLog)
 {
@@ -191,9 +181,6 @@ void ProfLogPrint(ProfLogT *pLog, Bool bPrintLog, Bool bPrintSummary)
 	Int32 iStackPtr;
 	ProfLogEntryT *pLastEntry = NULL;
 
-
-//	ConPrint("Profile log:\n");
-
 	 _ProfLog_nSections = 0;
 	 _ProfLogAddSection("<unknown>");
 
@@ -201,8 +188,6 @@ void ProfLogPrint(ProfLogT *pLog, Bool bPrintLog, Bool bPrintSummary)
 	for (iEntry=0; iEntry < pLog->nEntries; iEntry++)
 	{
 		ProfLogEntryT *pSectionEntry = NULL;
-        
-//        printf("%s %d\n", pEntry->pName, pEntry->Counter[PROF_COUNTER_CYCLE]);
 
 		if (pEntry->pName[0] == '!')
 		{
@@ -222,7 +207,6 @@ void ProfLogPrint(ProfLogT *pLog, Bool bPrintLog, Bool bPrintSummary)
 				// add unknown section
 				_ProfLogSection(bPrintLog, iStackPtr, "<unknown>", pEntry - 1, pEntry);
 			}
-
 
 			// section begin, push on stack
             if (iStackPtr >= PROFLOG_MAXDEPTH)
@@ -281,8 +265,7 @@ void ProfLogPrint(ProfLogT *pLog, Bool bPrintLog, Bool bPrintSummary)
     {
         ConError("ERROR: Begin without matching end %s\n", pLastEntry->pName);
     }
-    
-    
+
 	if (iStackPtr != 0)
     {
         ConError("ERROR: Stack not empty\n");

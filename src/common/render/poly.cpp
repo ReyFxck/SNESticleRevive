@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements poly behavior for shared rendering and audio buffers.
+ */
 
 #include <stdio.h>
 #include "types.h"
@@ -71,7 +78,6 @@ static void _PolyRect_tc(Float32 x0, Float32 y0, Float32 w, Float32 h)
         );
 }
 
-
 void PolyInit()
 {
 }
@@ -90,10 +96,10 @@ void PolyTexture(TextureT *pTexture)
 
         GPPrimSetTex(
             pTexture->uVramAddr,
-            pTexture->uWidth, 
+            pTexture->uWidth,
 
-            pTexture->uWidthLog2, 
-            pTexture->uHeightLog2, 
+            pTexture->uWidthLog2,
+            pTexture->uHeightLog2,
             pTexture->eFormat,
 
             0, 256, GS_PSMCT16,
@@ -101,9 +107,6 @@ void PolyTexture(TextureT *pTexture)
            );
     }
 
-
-
-//	printf("pt: %dx%d\n", pTexture->uWidth, pTexture->uHeight);
 }
 
 void PolyColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
@@ -123,16 +126,8 @@ void PolyColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
     _Poly_Color32 = GS_SET_RGBA(uR, uG, uB, uA);
 }
 
-
-
 void PolyST(Float32 s0, Float32 t0, Float32 s1, Float32 t1)
 {
-    #if 0
-	_Poly_ST[0].vx = s0;
-	_Poly_ST[0].vy = t0;
-	_Poly_ST[1].vx = s1;
-	_Poly_ST[1].vy = t1;
-    #endif
 
 	_Poly_UV[0].vx = s0 * _Poly_pTexture->uWidth;
 	_Poly_UV[0].vy = t0 * _Poly_pTexture->uHeight;
@@ -143,12 +138,6 @@ void PolyST(Float32 s0, Float32 t0, Float32 s1, Float32 t1)
 
 void PolyUV(Int32 u0, Int32 v0, Int32 w, Int32 h)
 {
-    #if 0
-	_Poly_ST[0].vx = ((Float32)u0) * _Poly_pTexture->fInvWidth;
-	_Poly_ST[0].vy = ((Float32)v0) * _Poly_pTexture->fInvHeight;
-	_Poly_ST[1].vx = ((Float32)(u0+w)) * _Poly_pTexture->fInvWidth;
-	_Poly_ST[1].vy = ((Float32)(v0+h)) * _Poly_pTexture->fInvHeight;
-    #endif
 
 	_Poly_UV[0].vx = ((Float32)u0);
 	_Poly_UV[0].vy = ((Float32)v0);
@@ -178,28 +167,11 @@ void PolyRect(Float32 x0, Float32 y0, Float32 w, Float32 h)
 	}
 }
 
-
 void PolySprite(Float32 x0, Float32 y0, Float32 w, Float32 h)
 {
 	if (_Poly_pTexture)
 	{
-//		_PolySprite_tc(x0,y0,w,h);
 	} else
 	{
-//		_PolySprite_c(x0,y0,w,h);
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

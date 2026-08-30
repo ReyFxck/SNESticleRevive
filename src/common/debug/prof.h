@@ -1,4 +1,11 @@
-									  
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the prof interface for shared debugging support.
+ */
+
 #ifndef _PROF_H
 #define _PROF_H
 
@@ -16,11 +23,7 @@ extern ProfLogEntryT *Prof_pLogEnd;
 #define PROF_ENABLED ((CODE_PROFILE==TRUE) || FALSE)
 #endif
 
-
-
-//
 // profile section macros
-//
 
 #if PROF_ENABLED
 
@@ -54,23 +57,20 @@ static inline void ProfWriteEntry(const char *pName, Int32 uUser)
 
 #else
 
-#define PROF_ENTER(__SectionName) 
-#define PROF_LEAVE(__SectionName) 
-#define PROF_ENTER2(__SectionName,__x) 
-#define PROF_LEAVE2(__SectionName,__x) 
+#define PROF_ENTER(__SectionName)
+#define PROF_LEAVE(__SectionName)
+#define PROF_ENTER2(__SectionName,__x)
+#define PROF_LEAVE2(__SectionName,__x)
 
 #endif
-
 
 void ProfInit(Int32 MaxLogEntries);
 void ProfShutdown(void);
 void ProfProcess(void);
 void ProfStartProfile(Int32 nFrames);
 
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
 
 #endif

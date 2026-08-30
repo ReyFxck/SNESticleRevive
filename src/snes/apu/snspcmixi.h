@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snspcmixi interface for SNES audio processing.
+ */
 
 #ifndef _SNSPCMIXI_H
 #define _SNSPCMIXI_H
@@ -5,7 +12,7 @@
 class SNSpcDsp;
 
 // mixer interface
-class ISNSpcDspMix 
+class ISNSpcDspMix
 {
 	protected:
 	SNSpcDsp	*m_pDsp;
@@ -19,8 +26,6 @@ public:
 	virtual void	KeyOff(Int32 iChannel) = 0;
 	virtual void	Mix(class CMixBuffer *pOutBuffer) = 0;
 };
-
-
 
 class SNSpcDspMixNull  : public ISNSpcDspMix
 {

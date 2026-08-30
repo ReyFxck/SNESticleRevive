@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sncpu c interface for SNES CPU emulation.
+ */
 
 #ifndef _SNCPU_C_H
 #define _SNCPU_C_H

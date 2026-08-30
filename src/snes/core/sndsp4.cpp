@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sndsp4 behavior for the SNES emulation core.
+ */
+
+/*
  * sndsp4.cpp - DSP-4 (NEC uPD7725) coprocessor HLE  -- bus wrapper.
  *
  * Thin adapter between SNESticle's ISNDSP bus interface and the ZSNES DSP-4
@@ -17,12 +25,10 @@
 
 #include <string.h>
 
-// --------------------------------------------------------------------------
 //  Optional bus capture (diagnostic).  Logs every word in/out via DLog
 //  (-> EE SIO, visible in the emulator log) in the .vec format consumed by
 //  tools/dsp4test/dsp4_vectors.  Words are reassembled from the byte stream
 //  (LSB then MSB) per direction.  Kept lightweight; bounded by DSP4_CAP_MAX.
-// --------------------------------------------------------------------------
 extern "C" void DLog(const char *fmt, ...);
 
 #ifdef DSP4_CAPTURE
@@ -60,8 +66,6 @@ static void Dsp4CapReadByte(Uint8 b)
 static inline void Dsp4CapWriteByte(Uint8) {}
 static inline void Dsp4CapReadByte(Uint8) {}
 #endif
-
-//==========================================================================
 
 SNDSP4::SNDSP4()
 {

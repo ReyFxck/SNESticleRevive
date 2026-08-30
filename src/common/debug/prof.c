@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements prof behavior for shared debugging support.
+ */
 
 #include <stddef.h>
 #include "types.h"
@@ -5,22 +12,11 @@
 
 extern void DLog(const char *fmt, ...);
 
-
 ProfLogEntryT *Prof_pLogEntry;
 ProfLogEntryT *Prof_pLogEnd;
 
-//
-//
-//
-
 static ProfLogT _Prof_Log;
 static Int32 _Prof_nFrames = 0;
-
-
-//
-//
-//
-
 
 void ProfInit(Int32 MaxLogEntries)
 {
@@ -38,7 +34,6 @@ void ProfInit(Int32 MaxLogEntries)
 			(int)MaxLogEntries);
 }
 
-
 void ProfShutdown(void)
 {
 	ProfLogEnd(&_Prof_Log, Prof_pLogEntry);
@@ -49,13 +44,11 @@ void ProfShutdown(void)
 	ProfCtrShutdown();
 }
 
-
 void ProfStartProfile(Int32 nFrames)
 {
 	if (Prof_pLogEntry)
 		_Prof_nFrames = nFrames;
 }
-
 
 void ProfProcess(void)
 {
@@ -82,5 +75,3 @@ void ProfProcess(void)
 		Prof_pLogEntry = ProfLogBegin(&_Prof_Log);
 	}
 }
-
-

@@ -1,7 +1,15 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sncpu c behavior for SNES CPU emulation.
+ */
+
+/*
 	Problems:
 
-		PC can does not wrap to 16-bits. 
+		PC can does not wrap to 16-bits.
 		The Program Bank register is not affected by the Relative, Relative Long,
 		Absolute, Absolute Indirect, and Absolute Indexed Indirect addressing modes
 		or by incrementing the Program Counter from FFFF. The only instructions that
@@ -10,11 +18,8 @@
 		bank boundaries.
 
 		Extra cycle for (DP & FF)!=0
- 
+
  */
-
-
-
 
 #include <stdlib.h>
 #include <string.h>
@@ -26,9 +31,7 @@
 #define SNCPU_TRACE (CODE_DEBUG && FALSE)
 #define SNCPU_TRACE_NUM 256
 
-//
 // opcode begin/end
-//
 
 #define SNCPU_OPTABLE_BEGIN()
 #define SNCPU_OPTABLE_OP(x)
@@ -43,23 +46,23 @@
 	break;
 
 #define SNCPU_OP(_Opcode) \
-	case _Opcode:	
+	case _Opcode:
 
 #define SNCPU_OP_ALL(_Opcode) \
 	case 0x000|(_Opcode):	\
 	case 0x100|(_Opcode):	\
 	case 0x200|(_Opcode):	\
 	case 0x300|(_Opcode):	\
-	case 0x400|(_Opcode):	
+	case 0x400|(_Opcode):
 
 #define SNCPU_OP_E0(_Opcode) \
 	case 0x000|(_Opcode):	\
 	case 0x100|(_Opcode):	\
 	case 0x200|(_Opcode):	\
-	case 0x300|(_Opcode):	
+	case 0x300|(_Opcode):
 
 #define SNCPU_OP_E1(_Opcode) \
-	case 0x400|(_Opcode):	
+	case 0x400|(_Opcode):
 
 #define SNCPU_OP_X0(_Opcode) \
 	case 0x000|(_Opcode):	\
@@ -68,12 +71,9 @@
 #define SNCPU_OP_X1E1(_Opcode) \
 	case 0x100|(_Opcode):	\
 	case 0x300|(_Opcode):	\
-	case 0x400|(_Opcode):	
+	case 0x400|(_Opcode):
 
-//
 // i/o macros
-//
-
 
 #if defined(SNCPU_TEST) && SNCPU_TEST
 #define SNCPU_TESTCYCLES(_nCycles) pCpu->uTestCycles += (_nCycles);
@@ -103,35 +103,32 @@
 #define SNCPU_FETCH16(_Reg) _Reg=_SNCPUFetch16(pCpu, rPC); SNCPU_INC_PC(2)
 #define SNCPU_FETCH24(_Reg) _Reg=_SNCPUFetch24(pCpu, rPC); SNCPU_INC_PC(3)
 
-#define SNCPU_WRITE8(_Addr, _Data)  _SNCPUWrite8(pCpu, _Addr, _Data);  
-#define SNCPU_WRITE16(_Addr, _Data) _SNCPUWrite16(pCpu, _Addr, _Data); 
+#define SNCPU_WRITE8(_Addr, _Data)  _SNCPUWrite8(pCpu, _Addr, _Data);
+#define SNCPU_WRITE16(_Addr, _Data) _SNCPUWrite16(pCpu, _Addr, _Data);
 #define SNCPU_WRITE16_WRAP16(_Addr, _Data) \
 	_SNCPUWrite16Wrap16(pCpu, _Addr, _Data);
 
-#define SNCPU_READ8(_Addr, _x)  _x = _SNCPURead8(pCpu, _Addr);  
-#define SNCPU_READ16(_Addr, _x) _x = _SNCPURead16(pCpu, _Addr); 
+#define SNCPU_READ8(_Addr, _x)  _x = _SNCPURead8(pCpu, _Addr);
+#define SNCPU_READ16(_Addr, _x) _x = _SNCPURead16(pCpu, _Addr);
 #define SNCPU_READ16_WRAP16(_Addr, _x) _x = _SNCPURead16Wrap16(pCpu, _Addr);
 #define SNCPU_READ24_WRAP16(_Addr, _x) _x = _SNCPURead24Wrap16(pCpu, _Addr);
 #define SNCPU_READ16_DP(_Addr, _x) _x = _SNCPURead16DP(pCpu, _Addr, R_DPMASK);
 #define SNCPU_READ16_DPX(_Addr, _x) \
 	_x = _SNCPURead16Wrap16(pCpu, _Addr);
 
-#define SNCPU_PUSH8(_Data)	_SNCPUPush8(pCpu, _Data);  
-#define SNCPU_PUSH16(_Data)	_SNCPUPush16(pCpu, _Data); 
-#define SNCPU_PUSH24(_Data)	_SNCPUPush24(pCpu, _Data); 
+#define SNCPU_PUSH8(_Data)	_SNCPUPush8(pCpu, _Data);
+#define SNCPU_PUSH16(_Data)	_SNCPUPush16(pCpu, _Data);
+#define SNCPU_PUSH24(_Data)	_SNCPUPush24(pCpu, _Data);
 #define SNCPU_PUSH16_RAW(_Data) _SNCPUPush16Raw(pCpu, _Data);
 #define SNCPU_PUSH24_RAW(_Data) _SNCPUPush24Raw(pCpu, _Data);
-#define SNCPU_POP8(_x)	_x = _SNCPUPop8(pCpu);  
+#define SNCPU_POP8(_x)	_x = _SNCPUPop8(pCpu);
 #define SNCPU_POP8_RAW(_x) _x = _SNCPUPop8Raw(pCpu);
-#define SNCPU_POP16(_x)	_x = _SNCPUPop16(pCpu); 
-#define SNCPU_POP24(_x)	_x = _SNCPUPop24(pCpu); 
+#define SNCPU_POP16(_x)	_x = _SNCPUPop16(pCpu);
+#define SNCPU_POP24(_x)	_x = _SNCPUPop24(pCpu);
 #define SNCPU_POP16_RAW(_x) _x = _SNCPUPop16Raw(pCpu);
 #define SNCPU_POP24_RAW(_x) _x = _SNCPUPop24Raw(pCpu);
 
-
-//
 // register defines
-//
 
 #define fE    pCpu->Regs.rE
 #define R_DP   pCpu->Regs.rDP
@@ -153,9 +150,7 @@
 #define R_t1  t1
 #define R_t2  t2
 
-// 
 // get/set register
-//
 
 #define SNCPU_SET_A8(_x) R_A8 = _x;
 #define SNCPU_SET_X8(_x) R_X8 = _x;
@@ -194,12 +189,10 @@
 #define SNCPU_SET_PC24(_Addr)	\
 		R_PC= _Addr & 0xFFFFFF;
 
-#define SNCPU_SET_P(_x) R_P = _x; SNCPU_UNPACKFLAGS(); 
-#define SNCPU_GET_P(_x) SNCPU_PACKFLAGS(); _x = R_P; 
+#define SNCPU_SET_P(_x) R_P = _x; SNCPU_UNPACKFLAGS();
+#define SNCPU_GET_P(_x) SNCPU_PACKFLAGS(); _x = R_P;
 
-//
 // get/set flag
-//
 
 #define SNCPU_SETFLAG_Z8(_x)  fZ = (_x) << 8;
 #define SNCPU_SETFLAG_Z16(_x) fZ = (_x) << 0;
@@ -217,9 +210,7 @@
 #define SNCPU_SETFLAGI_V(__V) R_P &= ~SNCPU_FLAG_V; R_P |= ((__V) & 1) << 6;
 #define SNCPU_SETFLAG_V(__V) R_P &= ~SNCPU_FLAG_V; R_P |= ((__V) & 1) << 6;
 
-//
 // flag pack/unpack
-//
 
 /* In emulation mode, indexed direct-page addressing wraps in the selected
    page only when DL is zero.  Pack the page base in the upper half and the
@@ -284,8 +275,6 @@
 			}                                                   \
 		}                                                     \
 	} while (0);
-		
-
 
 #define SNCPU_UNPACKFLAGS()					\
 	fC = (R_P & SNCPU_FLAG_C);					\
@@ -294,16 +283,13 @@
 	if (R_P&SNCPU_FLAG_X) {pCpu->Regs.rX.b.h = 0; pCpu->Regs.rY.b.h = 0;} \
 	SNCPU_SETFLAG_E(pCpu->Regs.rE);
 
-
 #define SNCPU_PACKFLAGS()								\
 	R_P &= ~(SNCPU_FLAG_C | SNCPU_FLAG_Z |SNCPU_FLAG_N);	\
 	R_P |= fC;												\
 	R_P |= (fN >> 8) & 0x80;								\
-	if (!(fZ&0xFFFF)) R_P|=SNCPU_FLAG_Z;		
+	if (!(fZ&0xFFFF)) R_P|=SNCPU_FLAG_Z;
 
-//
 // operations
-//
 
 #define SNCPU_NOT8(_Dest) _Dest^=0xFF;
 #define SNCPU_NOT16(_Dest) _Dest^=0xFFFF;
@@ -325,7 +311,6 @@
 #define SNCPU_ANDI(_Dest, _Src) _Dest&=_Src;
 #define SNCPU_SHLI(_Dest, _Src) _Dest<<=_Src;
 #define SNCPU_SHRI(_Dest, _Src) _Dest>>=_Src;
-
 
 #define SNCPU_ADC8(_Dest,_Src)					\
 		{										\
@@ -374,7 +359,6 @@
 			else	R_P &= ~SNCPU_FLAG_V;		\
 			if (R_P & SNCPU_FLAG_D)	_Dest = _SNCpuDecimalSBC16((fC&1),_Target, _Src);				\
 		}
-
 
 #define SNCPU_BRREL(_bTest)				\
 		{								\
@@ -459,7 +443,6 @@ Uint32 _SNCpuDecimalSBC8(Uint32 uDest, Uint32 uTarget, Uint32 uSrc)
 	return uEncoded;
 }
 
-
 Uint32 _SNCpuDecimalSBC16(Uint32 uDest, Uint32 uTarget, Uint32 uSrc)
 {
 	Int32 iResult;
@@ -488,16 +471,7 @@ Uint32 _SNCpuDecimalSBC16(Uint32 uDest, Uint32 uTarget, Uint32 uSrc)
 	return uEncoded;
 }
 
-
-
-
-
-
-
-//
 // memory i/o
-//
-
 
 static __inline Uint8 __SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 {
@@ -520,7 +494,7 @@ static __inline Uint8 __SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 static Uint8 _SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 uData;
-	SNCPU_SUBMEMCYCLES(Addr,1); 
+	SNCPU_SUBMEMCYCLES(Addr,1);
 	uData =  __SNCPURead8(pCpu, Addr);
 	return  uData;
 }
@@ -528,7 +502,7 @@ static Uint8 _SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 static Uint16 _SNCPURead16(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 uData;
-	SNCPU_SUBMEMCYCLES(Addr,2); 
+	SNCPU_SUBMEMCYCLES(Addr,2);
 	uData =  __SNCPURead8(pCpu, Addr);
 	uData|= (__SNCPURead8(pCpu, Addr+1)<<8);
 	return  uData;
@@ -572,10 +546,6 @@ static Uint16 _SNCPURead16DP(SNCpuT *pCpu, Uint32 Addr, Uint32 uWrap)
 	return (Uint16)uData;
 }
 
-
-
-
-
 static __inline Uint8 __SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
@@ -590,7 +560,6 @@ static __inline Uint8 __SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
 	}
 	else
 	{
-		//return 0x00;
 		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
 
 	}
@@ -599,7 +568,7 @@ static __inline Uint8 __SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
 static Uint8 _SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 uData;
-	SNCPU_SUBMEMCYCLES(Addr,1); 
+	SNCPU_SUBMEMCYCLES(Addr,1);
 	uData =  __SNCPUFetch8(pCpu, Addr);
 	return  uData;
 }
@@ -629,10 +598,6 @@ static Uint32 _SNCPUFetch24(SNCpuT *pCpu, Uint32 Addr)
 	return  uData;
 }
 
-
-
-
-
 static __inline void  __SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 {
 	Uint32 iBank;
@@ -655,13 +620,13 @@ static __inline void  __SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 
 static void  _SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 {
-	SNCPU_SUBMEMCYCLES(Addr,1); 
+	SNCPU_SUBMEMCYCLES(Addr,1);
 	__SNCPUWrite8(pCpu, Addr + 0, Data >> 0);
 }
 
 static void  _SNCPUWrite16(SNCpuT *pCpu, Uint32 Addr, Uint16 Data)
 {
-	SNCPU_SUBMEMCYCLES(Addr,2); 
+	SNCPU_SUBMEMCYCLES(Addr,2);
 	__SNCPUWrite8(pCpu, Addr + 0, Data >> 0);
 	__SNCPUWrite8(pCpu, Addr + 1, Data >> 8);
 }
@@ -675,10 +640,9 @@ static void _SNCPUWrite16Wrap16(SNCpuT *pCpu, Uint32 Addr, Uint16 Data)
 	__SNCPUWrite8(pCpu, uAddr1, Data >> 8);
 }
 
-
 static void _SNCPUPush8(SNCpuT *pCpu, Uint8 Data)
 {
-	SNCPU_SUBCYCLESSLOW(1); 
+	SNCPU_SUBCYCLESSLOW(1);
 	__SNCPUWrite8(pCpu, pCpu->Regs.rS.w, Data);
 	if (pCpu->Regs.rE)
 	{
@@ -715,7 +679,7 @@ static Uint8 _SNCPUPop8(SNCpuT *pCpu)
 		// inc 16-bit S
 		pCpu->Regs.rS.w++;
 	}
-	SNCPU_SUBCYCLESSLOW(1); 
+	SNCPU_SUBCYCLESSLOW(1);
 	return __SNCPURead8(pCpu, pCpu->Regs.rS.w);
 }
 
@@ -726,7 +690,6 @@ static Uint16 _SNCPUPop16(SNCpuT *pCpu)
 	uData|= (_SNCPUPop8(pCpu)<<8);
 	return uData;
 }
-
 
 static Uint32 _SNCPUPop24(SNCpuT *pCpu)
 {
@@ -811,11 +774,6 @@ static Uint32 _SNCPUPop24Raw(SNCpuT *pCpu)
 	return uData;
 }
 
-
-//
-//
-//
-
 #if SNCPU_PROFILE
 #include <windows.h>
 #include <stdio.h>
@@ -844,11 +802,9 @@ void DumpExecCount()
 }
 #endif
 
-
 #if SNCPU_TRACE
 SNCpuRegsT _LastRegs[SNCPU_TRACE_NUM];
 #endif
-
 
 Int32 SNCPUExecute_C(SNCpuT *pCpu)
 {
@@ -859,7 +815,7 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 	Uint32 fN; // N??????? ????????
 	Uint32 fZ; // ZZZZZZZZ ZZZZZZZZ
 	Uint32 fC; // 00000000 0000000C
-	
+
 #if SNCPU_PROFILE
 	if (_bDumpExecCount)
 	{
@@ -869,7 +825,6 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 #endif
 
 	// registerize registers
-//	nCycles		= pCpu->Cycles;
 	rPC			= pCpu->Regs.rPC;
 
 	// UNPACK flags
@@ -880,7 +835,6 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 	{
 		Uint32 uOpcode;
 		Uint32 t0,t1,t2;
-
 
 #if SNCPU_TRACE
 		int i;
@@ -896,7 +850,6 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 			i++;
 		}*/
 #endif
-
 
 		SNCPU_FETCH8(uOpcode);
 		uOpcode|= uOpcodeMod;
@@ -917,7 +870,6 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 
 #include "op65816.h"
 
-
 		// addR_imm8_SEP_
 	SNCPU_OP_ALL(0xE2);
 		SNCPU_FETCH8(t1);
@@ -933,13 +885,13 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 
 		SNCPU_SUBCYCLES(1);
 		break;
-        
+
 		// addR_imm8_REP_
 	SNCPU_OP_ALL(0xC2);
 		SNCPU_FETCH8(t1);
 
 		R_P |= t1; // reset flags
-		R_P ^= t1; // 
+		R_P ^= t1; //
 
 		// update live flags
 		if (t1&SNCPU_FLAG_C) fC = 0;
@@ -999,10 +951,10 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 	SNCPU_OP_ALL(0x82);
 		// BRL
 		{
-			Int32	iRel;				
-			SNCPU_FETCH16(iRel);		
-			iRel <<=16;					
-			iRel >>=16;					
+			Int32	iRel;
+			SNCPU_FETCH16(iRel);
+			iRel <<=16;
+			iRel >>=16;
 			// maintain bank
 #if 1
 			iRel+= rPC;
@@ -1010,10 +962,9 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 #else
 			rPC+=iRel;
 #endif
-			SNCPU_SUBCYCLES(1);			
+			SNCPU_SUBCYCLES(1);
 		}
 		break;
-
 
 	SNCPU_OP_X0(0x54);
 		// MVN
@@ -1062,7 +1013,6 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 		}
 		SNCPU_SUBCYCLES(2);
 		break;
-
 
 	SNCPU_OP_X0(0x44);
 		// MVP
@@ -1146,7 +1096,6 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 
 	// restore registers
 	SNCPU_PACKFLAGS();
-//	pCpu->Cycles	= nCycles;
 	pCpu->Regs.rPC	= rPC;
 
 	return 0;

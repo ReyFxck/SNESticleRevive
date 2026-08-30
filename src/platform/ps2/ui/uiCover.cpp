@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements uiCover behavior for the PlayStation 2 user interface.
+ */
+
+/*
  * uiCover.cpp - Cover-art (capas) display for the ROM browser.
  *
  * Two-layer design so the (slow) cdfs/USB filesystem is touched as

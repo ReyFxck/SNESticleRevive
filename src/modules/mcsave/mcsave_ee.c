@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mcsave ee behavior for the PlayStation 2 memory-card save client.
+ */
 
 #include <tamtypes.h>
 #include <kernel.h>
@@ -6,7 +13,7 @@
 #include <string.h>
 #include <sifrpc.h>
 #include <stdarg.h>
-#define NEWLIB_PORT_AWARE 
+#define NEWLIB_PORT_AWARE
 #include <fileio.h>
 #include "mcsave_ee.h"
 
@@ -37,9 +44,9 @@ int MCSave_Init(int MaxSize)
 
 	while(1){
 		if (SifBindRpc( &cd0, MCSAVE_IRX, 0) < 0) return -1; // bind error
- 		if (cd0.server != 0) break;
-    	i = 0x10000;
-    	while(i--);
+		if (cd0.server != 0) break;
+	i = 0x10000;
+	while(i--);
 	}
 
 	sbuff[0] = MaxSize;
@@ -86,8 +93,6 @@ int MCSave_Write(char *pFileName, char *pData, int nBytes)
 		return 0;
 	}
 
-//    printf("MCSaveEE: %08X %d %s\n", (unsigned)pData, nBytes, pFileName);
-
     if (!_MCSave_bInitialized) return 0;
 
     // transfer data to sram buffer
@@ -99,7 +104,6 @@ int MCSave_Write(char *pFileName, char *pData, int nBytes)
 	FlushCache(0);
 
     i = SifSetDma(&sdt, 1); // start dma transfer
-//    while ((SifDmaStat(i) >= 0)); // wait for completion of dma transfer
 
     // perform async rpc
     _MCSave_bAsync= 1;

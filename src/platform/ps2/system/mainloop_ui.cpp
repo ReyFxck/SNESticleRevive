@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop ui behavior for the PlayStation 2 application runtime.
+ */
+
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -46,7 +54,6 @@ extern "C" void ScrPrintf(const Char *pFormat, ...)
 	vsprintf(str, pFormat, argptr);
 	va_end(argptr);
 
-//	scr_printf("%s", str);
 	if (_MainLoop_pLogScreen)
 		_MainLoop_pLogScreen->AddMessage(str);
 

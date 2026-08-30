@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sncx4 interface for the SNES emulation core.
+ */
+
+/*
  * sncx4.h - CX4 (Capcom/Hitachi HG51B169) coprocessor HLE
  *
  * O CX4 e' um coprocessador matematico programavel da Capcom, usado em

@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop menu behavior for the PlayStation 2 application runtime.
+ */
+
 #include <stdio.h>
 
 #include "types.h"
@@ -37,17 +45,6 @@ int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                 ppInstallFiles[0] = (char *)"BOOT.ELF"; // dest
                                 switch (Parm1)
                                 {
-#if 0
-                                        case 0:
-                                                // cdrom->mc0
-                                                ppInstallFiles[1] = VersionGetElfName(); // src
-                                                InstallFiles(mc0, "cdrom0:\\", ppInstallFiles, _MainLoopInstallCallback);
-                                                break;
-                                        case 1:
-                                                ppInstallFiles[1] = VersionGetElfName(); // src
-                                                InstallFiles(mc1, "cdrom0:\\", ppInstallFiles, _MainLoopInstallCallback);
-                                                break;
-#endif
                                         case 2:
                                                 ppInstallFiles[1] = (char *)"SNESTICLE.ELF"; // src
                                                 InstallFiles(mc0, (char *)"host:", ppInstallFiles, _MainLoopInstallCallback);
@@ -91,7 +88,6 @@ int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 
         return 0;
 }
-
 
 int _MainLoopLogEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 {
@@ -702,7 +698,6 @@ int _MainLoopMemCardFormatMenuEvent(
         return 1;
 }
 
-
 const char *_MainLoopMenuEntries[]=
 {
         (char *)"Copy cdrom0: -> mc0:",
@@ -717,7 +712,6 @@ const char *_MainLoopMenuEntries[]=
         (char *)"Copy rom0:libsd -> host:",
         NULL
 };
-
 
 char *_MainLoop_pInstallFiles[] =
 {

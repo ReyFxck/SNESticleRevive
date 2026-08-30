@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the types interface for shared base utilities.
+ */
 
 /*H********************************************************************
 
@@ -10,7 +17,6 @@
 	Notes:
 		None
 
-
 ********************************************************************H*/
 
 #ifndef _TYPES_H
@@ -21,7 +27,7 @@
 
 #ifndef ASSERT
 #define ASSERT assert
-#endif 
+#endif
 
 #ifndef FALSE
 #define FALSE 0
@@ -53,5 +59,3 @@ typedef unsigned int      Uint128 __attribute__(( mode(TI) ));
 #define _INLINE inline
 
 #endif
-
-

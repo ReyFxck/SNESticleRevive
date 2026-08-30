@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the poly interface for shared rendering and audio buffers.
+ */
 
 #ifndef _POLY_H
 #define _POLY_H
@@ -16,6 +23,4 @@ void PolySprite(Float32 x0, Float32 y0, Float32 w, Float32 h);
 void PolyMode(Uint32 uMode);
 void PolyBlend(Uint32 uBlend);
 
-
 #endif
-

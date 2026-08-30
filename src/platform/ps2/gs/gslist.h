@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the gslist interface for the PlayStation 2 Graphics Synthesizer backend.
+ */
 
 #ifndef _GSLIST_H
 #define _GSLIST_H
@@ -10,15 +17,12 @@ typedef struct
     Uint64 regs;
 } GSGifTagT;
 
-
 typedef int (*GSListFlushFuncT)(void);
-
 
 void  GSListBegin(Uint128 *pList, Uint32 nQwords, GSListFlushFuncT pFunc);
 Int32 GSListEnd();
 
 Int32 GSListSpace(Uint32 nMinQwords);
-
 
 void GSListSetPtr(Uint128 *pPtr);
 Uint128 *GSListGetPtr();
@@ -42,12 +46,10 @@ void GSGifTagOpenAD();
 void GSGifRegAD(Uint32 uAddr, Uint64 uData);
 void GSGifTagCloseAD();
 
-// gif tag 
+// gif tag
 void GSGifTagOpen(Uint64 GifTag, Uint64 GifRegs);
 void GSGifReg(Uint64 uData);
 void GSGifTagClose(void);
 void GSGifTagCloseNLoop(Int32 nLoop);
 
-
 #endif
-

@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the proflog interface for shared debugging support.
+ */
 
 #ifndef _PROFLOG_H
 #define _PROFLOG_H
@@ -7,14 +13,13 @@
 extern "C" {
 #endif /* __cplusplus */
 
-
-enum 
+enum
 {
 	PROF_COUNTER_CYCLE,
 	PROF_COUNTER_COUNTER0,
 	PROF_COUNTER_COUNTER1,
 	PROF_COUNTER_USER,
-	PROF_COUNTER_NUM 
+	PROF_COUNTER_NUM
 };
 
 typedef struct ProfLogEntry_t
@@ -38,13 +43,8 @@ void ProfLogEnd(ProfLogT *pLog, ProfLogEntryT *pEntry);
 void ProfLogParse(ProfLogT *pLog);
 void ProfLogPrint(ProfLogT *pLog, Bool bPrintLog, Bool bPrintSummary);
 
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
 #endif
-
-
-
-

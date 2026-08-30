@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppucolor behavior for SNES picture processing.
+ */
 
 #include <math.h>
 #include <string.h>
@@ -10,7 +17,6 @@
 
 // factors are only accurate to three decimal places.
 const float k_epsilon = 0.001f;
-
 
 static Uint32 _SNPPUColor_Pal15to32[SNPPUCOLOR_NUM];
 static Int32 _SNPPUColor_Profile = SNPPU_COLOR_PROFILE_ORIGINAL;
@@ -49,7 +55,7 @@ static void _SNPPUColorCalibrateColor(float *pR, float *pG, float *pB,
 
 		float coolant;
 		// Calculate the ratio between the maximum chroma range allowed
-		// and the current chroma range. 
+		// and the current chroma range.
 		if (maxComposite > 1.0 + fMaxExcursion)
 		{
 			// The maximum chroma range is the maximum composite value
@@ -79,9 +85,6 @@ static void _SNPPUColorCalibrateColor(float *pR, float *pG, float *pB,
 	*pB = b;
 }
 
-
-
-
 Uint32 SNPPUColorConvert15to32(Uint16 uColor15)
 {
 	return _SNPPUColor_Pal15to32[uColor15 & 0x7FFF];
@@ -92,7 +95,7 @@ void SNPPUColorSetColors(const Uint32 *pColors, Int32 nColors)
 	if (nColors > SNPPUCOLOR_NUM) nColors=SNPPUCOLOR_NUM;
 
 	// copy color data
-	memcpy(_SNPPUColor_Pal15to32, pColors, nColors * sizeof(Uint32)); 
+	memcpy(_SNPPUColor_Pal15to32, pColors, nColors * sizeof(Uint32));
 }
 
 Uint32 *SNPPUColorGetPalette()
@@ -123,7 +126,6 @@ void SNPPUColorSetProfile(Int32 iProfile)
 		SNPPUColorCalibrate(&_SNPPUColor_LastCalib);
 }
 
-
 void SNPPUColorCalibrate(const SNPPUColorCalibT *pCalib)
 {
 	Uint32 uColor15;
@@ -137,7 +139,7 @@ void SNPPUColorCalibrate(const SNPPUColorCalibT *pCalib)
 
 	fCos = cosf(pCalib->fIQAngle * (float)M_PI / 180.0f);
 	fSin = sinf(pCalib->fIQAngle * (float)M_PI / 180.0f);
-	
+
 	// go through all possible colors
 	for (uColor15=0; uColor15 < SNPPUCOLOR_NUM; uColor15++)
 	{
@@ -166,11 +168,11 @@ void SNPPUColorCalibrate(const SNPPUColorCalibT *pCalib)
 		}
 
 		// clamp R,G,B
-		if (fR > 1.0f) fR = 1.0f; 
+		if (fR > 1.0f) fR = 1.0f;
 		if (fR < 0.0f) fR = 0.0f;
-		if (fG > 1.0f) fG = 1.0f; 
+		if (fG > 1.0f) fG = 1.0f;
 		if (fG < 0.0f) fG = 0.0f;
-		if (fB > 1.0f) fB = 1.0f; 
+		if (fB > 1.0f) fB = 1.0f;
 		if (fB < 0.0f) fB = 0.0f;
 
 		// convert float -> int
@@ -187,4 +189,3 @@ void SNPPUColorCalibrate(const SNPPUColorCalibT *pCalib)
 		_SNPPUColor_Pal15to32[uColor15] = uColor32;
 	}
 }
-

@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the embedded irx interface for the PlayStation 2 application runtime.
+ */
+
 #ifndef _EMBEDDED_IRX_H
 #define _EMBEDDED_IRX_H
 

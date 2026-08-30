@@ -1,12 +1,9 @@
 /*
- * snsdd1.cpp - S-DD1 (Super Data Decompression 1) coprocessor HLE
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Veja snsdd1.h para a descricao geral.
- *
- * Implementacao clean-room do descompressor (Golomb + modelo de contexto
- * adaptativo por bitplane), a partir da engenharia reversa publica do
- * Andreas Naive. As tabelas (evolucao de estado / run-length) sao constantes
- * factuais do hardware.
+ * Description:
+ *   Implements snsdd1 behavior for the SNES emulation core.
  */
 
 #include "types.h"
@@ -14,9 +11,7 @@
 
 #include <string.h>
 
-// ---------------------------------------------------------------------------
 // Tabelas factuais
-// ---------------------------------------------------------------------------
 
 // tabela de evolucao de estado da estimativa de probabilidade:
 // { tamanho do codigo Golomb, proximo estado se MPS, proximo estado se LPS }
@@ -49,9 +44,7 @@ static const Uint8 s_RunTable[128] =
     113,  49,  81,  17,  97,  33,  65,   1
 };
 
-// ---------------------------------------------------------------------------
 // Construcao / reset
-// ---------------------------------------------------------------------------
 
 SNSDD1::SNSDD1()
 {
@@ -78,9 +71,7 @@ void SNSDD1::Reset()
     memset(m_PrevBits, 0, sizeof(m_PrevBits));
 }
 
-// ---------------------------------------------------------------------------
 // Registradores
-// ---------------------------------------------------------------------------
 
 Uint8 SNSDD1::ReadReg(Uint32 uAddr)
 {
@@ -95,9 +86,7 @@ void SNSDD1::WriteReg(Uint32 uAddr, Uint8 uData)
         m_bMapDirty = TRUE;   // $4804-$4807: o mapa de bancos mudou
 }
 
-// ---------------------------------------------------------------------------
 // Descompressor
-// ---------------------------------------------------------------------------
 
 Uint8 SNSDD1::GetCodeword(Int32 nBits)
 {

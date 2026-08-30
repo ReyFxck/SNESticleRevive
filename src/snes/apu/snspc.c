@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspc behavior for SNES audio processing.
+ */
 
 #include <string.h>
 #include <stdio.h>
@@ -14,16 +20,10 @@ static Uint8 SNSPC_TRAPFUNC _SNSPCDefaultRead(SNSpcT *pCpu, Uint32 Addr);
 static void SNSPC_TRAPFUNC _SNSPCDefaultWrite(SNSpcT *pCpu, Uint32 Addr, Uint8 Data);
 static Int32 _SNSPCDefaultExecuteFunc(SNSpcT *pCpu);
 
-
-//
-//
-//
-
 static SNSpcExecuteFuncT _SNSPC_pExecuteFunc = _SNSPCDefaultExecuteFunc;
 static SNSpcExecuteFuncT _SNSPC_pDebugExecuteFunc = _SNSPCDefaultExecuteFunc;
 static Bool _SNSPC_bDebug = FALSE;
 static Int32 _SNSPC_nDebugCycles = 1;
-
 
 static Uint8 SNSPC_TRAPFUNC _SNSPCDefaultRead(SNSpcT *pCpu, Uint32 Addr)
 {
@@ -34,13 +34,11 @@ static void SNSPC_TRAPFUNC _SNSPCDefaultWrite(SNSpcT *pCpu, Uint32 Addr, Uint8 D
 {
 }
 
-
 static Int32 _SNSPCDefaultExecuteFunc(SNSpcT *pCpu)
 {
 	pCpu->Cycles = 0;
 	return 0;
 }
-
 
 void SNSPCResetCounters(SNSpcT *pCpu)
 {
@@ -130,7 +128,7 @@ void SNSPCReset(SNSpcT *pCpu, Bool bHardReset)
 		SNSPCResetCounters(pCpu);
 
 		pCpu->bRomEnable = FALSE;
-		
+
 		// clear spc Mem
 		memset(pCpu->Mem, 0, SNSPC_MEM_SIZE);
 
@@ -150,7 +148,6 @@ Uint8 SNSPCPeek8(SNSpcT *pCpu, Uint32 uAddr)
 	return pCpu->Mem[uAddr];
 }
 
-
 void SNSPCPeekMem(SNSpcT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes)
 {
 	while (nBytes > 0)
@@ -164,7 +161,6 @@ void SNSPCPeekMem(SNSpcT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes)
 	}
 }
 
-
 Uint8 SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 {
 	if (uAddr >= 0xF0 && uAddr < 0x100)
@@ -175,7 +171,6 @@ Uint8 SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 		return pCpu->Mem[uAddr];
 	}
 }
-
 
 Uint16 SNSPCRead16(SNSpcT *pCpu, Uint32 Addr)
 {
@@ -215,7 +210,6 @@ void SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
 		pCpu->ShadowMem[uAddr & (SNSPC_ROM_SIZE -1)] = uData;
 	}
 
-
 	if (uAddr >= 0xF0 && uAddr < 0x100)
 	{
 		pCpu->pWriteTrapFunc(pCpu, uAddr, uData);
@@ -228,7 +222,6 @@ void SNSPCWrite16(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
 	SNSPCWrite8(pCpu, Addr + 1, Data >> 8);
 }
 
-
 void SNSPCSetExecuteFunc(SNSpcExecuteFuncT pFunc)
 {
 	if (_SNSPC_bDebug)
@@ -239,8 +232,6 @@ void SNSPCSetExecuteFunc(SNSpcExecuteFuncT pFunc)
 		_SNSPC_pExecuteFunc = pFunc;
 	}
 }
-
-
 
 Int32 SNSPCExecute(SNSpcT *pCpu, Int32 nExecCycles)
 {
@@ -254,20 +245,10 @@ Int32 SNSPCExecute(SNSpcT *pCpu, Int32 nExecCycles)
 	return nExecCycles - pCpu->Cycles;
 }
 
-
 void SNSPCResetCounter(SNSpcT *pCpu, Int32 iCounter)
 {
 	pCpu->Counter[iCounter] = 0;
 }
-
-#if 0
-Int32 SNSPCGetCounter(SNSpcT *pCpu, Int32 iCounter)
-{
-	return pCpu->Counter[iCounter] - pCpu->Cycles;
-}
-#endif
-
-
 
 void SNSPCDumpRegs(SNSpcT *pCpu, char *pStr)
 {
@@ -291,7 +272,6 @@ void SNSPCDumpRegs(SNSpcT *pCpu, char *pStr)
 
 }
 
-
 Int32 SNSPCExecuteDebug(SNSpcT *pCpu)
 {
 	Int32 nTotalCycles,nExecCycles;
@@ -299,8 +279,8 @@ Int32 SNSPCExecuteDebug(SNSpcT *pCpu)
 	while (nTotalCycles > 0)
 	{
 		char str[64];
-  
-  		SNSPCDisasm(str, pCpu->Mem + pCpu->Regs.rPC, pCpu->Regs.rPC);
+
+		SNSPCDisasm(str, pCpu->Mem + pCpu->Regs.rPC, pCpu->Regs.rPC);
 		ConDebug("%06X: %s\n", pCpu->Regs.rPC, str);
 
 		nExecCycles=_SNSPC_nDebugCycles;
@@ -315,12 +295,9 @@ Int32 SNSPCExecuteDebug(SNSpcT *pCpu)
 
 		nTotalCycles -= nExecCycles;
 
-//		SNSPCDumpRegs(pCpu, str);
-//		ConDebug("%s %d\n", str, SNSPCGetCounter(pCpu, SNSPC_COUNTER_FRAME));
 	}
 	return 0;
 }
-
 
 void SNSPCSetDebug(Bool bDebug, Int32 nDebugCycles)
 {
@@ -340,7 +317,6 @@ void SNSPCSetDebug(Bool bDebug, Int32 nDebugCycles)
 
 	_SNSPC_nDebugCycles = nDebugCycles;
 }
-
 
 Uint32 SNSPCMemChecksum(SNSpcT *pCpu)
 {

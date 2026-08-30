@@ -1,14 +1,17 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements font behavior for shared base utilities.
+ */
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include "types.h"
-#if 0
 #include "font.h"
-#else
-#include "font.h"
-#endif
 #include "surface.h"
 extern "C" {
 #include "gs.h"
@@ -67,7 +70,7 @@ static FontT _Font_Default;
 static FontT _Font_Fixed;
 static FontT *_Font_pFonts[4];
 
-static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, Uint32 uColor, int c) 
+static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, Uint32 uColor, int c)
 {
 	Uint32 u0,v0,u1,v1;
     Uint32 x0,y0,x1,y1;
@@ -132,7 +135,7 @@ Int32 FontGetStrWidth(const Char *pStr)
 
     while (*pStr)
     {
-		if (*pStr != ' ') 
+		if (*pStr != ' ')
 		{
             FontCharT *pFontChar = &pFont->CharMap[(unsigned char)*pStr];
 			iWidth += _FontAdvLogical((pFontChar->u1 - pFontChar->u0) * FONT_DRAW_SCALE + 2);
@@ -147,21 +150,18 @@ Int32 FontGetStrWidth(const Char *pStr)
 	return iWidth;
 }
 
-
 static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const Char *pStr, Uint32 uColor)
 {
     TextureT *pTexture = &pFont->Texture;
     if (!pTexture) return;
 
-
 	// Set texture/clut regs.  NEAREST keeps the m5x7 bitmap crisp.
 	GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth, pTexture->uWidthLog2, pTexture->uHeightLog2, pTexture->eFormat, 0, 0, 0, 0);
 
-	while (*pStr) 
+	while (*pStr)
 	{
-		if (*pStr != ' ') 
+		if (*pStr != ' ')
 		{
-            //if (*pStr < pFont->nChars)
             {
                 FontCharT *pFontChar = &pFont->CharMap[(unsigned char)*pStr];
                 Int32 iWidth;
@@ -204,11 +204,10 @@ static void _FontBiosMake(FontT *pFont)
 	_FontSetCharSize(pFont, 8, 12);
 
 	for (y=0; y<8; y++) {
-		for (x=0; x<16; x++) 
+		for (x=0; x<16; x++)
 		{
             Uint8 uChar  = y * 16 + x;
 			_FontSetCharMap(pFont, uChar, x * 16, y * 16, vixarmet[uChar], 16);
-//			_FontSetCharMap(pFont, uChar, x * 16, y * 16, 8, 16);
 		}
 	}
 
@@ -217,7 +216,6 @@ static void _FontBiosMake(FontT *pFont)
 	gp_hardflush(&thegp);
 }
   */
-
 
 void FontMake(FontT *pFont, CSurface *pSurface, Uint32 uVramAddr, const Char *pCharList)
 {
@@ -258,16 +256,6 @@ void FontMakeFromMap(FontT *pFont, CSurface *pSurface, Uint32 uVramAddr,
     GPFifoFlush();
 }
 
-
-
-
-
-
-//
-//
-//
-
-
 void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
 {
     Uint32 uR, uG, uB, uA;
@@ -287,7 +275,6 @@ void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
     uA = FIXED7(a);
 
 	_Font_State.uColor = GS_SET_RGBA(uR, uG, uB, uA);
-//	_Font_State.uColor = GS_SET_RGBA(0x40, 0x40, 0x40, uA);
 
 }
 
@@ -297,10 +284,10 @@ void FontPuts(Float32 vx, Float32 vy, const Char *pStr)
 	pFont = _Font_State.pFont;
 	if (!pFont) return;
 
-	_FontDrawStr(pFont, 
-				vx, vy, 15.0f, 
+	_FontDrawStr(pFont,
+				vx, vy, 15.0f,
 				pStr,
-				_Font_State.uColor 
+				_Font_State.uColor
 				);
 
 }
@@ -309,7 +296,7 @@ void FontPrintf(Float32 vx, Float32 vy, const Char *pFormat, ...)
 {
 	static char strbuf[1024];
 	va_list args;
-	
+
 	va_start(args, pFormat);
 	vsprintf(strbuf, pFormat, args);
 	va_end(args);
@@ -322,12 +309,10 @@ void FontSelect(Int32 iFont)
 	_Font_State.pFont = _Font_pFonts[iFont];
 }
 
-
 void FontSetFont(Int32 iFont, FontT *pFont)
 {
     _Font_pFonts[iFont] = pFont;
 }
-
 
 Int32 FontGetWidth()
 {
@@ -339,12 +324,10 @@ Int32 FontGetHeight()
 	return _Font_State.pFont ? _Font_State.pFont->uCharY : 0;
 }
 
-
 Uint32 FontGetVramSize()
 {
     return (Uint32)_FontTex_ui_w * (Uint32)_FontTex_ui_h * 4U;
 }
-
 
 void FontInit(Uint32 uVramAddr)
 {
@@ -380,19 +363,8 @@ void FontShutdown()
 	FontDelete(&_Font_Fixed);
 }
 
-
-
-//
-//
-//
-
-
-
-
 void FontNew(FontT *pFont)
 {
-//    pFont->pTexture = NULL;
-//    pFont->pClut    = NULL;
     pFont->nChars   = 0;
     pFont->uFixedWidth = 0;
     memset(&pFont->CharMap, 0, sizeof(pFont->CharMap));
@@ -400,7 +372,6 @@ void FontNew(FontT *pFont)
 
 void FontDelete(FontT *pFont)
 {
-//    pFont->pTexture=NULL;
 }
 
 static Bool _FontScanHorizWhite(CSurface *pSurface, Uint32 uStartX, Uint32 uEndX, Uint32 uY)
@@ -446,7 +417,6 @@ const Char *_FontParseLine(FontT *pFont, CSurface *pSurface, const Char *pCharLi
     Uint32 uWidth;//, uHeight;
 
     uWidth = pSurface->GetWidth();
-    //uHeight = pSurface->GetHeight();
 
     uX = 0;
     while (uX < uWidth)
@@ -477,10 +447,8 @@ const Char *_FontParseLine(FontT *pFont, CSurface *pSurface, const Char *pCharLi
             _FontSetCharMap(pFont, *pCharList,  uStartX, uStartY, uEndX - uStartX, uEndY - uStartY);
             pCharList++;
 
-//            printf("char %d,%d -> %d,%d\n", uStartX, uStartY, uEndX, uEndY);
             uX++;
         }
-        
 
     }
 
@@ -529,7 +497,7 @@ void FontParseChars(FontT *pFont, CSurface *pSurface, const Char *pCharList)
             pCharList = _FontParseLine(pFont, pSurface, pCharList, uStartY, uEndY);
             uY++;
         }
-    } 
+    }
 
 	_FontSetCharSize(pFont, 5, uFontHeight);
 

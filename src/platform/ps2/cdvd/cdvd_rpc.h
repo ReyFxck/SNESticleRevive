@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the cdvd rpc interface for SNESticleRevive.
+ */
+
 #ifndef _CDVD_RPC_H
 #define _CDVD_RPC_H
 
@@ -7,7 +15,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 int CDVD_Init();
 int CDVD_DiskReady(int mode);
@@ -21,6 +28,5 @@ void CDVD_FlushCache();
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif // _CDVD_H

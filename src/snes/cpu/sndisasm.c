@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sndisasm behavior for SNES CPU emulation.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -99,7 +106,7 @@ typedef enum
     SND_INST_WDM,
     SND_INST_XBA,
     SND_INST_XCE,
-    
+
     SND_INST_NUM
 
 } SNDInstE;
@@ -110,8 +117,8 @@ typedef enum
     SND_OPERAND_A,                  // A
     SND_OPERAND_PCREL,              // relative branch
     SND_OPERAND_PCRELLONG,          // long jump
-    SND_OPERAND_PCREL_INDIRECT,     // 
-        
+    SND_OPERAND_PCREL_INDIRECT,     //
+
     SND_OPERAND_SR      ,           // $xx,S
     SND_OPERAND_SR_IY   ,           // ($xx,S),Y
 
@@ -128,7 +135,7 @@ typedef enum
     SND_OPERAND_IMMEDIATEX,         // #$xx or #$xxxx
     SND_OPERAND_IMMEDIATE8,         // #$xx
 	SND_OPERAND_SEPREP8,         // #$xx
-    
+
     SND_OPERAND_ABS,                // $xxxx
     SND_OPERAND_ABS_INDIRECT,       // ($xxxx)
     SND_OPERAND_ABS_INDIRECTLONG,   // [$xxxx]
@@ -142,8 +149,6 @@ typedef enum
 
     SND_OPERAND_NUM
 } SNDOperandE;
-
-
 
 typedef struct SNDOpStream_T
 {
@@ -159,17 +164,11 @@ typedef struct
     SNDOperandE eOperand;   // operand type
 } SNDInstDefT;
 
-
-typedef struct 
+typedef struct
 {
     SNDInstE eInst;
     char *pName;
 } SNDMnemonicT;
-
-
-//
-//
-//
 
 //static Bool _SND_bInitialized = FALSE;
 //static SNDInstDefT *_SND_InstMatrix[0x100];
@@ -271,8 +270,6 @@ static SNDInstDefT _SND_InstDefs[]=
     {0xD9, SND_INST_CMP, SND_OPERAND_ABS_IY             },
     {0xDD, SND_INST_CMP, SND_OPERAND_ABS_IX             },
     {0xDF, SND_INST_CMP, SND_OPERAND_ABSLONG_IX         },
-
-
 
     {0xA1, SND_INST_LDA, SND_OPERAND_DP_IX_INDIRECT     },
     {0xA3, SND_INST_LDA, SND_OPERAND_SR                 },
@@ -383,7 +380,6 @@ static SNDInstDefT _SND_InstDefs[]=
     {0xC4, SND_INST_CPY, SND_OPERAND_DP                 },
     {0xCC, SND_INST_CPY, SND_OPERAND_ABS                },
 
-
     {0x4C, SND_INST_JMP, SND_OPERAND_ABS                },
     {0x5C, SND_INST_JMP, SND_OPERAND_ABSLONG            },
     {0x6C, SND_INST_JMP, SND_OPERAND_ABS_INDIRECT       },
@@ -393,7 +389,6 @@ static SNDInstDefT _SND_InstDefs[]=
     {0x20, SND_INST_JSR, SND_OPERAND_ABS                },
     {0x22, SND_INST_JSR, SND_OPERAND_ABSLONG            },
     {0xFC, SND_INST_JSR, SND_OPERAND_ABS_IX_INDIRECT    },
-
 
     {0xA2, SND_INST_LDX, SND_OPERAND_IMMEDIATEX         },
     {0xA6, SND_INST_LDX, SND_OPERAND_DP                 },
@@ -486,110 +481,102 @@ static SNDInstDefT _SND_InstDefs[]=
 static const char *_SND_pMnemonics[]=
 {
     (char *)""   ,
-    (char *)"adc", // SND_INST_ADC  
-    (char *)"and", // SND_INST_AND  
-    (char *)"asl", // SND_INST_ASL  
-    (char *)"bcc", // SND_INST_BCC  
-    (char *)"bcs", // SND_INST_BCS  
-    (char *)"beq", // SND_INST_BEQ  
-    (char *)"bit", // SND_INST_BIT  
-    (char *)"bmi", // SND_INST_BMI  
-    (char *)"bne", // SND_INST_BNE  
-    (char *)"bpl", // SND_INST_BPL  
-    (char *)"bra", // SND_INST_BRA  
-    (char *)"brk", // SND_INST_BRK  
-    (char *)"brl", // SND_INST_BRL  
-    (char *)"bvc", // SND_INST_BVC  
-    (char *)"bvs", // SND_INST_BVS  
-    (char *)"clc", // SND_INST_CLC  
-    (char *)"cld", // SND_INST_CLD  
-    (char *)"cli", // SND_INST_CLI  
-    (char *)"clv", // SND_INST_CLV  
-    (char *)"cmp", // SND_INST_CMP  
-    (char *)"cop", // SND_INST_COP  
-    (char *)"cpx", // SND_INST_CPX  
-    (char *)"cpy", // SND_INST_CPY  
-    (char *)"dec", // SND_INST_DEC  
-    (char *)"dex", // SND_INST_DEX  
-    (char *)"dey", // SND_INST_DEY  
-    (char *)"eor", // SND_INST_EOR  
-    (char *)"inc", // SND_INST_INC  
-    (char *)"inx", // SND_INST_INX  
-    (char *)"iny", // SND_INST_INY  
-    (char *)"jmp", // SND_INST_JMP  
-    (char *)"jsr", // SND_INST_JSR  
-    (char *)"lda", // SND_INST_LDA  
-    (char *)"ldx", // SND_INST_LDX  
-    (char *)"ldy", // SND_INST_LDY  
-    (char *)"lsr", // SND_INST_LSR  
-    (char *)"mvn", // SND_INST_MVN  
+    (char *)"adc", // SND_INST_ADC
+    (char *)"and", // SND_INST_AND
+    (char *)"asl", // SND_INST_ASL
+    (char *)"bcc", // SND_INST_BCC
+    (char *)"bcs", // SND_INST_BCS
+    (char *)"beq", // SND_INST_BEQ
+    (char *)"bit", // SND_INST_BIT
+    (char *)"bmi", // SND_INST_BMI
+    (char *)"bne", // SND_INST_BNE
+    (char *)"bpl", // SND_INST_BPL
+    (char *)"bra", // SND_INST_BRA
+    (char *)"brk", // SND_INST_BRK
+    (char *)"brl", // SND_INST_BRL
+    (char *)"bvc", // SND_INST_BVC
+    (char *)"bvs", // SND_INST_BVS
+    (char *)"clc", // SND_INST_CLC
+    (char *)"cld", // SND_INST_CLD
+    (char *)"cli", // SND_INST_CLI
+    (char *)"clv", // SND_INST_CLV
+    (char *)"cmp", // SND_INST_CMP
+    (char *)"cop", // SND_INST_COP
+    (char *)"cpx", // SND_INST_CPX
+    (char *)"cpy", // SND_INST_CPY
+    (char *)"dec", // SND_INST_DEC
+    (char *)"dex", // SND_INST_DEX
+    (char *)"dey", // SND_INST_DEY
+    (char *)"eor", // SND_INST_EOR
+    (char *)"inc", // SND_INST_INC
+    (char *)"inx", // SND_INST_INX
+    (char *)"iny", // SND_INST_INY
+    (char *)"jmp", // SND_INST_JMP
+    (char *)"jsr", // SND_INST_JSR
+    (char *)"lda", // SND_INST_LDA
+    (char *)"ldx", // SND_INST_LDX
+    (char *)"ldy", // SND_INST_LDY
+    (char *)"lsr", // SND_INST_LSR
+    (char *)"mvn", // SND_INST_MVN
     (char *)"mvp", // SND_INST_MVP
-    (char *)"nop", // SND_INST_NOP  
-    (char *)"ora", // SND_INST_ORA  
-    (char *)"pea", // SND_INST_PEA  
-    (char *)"pei", // SND_INST_PEI  
-    (char *)"per", // SND_INST_PER  
-    (char *)"pha", // SND_INST_PHA  
-    (char *)"phb", // SND_INST_PHB  
-    (char *)"phd", // SND_INST_PHD  
-    (char *)"phk", // SND_INST_PHK  
-    (char *)"php", // SND_INST_PHP  
-    (char *)"phx", // SND_INST_PHX  
-    (char *)"phy", // SND_INST_PHY  
-    (char *)"pla", // SND_INST_PLA  
-    (char *)"plb", // SND_INST_PLB  
-    (char *)"pld", // SND_INST_PLD  
-    (char *)"plp", // SND_INST_PLP  
-    (char *)"plx", // SND_INST_PLX  
-    (char *)"ply", // SND_INST_PLY  
-    (char *)"rep", // SND_INST_REP  
-    (char *)"rol", // SND_INST_ROL  
-    (char *)"ror", // SND_INST_ROR  
-    (char *)"rti", // SND_INST_RTI  
-    (char *)"rtl", // SND_INST_RTL  
-    (char *)"rts", // SND_INST_RTS  
-    (char *)"sbc", // SND_INST_SBC  
-    (char *)"sec", // SND_INST_SEC  
-    (char *)"sed", // SND_INST_SED  
-    (char *)"sei", // SND_INST_SEI  
-    (char *)"sep", // SND_INST_SEP  
-    (char *)"sta", // SND_INST_STA  
-    (char *)"stp", // SND_INST_STP  
-    (char *)"stx", // SND_INST_STX  
-    (char *)"sty", // SND_INST_STY  
-    (char *)"stz", // SND_INST_STZ  
-    (char *)"tax", // SND_INST_TAX  
-    (char *)"tay", // SND_INST_TAY  
-    (char *)"tcd", // SND_INST_TCD  
-    (char *)"tcs", // SND_INST_TCS  
-    (char *)"tdc", // SND_INST_TDC  
-    (char *)"trb", // SND_INST_TRB  
-    (char *)"tsb", // SND_INST_TSB  
-    (char *)"tsc", // SND_INST_TSC  
-    (char *)"tsx", // SND_INST_TSX  
-    (char *)"txa", // SND_INST_TXA  
-    (char *)"txs", // SND_INST_TXS  
-    (char *)"txy", // SND_INST_TXY  
-    (char *)"tya", // SND_INST_TYA  
-    (char *)"tyx", // SND_INST_TYX  
-    (char *)"wai", // SND_INST_WAI  
-    (char *)"wdm", // SND_INST_WDM  
-    (char *)"xba", // SND_INST_XBA  
-    (char *)"xce", // SND_INST_XCE  
-};    
-
-
-
-
-//
-//
-//
-
+    (char *)"nop", // SND_INST_NOP
+    (char *)"ora", // SND_INST_ORA
+    (char *)"pea", // SND_INST_PEA
+    (char *)"pei", // SND_INST_PEI
+    (char *)"per", // SND_INST_PER
+    (char *)"pha", // SND_INST_PHA
+    (char *)"phb", // SND_INST_PHB
+    (char *)"phd", // SND_INST_PHD
+    (char *)"phk", // SND_INST_PHK
+    (char *)"php", // SND_INST_PHP
+    (char *)"phx", // SND_INST_PHX
+    (char *)"phy", // SND_INST_PHY
+    (char *)"pla", // SND_INST_PLA
+    (char *)"plb", // SND_INST_PLB
+    (char *)"pld", // SND_INST_PLD
+    (char *)"plp", // SND_INST_PLP
+    (char *)"plx", // SND_INST_PLX
+    (char *)"ply", // SND_INST_PLY
+    (char *)"rep", // SND_INST_REP
+    (char *)"rol", // SND_INST_ROL
+    (char *)"ror", // SND_INST_ROR
+    (char *)"rti", // SND_INST_RTI
+    (char *)"rtl", // SND_INST_RTL
+    (char *)"rts", // SND_INST_RTS
+    (char *)"sbc", // SND_INST_SBC
+    (char *)"sec", // SND_INST_SEC
+    (char *)"sed", // SND_INST_SED
+    (char *)"sei", // SND_INST_SEI
+    (char *)"sep", // SND_INST_SEP
+    (char *)"sta", // SND_INST_STA
+    (char *)"stp", // SND_INST_STP
+    (char *)"stx", // SND_INST_STX
+    (char *)"sty", // SND_INST_STY
+    (char *)"stz", // SND_INST_STZ
+    (char *)"tax", // SND_INST_TAX
+    (char *)"tay", // SND_INST_TAY
+    (char *)"tcd", // SND_INST_TCD
+    (char *)"tcs", // SND_INST_TCS
+    (char *)"tdc", // SND_INST_TDC
+    (char *)"trb", // SND_INST_TRB
+    (char *)"tsb", // SND_INST_TSB
+    (char *)"tsc", // SND_INST_TSC
+    (char *)"tsx", // SND_INST_TSX
+    (char *)"txa", // SND_INST_TXA
+    (char *)"txs", // SND_INST_TXS
+    (char *)"txy", // SND_INST_TXY
+    (char *)"tya", // SND_INST_TYA
+    (char *)"tyx", // SND_INST_TYX
+    (char *)"wai", // SND_INST_WAI
+    (char *)"wdm", // SND_INST_WDM
+    (char *)"xba", // SND_INST_XBA
+    (char *)"xce", // SND_INST_XCE
+};
 
 static void _SNDOpStreamOpen(SNDOpStreamT *pOpStream, Uint8 *pOpcode, Uint32 PC)
 {
     pOpStream->pOpcode  = pOpcode;
-    pOpStream->uStartPC = 
+    pOpStream->uStartPC =
     pOpStream->uPC      = PC;
 }
 
@@ -608,7 +595,7 @@ static Uint8 _SNDOpStreamFetch8(SNDOpStreamT *pOpStream)
     // increment pc
     pOpStream->pOpcode++;
     pOpStream->uPC++;
-    
+
     return uByte;
 }
 
@@ -617,35 +604,28 @@ static Uint16 _SNDOpStreamFetch16(SNDOpStreamT *pOpStream)
     return _SNDOpStreamFetch8(pOpStream) | (_SNDOpStreamFetch8(pOpStream) << 8);
 }
 
-
 static Uint32 _SNDOpStreamFetch24(SNDOpStreamT *pOpStream)
 {
     return _SNDOpStreamFetch8(pOpStream) | (_SNDOpStreamFetch8(pOpStream) << 8) | (_SNDOpStreamFetch8(pOpStream) << 16);
 }
 
-
-
-
 static SNDInstDefT *_SNDGetInstDef(Uint8 uOpcode)
 {
     SNDInstDefT *pInstDef;
-    
+
     pInstDef = _SND_InstDefs;
-    
+
     while (pInstDef->eInst != SND_INST_NONE)
     {
         if (pInstDef->uOpcode == uOpcode)
         {
             return pInstDef;
         }
-    
+
         pInstDef++;
     }
     return NULL;
 }
-
-
-
 
 static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr, Uint8 *pFlags)
 {
@@ -654,17 +634,17 @@ static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr, Uint8 *pFlags)
     const char *pMnemonic;
     char strOperand[32];
 
-    // fetch instruction opcode    
+    // fetch instruction opcode
     uOpcode = _SNDOpStreamFetch8(pOpStream);
-    
+
     // get inst corresponding to opcode
     pInstDef = _SNDGetInstDef(uOpcode);
-    
+
     if (pInstDef)
     {
         Uint8 uImm8 = 0;
         pMnemonic = _SND_pMnemonics[pInstDef->eInst];
-        
+
         switch (pInstDef->eInst)
         {
             case SND_INST_SEP:
@@ -676,7 +656,7 @@ static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr, Uint8 *pFlags)
                 *pFlags &= ~uImm8;
                 break;
             default:
-                break;                
+                break;
         }
 
         switch (pInstDef->eOperand)
@@ -693,7 +673,7 @@ static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr, Uint8 *pFlags)
             case SND_OPERAND_PCRELLONG:          // long jump
                 sprintf(strOperand, "+$%04X", (Int16)_SNDOpStreamFetch16(pOpStream));
                 break;
-            case SND_OPERAND_PCREL_INDIRECT:     // 
+            case SND_OPERAND_PCREL_INDIRECT:     //
                 sprintf(strOperand, "($%04X)", (pOpStream->uPC + _SNDOpStreamFetch16(pOpStream) + 2) & 0xFFFF);
                 break;
             case SND_OPERAND_SR:                // $xx,S
@@ -755,7 +735,7 @@ static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr, Uint8 *pFlags)
                 break;
 
             case SND_OPERAND_MV:    // $xx, $xx
-				{	
+				{
 					Uint8 uDest= _SNDOpStreamFetch8(pOpStream);
 					Uint8 uSrc = _SNDOpStreamFetch8(pOpStream);
 					sprintf(strOperand, "$%02X,$%02X", uSrc, uDest);
@@ -797,15 +777,13 @@ static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr, Uint8 *pFlags)
     }
 
     // construct disasm string
-    sprintf(pStr, "%s %s", pMnemonic, strOperand); 
+    sprintf(pStr, "%s %s", pMnemonic, strOperand);
 }
-
-
 
 Int32 SNDisasm(char *pStr, Uint8 *pOpcode, Uint32 PC, Uint8 *pFlags)
 {
     SNDOpStreamT OpStream;
-    
+
     // open opcode stream
     _SNDOpStreamOpen(&OpStream, pOpcode, PC);
 
@@ -814,32 +792,3 @@ Int32 SNDisasm(char *pStr, Uint8 *pOpcode, Uint32 PC, Uint8 *pFlags)
     // close opcode stream
     return _SNDOpStreamClose(&OpStream);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

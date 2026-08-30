@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snqueue interface for the SNES emulation core.
+ */
 
 #ifndef _SNQUEUE_H
 #define _SNQUEUE_H
@@ -65,7 +72,7 @@ public:
 			return pElement;
 		}
 		return NULL;
- 	}
+	}
 
 	inline SNQueueElementT	*Dequeue()
 	{

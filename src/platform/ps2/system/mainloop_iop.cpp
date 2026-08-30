@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop iop behavior for the PlayStation 2 application runtime.
+ */
+
 #include "mainloop_net.h"
 #include "mainloop_load.h"
 #include <stdio.h>
@@ -41,11 +49,7 @@ extern "C" void BootMark(const char *pLabel);
 #include "dataio.h"
 #include "prof.h"
 #include "bmpfile.h"
-#if 0
 #include "font.h"
-#else
-#include "font.h"
-#endif
 #include "poly.h"
 #include "texture.h"
 #include "mixbuffer.h"
@@ -56,9 +60,6 @@ extern "C" void BootMark(const char *pLabel);
 
 #include "pathext.h"
 #include "snppucolor.h"
-#if 0
-#include "version.h"
-#endif
 #include "emumovie.h"
 extern "C" {
 #include "cd.h"
@@ -67,9 +68,7 @@ extern "C" {
 #include "snspc_c.h"
 };
 
-//#include "nespal.h"
 #include "snes.h"
-//#include "nesstate.h"
 
 #include <sifrpc.h>
 #include <loadfile.h>
@@ -98,7 +97,6 @@ extern "C" {
 #include "embedded_irx.h"
 
 extern "C" Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
-
 
 /* MAINLOOP_MEMCARD / NETPORT / STATEPATH / SNESSTATEDEBUG /
    NESSTATEDEBUG / HISTORY / MAXSRAMSIZE now live in
@@ -218,7 +216,6 @@ Int32 IOPLoadModule(const Char *pModuleName, Char **ppSearchPaths, int arglen, c
 		ret = SifLoadModule(ModulePath, arglen, pArgs);
 	}
 
-
 	if (ret >= 0)
 	{
 		// success!
@@ -249,14 +246,6 @@ Bool _MainLoop_bMCSaveReady = FALSE;
 void _MainLoopLoadModules(Char **ppSearchPaths)
 {
 	Bool bLoadedNetwork;
-
-	#if 0
-	if (!EEPuts_Init())
-	{
-		EEPuts_SetCallback(_MainLoop_Puts);
-		IOPLoadModule("EEPUTS.IRX", ppSearchPaths, 0, NULL);
-	}
-	#endif
 
 	/* SIO2MAN + MCMAN + MCSERV are loaded by MemCardLoadEmbeddedIrx()
 	   in MainLoopInit immediately before we get here. The modern PS2SDK
@@ -293,9 +282,7 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	/* libmc finalise. mcInit() picks up whichever MCMAN/MCSERV pair
 	   is currently loaded - the modern PS2DEV ones registered by
 	   init_memcard_driver() in main.cpp are detected automatically. */
-	// BOOTLOG("[boot] MemCardInit (ps2_drivers mcman/mcserv)\n");
 	MemCardInit();
-	// BOOTLOG("[boot] MemCardInit done\n");
 	#if MAINLOOP_MEMCARD
 	MemCardCreateSave(_SramPath, _MainLoop_SaveTitle, TRUE);
 	#endif
@@ -376,7 +363,6 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   Keep rom0:LIBSD as a last-resort fallback (for the rare case
 	   where freesd somehow refuses to load -- in practice the embedded
 	   copy always loads). */
-	// BOOTLOG("[boot] FREESD/LIBSD: try load\n");
 	{
 		int spu2_ok = (IOPLoadModule("FREESD.IRX", ppSearchPaths, 0, NULL) >= 0)
 		           || (IOPLoadModule("rom0:LIBSD", NULL, 0, NULL) >= 0);

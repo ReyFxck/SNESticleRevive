@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the texture interface for shared rendering and audio buffers.
+ */
 
 #ifndef _TEXTURE_H
 #define _TEXTURE_H
@@ -19,7 +25,6 @@ struct TextureT
 	Float32		fInvWidth, fInvHeight;
 };
 
-
 struct ClutT
 {
 	Uint32		uWidth, uHeight;
@@ -38,4 +43,3 @@ void TextureSetFilter(TextureT *pTexture, Uint32 eFilter);
 void TextureUpload(TextureT *pTexture, Uint8 *pData);
 
 #endif
-

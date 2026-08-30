@@ -1,6 +1,10 @@
-
-
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the console interface for shared base utilities.
+ */
 
 #ifndef _CONSOLE_H
 #define _CONSOLE_H
@@ -29,11 +33,8 @@ void ConShutdown();
 #define ConError printf
 #define ConDebug printf
 
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
 #endif
-
-

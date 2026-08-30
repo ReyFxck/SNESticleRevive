@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements ps2dma behavior for low-level PlayStation 2 support.
+ */
 
 #include "types.h"
 #include "ps2dma.h"
@@ -20,7 +27,6 @@ void DmaSyncSprToRam()
     while (D8_CHCR & DCHCR_M_STR) ;
 }
 
-
 void DmaExecRamToSpr(Uint128 *pMem, Uint128 *pSpr, Uint32 nQwords)
 {
     D9_QWC  = nQwords;
@@ -35,7 +41,6 @@ void DmaSyncRamToSpr()
     // sync
     while (D9_CHCR & DCHCR_M_STR) ;
 }
-
 
 void DmaExecVIF0(Uint128 *pMem,  Uint32 nQwords)
 {
@@ -54,7 +59,6 @@ void DmaExecVIF0Chain(Uint128 *pTag)
     __asm__ __volatile__ ("sync.l");
 }
 
-
 void DmaSyncVIF0()
 {
     // sync dma
@@ -63,9 +67,6 @@ void DmaSyncVIF0()
     // sync vif to ensure it is complete also
     while (VIF0_STAT & 3) ;
 }
-
-
-
 
 void DmaExecVIF1(Uint128 *pMem,  Uint32 nQwords)
 {
@@ -84,7 +85,6 @@ void DmaExecVIF1Chain(Uint128 *pTag)
     __asm__ __volatile__ ("sync.l");
 }
 
-
 void DmaSyncVIF1()
 {
     // sync dma
@@ -93,8 +93,6 @@ void DmaSyncVIF1()
     // sync vif to ensure it is complete also
     while (VIF1_STAT & 3) ;
 }
-
-
 
 void DmaExecGIF(Uint128 *pMem,  Uint32 nQwords)
 {
@@ -114,7 +112,6 @@ void DmaExecGIFChain(Uint128 *pTag)
     __asm__ __volatile__ ("sync.l");
 }
 
-
 void DmaSyncGIF()
 {
 	int timeout=10*1000*1000;
@@ -125,13 +122,10 @@ void DmaSyncGIF()
 		timeout--;
 	}
 
-	#if DMA_DEBUG 
+	#if DMA_DEBUG
 	if (timeout < 0)
 	{
 		GS_BGCOLOUR = 0x0000FF;
 	}
 	#endif
 }
-
-
-

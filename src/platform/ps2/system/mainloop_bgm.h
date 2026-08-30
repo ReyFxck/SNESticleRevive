@@ -1,19 +1,9 @@
-/* mainloop_bgm.h
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Trilha sonora de fundo do menu (browser de ROMs e menu de pausa).
- *
- * Toca modulos de tracker .mod (Amiga ProTracker) e .xm (FastTracker II)
- * via libxmp-lite. O PCM e' gerado na CPU (EE) a cada frame de menu e
- * empurrado para o audsrv pela API Aud_* (48000 Hz / 16-bit / stereo).
- *
- * Uso:
- *   - BgmUpdate() e' chamado a cada frame enquanto o menu esta visivel
- *     (MainLoopRender, bloco `if (_bMenu)`).  Ele faz lazy-load da
- *     primeira faixa achada e alimenta o audsrv com o que couber.
- *   - BgmStop() para a reproducao ao iniciar uma ROM.
- *
- * Os arquivos sao procurados em BGM_PATH (define do Makefile, espelha
- * COVERS_PATH) e em algumas pastas padrao (ver mainloop_bgm.cpp).
+ * Description:
+ *   Declares the mainloop bgm interface for the PlayStation 2 application runtime.
  */
 
 #ifndef _MAINLOOP_BGM_H

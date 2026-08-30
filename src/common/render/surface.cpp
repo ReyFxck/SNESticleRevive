@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements surface behavior for shared rendering and audio buffers.
+ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -5,13 +12,6 @@
 #include <malloc.h>
 #include "types.h"
 #include "surface.h"
-
-
-
-//
-//
-//
-
 
 CSurface::CSurface()
 {
@@ -35,13 +35,10 @@ void CSurface::Lock()
 
 }
 
-
 void CSurface::Unlock()
 {
 
 }
-
-
 
 Uint8 *CSurface::GetLinePtr(Int32 iLine)
 {
@@ -55,7 +52,6 @@ Uint8 *CSurface::GetLinePtr(Int32 iLine)
 		return NULL;
 	}
 }
-
 
 void CSurface::ClearLine(Int32 iLine)
 {
@@ -85,7 +81,6 @@ void CSurface::Clear()
 	Unlock();
 }
 
-
 /*
 
 static void _ConvertPixels(Uint8 *pDest, PixelFormatT *pDestFormat, Uint8 *pSrc, PixelFormatT *pSrcFormat, Int32 nPixels)
@@ -97,8 +92,6 @@ static void _ConvertPixels(Uint8 *pDest, PixelFormatT *pDestFormat, Uint8 *pSrc,
 
 	while (nPixels > 0)
 	{
-		
-
 
 		nPixels--;
 		pSrc  += nSrcBytes;
@@ -131,8 +124,6 @@ void CSurface::CopyTo(CSurface *pDest)
 }
 
 */
-
-
 
 void CSurface::Set(Uint8 *pData, Uint32 uWidth, Uint32 uHeight, Uint32 uPitch, PixelFormatT *pFormat)
 {
@@ -192,4 +183,3 @@ void CSurface::Free()
 	m_pData   = NULL;
 	memset(&m_Format, 0, sizeof(m_Format));
 }
-

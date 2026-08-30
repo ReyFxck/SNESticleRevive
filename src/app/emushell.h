@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the emushell interface for the emulator application layer.
+ */
 
 #ifndef _EMUSHELL_H
 #define _EMUSHELL_H
@@ -16,7 +23,6 @@ struct EmuShellSysT
 	CEmuRom		*pRom;
 	CEmuRom		*pBios;
 };
-
 
 class CEmuShell
 {

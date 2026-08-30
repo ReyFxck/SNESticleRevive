@@ -1,18 +1,9 @@
-/* gpfifo.c
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * The original GPFifo was a hand-rolled double-buffered DMA queue
- * for GIF path-3 commands, with the body built incrementally via
- * gslist.c (GSGifTagOpenAD / GSGifRegAD / GSDmaCntOpen / ...).
- *
- * After the Fase 1 GS->gsKit migration, regular UI / font / poly
- * drawing goes through gsKit's own queue (see gpprim.c). The legacy
- * gslist mechanism is still required by the SNES blender
- * (snes/ppu/snppublend_gs.cpp), which builds raw GIF chains for its
- * Begin / End register writes. To keep the blender working without
- * touching it, we keep the old double-buffered gslist alive here and
- * simply make sure gsKit's DMA is drained any time we flip from the
- * gsKit queue to the legacy chain (or vice versa) on the GIF
- * channel.
+ * Description:
+ *   Implements gpfifo behavior for the PlayStation 2 Graphics Synthesizer backend.
  */
 
 #include <stdio.h>

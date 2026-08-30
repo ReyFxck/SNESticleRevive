@@ -1,13 +1,9 @@
-/* mainloop_init.cpp
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Hosts MainLoopInit() and the file-static state that is only consumed
- * by the boot path: the screen-dimension / GS-address #defines, the
- * default browser start dir, the GIF FIFO scratch buffer, the SNES
- * colour-calibration block, and the boot-time ROM filename.
- *
- * Extracted from mainloop.cpp during the Batch 3 split. No logic,
- * literal, attribute, or initialisation order has been changed -- only
- * the translation unit a given chunk lives in.
+ * Description:
+ *   Implements mainloop init behavior for the PlayStation 2 application runtime.
  */
 
 #include <stdio.h>
@@ -67,7 +63,6 @@ extern "C" {
 #include "uiMenu.h"
 #include "uiLog.h"
 
-
 /* BOOTLOG: route boot-phase diagnostics through DLog (defined in
    modules/sjpcm/sjpcm_rpc.c).  Plain printf on the EE never reaches
    PCSX2/NetherSX2's emulator log in this build, so DLog (which writes
@@ -78,7 +73,6 @@ extern "C" void DLog(const char *fmt, ...);
 #define MENU_STARTDIR _MainLoop_MenuStartDir
 
 /* MAINLOOP_NETPORT lives in mainloop_shared.h (included above). */
-
 
 /* The chosen GS layout (PAL/NTSC width, FB and texture addresses).
    Three alternative blocks were left commented out in the original
@@ -189,7 +183,6 @@ static Bool _MainLoopAllocVideoVram(void)
 	return TRUE;
 }
 
-
 /* Browser starting directory. On real PS2 you typically want "mass:/"
    (USB stick) or a memcard path. On PCSX2/AetherSX2/NetherSX2 the
    "host:" device is not mapped, so an empty string here makes the
@@ -203,21 +196,12 @@ static int dispx, dispy;
 
 static Uint8 _MainLoop_GfxPipe[0x40000] _ALIGN(128) __attribute__ ((section (".bss")));
 
-#if 0
-static SNPPUColorCalibT _ColorCalib =
-{
-	0.9f,
-	15.0f,
-	0.2f
-};
-#else
 static SNPPUColorCalibT _ColorCalib =
 {
 	0.9f,
 	20.0f,
 	0.2f
 };
-#endif
 
 //static Char * _pSnesWavFileName = "host0:d:/snesps2.wav";
 
@@ -238,29 +222,23 @@ NULL
 //"cdfs:\\ROMS\\mario.smc";
 ;
 
-
 /* MainGetBootDir() / MainGetBootPath() are exported from the app
    entrypoint; forward-declared here exactly as in the original
    mainloop.cpp. */
 char *MainGetBootDir();
 char *MainGetBootPath();
 
-
 Bool MainLoopInit()
 {
-//    assert(0);
     #if PROF_ENABLED
     /* Bound the log to 32K entries. The old 128K allocation used about
        2.5 MiB and could fail in packed builds on the 32 MiB PS2. */
     ProfInit(32 * 1024);
     #endif
-	// BOOTLOG("[boot] GS_InitGraph()\n");
 	GS_InitGraph(GS_NTSC,GS_INTERLACE);
 	dispx = MAINLOOP_DISPX;
 	dispy = MAINLOOP_DISPY;
-	// BOOTLOG("[boot] GS_SetDispMode()\n");
 	GS_SetDispMode(dispx,dispy, MAINLOOP_SCREENWIDTH, MAINLOOP_SCREENHEIGHT);
-	// BOOTLOG("[boot] GS_SetEnv()\n");
 	GS_SetEnv(MAINLOOP_SCREENWIDTH, MAINLOOP_SCREENHEIGHT,
 	          FB0, FB1, GS_PSMCT32, Z0, GS_PSMZ16S);
 
@@ -277,19 +255,6 @@ Bool MainLoopInit()
 	_MainLoop_pLogScreen->SetMsgFunc(_MainLoopLogEvent);
 	_MainLoopSetScreen(_MainLoop_pLogScreen);
 	_bMenu = TRUE;
-#if 0
-	const VersionInfoT *pVersionInfo = VersionGetInfo();
-
-	ScrPrintf("%s v%d.%d.%d %s %s %s", 
-		pVersionInfo->ApplicationName, 
-		pVersionInfo->Version[0],
-		pVersionInfo->Version[1],
-		pVersionInfo->Version[2],
-		pVersionInfo->BuildType,
-		pVersionInfo->BuildDate, 
-		pVersionInfo->BuildTime);
-	ScrPrintf("%s",  pVersionInfo->CopyRight);
-#endif
 
 	/* Boot banner: original SNESticlePS2 title + iaddis copyright
 	   (replaces the #if 0 block above which depended on VersionGetInfo,
@@ -392,7 +357,6 @@ _AudMix = new AudMixBuffer(32000, TRUE);
 	 * "settle done" shows timed_out=1 on a real console, the VBlank was
 	 * indeed stalled (confirms the GSM hang); timed_out=0 means it fired
 	 * normally and any remaining GSM glitch is geometry, not a hang. */
-	// BOOTLOG("[boot] GS settle wait (timeout-safe) begin\n");
 	BootMark("[VID] settle...");   /* area de risco (hang GSM); marcador na hora */
 	{
 		int base  = TestVRstart();
@@ -400,7 +364,6 @@ _AudMix = new AudMixBuffer(32000, TRUE);
 		while ((TestVRstart() - base) < 60 && guard-- > 0)
 			usleep(1000);
 	}
-	// BOOTLOG("[boot] GS settle wait done\n");
 // create textures in main ram
     _fbTexture[0] = new CRenderSurface;
     _fbTexture[1] = new CRenderSurface;
@@ -409,16 +372,11 @@ _AudMix = new AudMixBuffer(32000, TRUE);
     _fbTexture[1]->Alloc(256, 256,  PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
     _fbTexture[0]->Clear();
     _fbTexture[1]->Clear();
-	// BOOTLOG("[boot] TextureNew(_OutTex)\n");
     TextureNew(&_OutTex, 256, 256, GS_PSMCT32);
     TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
 TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
-#if 0
-	_MainLoopSetPalette(NESPAL_FCEU);
-#endif
 	PathExtAdd(MAINLOOP_ENTRYTYPE_GZ, (char *)"gz");
 	PathExtAdd(MAINLOOP_ENTRYTYPE_ZIP, (char *)"zip");
-
 
 	SNPPUColorCalibrate(&_ColorCalib);
 
@@ -507,12 +465,10 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 	_MainLoop_pMenuScreen->SetTitle("Install Menu");
 	_MainLoop_pMenuScreen->SetEntries((char **)_MainLoopMenuEntries );
 
-
 	_MainLoopSetScreen(_MainLoop_pBrowserScreen);
         // espera ~2s (ajuste se quiser)
 	_bMenu = FALSE;
 
-//	while (1);
 	// load snes palette
         _MainLoopLoadSnesPalette("mc0:/SNESticle/default.snpal");
 	// load rom
@@ -537,16 +493,6 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
   */
 
 	InputPoll();
-
-#if 0
-	while (1)
-	{
-		MainLoopRender();
-		_MainLoop_pBrowserScreen->SetDir("cdfs:/ROMS/SNES");
-		MainLoopRender();
-		_MainLoop_pBrowserScreen->SetDir("cdfs:/ROMS/SNES/USA");
-	}
-#endif
 
     return TRUE;
 }

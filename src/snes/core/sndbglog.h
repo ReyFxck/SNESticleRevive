@@ -1,13 +1,11 @@
 /*
- * sndbglog.h - diagnostico universal do core SNES (schema snesdiag-v1).
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- *  SNES_DIAGNOSTICS=1 mede subsistemas e resume uma janela de 120 frames.
- *  SNES_DIAGNOSTICS=2 acrescenta captura profunda, acionada por anomalia
- *  ou manualmente; nao existe temporizador de captura nem regra por ROM.
- *
- *  Saida via DLog() (EE SIO) -> arquivo TXT do emulador Android.
- *  O build normal define SNDBG_LOG=0 e elimina todos estes probes.
+ * Description:
+ *   Declares the sndbglog interface for the SNES emulation core.
  */
+
 #ifndef _SNDBGLOG_H
 #define _SNDBGLOG_H
 

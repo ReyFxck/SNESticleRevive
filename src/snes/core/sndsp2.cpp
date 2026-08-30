@@ -1,13 +1,9 @@
 /*
- * sndsp2.cpp - DSP-2 (NEC uPD7725) coprocessor HLE
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Implementacao clean-room a partir do comportamento documentado do
- * chip (engenharia reversa publica).  Usado so em Dungeon Master.
- *
- * Protocolo HLE byte-oriented: a CPU escreve opcode + N bytes de
- * parametro e le M bytes de saida; o Status Register esta sempre
- * pronto (0x80 = RQM).  Os comandos 0x05/0x06/0x0D tem tamanho
- * dinamico: o(s) primeiro(s) byte(s) e' o comprimento.
+ * Description:
+ *   Implements sndsp2 behavior for the SNES emulation core.
  */
 
 #include "types.h"
@@ -36,9 +32,7 @@ void SNDSP2::Reset()
     m_bOp0DHasLen = FALSE; m_Op0DInLen = m_Op0DOutLen = 0;
 }
 
-//==========================================================================
 //  Comandos
-//==========================================================================
 
 // op01: rearranjo de bitplane (32 bytes in -> 32 bytes out).  Cada bloco
 // de 4 bytes de entrada gera 2 bytes na metade baixa e 2 na metade alta
@@ -104,9 +98,7 @@ void SNDSP2::DoOp0D()
     }
 }
 
-//==========================================================================
 //  Dispatch
-//==========================================================================
 
 void SNDSP2::Execute(Uint8 uLastByte)
 {
@@ -191,9 +183,7 @@ void SNDSP2::Execute(Uint8 uLastByte)
     }
 }
 
-//==========================================================================
 //  Interface de barramento (ISNDSP)
-//==========================================================================
 
 void SNDSP2::WriteData(Uint32 /*uAddr*/, Uint8 uData)
 {

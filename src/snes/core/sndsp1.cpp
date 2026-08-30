@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sndsp1 behavior for the SNES emulation core.
+ */
+
+/*
  * sndsp1.cpp - DSP-1 / DSP-1B coprocessor emulation
  *
  * Esta implementacao reproduz o comportamento do DSP-1 a partir da
@@ -26,9 +34,7 @@
 
 #include <string.h>
 
-//==========================================================================
 //  TABELAS  (dados factuais do silicio, publicados em 2006)
-//==========================================================================
 
 // SinTable: 256 pontos de uma senoide 16-bit signed, dois ciclos
 // (0..255 = um periodo, 256..511 espelhado negativo).  Indexada por
@@ -252,13 +258,10 @@ static const Uint16 g_DataRom[1024] = {
     0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff
 };
 
-//==========================================================================
 //  TABELA DE TAMANHOS DOS COMANDOS
-//
 //  Cada entrada e' (nInputs, nOutputs) em palavras de 16-bit.  Opcodes
 //  invalidos / aliases sao tratados como aliasados (mascarando os bits
 //  altos do opcode segundo o mapa real do chip).
-//==========================================================================
 struct DSP1_CmdInfo {
     Uint8 nIn;
     Uint16 nOut;
@@ -283,9 +286,7 @@ static const DSP1_CmdInfo g_CmdTable[0x40] = {
     /*0x3C*/ {6, 3},  /*0x3D*/ {3, 3},  /*0x3E*/ {2, 2},  /*0x3F*/ {1, 1024}
 };
 
-//==========================================================================
 //  Helpers de matematica  (sin / cos / inverso / normalize / shiftR)
-//==========================================================================
 
 static Int16 DSP1_Sin(Int16 iAngle)
 {
@@ -433,9 +434,7 @@ static void DSP1_Inverse(Int16 Coefficient, Int16 Exponent, Int16 &iCoefficient,
     iExponent = (Int16)(1 - Exponent);
 }
 
-//==========================================================================
 //  SNDSP1 - classe
-//==========================================================================
 
 static SNDSP1 *g_pSNDSP1_Instance = 0;
 
@@ -483,9 +482,7 @@ void SNDSP1::Reset()
     m_Vx = m_Vy = m_Vz = 0;
 }
 
-//==========================================================================
 //  Implementacao dos comandos
-//==========================================================================
 
 // ---- 0x00 Multiply  /  0x20 Multiply2 ----
 static void DSP1_DoMultiply(Int16 *in, Int16 *out)
@@ -701,9 +698,7 @@ static void DSP1_DoGyrate(Int16 *in, Int16 *out)
     out[2] = (Int16)(Ay + DSP1_DenormalizeAndClip(C, E) + L);
 }
 
-//==========================================================================
 //  Mode-7 / Camera commands  (Parameter / Project / Raster / Target)
-//==========================================================================
 
 void SNDSP1::Execute(Uint8 uCmd)
 {
@@ -899,7 +894,6 @@ void SNDSP1::Execute(Uint8 uCmd)
         // entao 16-refE pode chegar a 31.  Shift left de Int32 por
         // valores >= 31 e' UB em C++ (na EE do PS2 com gcc 3.x devolve
         // 0/lixo).  Aqui saturamos para evitar isso.
-        //
         // IMPORTANTE: apos o shift de C12, refE e' REPROPOSITADO para
         // armazenar (16 - refE) -- o novo expoente de referencia usado
         // no calculo final do expoente de H/V ("m_E_Les - E2 + refE").
@@ -1020,9 +1014,7 @@ void SNDSP1::Execute(Uint8 uCmd)
     }
 }
 
-//==========================================================================
 //  FSM / Bus Interface
-//==========================================================================
 
 void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
 {
@@ -1030,17 +1022,14 @@ void SNDSP1::FsmStep(bool bRead, Uint8 &rData)
     if (!(m_uSR & SR_RQM)) return;
 
     // O DSP-1 tem dois modos de transferencia controlados por DRC:
-    //
     //   DRC=1 (8-bit)  -> fase de OPCODE: um unico byte, no byte BAIXO
     //                     do DR.  m_uCommand le o byte baixo.  Manter
     //                     este caminho intacto e' o que faz o jogo dar
     //                     boot e passar no self-test do DSP-1.
-    //
     //   DRC=0 (16-bit) -> fase de DADOS: palavra de 16 bits transferida
     //                     LSB-first.  O 1o acesso (DRS=0) e' o byte
     //                     BAIXO; o 2o acesso (DRS=1) e' o byte ALTO.
     //                     Esta e' a ordem do hardware real / bsnes.
-    //
     // IMPORTANTE: uma versao anterior usou MSB-first aqui achando que
     // consertava "karts fora da tela", mas o bsnes (preciso ao hardware)
     // usa LSB-first e roda karts E pista certos.  O MSB-first deixava o

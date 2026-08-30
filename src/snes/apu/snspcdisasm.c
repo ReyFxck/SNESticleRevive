@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspcdisasm behavior for SNES audio processing.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -75,7 +82,7 @@ typedef enum
 	SNDSPC_INST_NOP,
 	SNDSPC_INST_SLEEP,
 	SNDSPC_INST_STOP,
-    
+
     SNDSPC_INST_NUM
 
 } SNDSPCInstE;
@@ -83,49 +90,45 @@ typedef enum
 typedef enum
 {
     SNDSPC_OPERAND_NONE,
-    SNDSPC_OPERAND_A,                  
-    SNDSPC_OPERAND_X,                  
-    SNDSPC_OPERAND_Y,                  
-    SNDSPC_OPERAND_PSW,                
-    SNDSPC_OPERAND_YA,                 
-    SNDSPC_OPERAND_PC,                 
-    SNDSPC_OPERAND_SP,                 
-    
-    SNDSPC_OPERAND_IMM,        
-    SNDSPC_OPERAND_DP,        
-    SNDSPC_OPERAND_DP_IX,        
-    SNDSPC_OPERAND_DP_IX_INDIRECT,        
-    SNDSPC_OPERAND_DP_INDIRECT_IY,        
-    SNDSPC_OPERAND_IX,  
-    SNDSPC_OPERAND_IY,  
-    SNDSPC_OPERAND_IX_INC,  
-    SNDSPC_OPERAND_ABS,  
-    SNDSPC_OPERAND_ABS_IX,  
-    SNDSPC_OPERAND_ABS_IY,  
-    SNDSPC_OPERAND_IX_INDIRECT,  
-    SNDSPC_OPERAND_REL,        
+    SNDSPC_OPERAND_A,
+    SNDSPC_OPERAND_X,
+    SNDSPC_OPERAND_Y,
+    SNDSPC_OPERAND_PSW,
+    SNDSPC_OPERAND_YA,
+    SNDSPC_OPERAND_PC,
+    SNDSPC_OPERAND_SP,
 
+    SNDSPC_OPERAND_IMM,
+    SNDSPC_OPERAND_DP,
+    SNDSPC_OPERAND_DP_IX,
+    SNDSPC_OPERAND_DP_IX_INDIRECT,
+    SNDSPC_OPERAND_DP_INDIRECT_IY,
+    SNDSPC_OPERAND_IX,
+    SNDSPC_OPERAND_IY,
+    SNDSPC_OPERAND_IX_INC,
+    SNDSPC_OPERAND_ABS,
+    SNDSPC_OPERAND_ABS_IX,
+    SNDSPC_OPERAND_ABS_IY,
+    SNDSPC_OPERAND_IX_INDIRECT,
+    SNDSPC_OPERAND_REL,
 
-	SNDSPC_OPERAND_DP0,        
-	SNDSPC_OPERAND_DP1,        
-	SNDSPC_OPERAND_DP2,        
-	SNDSPC_OPERAND_DP3,        
-	SNDSPC_OPERAND_DP4,        
-	SNDSPC_OPERAND_DP5,        
-	SNDSPC_OPERAND_DP6,        
-	SNDSPC_OPERAND_DP7,        
+	SNDSPC_OPERAND_DP0,
+	SNDSPC_OPERAND_DP1,
+	SNDSPC_OPERAND_DP2,
+	SNDSPC_OPERAND_DP3,
+	SNDSPC_OPERAND_DP4,
+	SNDSPC_OPERAND_DP5,
+	SNDSPC_OPERAND_DP6,
+	SNDSPC_OPERAND_DP7,
 
-	SNDSPC_OPERAND_C,        
-    SNDSPC_OPERAND_DP_IY,        
-    SNDSPC_OPERAND_MEMBIT,        
-    SNDSPC_OPERAND_NOTMEMBIT,        
-    SNDSPC_OPERAND_UPAGE,        
+	SNDSPC_OPERAND_C,
+    SNDSPC_OPERAND_DP_IY,
+    SNDSPC_OPERAND_MEMBIT,
+    SNDSPC_OPERAND_NOTMEMBIT,
+    SNDSPC_OPERAND_UPAGE,
 
-    
     SNDSPC_OPERAND_NUM
 } SNDSPCOperandE;
-
-
 
 typedef struct SNDOpStream_T
 {
@@ -143,24 +146,18 @@ typedef struct
 	Uint8			bSwap;		// swap operands?
 } SNDSPCInstDefT;
 
-
-typedef struct 
+typedef struct
 {
     SNDSPCInstE eInst;
     char *pName;
 } SNDSPCMnemonicT;
 
-
-//
-//
-//
-
 //static Bool _SNDSPC_bInitialized = FALSE;
-//static SNDInstDefT *_SNDSPC_InstMatrix[0x100];                    
+//static SNDInstDefT *_SNDSPC_InstMatrix[0x100];
 
 static SNDSPCInstDefT _SNDSPC_InstDefs[]=
 {
-// loads                                                            
+// loads
     {0xE8, SNDSPC_INST_MOV, SNDSPC_OPERAND_A, SNDSPC_OPERAND_IMM                  },
     {0xE6, SNDSPC_INST_MOV, SNDSPC_OPERAND_A, SNDSPC_OPERAND_IX             },
     {0xBF, SNDSPC_INST_MOV, SNDSPC_OPERAND_A, SNDSPC_OPERAND_IX_INC         },
@@ -211,8 +208,6 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0xFA, SNDSPC_INST_MOV, SNDSPC_OPERAND_DP               ,SNDSPC_OPERAND_DP     , TRUE},
     {0x8F, SNDSPC_INST_MOV, SNDSPC_OPERAND_DP               ,SNDSPC_OPERAND_IMM    , TRUE },
 
-
-
     {0x88, SNDSPC_INST_ADC, SNDSPC_OPERAND_A, SNDSPC_OPERAND_IMM                  },
     {0x86, SNDSPC_INST_ADC, SNDSPC_OPERAND_A, SNDSPC_OPERAND_IX             },
     {0x84, SNDSPC_INST_ADC, SNDSPC_OPERAND_A, SNDSPC_OPERAND_DP                   },
@@ -260,11 +255,6 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0x7E, SNDSPC_INST_CMP, SNDSPC_OPERAND_Y, SNDSPC_OPERAND_DP                   },
     {0x5E, SNDSPC_INST_CMP, SNDSPC_OPERAND_Y, SNDSPC_OPERAND_ABS                  },
 
-
-
-
-
-
     {0x28, SNDSPC_INST_AND, SNDSPC_OPERAND_A, SNDSPC_OPERAND_IMM                  },
     {0x26, SNDSPC_INST_AND, SNDSPC_OPERAND_A, SNDSPC_OPERAND_IX             },
     {0x24, SNDSPC_INST_AND, SNDSPC_OPERAND_A, SNDSPC_OPERAND_DP                   },
@@ -303,7 +293,6 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0x59, SNDSPC_INST_EOR, SNDSPC_OPERAND_IX, SNDSPC_OPERAND_IY                  },
     {0x49, SNDSPC_INST_EOR, SNDSPC_OPERAND_DP, SNDSPC_OPERAND_DP                   , TRUE},
     {0x58, SNDSPC_INST_EOR, SNDSPC_OPERAND_DP, SNDSPC_OPERAND_IMM                  , TRUE},
-
 
     {0xBC, SNDSPC_INST_INC, SNDSPC_OPERAND_A, SNDSPC_OPERAND_NONE       },
     {0xAB, SNDSPC_INST_INC, SNDSPC_OPERAND_DP, SNDSPC_OPERAND_NONE       },
@@ -350,7 +339,6 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0x9A, SNDSPC_INST_SUBW, SNDSPC_OPERAND_YA, SNDSPC_OPERAND_DP       },
     {0x5A, SNDSPC_INST_CMPW, SNDSPC_OPERAND_YA, SNDSPC_OPERAND_DP       },
 
-
     {0xCF, SNDSPC_INST_MUL, SNDSPC_OPERAND_YA, SNDSPC_OPERAND_NONE       },
     {0x9E, SNDSPC_INST_DIV, SNDSPC_OPERAND_YA, SNDSPC_OPERAND_X       },
 
@@ -393,7 +381,6 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0xEE, SNDSPC_INST_POP, SNDSPC_OPERAND_Y, SNDSPC_OPERAND_NONE       },
     {0x8E, SNDSPC_INST_POP, SNDSPC_OPERAND_PSW, SNDSPC_OPERAND_NONE       },
 
-
     {0x0E, SNDSPC_INST_TSET1, SNDSPC_OPERAND_ABS, SNDSPC_OPERAND_NONE       },
     {0x4E, SNDSPC_INST_TCLR1, SNDSPC_OPERAND_ABS, SNDSPC_OPERAND_NONE       },
 
@@ -408,7 +395,6 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0xAA, SNDSPC_INST_MOV1,  SNDSPC_OPERAND_C, SNDSPC_OPERAND_MEMBIT      },
     {0xCA, SNDSPC_INST_MOV1,  SNDSPC_OPERAND_MEMBIT, SNDSPC_OPERAND_C      },
 
-
     {0x60, SNDSPC_INST_CLRC,  SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE      },
     {0x80, SNDSPC_INST_SETC,  SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE      },
     {0xED, SNDSPC_INST_NOTC,  SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE      },
@@ -421,8 +407,6 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
     {0x00, SNDSPC_INST_NOP,    SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE      },
     {0xEF, SNDSPC_INST_SLEEP,    SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE      },
     {0xFF, SNDSPC_INST_STOP,    SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE      },
-
-
 
 	{0x02, SNDSPC_INST_SET1,    SNDSPC_OPERAND_DP0, SNDSPC_OPERAND_NONE      },
 	{0x22, SNDSPC_INST_SET1,    SNDSPC_OPERAND_DP1, SNDSPC_OPERAND_NONE      },
@@ -460,23 +444,12 @@ static SNDSPCInstDefT _SNDSPC_InstDefs[]=
 	{0xD3, SNDSPC_INST_BBC,    SNDSPC_OPERAND_DP6, SNDSPC_OPERAND_REL      },
 	{0xF3, SNDSPC_INST_BBC,    SNDSPC_OPERAND_DP7, SNDSPC_OPERAND_REL      },
 
-
-
-
-
-
-
-
-
 //    {0xx2, SNDSPC_INST_SET1, SNDSPC_OPERAND_DP, SNDSPC_OPERAND_NONE       },
 //    {0xy2, SNDSPC_INST_CLR1, SNDSPC_OPERAND_X, SNDSPC_OPERAND_NONE       },
-
 
 //    {0xn1, SNDSPC_INST_TCALL, SNDSPC_OPERAND_UPAGE, SNDSPC_OPERAND_NONE       },
 //    {0xx3, SNDSPC_INST_BBS, SNDSPC_OPERAND_DBP, SNDSPC_OPERAND_REL       },
 //    {0xy3, SNDSPC_INST_BBC, SNDSPC_OPERAND_DBP, SNDSPC_OPERAND_REL       },
-
-
 
     {0x00, SNDSPC_INST_NONE, SNDSPC_OPERAND_NONE, SNDSPC_OPERAND_NONE }
 };
@@ -551,20 +524,12 @@ static const char *_SNDSPC_pMnemonics[]=
 	(char *)"nop",
 	(char *)"sleep",
 	(char *)"stop",
-};    
-
-
-
-
-//
-//
-//
-
+};
 
 static void _SNDOpStreamOpen(SNDOpStreamT *pOpStream, Uint8 *pOpcode, Uint32 PC)
 {
     pOpStream->pOpcode  = pOpcode;
-    pOpStream->uStartPC = 
+    pOpStream->uStartPC =
     pOpStream->uPC      = PC;
 }
 
@@ -583,7 +548,7 @@ static Uint8 _SNDOpStreamFetch8(SNDOpStreamT *pOpStream)
     // increment pc
     pOpStream->pOpcode++;
     pOpStream->uPC++;
-    
+
     return uByte;
 }
 
@@ -592,30 +557,23 @@ static Uint16 _SNDOpStreamFetch16(SNDOpStreamT *pOpStream)
     return _SNDOpStreamFetch8(pOpStream) | (_SNDOpStreamFetch8(pOpStream) << 8);
 }
 
-
-
-
-
-
 static SNDSPCInstDefT *_SNDGetInstDef(Uint8 uOpcode)
 {
     SNDSPCInstDefT *pInstDef;
-    
+
     pInstDef = _SNDSPC_InstDefs;
-    
+
     while (pInstDef->eInst != SNDSPC_INST_NONE)
     {
         if (pInstDef->uOpcode == uOpcode)
         {
             return pInstDef;
         }
-    
+
         pInstDef++;
     }
     return NULL;
 }
-
-
 
 static void _SNDGetOperand(SNDOpStreamT *pOpStream, char *strOperand, SNDSPCOperandE eOperand)
 {
@@ -696,12 +654,10 @@ static void _SNDGetOperand(SNDOpStreamT *pOpStream, char *strOperand, SNDSPCOper
             break;
 
     default:
-            //assert(0);
             sprintf(strOperand, "?%d?", eOperand);
     }
 
 }
-
 
 static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr)
 {
@@ -711,16 +667,16 @@ static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr)
     char strOperand0[32];
     char strOperand1[32];
 
-    // fetch instruction opcode    
+    // fetch instruction opcode
     uOpcode = _SNDOpStreamFetch8(pOpStream);
-    
+
     // get inst corresponding to opcode
     pInstDef = _SNDGetInstDef(uOpcode);
-    
+
     if (pInstDef)
     {
         pMnemonic = _SNDSPC_pMnemonics[pInstDef->eInst];
-        
+
 		if (!pInstDef->bSwap)
 		{
 			_SNDGetOperand(pOpStream, strOperand0, pInstDef->eOperand0);
@@ -730,31 +686,29 @@ static void _SNDisasm(SNDOpStreamT *pOpStream, char *pStr)
 			_SNDGetOperand(pOpStream, strOperand1, pInstDef->eOperand1);
 			_SNDGetOperand(pOpStream, strOperand0, pInstDef->eOperand0);
 		}
-        
+
     } else
     {
         pMnemonic = "DB";
         sprintf(strOperand0, "$%02X", uOpcode);
         strcpy(strOperand1, "");
     }
-    
+
     if (strlen(strOperand1) > 0)
     {
         // construct disasm string
-        sprintf(pStr, "%s %s,%s", pMnemonic, strOperand0, strOperand1); 
+        sprintf(pStr, "%s %s,%s", pMnemonic, strOperand0, strOperand1);
     } else
     {
         // construct disasm string
-        sprintf(pStr, "%s %s", pMnemonic, strOperand0); 
+        sprintf(pStr, "%s %s", pMnemonic, strOperand0);
     }
 }
-
-
 
 Int32 SNSPCDisasm(char *pStr, Uint8 *pOpcode, Uint32 PC)
 {
     SNDOpStreamT OpStream;
-    
+
     // open opcode stream
     _SNDOpStreamOpen(&OpStream, pOpcode, PC);
 
@@ -763,32 +717,3 @@ Int32 SNSPCDisasm(char *pStr, Uint8 *pOpcode, Uint32 PC)
     // close opcode stream
     return _SNDOpStreamClose(&OpStream);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

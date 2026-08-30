@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppumode7 interface for SNES picture processing.
+ */
+
 #ifndef _SNPPUMODE7_H
 #define _SNPPUMODE7_H
 

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements pixelformat behavior for shared base utilities.
+ */
 
 #include <stdlib.h>
 #include "types.h"
@@ -55,7 +62,7 @@ static PixelFormatT _PixelFormat_BGR555 =
 	10, 5,
 	 5, 5,
 	 0, 5,
-	15, 1,     
+	15, 1,
 };
 
 static PixelFormatT _PixelFormat_BGR565 =
@@ -68,7 +75,6 @@ static PixelFormatT _PixelFormat_BGR565 =
 	 0, 5,
 	 0, 0,
 };
-
 
 static PixelFormatT _PixelFormat_RGB555 =
 {
@@ -92,7 +98,6 @@ static PixelFormatT _PixelFormat_RGBA5551 =
 	15, 1,
 };
 
-
 PixelFormatT *PixelFormatGetByEnum(PixelFormatE eFormat)
 {
 	switch (eFormat)
@@ -109,9 +114,3 @@ PixelFormatT *PixelFormatGetByEnum(PixelFormatE eFormat)
 		return NULL;
 	};
 }
-
-
-
-
-
-

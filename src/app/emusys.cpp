@@ -1,35 +1,14 @@
-
-
-/*!
-
-    \File    emusys.cpp
-
-    \Description
-	    Description
-
-    \Notes
-	    None.
-
-    \Copyright
-	    (c) 2004 Icer Addis
-
-*/
-
-
-/*-- Include files -------------------------------------------------------------------------------*/
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements emusys behavior for the emulator application layer.
+ */
 
 #include "types.h"
 #include "emusys.h"
 using namespace Emu;
-
-/*-- Preprocessor Defines ------------------------------------------------------------------------*/
-
-/*-- Type Definitions ----------------------------------------------------------------------------*/
-
-/*-- Private Implementation ----------------------------------------------------------------------*/
-
-/*-- Public Implementation -----------------------------------------------------------------------*/
-
 
 System::System()
 {
@@ -39,6 +18,5 @@ System::System()
 
 System::~System()
 {
-    
-}
 
+}

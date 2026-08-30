@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppuchrcache interface for SNES picture processing.
+ */
+
 #ifndef _SNPPUCHRCACHE_H
 #define _SNPPUCHRCACHE_H
 

@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the inputdevice interface for shared base utilities.
+ */
 
 #ifndef _INPUTDEVICE_H
 #define _INPUTDEVICE_H
@@ -25,7 +31,6 @@ enum InputAxisE
 #define INPUT_BUTTONSTATE_UP    0
 #define INPUT_BUTTONSTATE_DOWN  1
 
-
 class IInputDevice
 {
 public:
@@ -43,7 +48,6 @@ public:
 
 	virtual void Poll()=0;
 };
-
 
 class CInputDevice : public IInputDevice
 {
@@ -72,7 +76,6 @@ public:
 
 	virtual void Poll();
 };
-
 
 class CInputMap : public CInputDevice
 {

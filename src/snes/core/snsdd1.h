@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snsdd1 interface for the SNES emulation core.
+ */
+
+/*
  * snsdd1.h - S-DD1 (Super Data Decompression 1) coprocessor HLE
  *
  * O S-DD1 e' um chip da Ricoh que descomprime graficos em tempo real

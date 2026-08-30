@@ -1,11 +1,9 @@
-/* mainloop_render.cpp
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Hosts MainLoopRender() and the file-static state it needs
- * (_uVblankCycle and the screen-size #defines used to clear / blit the
- * SNES output texture).
- *
- * Extracted from mainloop.cpp during the Batch 3 split. No logic,
- * literal, or attribute change.
+ * Description:
+ *   Implements mainloop render behavior for the PlayStation 2 application runtime.
  */
 
 #include <stdio.h>
@@ -42,14 +40,12 @@ extern "C" {
 #include "mcsave_ee.h"
 };
 
-
 /* Same MAINLOOP_SCREENWIDTH / HEIGHT pair as mainloop_init.cpp. The
    render path uses these to size the output blit; the init path uses
    them to size the GS framebuffer. Three other historical layouts are
    kept commented out in mainloop_init.cpp for reference. */
 #define MAINLOOP_SCREENWIDTH 256
 #define MAINLOOP_SCREENHEIGHT 240
-
 
 static Uint32 _uVblankCycle;
 
@@ -109,7 +105,6 @@ void MainLoopRender()
 	static Uint32 _iFrame=0;
         static int whichdrawbuf = 0;
 
-
     /* Re-anchor FRAME_1 to gsKit's current draw buffer before any
        primitive runs this frame. The legacy GS_SetDrawFB used to do
        this implicitly per frame; gsKit_sync_flip only swaps the
@@ -146,7 +141,7 @@ void MainLoopRender()
 	{
 //		Float32 fDestColor = (_bMenu || _MainLoop_ModalCount) ? 0.10f : 0.80f;
 		Float32 fDestColor = 0.10f;
-		
+
 		if  (!_bMenu && !_MainLoop_ModalCount)
 		{
 			fDestColor = _MainLoop_fOutputIntensity;
@@ -156,30 +151,28 @@ void MainLoopRender()
 		Float32 dx = 0.0f;
 		Float32 dy = 8.0f;
 
-		if (fColor < fDestColor) 
+		if (fColor < fDestColor)
 		{
 			fColor+=0.06f;
-			if (fColor > fDestColor) 
-			{
-				fColor = fDestColor;
-			}
-		} 
-
-		if (fColor > fDestColor) 
-		{
-			fColor-=0.06f;
-			if (fColor < fDestColor) 
+			if (fColor > fDestColor)
 			{
 				fColor = fDestColor;
 			}
 		}
 
+		if (fColor > fDestColor)
+		{
+			fColor-=0.06f;
+			if (fColor < fDestColor)
+			{
+				fColor = fDestColor;
+			}
+		}
 
         PolyBlend(FALSE);
         PolyTexture(&_OutTex);
         PolyUV(0,0,256,240);
 		PolyColor4f(fColor, fColor, fColor, 1.0f);
-
 
                 if (g_GskVideoMode == GSK_VIDMODE_240P && _pSystem == _pNes)
         {
@@ -198,14 +191,11 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
         }
 
         PolyBlend(TRUE);
-        //PolyTexture(NULL);
-        //PolyRect(dx,dy,128,120);
     }
 
-
     if (!_bMenu)
-    {	
-	
+    {
+
 		if (s_pMovieClip->IsPlaying())
 		{
 	        FontSelect(2);
@@ -220,7 +210,6 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 	        FontPrintf(240,220, "O");
 		}
 
-
 		switch (_MainLoop_uDebugDisplay)
         {
 		case 0:
@@ -229,9 +218,6 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 	        FontPrintf(40,170, "%08X", InputGetPadData(0));
   */
 
-//		        FontSelect(2);
-//		        FontColor4f(1.0, 1.0f, 1.0f, 1.0f);
-//		        FontPrintf(40,190, "%3d", xpadGetFrameCount(0,0));
 			break;
 		case 1:
 		/*
@@ -276,9 +262,7 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 		*/
 		}
 
-//			FontPrintf(195, 210, "%8d", _AudMix.GetLastOutput());
     }
-
 
 	/* Keep menu audio alive even while a modal overlays the UI. Previously
 	   BgmUpdate lived only in the non-modal branch below, so every fixed-time
@@ -315,7 +299,6 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 		}
 	}
 
-
 	#if CODE_DEBUG
 	if (_MainLoop_bMCSaveReady && MCSave_WriteSync(FALSE, NULL))
 	{
@@ -325,8 +308,6 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 			FontPrintf(235,216, "#");
 	}
 	#endif
-
-
 
     PROF_ENTER("GPFlush");
     GPFifoFlush();

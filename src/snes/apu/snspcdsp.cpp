@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspcdsp behavior for SNES audio processing.
+ */
 
 #include <string.h>
 #include "types.h"
@@ -7,12 +14,6 @@
 
 #define SNSPCDSP_DETERMINISMSAFE (0)
 #define SNSPCDSP_DEBUGPRINT (CODE_DEBUG && FALSE)
-
-
-//
-//
-//
-
 
 SNSpcDsp::SNSpcDsp()
 {
@@ -31,9 +32,6 @@ void SNSpcDsp::Write8(Uint32 uAddr, Uint8 uData)
 
 	uAddr &= 0x7F;
 
-//	if (uAddr==SNSPCDSP_REG_FLG) // && uData != m_Regs[uAddr])
-//		ConDebug("flg %02X\n", uData);
-
 #if SNSPCDSP_DEBUGPRINT
 	if (m_Regs[uAddr] != uData)
 		ConDebug("dsp[%02X] %02X\n", uAddr, uData);
@@ -50,7 +48,7 @@ void SNSpcDsp::Write8(Uint32 uAddr, Uint8 uData)
 			m_Regs[SNSPCDSP_REG_FLG] |= 0x40 | 0x20; // enable mute, disable echo
 			m_Regs[SNSPCDSP_REG_KOFF] = 0;
 			m_Regs[SNSPCDSP_REG_KON] = 0;
-	    	m_Regs[SNSPCDSP_REG_ENDX] = 0;
+		m_Regs[SNSPCDSP_REG_ENDX] = 0;
 		}
 		break;
     case SNSPCDSP_REG_KON:
@@ -72,10 +70,9 @@ void SNSpcDsp::Write8(Uint32 uAddr, Uint8 uData)
 		break;
     case SNSPCDSP_REG_ENDX:
         // reset endx
-    	m_Regs[SNSPCDSP_REG_ENDX] = 0;
+	m_Regs[SNSPCDSP_REG_ENDX] = 0;
         break;
 	case SNSPCDSP_REG_KOFF:
-		//ConDebug("koff: %02X\n", uData);
 		if (uData != 0)
 		{
 			for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
@@ -93,7 +90,6 @@ void SNSpcDsp::Write8(Uint32 uAddr, Uint8 uData)
 	}
 
 }
-
 
 Uint8 SNSpcDsp::Read8(Uint32 uAddr)
 {
@@ -156,7 +152,6 @@ Uint16 SNSpcDsp::GetSampleDir(Uint8 uSrcN, Uint32 uOffset)
 	return uData;
 }
 
-
 void SNSpcDsp::KeyOn(Int32 iChannel)
 {
 	// clear endx
@@ -169,7 +164,6 @@ void SNSpcDsp::KeyOn(Int32 iChannel)
 		m_pMixer[1]->KeyOn(iChannel);
 }
 
-
 void SNSpcDsp::KeyOff(Int32 iChannel)
 {
 	// tell mixer(s) to key off
@@ -178,7 +172,6 @@ void SNSpcDsp::KeyOff(Int32 iChannel)
 	if (m_pMixer[1])
 		m_pMixer[1]->KeyOff(iChannel);
 }
-
 
 Bool SNSpcDsp::EnqueueWrite(Uint32 uCycle, Uint32 uAddr, Uint8 uData)
 {
@@ -215,7 +208,7 @@ void SNSpcDsp::Sync(void)
 void SNSpcDsp::UpdateFlags(ISNSpcDspMix *pMixer)
 {
 	Int32 iChannel;
-	
+
 	for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 	{
 		SNSpcVoiceRegsT *pRegs = (SNSpcVoiceRegsT *)GetVoiceRegs(iChannel);
@@ -232,7 +225,7 @@ void SNSpcDsp::UpdateFlags(ISNSpcDspMix *pMixer)
 				m_Regs[SNSPCDSP_REG_KON]  &= ~(1 << iChannel);
 				m_Regs[SNSPCDSP_REG_KOFF] &= ~(1 << iChannel);
 			}
-			
+
 		} else
 		{
 			pRegs->envx = 0;
@@ -240,4 +233,3 @@ void SNSpcDsp::UpdateFlags(ISNSpcDspMix *pMixer)
 		}
 	}
 }
-

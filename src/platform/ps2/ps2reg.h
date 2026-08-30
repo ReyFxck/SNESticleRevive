@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the ps2reg interface for SNESticleRevive.
+ */
 
 #define r0  $0
 #define zr  $0
@@ -32,4 +39,3 @@
 #define sp  $29
 #define fp  $30
 #define ra  $31
-

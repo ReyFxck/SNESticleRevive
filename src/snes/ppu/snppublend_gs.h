@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppublend gs interface for SNES picture processing.
+ */
 
 #ifndef _SNPPUBLEND_GS_H
 #define _SNPPUBLEND_GS_H
-
 
 #include "snppublend.h"
 
@@ -29,8 +35,6 @@ struct SNPPUBlendColorCalibT
 	Float32	i_mul,i_add;
 	Float32	q_mul,q_add;
 };
-
-
 
 class SNPPUBlendGS : public ISNPPUBlend
 {
@@ -60,7 +64,5 @@ public:
 
 	static void ColorCalibrate(SNPPUBlendColorCalibT *pCalib);
 };
-
-
 
 #endif

@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspcio behavior for SNES audio processing.
+ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +28,6 @@ static void _SpcDebugRead(SNSpcT *pSpc, Uint32 uAddr, Uint32 uData)
 {
 	if (_SpcOp || _SpcAddr!=uAddr || _SpcData!=uData)
 	{
-		//ConDebug("%08d: spc read  %04X %02X\n", SNSPCGetCounter(pSpc, SNSPC_COUNTER_TOTAL, 0), uAddr, uData);
 		_SpcOp = 0;
 		_SpcAddr = uAddr;
 		_SpcData = uData;
@@ -33,8 +38,8 @@ static void _SpcDebugWrite(SNSpcT *pSpc, Uint32 uAddr, Uint32 uData)
 {
 	if (!_SpcOp || _SpcAddr!=uAddr || _SpcData!=uData)
 	{
-		ConDebug("%08d: spc write %04X %02X %02X %02X %02X %02X %08X\n", 
-			SNSPCGetCounter(pSpc, SNSPC_COUNTER_TOTAL, 0), 
+		ConDebug("%08d: spc write %04X %02X %02X %02X %02X %02X %08X\n",
+			SNSPCGetCounter(pSpc, SNSPC_COUNTER_TOTAL, 0),
 			uAddr, uData,
 			pSpc->Regs.rA,
 			pSpc->Regs.rX,
@@ -81,7 +86,6 @@ inline void SNSpcIO::SyncQueue(Uint32 uCycle)
 	}
 }
 
-
 void SNSpcIO::Reset()
 {
 	memset(&m_Regs, 0, sizeof(m_Regs));
@@ -92,8 +96,6 @@ void SNSpcIO::Reset()
 	SNSpcTimerReset(&m_Regs.spc_timer[1], 128 * SNSPC_CYCLE); //SNES_MASTERCLOCKRATE / 8000);
 	SNSpcTimerReset(&m_Regs.spc_timer[2], 16  * SNSPC_CYCLE); //SNES_MASTERCLOCKRATE / 64000);
 }
-
-
 
 #if SNES_STATEDEBUG
 extern "C" Bool g_bStateDebug;
@@ -120,7 +122,6 @@ Uint8 SNSpcIO::Read8Trap(SNSpcT *pSpc, Uint32 uAddr)
 	case 0xF6:
 	case 0xF7:
 		#if SNES_DEBUGSPCIO
-	//	_SpcDebugRead(pSpc, uAddr, pIO->m_Regs.apu_w[uAddr & 3]);
 		#endif
 
 		#if SNSPCIO_WRITEQUEUE
@@ -142,7 +143,6 @@ Uint8 SNSpcIO::Read8Trap(SNSpcT *pSpc, Uint32 uAddr)
 		return 	pSpc->Mem[uAddr];
 	}
 }
-
 
 void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 {
@@ -168,7 +168,7 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 			{
 				pSpc->Mem[0xf6] = pIO->m_Regs.apu_w[2] = 0x00;
 				pSpc->Mem[0xf7] = pIO->m_Regs.apu_w[3] = 0x00;
-			}		
+			}
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[0], iCycle, (uData & 1));
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[1], iCycle, (uData & 2));
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[2], iCycle, (uData & 4));
@@ -220,5 +220,3 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 	// store to memory
 	pSpc->Mem[uAddr] = uData;
 }
-
-

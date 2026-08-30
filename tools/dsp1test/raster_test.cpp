@@ -1,7 +1,14 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Exercises raster test behavior in the dsp1test regression suite.
+ */
+
 // Teste do comando Raster (0x0A) do DSP-1 - gera a matriz Mode-7
 // (An,Bn,Cn,Dn) por scanline.  E' o que desenha a pista do Mario Kart
 // e o chao do Pilotwings.  NAO e' coberto pela bancada principal.
-//
 // Dirige o protocolo de barramento exatamente como o jogo: escreve
 // Parameter (monta a camera), depois Raster com Vs inicial e LE em
 // streaming continuo (o DSP auto-incrementa Vs e entrega 4 words por

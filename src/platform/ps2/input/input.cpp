@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements input behavior for PlayStation 2 controller input.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>

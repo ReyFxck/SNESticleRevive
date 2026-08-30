@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppublend c behavior for SNES picture processing.
+ */
 
 #include <stdlib.h>
 #include "types.h"
@@ -8,17 +15,13 @@
 #include "snppublend_c.h"
 #include "snppucolor.h"
 
-
 extern SnesChrLookupT _SnesPPU_PlaneLookup[2];
-
 
 static Uint32 _ConvertColor16to32(SnesColor16T uColor16, PixelFormatT *pFormat, Uint32 uIntensity, Uint32 uShift)
 {
 	Uint32 uColor32;
 	Uint32 uR, uG, uB;
 	Uint32 uA = 0;
-
-	//uIntensity = 15;
 
 	// lookup color
 	uColor32 = SNPPUColorConvert15to32(uColor16);
@@ -47,14 +50,6 @@ static Uint32 _ConvertColor16to32(SnesColor16T uColor16, PixelFormatT *pFormat, 
 	uColor32|=  uA <<  (pFormat->uAlphaShift);
 	return uColor32;
 }
-
-
-
-
-
-//
-//
-//
 
 static void _Color8to32(Uint32 *pDest32, Uint8 *pSrc8, Uint32 *pPal32, Int32 nPixels, SNMaskT *pColorMask, SNMaskT *pHalfColorMask)
 {
@@ -109,7 +104,6 @@ static void _Color8to32(Uint32 *pDest32, Uint8 *pSrc8, Uint32 *pPal32, Int32 nPi
 	}
 }
 
-
 static void _ColorAdd(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels)
 {
 	Uint8 *pDest8, *pMain8, *pSub8;
@@ -158,9 +152,6 @@ static void _ColorSub(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels
 	}
 }
 
-
-
-
 static void _ClearLine32(Uint32 *pPixels, Int32 nPixels, Uint32 uColor, Uint32 uBGMask)
 {
 	while (nPixels > 0)
@@ -173,7 +164,6 @@ static void _ClearLine32(Uint32 *pPixels, Int32 nPixels, Uint32 uColor, Uint32 u
 
 }
 
-
 void SNPPUBlendC::Begin(CRenderSurface *pTarget)
 {
     m_pTarget = pTarget;
@@ -183,7 +173,6 @@ void SNPPUBlendC::End()
 {
     m_pTarget = NULL;
 }
-
 
 void SNPPUBlendC::UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 uIntensity)
 {
@@ -229,8 +218,6 @@ void SNPPUBlendC::UpdatePaletteEntry(SNPPUBlendInfoT *pInfo, Uint32 uAddr, Uint3
 	}
 }
 
-
-
 void SNPPUBlendC::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor16, SNMaskT *pColorMask, Bool bAddSub, Uint32 uIntensity)
 {
     Uint32 uSaveColor;
@@ -272,8 +259,6 @@ void SNPPUBlendC::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor16
 
 }
 
-
-
 void SNPPUBlendC::Clear(SNPPUBlendInfoT *pInfo, Int32 iLine)
 {
 	_ClearLine32(pInfo->uLine32, 256, 0x0000000, 0);
@@ -283,4 +268,3 @@ void SNPPUBlendC::Clear(SNPPUBlendInfoT *pInfo, Int32 iLine)
 	m_pTarget->RenderLine32(iLine, pInfo->uLine32, 256);
 	PROF_LEAVE("SubmitLine");
 }
-

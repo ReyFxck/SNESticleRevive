@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sncpu interface for SNES CPU emulation.
+ */
 
 #ifndef _SNCPU_H
 #define _SNCPU_H
@@ -7,7 +13,6 @@
 
 //#define SNCPU_TRAPFUNC __fastcall
 #define SNCPU_TRAPFUNC
-
 
 enum SNCpuCounterE
 {
@@ -24,18 +29,17 @@ struct SNCpu_t;
 typedef Uint8 (SNCPU_TRAPFUNC *SNCpuReadTrapFuncT)(struct SNCpu_t *pCpu, Uint32 addr);
 typedef void (SNCPU_TRAPFUNC *SNCpuWriteTrapFuncT)(struct SNCpu_t *pCpu, Uint32 addr, Uint8 data);
 typedef Int32 (*SNCpuExecuteFuncT)(struct SNCpu_t *pCpu);
-//typedef void (*SNCpuAbortFuncT)(struct SNCpu_t *pCpu);
 
 typedef union
 {
 	Uint16	w;
-	struct 
+	struct
 	{
 		Uint8 l,h;
 	} b;
 } SNRegU;
 
-typedef struct 
+typedef struct
 {
 	SNRegU  rA;		// accumulator
     SNRegU  rX;		// X
@@ -47,16 +51,15 @@ typedef struct
     Uint16  rDP;    // direct page
 
 	Uint32  rPC;    // PC | Program Bank
-    Uint32  rDB;    // data bank 
+    Uint32  rDB;    // data bank
 } SNCpuRegsT;
 
-
-typedef struct 
+typedef struct
 {
 	Uint8				*pMem;
 
-	SNCpuReadTrapFuncT  pReadTrapFunc; 
-	SNCpuWriteTrapFuncT pWriteTrapFunc; 
+	SNCpuReadTrapFuncT  pReadTrapFunc;
+	SNCpuWriteTrapFuncT pWriteTrapFunc;
 
 	Uint8				uBankCycle;			// the # of cycles required to access this bank
     Uint8               bRAM;          // read only?
@@ -91,7 +94,6 @@ typedef struct SNCpu_t
 	SNCpuBankT			Bank[SNCPU_BANK_NUM];			// cpu memory banks
 
 } SNCpuT;
-
 
 void SNCPUNew(SNCpuT *pCpu);
 void SNCPUDelete(SNCpuT *pCpu);
@@ -147,7 +149,6 @@ Bool SNCPUExecute(SNCpuT *pCpu);
 Bool SNCPUExecuteOne(SNCpuT *pCpu);
 void SNCPUSetDebug(Bool bDebug, Int32 nDebugCycles);
 
-
 static _INLINE Int32 SNCPUGetCounter(SNCpuT *pCpu, Int32 iCounter)
 {
 	return pCpu->Counter[iCounter] - pCpu->Cycles;
@@ -161,7 +162,5 @@ static _INLINE void SNCPUAddCycles(SNCpuT *pCpu, Int32 nCycles)
     pCpu->Counter[2] += nCycles;
     pCpu->Counter[3] += nCycles;
 }
-
-
 
 #endif

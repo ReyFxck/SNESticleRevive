@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements mainloop state behavior for the PlayStation 2 application runtime.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -38,7 +46,6 @@ extern Bool _MainLoop_bMCSaveReady;
 #if MAINLOOP_HISTORY
 extern Uint32 _nHistory;
 #endif
-
 
 static Uint32 _PathCalcHash(const char *pStr)
 {
@@ -2330,14 +2337,12 @@ Bool _MainLoopSaveState()
     return FALSE;
 }
 
-
 void _MainLoopResetHistory()
 {
 #if MAINLOOP_HISTORY
     _nHistory = 0;
 #endif
 }
-
 
 void _MainLoopResetInputChecksums()
 {

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sncpudefs interface for SNES CPU emulation.
+ */
 
 #ifndef _SNCPUDEFS_H
 #define _SNCPUDEFS_H
@@ -15,14 +22,14 @@
 
 // e=0 vector locations
 #define SNCPU_VECTORE_ABORT 0x00FFF8
-#define SNCPU_VECTORE_BRK   0x00FFF6		
+#define SNCPU_VECTORE_BRK   0x00FFF6
 #define SNCPU_VECTORE_COP   0x00FFF4
 #define SNCPU_VECTORE_IRQ   0x00FFFE
 #define SNCPU_VECTORE_NMI   0x00FFFA
 
 // e=1
 #define SNCPU_VECTOR_ABORT 0x00FFE8
-#define SNCPU_VECTOR_BRK   0x00FFE6		
+#define SNCPU_VECTOR_BRK   0x00FFE6
 #define SNCPU_VECTOR_COP   0x00FFE4
 #define SNCPU_VECTOR_IRQ   0x00FFEE
 #define SNCPU_VECTOR_NMI   0x00FFEA
@@ -52,5 +59,3 @@
 #define SNCPU_CYCLE_FAST (6)
 
 #endif
-
-

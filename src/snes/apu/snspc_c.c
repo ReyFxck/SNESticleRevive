@@ -1,16 +1,18 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspc c behavior for SNES audio processing.
+ */
 
 /*
-Todo: 
+Todo:
 Half carry support
 
 Read 16-bit value from dp does not wrap!
 
- 
  */
-
-
-
 
 #include <stdlib.h>
 #include <string.h>
@@ -20,7 +22,6 @@ Read 16-bit value from dp does not wrap!
 #include "snspcdisasm.h"
 #include "sndebug.h"
 
-
 #define SNSPC_STATEDEBUG (SNES_DEBUG && 1)
 #define SNSPC_HALFFLAG FALSE
 #define SNSPC_PROFILE FALSE
@@ -28,19 +29,19 @@ Read 16-bit value from dp does not wrap!
 //#define SNSPC_SUBCYCLES(_nCycles)			pCpu->Cycles-= ((_nCycles)*SNSPC_CYCLE) >> pCpu->uCycleShift;
 #define SNSPC_SUBCYCLES(_nCycles)			nCycles-= ((_nCycles)*SNSPC_CYCLE);
 
-#define SNSPC_FETCH8(_Reg)  _Reg=_SNSPCFetch8(pCpu, rPC);  rPC++;  
-#define SNSPC_FETCH16(_Reg) _Reg=_SNSPCFetch16(pCpu, rPC); rPC+=2; 
+#define SNSPC_FETCH8(_Reg)  _Reg=_SNSPCFetch8(pCpu, rPC);  rPC++;
+#define SNSPC_FETCH16(_Reg) _Reg=_SNSPCFetch16(pCpu, rPC); rPC+=2;
 
-#define SNSPC_WRITE8(_Addr, _Data)  pCpu->Cycles = nCycles; _SNSPCWrite8(pCpu, _Addr, _Data);  
-#define SNSPC_WRITE16(_Addr, _Data) pCpu->Cycles = nCycles; _SNSPCWrite16(pCpu, _Addr, _Data); 
+#define SNSPC_WRITE8(_Addr, _Data)  pCpu->Cycles = nCycles; _SNSPCWrite8(pCpu, _Addr, _Data);
+#define SNSPC_WRITE16(_Addr, _Data) pCpu->Cycles = nCycles; _SNSPCWrite16(pCpu, _Addr, _Data);
 
-#define SNSPC_READ8(_Addr, _x)  pCpu->Cycles = nCycles; _x = _SNSPCRead8(pCpu, _Addr);  
-#define SNSPC_READ16(_Addr, _x) pCpu->Cycles = nCycles; _x = _SNSPCRead16(pCpu, _Addr); 
+#define SNSPC_READ8(_Addr, _x)  pCpu->Cycles = nCycles; _x = _SNSPCRead8(pCpu, _Addr);
+#define SNSPC_READ16(_Addr, _x) pCpu->Cycles = nCycles; _x = _SNSPCRead16(pCpu, _Addr);
 
-#define SNSPC_PUSH8(_Data)	_SNSPCPush8(pCpu, _Data);  
-#define SNSPC_PUSH16(_Data)	_SNSPCPush16(pCpu, _Data);  
-#define SNSPC_POP8(_x)	_x = _SNSPCPop8(pCpu);  
-#define SNSPC_POP16(_x)	_x = _SNSPCPop16(pCpu);  
+#define SNSPC_PUSH8(_Data)	_SNSPCPush8(pCpu, _Data);
+#define SNSPC_PUSH16(_Data)	_SNSPCPush16(pCpu, _Data);
+#define SNSPC_POP8(_x)	_x = _SNSPCPop8(pCpu);
+#define SNSPC_POP16(_x)	_x = _SNSPCPop16(pCpu);
 
 // this macro assumes that the memory read/write cycle is the last cycle of an instruction
 // this prevents the spc from executing "ahead" of the main cpu
@@ -82,7 +83,7 @@ Read 16-bit value from dp does not wrap!
 #if SNSPC_HALFFLAG
 #define SNSPC_SETFLAG_H(__H) r_P &= ~SNSPC_FLAG_H; r_P |= ((__H) & 1) << 3;
 #else
-#define SNSPC_SETFLAG_H(__H) r_P &= ~SNSPC_FLAG_H; 
+#define SNSPC_SETFLAG_H(__H) r_P &= ~SNSPC_FLAG_H;
 #endif
 
 #define SNSPC_SETFLAG_P() r_P |= SNSPC_FLAG_P; r_DP=0x100;
@@ -93,13 +94,13 @@ Read 16-bit value from dp does not wrap!
 	fC = (r_P & SNSPC_FLAG_C);					\
 	r_DP = (r_P & SNSPC_FLAG_P) << 3;					\
 	fZ = (r_P & SNSPC_FLAG_Z) ^ SNSPC_FLAG_Z;	\
-	fN = (r_P << 8);							
+	fN = (r_P << 8);
 
 #define SNSPC_PACKFLAGS()								\
 	r_P &= ~(SNSPC_FLAG_C | SNSPC_FLAG_Z |SNSPC_FLAG_N);	\
 	r_P |= fC & SNSPC_FLAG_C;												\
 	r_P |= (fN >> 8) & SNSPC_FLAG_N;								\
-	if (!(fZ&0xFFFF)) r_P|=SNSPC_FLAG_Z;		
+	if (!(fZ&0xFFFF)) r_P|=SNSPC_FLAG_Z;
 
 #define SNSPC_SET_YA16(_x) r_A = (_x); r_Y=(_x)>>8;
 #define SNSPC_SET_A8(_x) r_A = _x;
@@ -114,7 +115,7 @@ Read 16-bit value from dp does not wrap!
 #define SNSPC_GET_X8(_x) _x = r_X;
 #define SNSPC_GET_Y8(_x) _x = r_Y;
 #define SNSPC_GET_SP8(_x) _x = r_SP;
-#define SNSPC_GET_PSW8(_x) SNSPC_PACKFLAGS(); _x = r_P; 
+#define SNSPC_GET_PSW8(_x) SNSPC_PACKFLAGS(); _x = r_P;
 #define SNSPC_GET_PC(_x) _x = r_PC;
 #define SNSPC_GETI(_x,_imm) _x = _imm;
 
@@ -196,7 +197,6 @@ Read 16-bit value from dp does not wrap!
 		r_P |= SNSPC_FLAG_V;		\
 		}
 
-
 #define SNSPC_SBC8(_Dest,_Src)						\
 		{											\
 		Uint32 _Target = _Dest;					\
@@ -217,8 +217,6 @@ Read 16-bit value from dp does not wrap!
 		}
 */
 #endif
-
-
 
 // BPL
 #define SNSPC_BRREL(_bTest)				\
@@ -243,14 +241,13 @@ Read 16-bit value from dp does not wrap!
 			rPC+= iRel;				\
 		}
 
-
 #define SNSPC_BBC(_Bit)			\
 	SNSPC_FETCH8(t0);		\
 	t0+=r_DP;				\
 	SNSPC_READ8(t0,t1);	\
 	t1&=1<<(_Bit);			\
 	SNSPC_BRREL(!t1);		\
-	SNSPC_SUBCYCLES(5);		
+	SNSPC_SUBCYCLES(5);
 
 #define SNSPC_BBS(_Bit)			\
 	SNSPC_FETCH8(t0);		\
@@ -258,9 +255,7 @@ Read 16-bit value from dp does not wrap!
 	SNSPC_READ8(t0,t1);	\
 	t1&=1<<(_Bit);			\
 	SNSPC_BRREL(t1);		\
-	SNSPC_SUBCYCLES(5);		
-
-
+	SNSPC_SUBCYCLES(5);
 
 // addr_abs_CALL_
 #define SNSPC_TCALL(__n)	\
@@ -268,12 +263,6 @@ Read 16-bit value from dp does not wrap!
 	SNSPC_GET_PC(t2);\
 	SNSPC_PUSH16(t2);\
 	SNSPC_SET_PC16(t0);
-
-
-
-//
-//
-//
 
 static __inline Uint8 _SNSPCFetch8(SNSpcT *pCpu, Uint32 uAddr)
 {
@@ -284,7 +273,6 @@ static __inline Uint16 _SNSPCFetch16(SNSpcT *pCpu, Uint32 uAddr)
 {
 	return pCpu->Mem[uAddr] | (pCpu->Mem[uAddr+1]<<8);
 }
-
 
 static __inline Uint8 __SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 {
@@ -348,7 +336,6 @@ static void  _SNSPCWrite16(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
 	__SNSPCWrite8(pCpu, Addr + 1, Data >> 8);
 }
 
-
 static void _SNSPCPush8(SNSpcT *pCpu, Uint8 Data)
 {
 	pCpu->Mem[r_SP + 0x100] = Data;
@@ -379,15 +366,6 @@ static Uint16 _SNSPCPop16(SNSpcT *pCpu)
 	return uData;
 }
 
-
-//
-//
-//
-
-#if 0
-SNSpcRegsT _LastRegs[512];
-#endif
-
 #if  SNSPC_STATEDEBUG
 #include "console.h"
 #endif
@@ -403,7 +381,7 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 //	Uint32 bDone = FALSE;
 
 	nCycles = pCpu->Cycles;
-	
+
 	if (nCycles <= 0) return 0;
 
 	// registerize registers
@@ -420,16 +398,11 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 
 //#if  SNSPC_STATEDEBUG
 //		pCpu->Regs.rPC = rPC;
-//		if (g_bStateDebug)
 //		{
 //			Char str[64];
-//  
-//	  		SNSPCDisasm(str, pCpu->Mem + pCpu->Regs.rPC, pCpu->Regs.rPC);
-//            pCpu->Cycles = nCycles;
-//
-//            ConDebug("%06d: spc %04X: %02X %02X %02X %02X %c%c%c%c %s (%d)\n", 
+//            ConDebug("%06d: spc %04X: %02X %02X %02X %02X %c%c%c%c %s (%d)\n",
 //                SNSPCGetCounter(pCpu, SNSPC_COUNTER_FRAME),
-//                rPC, 
+//                rPC,
 //				pCpu->Regs.rA,
 //				pCpu->Regs.rX,
 //				pCpu->Regs.rY,
@@ -443,21 +416,6 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 //			);
 //		}
 //#endif
-
-	#if 0
-		int i;
-		pCpu->Regs.rPC = rPC;
-		for (i=511; i > 0; i--)
-		{
-			_LastRegs[i] = _LastRegs[i-1];
-		}
-		_LastRegs[0] = pCpu->Regs;
-
-		if (rPC==0xC9C)
-		{
-			i++;
-		}
-#endif
 
 		SNSPC_FETCH8(uOpcode);
 
@@ -511,7 +469,6 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		SNSPC_BRA();
        SNSPC_ENDOP(4);
 
-
 	SNSPC_OP(0x2E, 5);
 		// CBNE dp,rel
 		SNSPC_FETCH8(t0);
@@ -532,7 +489,6 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		SNSPC_BRREL(t1!=t2);
        SNSPC_ENDOP(6);
 
-
 	SNSPC_OP(0x6E, 5);
 		// DBNZ dp,rel
 		SNSPC_FETCH8(t0);
@@ -551,7 +507,6 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		SNSPC_BRREL(t1!=0);
        SNSPC_ENDOP(4);
 
-
 	SNSPC_OP(0x9E, 12);
 		SNSPC_GET_YA16(t0);
 		SNSPC_GET_X8(t1);
@@ -561,13 +516,13 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		{
 			t2 = t0 / t1;
 			t1 = t0 % t1;
-		} else 
-		{	
+		} else
+		{
 			t1 = 0x0000;
 			t2 = 0xFFFF;
 		}
 		// set flag on overflow ??
-		if (t2 >= 0x100) 
+		if (t2 >= 0x100)
 		{
 			SNSPC_SETFLAG_V();
 		}
@@ -637,11 +592,10 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 	SNSPC_OP(0xD3, 5);
 		SNSPC_BBC(6);
 		break;
-	
+
 	SNSPC_OP(0xF3, 5);
 		SNSPC_BBC(7);
 		break;
-
 
 	SNSPC_OP(0xEF, 3);
 		// SLEEP
@@ -653,8 +607,6 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		rPC--;
 		SNSPC_SUBCYCLES(3);
 		break;
-
-
 
 		// MOV1 membit, C
 	SNSPC_OP(0x0ca,5)
@@ -677,7 +629,6 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 
 		SNSPC_WRITE8(t0,t1);
 		SNSPC_ENDOP(5)
-
 
 	SNSPC_OP(0x0F, 8);
 		// BRK
@@ -724,4 +675,3 @@ done:
 
 	return 0;
 }
-

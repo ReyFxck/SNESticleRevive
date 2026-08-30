@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the ps2dma interface for low-level PlayStation 2 support.
+ */
 
 #ifndef _PS2DMA_H
 #define _PS2DMA_H
@@ -6,7 +13,6 @@
 extern "C" {
 #endif /* __cplusplus */
 
-
 typedef struct
 {
     Uint16 qwc;
@@ -14,7 +20,6 @@ typedef struct
     Uint32 addr;
     Uint32 pad[2];
 } DmaTagT;
-
 
 #define DMA_TAG_REFE 0x0000
 #define DMA_TAG_CNT  0x1000
@@ -57,7 +62,6 @@ typedef struct
 #define D9_TADR *((volatile Uint32 *)(0x1000D430))
 #define D9_SADR *((volatile Uint32 *)(0x1000D480))
 
-
 #define DCHCR_S_DIR  (0)
 #define DCHCR_S_MOD  (2)
 #define DCHCR_S_ASP  (4)
@@ -78,7 +82,6 @@ typedef struct
 #define DCHCR_M_MOD_CHAIN       (1<<DCHCR_S_MOD)
 #define DCHCR_M_MOD_INTERLEAVE  (2<<DCHCR_S_MOD)
 
-
 #define VIF0_STAT *((volatile Uint32 *)(0x10003800))
 #define VIF1_STAT *((volatile Uint32 *)(0x10003C00))
 /* gsKit's gsInit.h declares GIF_STAT as a pointer; guard ours so
@@ -87,10 +90,8 @@ typedef struct
 #define GIF_STAT  *((volatile Uint32 *)(0x10003020))
 #endif
 
-
 void DmaExecSprToRam(Uint128 *pMem, Uint128 *pSpr, Uint32 nQwords);
 void DmaSyncSprToRam();
-
 
 void DmaExecRamToSpr(Uint128 *pMem, Uint128 *pSpr, Uint32 nQwords);
 void DmaSyncRamToSpr();
@@ -107,14 +108,8 @@ void DmaExecGIF(Uint128 *pMem,  Uint32 nQwords);
 void DmaExecGIFChain(Uint128 *pTag);
 void DmaSyncGIF();
 
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
-
 #endif
-
-
-
-

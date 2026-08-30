@@ -1,32 +1,17 @@
-
-
-/*!
-
-    \File    emurom.h
-
-    \Description
-        Description
-
-    \Notes
-        None.
-
-    \Copyright
-        (c) 2004 Icer Addis
-
-*/
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the emurom interface for the emulator application layer.
+ */
 
 #ifndef _emurom_h
 #define _emurom_h
 
-/*-- Include files -------------------------------------------------------------------------------*/
-
 class CDataIO;
 
 namespace Emu {
-/*-- Preprocessor Definitions --------------------------------------------------------------------*/
-
-/*-- Type Definitions ----------------------------------------------------------------------------*/
 
 class Rom
 {
@@ -62,10 +47,6 @@ public:
 protected:
     Bool		                m_bLoaded;
 };
-
-/*-- Variables -----------------------------------------------------------------------------------*/
-
-/*-- Functions -----------------------------------------------------------------------------------*/
 
 } // namespace
 #endif // _emurom_h

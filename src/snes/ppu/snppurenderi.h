@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppurenderi interface for SNES picture processing.
+ */
 
 #ifndef _SNPPURENDERI_H
 #define _SNPPURENDERI_H
@@ -7,7 +14,6 @@
 #define SNESPPURENDER_UPDATE_BGSCR  (1<<2)
 #define SNESPPURENDER_UPDATE_BGCHR  (1<<3)
 #define SNESPPURENDER_UPDATE_OBJPRI (1<<4)
-
 
 #define SNESPPURENDER_UPDATE_WINDOW   (1<<5)
 
@@ -36,6 +42,5 @@ public:
 	virtual void UpdateVRAMRange(Uint32 uVramAddr, Uint32 nWords) {};
 	virtual void UpdateCGRAM(Uint32 uAddr, Uint16 uData) {};
 };
-
 
 #endif

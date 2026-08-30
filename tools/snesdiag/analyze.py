@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Summarizes snesdiag-v1 records from Android emulator text logs.
+
 """Summarize snesdiag-v1 records from a PCSX2/NetherSX2/ARMSX2 TXT log."""
 
 from __future__ import annotations
@@ -10,7 +16,6 @@ import sys
 from collections import Counter
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-
 
 TAG_RE = re.compile(r"(\[(?:snes-[a-z0-9-]+|gsu-watchdog|rom-map)\])\s*(.*)", re.I)
 PERCENT_KEYS = ("cpu", "ppu", "gsu", "apu", "mix", "mdma", "hdma")
@@ -25,11 +30,9 @@ CAPTURE_BITS = {
     0x80: "chip",
 }
 
-
 def _uint(payload: str, name: str) -> Optional[int]:
     match = re.search(r"(?:^|\s)" + re.escape(name) + r"=(\d+)", payload)
     return int(match.group(1)) if match else None
-
 
 def _tuple(payload: str, name: str, count: int) -> Optional[Tuple[int, ...]]:
     match = re.search(
@@ -40,15 +43,12 @@ def _tuple(payload: str, name: str, count: int) -> Optional[Tuple[int, ...]]:
         return None
     return tuple(int(value) for value in match.group(1).split("/"))
 
-
 def _hex(payload: str, name: str) -> Optional[int]:
     match = re.search(r"(?:^|\s)" + re.escape(name) + r"=([0-9a-f]+)", payload, re.I)
     return int(match.group(1), 16) if match else None
 
-
 def _finding(severity: str, code: str, message: str, value: int = 0) -> Dict[str, object]:
     return {"severity": severity, "code": code, "message": message, "value": value}
-
 
 def analyze_lines(lines: Iterable[str]) -> Dict[str, object]:
     stats: Counter[str] = Counter()
@@ -182,7 +182,6 @@ def analyze_lines(lines: Iterable[str]) -> Dict[str, object]:
         "findings": findings,
     }
 
-
 def render_text(report: Dict[str, object]) -> str:
     stats = report["stats"]
     lines = [
@@ -216,7 +215,6 @@ def render_text(report: Dict[str, object]) -> str:
         lines.append("findings: none in the captured windows")
     return "\n".join(lines)
 
-
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path, help="TXT log exported by the Android emulator")
@@ -233,7 +231,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     print(json.dumps(report, indent=2, sort_keys=True) if args.json else render_text(report))
     return 1 if args.strict and report["findings"] else 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

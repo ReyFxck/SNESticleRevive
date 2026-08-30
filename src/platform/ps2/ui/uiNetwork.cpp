@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements uiNetwork behavior for the PlayStation 2 user interface.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <libpad.h>

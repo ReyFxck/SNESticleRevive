@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements embedded irx behavior for the PlayStation 2 application runtime.
+ */
+
 #include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>

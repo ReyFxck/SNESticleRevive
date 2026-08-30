@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements audmixbuffer behavior for shared rendering and audio buffers.
+ */
 
 #include <stdio.h>
 #include "types.h"
@@ -37,7 +44,6 @@ extern "C" int AudMixGameGetVolume(void)
     return s_gameVolume;
 }
 
-
 AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
 {
     m_uSampleRate = uSampleRate;
@@ -55,14 +61,12 @@ void AudMixBuffer::Reset()
     memset(m_OutData, 0, sizeof(m_OutData));
 }
 
-
 void AudMixBuffer::GetFormat(Uint32 *puSampleRate, Uint32 *pnSampleBits, Uint32 *pnChannels)
 {
 	*puSampleRate = m_uSampleRate;
 	*pnSampleBits = 16;
 	*pnChannels   = 2;
 }
-
 
 Int32 AudMixBuffer::GetOutputSamples()
 {
@@ -186,7 +190,6 @@ Int32 AudMixBuffer::ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples, 
     return (Int32)(pOut - pOutStart);
 }
 
-
 Int32 AudMixBuffer::ConvertSamplesStereo_32000(Int16 *pLeftSamples, Int16 *pRightSamples, Int16 *pOutLeft, Int16 *pOutRight, Int32 nInSamples)
 {
     Int32 nOutSamples;
@@ -221,7 +224,7 @@ void AudMixBuffer::OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSamples
             break;
     }
 
-    // check for buffer overflow 
+    // check for buffer overflow
     if ((m_nOutSamples + nOutSamples) > AUDMIXBUFFER_MAXENQUEUE)
     {
         return;
@@ -307,8 +310,6 @@ void AudMixBuffer::Flush()
 
     m_nOutSamples = 0;
 }
-
-
 
 void AudMixBuffer::OutputSamplesMono(Int16 *pSamples,Int32 nSamples)
 {

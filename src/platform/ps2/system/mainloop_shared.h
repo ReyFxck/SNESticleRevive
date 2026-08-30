@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the mainloop shared interface for the PlayStation 2 application runtime.
+ */
+
 #pragma once
 
 /* Shared declarations for the PS2 main loop translation units.
@@ -31,7 +39,6 @@
 #include "uiLog.h"
 #include "uiVideo.h"
 #include "uiScreen.h"
-
 
 /* ---- Project-wide build-time configuration ------------------------ *
  *
@@ -76,7 +83,6 @@
 #ifndef MAINLOOP_MAXSRAMSIZE
 #define MAINLOOP_MAXSRAMSIZE (64 * 1024)
 #endif
-
 
 /* ---- Strings / paths ---------------------------------------------- */
 
@@ -172,7 +178,6 @@ void _MenuRuntimeUpdate(void);
    mainloop.cpp; promoted to extern when MainLoopRender() and the
    menu-runtime were split into separate translation units. */
 void _MenuDraw();
-
 
 enum
 {

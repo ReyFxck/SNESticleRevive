@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements font ui behavior for shared base utilities.
+ */
+
 /* UI font atlas - generated from m5x7 (Daniel Linssen, CC0) @ size 16.
    Atlas 256x32 RGBA8 + explicit glyph map. Natural (un-dilated) glyphs;
    integer 1x/2x drawing keeps 1px ink crisp. Regen via tools/font_gen_ui.py. */

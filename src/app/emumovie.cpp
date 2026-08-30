@@ -1,33 +1,14 @@
-
-/*!
-
-    \File    emumovie.cpp
-
-    \Description
-	    Description
-
-    \Notes
-	    None.
-
-    \Copyright
-	    (c) 2004 Icer Addis
-
-*/
-
-
-/*-- Include files -------------------------------------------------------------------------------*/
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements emumovie behavior for the emulator application layer.
+ */
 
 #include "types.h"
 #include "emumovie.h"
 using namespace Emu;
-
-/*-- Preprocessor Defines ------------------------------------------------------------------------*/
-
-/*-- Type Definitions ----------------------------------------------------------------------------*/
-
-/*-- Private Implementation ----------------------------------------------------------------------*/
-
-/*-- Public Implementation -----------------------------------------------------------------------*/
 
 MovieClip::MovieClip(Uint32 uStateSize, Uint32 uMaxFrames)
 {
@@ -49,7 +30,6 @@ MovieClip::~MovieClip()
 {
     free(m_pStateData);
 }
-
 
 void MovieClip::RecordBegin(System *pSystem)
 {
@@ -85,8 +65,6 @@ Bool MovieClip::RecordFrame(SysInputT &input)
     return FALSE;
 }
 
-
-
 void MovieClip::PlayBegin(System *pSystem)
 {
     assert(!IsRecording());
@@ -117,7 +95,3 @@ Bool MovieClip::PlayFrame(SysInputT &input)
     }
     return FALSE;
 }
-
-
-
-

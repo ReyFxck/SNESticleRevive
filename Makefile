@@ -1,9 +1,15 @@
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Builds, packages and validates SNESticleRevive for PlayStation 2.
+
 ISO_TOOL ?= $(firstword $(shell command -v mkisofs 2>/dev/null) $(shell command -v genisoimage 2>/dev/null) $(shell command -v xorriso 2>/dev/null))
 PS2_PACKER_SRC_DIR ?= $(PS2DEV_CACHE_DIR)/ps2-packer-src
 PS2_PACKER_REPO ?= https://github.com/ps2dev/ps2-packer.git
 AUTO_INSTALL ?= ask
 BUILD_OUTPUT_FILE ?= $(BUILD_META_DIR)/output.txt
-ROMS ?= 
+ROMS ?=
 BUILD_COPIED_FILE ?= $(BUILD_META_DIR)/copied.txt
 BUILD_START_TEXT ?= $(BUILD_META_DIR)/start.txt
 BUILD_START_EPOCH ?= $(BUILD_META_DIR)/start.epoch
@@ -928,7 +934,6 @@ elf: $(TARGET_STRIPPED) $(if $(filter 1,$(PACK)),$(TARGET_PACKED))
 		echo "[elf] (passe out=<pasta> para copiar)"; \
 	fi
 
-
 package: check-env $(TARGET_STRIPPED) package-irx
 
 package-irx: $(TARGET_STRIPPED) | $(PKG_DIR)
@@ -977,7 +982,6 @@ count:
 	@printf 'sources: %s\n' "$(words $(SRCS))"
 	@printf 'objects: %s\n' "$(words $(OBJS))"
 
-
 # ---- ISO (OPL-compatible, adapted from InfinityStation) ----
 #
 # OPL (Open PS2 Loader) exige que:
@@ -1013,7 +1017,7 @@ ISO_VMODE     ?= NTSC
 SMB_CONFIG    ?=
 
 # User-facing knobs (lowercase)
-OUT ?= 
+OUT ?=
 out ?= $(OUT)
 roms ?= $(ROMS)
 BGM ?=
@@ -1490,8 +1494,6 @@ build-summary:
 	printf "Jobs    : %s\n" "$(JOBS)"; \
 	printf "Output  : %s\n" "$$output"; \
 	printf "Copied  : %s\n" "$$copied"
-
-
 
 ensure-iso-tool:
 	@set -e; \

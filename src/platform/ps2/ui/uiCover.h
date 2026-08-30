@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the uiCover interface for the PlayStation 2 user interface.
+ */
+
+/*
  * uiCover.h - Cover-art (capas) display for the ROM browser.
  *
  * PNG decoding via upng (src/third_party/upng, zlib license). Decoded +

@@ -1,24 +1,9 @@
-/* mainloop_bgm.cpp
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Trilha sonora de fundo do menu (.mod / .xm) via libxmp-lite.
- *
- * Arquitetura normal: a cada frame de menu, MainLoopRender chama
- * BgmUpdate(), que gera PCM na EE com o player de tracker e empurra para o
- * audsrv via Aud_Enqueue(). Durante uma operacao SINCRONA de filesystem, um
- * helper EE temporariamente mantem apenas esse decoder alimentado; fora desses
- * escopos a thread dorme. Durante o menu o core SNES/NES nao roda, entao o BGM
- * e' o unico produtor de audio -- nao briga com o AudMixBuffer do jogo.
- *
- * Descoberta de arquivo: procura todas as faixas .mod/.xm em BGM_PATH
- * (define do Makefile) e em pastas padrao, indexa-as e toca como uma
- * playlist: ao terminar uma faixa avanca para a proxima. Ao voltar de uma ROM
- * o decoder carregado e' retomado sem reler o dispositivo.
- *
- * O player anterior (jar_mod/jar_xm) implementava apenas parte dos efeitos
- * de tracker e tinha erros em sample loops/pattern loops. libxmp-lite 4.7.2
- * preserva as regras ProTracker/FastTracker e corrige regressões antigas de
- * mute/instrument swap, para que andamento, instrumentos, E6 loops e saltos
- * de pattern sejam reproduzidos como no tracker original.
+ * Description:
+ *   Implements mainloop bgm behavior for the PlayStation 2 application runtime.
  */
 
 #include <stdio.h>
@@ -48,7 +33,6 @@ extern "C" {
 
 #include "mainloop_bgm.h"
 #include "embedded_irx.h"
-
 
 /* ---- configuracao ---------------------------------------------------- */
 
@@ -140,7 +124,6 @@ static const char *s_dirs[] = {
 };
 #define BGM_NUM_DIRS (sizeof(s_dirs) / sizeof(s_dirs[0]))
 
-
 /* ---- estado ---------------------------------------------------------- */
 
 enum BgmStateE {
@@ -216,7 +199,6 @@ static unsigned int s_resampleFrac = 0; /* fracao exata / 48000 */
 static short s_left [BGM_OUT_CHUNK]     __attribute__((aligned(64)));
 static short s_right[BGM_OUT_CHUNK]     __attribute__((aligned(64)));
 
-
 static void _BgmLock(void)
 {
     if (s_ioLock > 0)
@@ -228,7 +210,6 @@ static void _BgmUnlock(void)
     if (s_ioLock > 0)
         SignalSema(s_ioLock);
 }
-
 
 /* ---- utilitarios ----------------------------------------------------- */
 
@@ -856,7 +837,6 @@ static char *_LoadFileAlloc(const char *path, long *outLen)
     return buf;
 }
 
-
 /* ---- carga (lazy) ---------------------------------------------------- */
 
 static void _ResetResampler(void)
@@ -933,7 +913,6 @@ static void _TryLoad(void)
 
     s_state = (s_indexCount > 0) ? BGM_UNTRIED : BGM_FAILED;
 }
-
 
 /* ---- API ------------------------------------------------------------- */
 

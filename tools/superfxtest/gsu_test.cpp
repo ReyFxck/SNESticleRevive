@@ -1,10 +1,16 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Exercises gsu test behavior in the superfxtest regression suite.
+ */
+
 // Bancada host-side do core SuperFX/GSU (src/snes/core/sngsu.cpp).
-//
 //  Parte A: testes de unidade deterministicos (MMIO, GO, prefixos, STOP/IRQ).
 //  Parte B: FUZZ ORACLE -- milhares de casos. Para cada opcode de calculo,
 //           varre muitos operandos e compara resultado+flags do GSU contra
 //           um calculo de referencia em C. Acusa qualquer divergencia.
-//
 //  Limite honesto: o oracle espelha a spec (fullsnes), entao ele pega bugs de
 //  IMPLEMENTACAO (rota de opcode, mascara, sinal, truncamento, off-by-one).
 //  A exatidao fina de flags vs silicio real ainda precisa de validacao em

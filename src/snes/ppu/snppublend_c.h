@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppublend c interface for SNES picture processing.
+ */
 
 #ifndef _SNPPUBLEND_C_H
 #define _SNPPUBLEND_C_H
-
 
 #include "snppublend.h"
 
@@ -15,7 +21,5 @@ public:
     virtual void UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 uIntensity);
     virtual void UpdatePaletteEntry(SNPPUBlendInfoT *pInfo, Uint32 uAddr, Uint32 uData, Uint32 uIntensity);
 };
-
-
 
 #endif

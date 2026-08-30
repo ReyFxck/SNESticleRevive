@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the rendersurface interface for shared rendering and audio buffers.
+ */
 
 #ifndef _RENDERSURFACE_H
 #define _RENDERSURFACE_H
@@ -8,12 +15,12 @@ class CRenderSurface : public CSurface
 {
 	PaletteT		m_Palette[SURFACE_MAXPALETTES];	// global palette for this pixel format
 
-	PaletteT		m_Clut;			
+	PaletteT		m_Clut;
 	Int32			m_iPalette;
 
 public:
 	CRenderSurface();
-	
+
 	void	RenderLine(Int32 iLine, Uint8 *pLine, Int32 nPixels, Int32 Offset = 0);
 	void	RenderLine32(Int32 iLine, Uint32 *pLine, Int32 nPixels);
 
@@ -28,5 +35,3 @@ public:
 };
 
 #endif
-
-

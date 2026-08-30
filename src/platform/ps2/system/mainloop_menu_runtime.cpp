@@ -1,20 +1,9 @@
-/* mainloop_menu_runtime.cpp
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * Hosts the runtime menu helpers used by MainLoopRender() and the input
- * path:
- *
- *   - _MenuEnable() : toggle the in-game menu, flushing SRAM to memcard
- *                     when the menu is brought up.
- *   - _MenuDraw()   : per-frame menu overlay (called from
- *                     MainLoopRender()).
- *
- * _MenuDraw() used to be a file-static helper inside mainloop.cpp.
- * After the Batch 3 split it has external linkage so MainLoopRender()
- * (now in mainloop_render.cpp) can still reach it through the
- * declaration in mainloop_shared.h.
- *
- * Extracted from mainloop.cpp during the Batch 3 split. Behaviour and
- * the surrounding `#if MAINLOOP_MEMCARD` / `#if 0` gating are unchanged.
+ * Description:
+ *   Implements mainloop menu runtime behavior for the PlayStation 2 application runtime.
  */
 
 #include <stdio.h>
@@ -38,7 +27,6 @@
 extern "C" {
 #include "audio.h"
 };
-
 
 /* The L2+R2 path must return control immediately. The old implementation did
    all memory-card work plus a fixed 60-frame success modal before setting
@@ -89,7 +77,6 @@ void _MenuRuntimeUpdate(void)
 	_MenuSavePendingSRAM();
 }
 
-
 void _MenuEnable(Bool bEnable)
 {
 	if (bEnable!=_bMenu)
@@ -127,9 +114,6 @@ void _MenuEnable(Bool bEnable)
 	}
 }
 
-
-
-
 void _MenuDraw()
 {
 	FontSelect(0);
@@ -154,36 +138,7 @@ void _MenuDraw()
 	PolyRect(0, footerY, 256, 224 - footerY);
 
 	FontSelect(2);
-//	FontColor4f(1.0, 0.0f, 0.0f, 1.0f);
-//	FontColor4f(1.0, 0.5f, 0.5f, 1.0f);
 	FontColor4f(0.2, 0.6f, 0.2f, 1.0f);
-
-#if 0
-	const VersionInfoT *pVersionInfo = VersionGetInfo();
-
-	char VersionStr[256];
-	
-	sprintf(VersionStr, "%s v%d.%d.%d %s", 
-		pVersionInfo->ApplicationName, 
-		pVersionInfo->Version[0],
-		pVersionInfo->Version[1],
-		pVersionInfo->Version[2],
-		pVersionInfo->BuildType
-		);
-
-	FontPuts(256 - 16 - FontGetStrWidth(VersionStr), vy, VersionStr);
-
-//	FontPrintf(8, vy-16, "%d", CDVD_DiskReady(1));
-
-
-
-
-	FontPrintf(8, vy, "%s%d.%d", 
-		pVersionInfo->Compiler, 
-		pVersionInfo->CompilerVersion[0],  
-		pVersionInfo->CompilerVersion[1]
-		);
-#endif	
 
     /* Status bar (green): compiler version on the left and app version
        right-aligned. Network details already live on the Host settings
@@ -198,8 +153,6 @@ void _MenuDraw()
 #endif
     FontPuts(256 - 16 - FontGetStrWidth(_AppVersionStr),
              vy, _AppVersionStr);
-
-
 
 	FontSelect(0);
 }

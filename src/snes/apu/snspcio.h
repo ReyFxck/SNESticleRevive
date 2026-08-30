@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snspcio interface for SNES audio processing.
+ */
 
 #ifndef _SNSPCIO_H
 #define _SNSPCIO_H
@@ -50,6 +56,5 @@ public:
 	#endif
 
 };
-
 
 #endif

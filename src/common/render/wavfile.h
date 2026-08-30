@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the wavfile interface for shared rendering and audio buffers.
+ */
 
 #ifndef _WAVFILE_H
 #define _WAVFILE_H

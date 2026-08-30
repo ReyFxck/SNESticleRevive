@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Exercises safe frameskip test behavior in the pputest regression suite.
+ */
+
 #include <cstdio>
 
 #include "types.h"

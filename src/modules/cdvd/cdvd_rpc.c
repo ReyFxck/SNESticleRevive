@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements cdvd rpc behavior for the PlayStation 2 CD/DVD RPC client.
+ */
+
 #include <tamtypes.h>
 #include <kernel.h>
 #include <sifrpc.h>
@@ -18,9 +26,9 @@ int CDVD_Init()
 
 	while(1){
 		if (SifBindRpc( &cd0, CDVD_IRX, 0) < 0) return -1; // bind error
- 		if (cd0.server != 0) break;
-    	i = 0x10000;
-    	while(i--);
+		if (cd0.server != 0) break;
+	i = 0x10000;
+	while(i--);
 	}
 
 	cdvd_inited = 1;

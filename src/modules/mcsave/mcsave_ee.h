@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the mcsave ee interface for the PlayStation 2 memory-card save client.
+ */
 
 #ifndef _MCSAVE_EE_H
 #define _MCSAVE_EE_H
@@ -12,7 +18,6 @@
 #define MCSAVE_STORE    0x03
 #define MCSAVE_QUIT             0x04
 #define MCSAVE_DREAD    0x05
-
 
 void MCSave_Puts(char *format, ...);
 int MCSave_Init(int MaxSize);

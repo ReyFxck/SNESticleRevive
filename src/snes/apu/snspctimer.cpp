@@ -1,10 +1,13 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspctimer behavior for SNES audio processing.
+ */
 
 #include "types.h"
 #include "snspctimer.h"
-
-//
-//
-//
 
 void SNSpcTimerReset(SNSpcTimerT *pTimer, Uint32 uCyclesPerTick)
 {
@@ -16,7 +19,6 @@ void SNSpcTimerReset(SNSpcTimerT *pTimer, Uint32 uCyclesPerTick)
 	pTimer->iCycleSync		= 0;
 	pTimer->nElapsedCycles	= 0;
 }
-
 
 void SNSpcTimerSync(SNSpcTimerT *pTimer, Int32 nCycles)
 {
@@ -40,7 +42,6 @@ void SNSpcTimerSync(SNSpcTimerT *pTimer, Int32 nCycles)
 		}
 	}
 
-
 	// reset cycle sync time
 	pTimer->iCycleSync = nCycles;
 }
@@ -50,7 +51,7 @@ void SNSpcTimerSetEnable(SNSpcTimerT *pTimer, Int32 nCycles, Bool bEnable)
 	if (bEnable!=pTimer->bEnabled)
 	{
 		SNSpcTimerSync(pTimer, nCycles);
-		if (bEnable) 
+		if (bEnable)
 		{
 			// reset up counter
 			pTimer->uUpCounter = 0;
@@ -87,12 +88,3 @@ Uint8 SNSpcTimerGetCounter(SNSpcTimerT *pTimer, Int32 iCycle)
 	// return
 	return uUpCounter & 0xF;
 }
-
-
-
-
-
-
-
-
-

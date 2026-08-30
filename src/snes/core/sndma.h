@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the sndma interface for the SNES emulation core.
+ */
 
 #ifndef _SNDMA_H
 #define _SNDMA_H
@@ -68,7 +75,5 @@ private:
 
     //Uint32 ProcessMDMACh(Uint32 uChan);
 };
-
-
 
 #endif

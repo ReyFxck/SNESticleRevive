@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements uiVideo behavior for the PlayStation 2 user interface.
+ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -24,9 +31,7 @@ extern "C" {
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
 
-/* ------------------------------------------------------------------ */
 /* Persistence                                                         */
-/* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
 #define VIDEOCFG_VERSION 18
@@ -221,9 +226,7 @@ void VideoSettingsLoad(void)
 	}
 }
 
-/* ------------------------------------------------------------------ */
 /* Screen                                                              */
-/* ------------------------------------------------------------------ */
 
 CVideoScreen::CVideoScreen()
 {

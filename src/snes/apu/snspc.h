@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snspc interface for SNES audio processing.
+ */
 
 #ifndef _SNSPC_H
 #define _SNSPC_H
@@ -45,7 +52,7 @@ typedef struct SNSpc_t
 	Uint8		ShadowMem[SNSPC_ROM_SIZE];
 
 	Bool		bRomEnable;
-	Uint8		uPad; 
+	Uint8		uPad;
 } SNSpcT;
 
 void SNSPCNew(SNSpcT *pCpu);
@@ -88,4 +95,3 @@ static _INLINE Int32 SNSPCGetCounter(SNSpcT *pCpu, Int32 iCounter)
 Uint32 SNSPCMemChecksum(SNSpcT *pCpu);
 
 #endif
-

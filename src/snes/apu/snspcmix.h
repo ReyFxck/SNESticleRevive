@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snspcmix interface for SNES audio processing.
+ */
 
 #ifndef _SNSPCMIX_H
 #define _SNSPCMIX_H
@@ -16,7 +22,6 @@
 #define SNSPCDSP_MAXSAMPLES 544/8
 #define SNSPCDSP_BUFFERSIZE (SNSPCDSP_MAXSAMPLES)
 #endif
-
 
 class    SNSpcDspMix : public ISNSpcDspMix
 {
@@ -46,7 +51,6 @@ public:
 	void	RestoreState(struct SNStateSPCDSPT *pState);
 };
 
-
 class SNSpcDspMixSilent : public SNSpcDspMix
 {
 	void	FetchBlock(Int32 iChannel);
@@ -75,7 +79,5 @@ public:
 	void	Reset();
 	void	Mix(class CMixBuffer *pOutBuffer);
 };
-
-
 
 #endif

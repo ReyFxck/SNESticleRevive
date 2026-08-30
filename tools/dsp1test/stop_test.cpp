@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Exercises stop test behavior in the dsp1test regression suite.
+ */
+
 // Reproduz o padrao do Mario Kart: Raster em stream parado com 0x8000,
 // e verifica que um comando seguinte (Target) NAO desincroniza.
 // Com o bug antigo (atalho no WriteData), o LSB 0x00 do 0x8000 virava

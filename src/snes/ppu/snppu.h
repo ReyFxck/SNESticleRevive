@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snppu interface for SNES picture processing.
+ */
 
 #ifndef _SNPPU_H
 #define _SNPPU_H
@@ -22,7 +29,7 @@ enum SnesPPULayerE
 	SNESPPU_LAYER_BG4 = 3,
 	SNESPPU_LAYER_OBJ = 4,
 	SNESPPU_LAYER_BACK = 5,
-	
+
 	SNESPPU_LAYER_NUM
 };
 
@@ -32,10 +39,6 @@ enum SnesPPULayerE
 #define SNESPPU_MASK_BG4            (1 << SNESPPU_LAYER_BG4)
 #define SNESPPU_MASK_OBJ            (1 << SNESPPU_LAYER_OBJ)
 #define SNESPPU_MASK_BACK           (1 << SNESPPU_LAYER_BACK)
-
-//
-//
-//
 
 typedef Uint16 SnesColor16T;
 
@@ -72,14 +75,10 @@ struct SnesPPUTile8T
 	Uint8	uPlane67[8][2];
 };
 
-
 struct SnesPPUScreenT
 {
 	Uint16	uTile[32][32];
 };
-
-
-
 
 // ppu registers
 struct SnesPPURegsT
@@ -97,7 +96,7 @@ struct SnesPPURegsT
 	SnesReg8T   	        bg4sc;
 	SnesReg8T   	        bg12nba;
 	SnesReg8T   	        bg34nba;
-	
+
 	SnesReg8T		        bgofslo;
 	SnesReg16T   	        bg1hofs;
 	SnesReg16T   	        bg1vofs;
@@ -126,7 +125,7 @@ struct SnesPPURegsT
 	SnesReg8T   	        mpyh;
 
 	SnesReg16T   	        cgadd;
-	
+
 	SnesReg8T   	        w12sel;
 	SnesReg8T   	        w34sel;
 	SnesReg8T   	        wobjsel;
@@ -212,7 +211,6 @@ public:
 	Uint8                   ReadVMDATAL();
 	Uint8                   ReadVMDATAH();
 
-
 	SnesColor16T            GetCG(Uint32 uEntry)  const                       {return m_CGRAM[uEntry];}
 	SnesColor16T *          GetCGData()                                       {return m_CGRAM;}
 
@@ -243,6 +241,5 @@ private:
     void                    UpdateMatMul();
 	void                    UpdateOAMPriority();
 };
-
 
 #endif

@@ -1,36 +1,16 @@
-
-
-/*!
-
-    \File    emurom.cpp
-
-    \Description
-        Description
-
-    \Notes
-        None.
-
-    \Copyright
-        (c) 2004 Icer Addis
-
-*/
-
-
-/*-- Include files -------------------------------------------------------------------------------*/
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements emurom behavior for the emulator application layer.
+ */
 
 #include <stdlib.h>
 #include "types.h"
 #include "emurom.h"
 
 using namespace Emu;
-
-/*-- Preprocessor Defines ------------------------------------------------------------------------*/
-
-/*-- Type Definitions ----------------------------------------------------------------------------*/
-
-/*-- Private Implementation ----------------------------------------------------------------------*/
-
-/*-- Public Implementation -----------------------------------------------------------------------*/
 
 Rom::Rom()
 {
@@ -46,11 +26,9 @@ Rom::LoadErrorE Rom::LoadRom(class CDataIO *pFileIO, Uint8 *pBuffer, Uint32 nBuf
 	return LOADERROR_INVALID;
 }
 
-
 void Rom::Unload()
 {
 }
-
 
 Uint32	Rom::GetNumRomRegions()
 {
@@ -76,4 +54,3 @@ char *Rom::GetExtName(Uint32 uExt)
 {
 	return NULL;
 }
-

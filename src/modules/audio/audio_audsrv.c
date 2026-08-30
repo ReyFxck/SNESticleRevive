@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements audio audsrv behavior for the PlayStation 2 audio backend.
+ */
+
+/*
     ---------------------------------------------------------------------
     audio_audsrv.c - audsrv backend for the Aud_* EE-side audio API.
     ---------------------------------------------------------------------
@@ -105,7 +113,6 @@ void DLog(const char *fmt, ...)
     sio_putsn(_dlog_buf);
 }
 
-
 /*
     Output is fixed 48000 Hz / 16 bit / stereo (SPU2 native).
     AudMixBuffer already up-samples 32000 Hz SNES audio to 48000 Hz
@@ -117,7 +124,6 @@ void DLog(const char *fmt, ...)
 #define AUD_AUDSRV_CHANNELS  2
 #define AUD_BYTES_PER_SAMPLE (AUD_AUDSRV_CHANNELS * (AUD_AUDSRV_BITS / 8)) /* 4 */
 
-
 /*
     Static interleave scratch sized for the worst case the engine will
     ever pass into Aud_Enqueue. AUDMIXBUFFER_MAXENQUEUE in
@@ -127,7 +133,6 @@ void DLog(const char *fmt, ...)
 #define AUD_MAX_ENQUEUE_SAMPLES 4096
 static short _interleave_buf[AUD_MAX_ENQUEUE_SAMPLES * AUD_AUDSRV_CHANNELS]
     __attribute__((aligned(64)));
-
 
 static int sjpcm_inited = 0;
 static int sjpcm_playing = 0;
@@ -153,7 +158,6 @@ static void Aud_WakeAudsrv(void)
         sjpcm_playing = 1;
 }
 
-
 int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
 {
     struct audsrv_fmt_t fmt;
@@ -174,9 +178,7 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
        SifBindRpc (because the IOP audsrv RPC server never registered),
        the user will see "audsrv_init..." on screen as the last line
        and we know exactly which step deadlocked. */
-    // DLog("[snes-aud] audsrv_init() ...");
     ret = audsrv_init();
-    // DLog("[snes-aud] audsrv_init() = %d", ret);
     if (ret != 0)
     {
         // DLog("[snes-aud] init FAILED %d (%s)",
@@ -189,7 +191,6 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
     fmt.channels = AUD_AUDSRV_CHANNELS;
 
     ret = audsrv_set_format(&fmt);
-    // DLog("[snes-aud] set_format(48000,16,2) = %d", ret);
     if (ret != 0)
     {
         // DLog("[snes-aud] set_format FAILED %d (%s)",
@@ -200,7 +201,6 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
 
     /* Default to full volume. Aud_Setvol() may override. */
     ret = audsrv_set_volume(MAX_VOLUME);
-    // DLog("[snes-aud] set_volume(%d) = %d", MAX_VOLUME, ret);
 
     /* Prime audsrv before a producer asks queued()/available(). */
     sjpcm_inited = 1;
@@ -208,7 +208,6 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
     Aud_WakeAudsrv();
     return 0;
 }
-
 
 void Aud_Quit(void)
 {
@@ -218,7 +217,6 @@ void Aud_Quit(void)
     sjpcm_inited = 0;
     sjpcm_playing = 0;
 }
-
 
 /*
     The original API was pause/play; audsrv plays continuously while
@@ -231,7 +229,6 @@ void Aud_Play(void)
     Aud_WakeAudsrv();
 }
 
-
 void Aud_Pause(void)
 {
     if (!sjpcm_inited) return;
@@ -239,14 +236,12 @@ void Aud_Pause(void)
     sjpcm_playing = 0;
 }
 
-
 void Aud_Clearbuff(void)
 {
     if (!sjpcm_inited) return;
     audsrv_stop_audio();
     sjpcm_playing = 0;
 }
-
 
 /*
     Aud_Setvol took a 14-bit hardware-style volume (0..0x3FFF) where
@@ -267,7 +262,6 @@ void Aud_Setvol(unsigned int volume)
     audsrv_set_volume(v);
 }
 
-
 /*
     Bytes already queued in audsrv's IOP-side ring buffer, expressed as
     stereo sample-frames so the math in AudMixBuffer::GetOutputSamples
@@ -285,7 +279,6 @@ int Aud_Buffered(void)
     return bytes / AUD_BYTES_PER_SAMPLE;
 }
 
-
 int Aud_Available(void)
 {
     int bytes;
@@ -297,7 +290,6 @@ int Aud_Available(void)
 
     return bytes / AUD_BYTES_PER_SAMPLE;
 }
-
 
 /*
     Interleave separate left/right channels and push to audsrv. `wait`
@@ -331,7 +323,6 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
         sjpcm_playing = 1;
 }
 
-
 /*
     The original async API let AudMixBuffer overlap RPC traffic with
     the next SNES frame via a SIF callback + semaphore handshake.
@@ -344,18 +335,15 @@ void Aud_BufferedAsyncStart(void)
     /* nothing to do - audsrv tracks queued bytes internally */
 }
 
-
 int Aud_BufferedAsyncGet(void)
 {
     return Aud_Buffered();
 }
 
-
 void Aud_EnqueueAsync(short *left, short *right, int size)
 {
     Aud_Enqueue(left, right, size, 0);
 }
-
 
 void Aud_Wait(void)
 {
@@ -363,7 +351,6 @@ void Aud_Wait(void)
        audsrv_wait_audio when the caller passes wait=1, so there is no
        extra synchronisation to perform here. */
 }
-
 
 int Aud_IsInitialized(void)
 {

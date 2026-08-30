@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the audio interface for the PlayStation 2 audio backend.
+ */
+
+/*
  * audio.h - EE-side audio output API (audsrv backend).
  *
  * A small Aud_* API over the PS2SDK **audsrv** service (SPU2 native:

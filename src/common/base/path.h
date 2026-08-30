@@ -1,34 +1,19 @@
-
-/*!
-
-    \File    path.h
-
-    \Description
-	    Description
-
-    \Notes
-	    None.
-
-    \Copyright
-	    (c) 2004 Icer Addis
-
-*/
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the path interface for shared base utilities.
+ */
 
 #ifndef _path_h
 #define _path_h
-
-/*-- Include files -------------------------------------------------------------------------------*/
-
-/*-- Preprocessor Definitions --------------------------------------------------------------------*/
 
 #define PATH_MAX		(256)
 #define PATH_MAX_DRIVE	(32)
 #define PATH_MAX_DIR	(256)
 #define PATH_MAX_NAME	(256)
 #define PATH_MAX_EXT	(256)
-
-/*-- Type Definitions ----------------------------------------------------------------------------*/
 
 class CPath
 {
@@ -63,13 +48,7 @@ private:
 	char    					m_path[PATH_MAX];
 };
 
-
-/*-- Variables -----------------------------------------------------------------------------------*/
-
-/*-- Functions -----------------------------------------------------------------------------------*/
-
 void PathGetFileName(Char *pName, const Char *pPath);
 void PathGetFileExt(Char *pExt, const Char *pPath);
 
 #endif // _path_h
-

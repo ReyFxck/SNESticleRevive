@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# Copyright (c) 1997-2004-2022 Icer Addis
+# Re-Worked By ReyFxck, Claude Aí, ChatGPT
+#
+# Description:
+#   Builds the dsp4test host-side regression suite.
+
 # Bancada host-side para o DSP-4 HLE.
 # Compila o codigo REAL (src/snes/core/sndsp4.cpp + dsp4emu.cpp, o HLE do
 # ZSNES portado) num binario de PC e roda os testes de protocolo/funcionais.

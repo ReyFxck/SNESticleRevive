@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppubg behavior for SNES picture processing.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -13,8 +19,6 @@
 #include "prof.h"
 #include "sndbglog.h"
 
-
-
 static Uint32 _SnesPPU_ScrSizeOffset[4][4]=
 {
 	{0x0000, 0x0000, 0x0000, 0x0000},
@@ -23,7 +27,7 @@ static Uint32 _SnesPPU_ScrSizeOffset[4][4]=
 	{0x0000, 0x0400, 0x0800, 0x0C00}
 };
 
-static Uint8 _SNPPUBg_Tile16Pos[4][4] = 
+static Uint8 _SNPPUBg_Tile16Pos[4][4] =
 {
 	{ 0,  1}, // normal
 	{ 1,  0}, // flipx
@@ -31,7 +35,7 @@ static Uint8 _SNPPUBg_Tile16Pos[4][4] =
 	{17, 16}, // flipxy
 };
 
-// BG Fetch 
+// BG Fetch
 
 /* Move one tile row down in the abstract ss-yyyyy-xxxxx tilemap address.
    A plain +32 would carry row 31 into the horizontal screen-select bit. */
@@ -44,7 +48,6 @@ static Uint16 _SNPPUOffsetNextRow(Uint16 uAddr)
 	uAddr ^= 0x0800;
 	return uAddr;
 }
-
 
 static Uint32 _FetchOffset(Uint16 uAddr, Uint16 *pOffset, Int32 nTiles, SnesPPUScreenT **ppScreen)
 {
@@ -94,7 +97,6 @@ static Uint32 _FetchOffset(Uint16 uAddr, Uint16 *pOffset, Int32 nTiles, SnesPPUS
 	return uOffsetOR;
 }
 
-
 static void _FetchBG8x8(Uint32 uAddr, SnesRenderTileT *pTile, Int32 nTiles, SnesPPUScreenT **ppScreen)
 {
 	//  each screen is 32x32
@@ -142,7 +144,6 @@ static void _FetchBG8x8(Uint32 uAddr, SnesRenderTileT *pTile, Int32 nTiles, Snes
     PROF_LEAVE("_FetchBG8x8");
 }
 
-
 static void _FetchBG16x16(Uint32 uAddr, SnesRenderTileT *pTile, Int32 nTiles, SnesPPUScreenT **ppScreen, Uint32 uFlipXOR)
 {
 	//  each screen is 32x32
@@ -181,7 +182,7 @@ static void _FetchBG16x16(Uint32 uAddr, SnesRenderTileT *pTile, Int32 nTiles, Sn
 			pScrData  =  (Uint16 *)ppScreen[(uAddr >> 10) & 3];
 		}
 
-		// extract tile 
+		// extract tile
 		// screen data is of format: YX?cccNNNNNNNNNN
 		uTile16 = ((uScrData >>  0) & 0x3FF);
 		uFlip	= (uScrData >> 14) & 3;
@@ -214,8 +215,6 @@ static void _FetchBG16x16(Uint32 uAddr, SnesRenderTileT *pTile, Int32 nTiles, Sn
 
 	PROF_LEAVE("_FetchBG16x16");
 }
-
-
 
 static void _FetchBG8x8Offset(Uint32 uScrollX, Uint32 uScrollY, Int32 iLine, SnesRenderTileT *pTile, Int32 nTiles, SnesPPUScreenT **ppScreen, Uint16 *pOffset, Uint32 uOffsetMask)
 {
@@ -320,7 +319,7 @@ static void _FetchBG8x8Offset2(Uint32 uScrollX, Uint32 uScrollY, Int32 iLine, Sn
 			{
 				uTileScrollX = (uScrollX & 7) | (pOffset[0] & 0x3F8);
 			}
-		} 
+		}
 
 		uTileScrollX += uX;
 		uTileScrollY += iLine;
@@ -356,8 +355,6 @@ static void _FetchBG8x8Offset2(Uint32 uScrollX, Uint32 uScrollY, Int32 iLine, Sn
 	PROF_LEAVE("_FetchBG8x8Offset2");
 }
 
-
-
 static void _GetScreenPtrs(SnesPPUScreenT **ppScreen, SnesPPU *pPPU, Uint32 uScrAddr, Uint32 uScrSize)
 {
 	// get pointers to screens
@@ -366,8 +363,6 @@ static void _GetScreenPtrs(SnesPPUScreenT **ppScreen, SnesPPU *pPPU, Uint32 uScr
 	ppScreen[2] = (SnesPPUScreenT *)pPPU->GetVramPtr(uScrAddr + _SnesPPU_ScrSizeOffset[uScrSize][2]);
 	ppScreen[3] = (SnesPPUScreenT *)pPPU->GetVramPtr(uScrAddr + _SnesPPU_ScrSizeOffset[uScrSize][3]);
 }
-
-
 
 Uint32 SnesPPURender::FetchBG(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTiles, Int32 nTiles, Int32 iLine, Uint32 &uOldVramAddr)
 {
@@ -378,7 +373,7 @@ Uint32 SnesPPURender::FetchBG(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTil
 	SnesPPUScreenT *pScreen[4];
 	Uint32 uResult = 0;
 
-	if (!pBGInfo->uBitDepth) 
+	if (!pBGInfo->uBitDepth)
 	{
 		// no fetching
 		return uResult;
@@ -484,7 +479,6 @@ Uint32 SnesPPURender::FetchBG(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTil
     return uResult;
 }
 
-
 /* Offset-per-tile is evaluated in 8-pixel screen columns even when the
    target BG uses 16x16 map tiles.  Resolve the enclosing map entry, then
    select its 8x8 quadrant. */
@@ -565,13 +559,11 @@ static void _FetchBG16x16Offset(
 	PROF_LEAVE("_FetchBG16x16Offset");
 }
 
-
-
 Uint32 SnesPPURender::FetchBGOffset(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTiles, Int32 nTiles, Int32 iLine, Uint16 *pOffset, Uint32 uOffsetMask, Bool bVOffset)
 {
 	SnesPPUScreenT *pScreen[4];
 
-	if (!pBGInfo->uBitDepth) 
+	if (!pBGInfo->uBitDepth)
 	{
 		// no fetching
 		return 0;
@@ -593,7 +585,7 @@ Uint32 SnesPPURender::FetchBGOffset(SnesBGInfoT *pBGInfo, struct SnesRenderTileT
 			_FetchBG8x8Offset2(pBGInfo->uScrollX, pBGInfo->uScrollY, iLine, pTiles, nTiles, pScreen, pOffset, uOffsetMask);
 		} else
 		{
-			_FetchBG8x8Offset(pBGInfo->uScrollX, pBGInfo->uScrollY, iLine, pTiles, nTiles, pScreen, pOffset, uOffsetMask);		
+			_FetchBG8x8Offset(pBGInfo->uScrollX, pBGInfo->uScrollY, iLine, pTiles, nTiles, pScreen, pOffset, uOffsetMask);
 		}
 		break;
 	case 1:
@@ -613,7 +605,6 @@ Uint32 SnesPPURender::FetchBGOffset(SnesBGInfoT *pBGInfo, struct SnesRenderTileT
 	return SNPPU_BGFLAGS_FETCHCHR | SNPPU_BGFLAGS_FETCHPAL | SNPPU_BGFLAGS_OFFSET;
 }
 
-
 static Uint16 _SNPPUReadOffset16Cell(
 	Uint32 uPixelX,
 	Uint32 uPixelY,
@@ -628,7 +619,6 @@ static Uint16 _SNPPUReadOffset16Cell(
 
 	return ((Uint16 *)ppScreen[(uAddr >> 10) & 3])[uAddr & 0x03FF];
 }
-
 
 static Uint32 _FetchOffset16x16Map(
 	Uint32 uScrollX,
@@ -668,7 +658,6 @@ static Uint32 _FetchOffset16x16Map(
 
 	return uOffsetOR;
 }
-
 
 Uint32 SnesPPURender::FetchOffset(SnesBGInfoT *pBGInfo, Uint16 *pOffset,
 	Int32 iLine, Uint32 &uOldVramAddr, Bool bVOffset)
@@ -740,18 +729,6 @@ Uint32 SnesPPURender::FetchOffset(SnesBGInfoT *pBGInfo, Uint16 *pOffset,
 	return uOffsetOR;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 void _SetBGMask(SNMaskT *pMask, SNMaskT *pWindow, Uint8 uWSel, Uint8 uWLog)
 {
 	SNMaskT *pWindow1=NULL;
@@ -801,8 +778,6 @@ void _SetBGMask(SNMaskT *pMask, SNMaskT *pWindow, Uint8 uWSel, Uint8 uWLog)
 			SNMaskClear(pMask);
 		}
 	}
-
-//	SNMaskClear(pMask);
 
 }
 
@@ -930,12 +905,12 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 		pBGInfo[3].uBitDepth= 0;
 		pBGInfo[0].uScrollX = 0;
 		pBGInfo[0].uScrollY = 0;
-		
-		pBGInfo[0].Priority  =  
-		pBGInfo[1].Priority  =  
-		pBGInfo[2].Priority  =  
+
+		pBGInfo[0].Priority  =
+		pBGInfo[1].Priority  =
+		pBGInfo[2].Priority  =
 		pBGInfo[3].Priority  =  7;
-		
+
 		break;
 
 	default:
@@ -947,8 +922,6 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 	}
 }
 
-
-
 void SnesPPURender::DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow)
 {
     const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
@@ -957,7 +930,7 @@ void SnesPPURender::DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow)
 
 	// create windows & inverted windows
 	// confirmed:
-	// window range is INCLUSIVE 
+	// window range is INCLUSIVE
 	//    40->41 is two pixels wide
 	//    40->40 is one pixel wide
 	//    40->39 is 0 pixels wide

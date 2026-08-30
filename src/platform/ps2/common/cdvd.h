@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the cdvd interface for shared PlayStation 2 platform definitions.
+ */
+
 #ifndef _CDVD_H
 #define _CDVD_H
 
@@ -12,7 +20,6 @@
 #define CDVD_DISKREADY  0x06
 #define CDVD_FLUSHCACHE 0x07
 
-
 struct TocEntry
 {
         u32             fileLBA;
@@ -22,7 +29,6 @@ struct TocEntry
         char    filename[128+1];
         u8              padding2[3];
 } __attribute__((packed));
-
 
 enum CDVD_getMode {
         CDVD_GET_FILES_ONLY = 1,

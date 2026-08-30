@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sncpu behavior for SNES CPU emulation.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,12 +24,7 @@ typedef char SNCpuBankOffsetMustStay52[
 	(offsetof(SNCpuT, Bank) == 52) ? 1 : -1];
 #endif
 
-
 #define SNCPU_FASTREADMEM TRUE
-
-//
-//
-//
 
 static Int32 _SNCPUDefaultExecuteFunc(SNCpuT *pCpu);
 static Uint8 SNCPU_TRAPFUNC _SNCPUDefaultRead(SNCpuT *pCpu, Uint32 Addr);
@@ -30,20 +32,10 @@ static void SNCPU_TRAPFUNC _SNCPUDefaultWrite(SNCpuT *pCpu, Uint32 Addr, Uint8 D
 static Uint8 SNCPU_TRAPFUNC _SNCPUWrap24Read(SNCpuT *pCpu, Uint32 Addr);
 static void SNCPU_TRAPFUNC _SNCPUWrap24Write(SNCpuT *pCpu, Uint32 Addr, Uint8 Data);
 
-
-//
-//
-//
-
 static SNCpuExecuteFuncT _SNCPU_pExecuteFunc = _SNCPUDefaultExecuteFunc;
 static SNCpuExecuteFuncT _SNCPU_pDebugExecuteFunc = _SNCPUDefaultExecuteFunc;
 static Bool _SNCPU_bDebug = FALSE;
 static Int32 _SNCPU_nDebugCycles = 1;
-
-
-//
-//
-//
 
 static Uint8 SNCPU_TRAPFUNC _SNCPUDefaultRead(SNCpuT *pCpu, Uint32 Addr)
 {
@@ -59,10 +51,6 @@ static Int32 _SNCPUDefaultExecuteFunc(SNCpuT *pCpu)
 	pCpu->Cycles = 0;
 	return 0;
 }
-
-//
-//
-
 
 void SNCPUNew(SNCpuT *pCpu)
 {
@@ -89,7 +77,6 @@ void SNCPUResetCounters(SNCpuT *pCpu)
 		pCpu->Counter[iCounter] = 0;
 	}
 }
-
 
 void SNCPUReset(SNCpuT *pCpu, Bool bHardReset)
 {
@@ -133,12 +120,11 @@ void SNCPUResetRegs(SNCpuT *pCpu)
 	pCpu->Regs.rY.w = 0;
 	pCpu->Regs.rS.w = 0;
 	pCpu->Regs.rP   = SNCPU_FLAG_I;
-	
+
 	pCpu->Regs.rPC = 0;
 	pCpu->Regs.rDP = 0;
 	pCpu->Regs.rDB = 0;
 }
-
 
 void SNCPUSetBank(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint8 *pMem, Bool bRAM)
 {
@@ -149,11 +135,11 @@ void SNCPUSetBank(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint8 *pMem, Bool bRAM
 
 	iBank  = Addr >> SNCPU_BANK_SHIFT;
 	nBanks = Size >> SNCPU_BANK_SHIFT;
-    
-    if (pMem==NULL) 
+
+    if (pMem==NULL)
     {
         bRAM = FALSE;
-    }        
+    }
 
 	while ((nBanks > 0) && (iBank < SNCPU_BANK_NUM))
 	{
@@ -173,7 +159,7 @@ void SNCPUSetTrap(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, SNCpuReadTrapFuncT pRe
 
 	assert(!(Size & SNCPU_BANK_MASK));
 	assert(!(Addr & SNCPU_BANK_MASK));
-	
+
 	iBank  = Addr >> SNCPU_BANK_SHIFT;
 	nBanks = Size >> SNCPU_BANK_SHIFT;
 
@@ -187,7 +173,7 @@ void SNCPUSetTrap(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, SNCpuReadTrapFuncT pRe
 		pCpu->Bank[iBank].pWriteTrapFunc = pWriteTrap;
 		pCpu->Bank[iBank].pMem = NULL;
 		pCpu->Bank[iBank].bRAM =  0;
-        
+
 		// next bank
 		iBank++;
 		nBanks--;
@@ -280,7 +266,6 @@ static void SNCPU_TRAPFUNC _SNCPUWrap24Write(SNCpuT *pCpu, Uint32 Addr, Uint8 Da
 	SNCPUWrite8(pCpu, Addr & 0xFFFFFF, Data);
 }
 
-
 Uint8 SNCPUPeek8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
@@ -299,7 +284,6 @@ Uint8 SNCPUPeek8(SNCpuT *pCpu, Uint32 Addr)
 	}
 }
 
-
 void SNCPUPeekMem(SNCpuT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes)
 {
 	while (nBytes > 0)
@@ -312,7 +296,6 @@ void SNCPUPeekMem(SNCpuT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes)
 		nBytes--;
 	}
 }
-
 
 //Uint32 uBankRead[256 * 8];
 //Uint32 uBankWrite[256 * 8];
@@ -333,19 +316,15 @@ Uint8 SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 	uLastAddr[0] = Addr;*/
 	if (pBankMem)
 	{
-		
+
 //		char str[64];
-//		sprintf(str,"read[%04X]=%02X\n", Addr, pBankMem[Addr]);
-//		OutputDebugStr(str);
 		return pBankMem[Addr];
 	}
 	else
 	{
-//		ConDebug("readtrap[%04X]", Addr);
 		//call trap function
 		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
 
-//		return 0xFF;
 	}
 }
 
@@ -365,7 +344,6 @@ Uint32 SNCPURead24(SNCpuT *pCpu, Uint32 Addr)
 	uData|= (SNCPURead8(pCpu, Addr+2) << 16);
 	return  uData;
 }
-
 
 #if !SNCPU_FASTREADMEM
 
@@ -430,21 +408,6 @@ void SNCPUReadMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 *pBuffer, Uint32 nTotalBytes
 }
 #endif
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 void  SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 {
 	Uint32 iBank;
@@ -456,7 +419,7 @@ void  SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 
 	if (pCpu->Bank[iBank].bRAM)
 	{
-    	pBankMem = pCpu->Bank[iBank].pMem;
+	pBankMem = pCpu->Bank[iBank].pMem;
 		// write directly to memory
 		pBankMem[Addr] = Data;
 	}
@@ -472,7 +435,6 @@ void  SNCPUWrite16(SNCpuT *pCpu, Uint32 Addr, Uint16 Data)
 	SNCPUWrite8(pCpu, Addr + 0, Data >> 0);
 	SNCPUWrite8(pCpu, Addr + 1, Data >> 8);
 }
-
 
 void SNCPUPush8(SNCpuT *pCpu, Uint8 Data)
 {
@@ -523,7 +485,6 @@ Uint16 SNCPUPop16(SNCpuT *pCpu)
 	return uData;
 }
 
-
 Uint32 SNCPUPop24(SNCpuT *pCpu)
 {
 	Uint32 uData;
@@ -535,7 +496,7 @@ Uint32 SNCPUPop24(SNCpuT *pCpu)
 
 void SNCPUNMI(SNCpuT *pCpu)
 {
-  
+
 #if SNES_DEBUG
     if (Snes_bDebugIO)
         SnesDebug("-NMI\n");
@@ -563,7 +524,7 @@ void SNCPUNMI(SNCpuT *pCpu)
 		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 8));
 		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 0));
 		SNCPUPush8(pCpu, pCpu->Regs.rP);
-	
+
 		pCpu->Regs.rPC = SNCPURead16(pCpu, SNCPU_VECTOR_NMI);
 	}
 
@@ -574,7 +535,6 @@ void SNCPUNMI(SNCpuT *pCpu)
 		SNCPU_CYCLE_SLOW * (pCpu->Regs.rE ? 5 : 6) +
 		SNCPU_CYCLE_FAST * 2);
 }
-
 
 void SNCPUIRQ(SNCpuT *pCpu)
 {
@@ -593,7 +553,6 @@ void SNCPUIRQ(SNCpuT *pCpu)
             SnesDebug("-IRQ\n");
 #endif
 
-        
 		if (pCpu->Regs.rE)
 		{
 			// emulation
@@ -622,15 +581,11 @@ void SNCPUIRQ(SNCpuT *pCpu)
 	}
 }
 
-//
-//
-//
-
 Int32 SNCPUDisassemble(SNCpuT *pCpu, Uint32 Addr, char *pStr, Uint8 *pFlags)
 {
 	Uint8 Opcode[4];
     Uint8 uFlags;
-    
+
     if (!pFlags)
     {
         uFlags = pCpu->Regs.rP;
@@ -643,7 +598,6 @@ Int32 SNCPUDisassemble(SNCpuT *pCpu, Uint32 Addr, char *pStr, Uint8 *pFlags)
 	// disassemble
 	return SNDisasm(pStr, Opcode, Addr, pFlags);
 }
-
 
 void SNCPUDumpRegs(SNCpuT *pCpu, char *pStr)
 {
@@ -670,12 +624,10 @@ void SNCPUDumpRegs(SNCpuT *pCpu, char *pStr)
 
 }
 
-
 void SNCPUResetCounter(SNCpuT *pCpu, Int32 iCounter)
 {
 	pCpu->Counter[iCounter] = 0;
 }
-
 
 void SNCPUSetExecuteFunc(SNCpuExecuteFuncT pFunc)
 {
@@ -687,7 +639,6 @@ void SNCPUSetExecuteFunc(SNCpuExecuteFuncT pFunc)
 		_SNCPU_pExecuteFunc = pFunc;
 	}
 }
-
 
 Bool SNCPUExecute(SNCpuT *pCpu)
 {
@@ -702,7 +653,7 @@ Bool SNCPUExecute(SNCpuT *pCpu)
     if (pCpu->nAbortCycles != 0)
     {
         pCpu->Cycles = pCpu->nAbortCycles;
-        pCpu->nAbortCycles = 0; 
+        pCpu->nAbortCycles = 0;
         return FALSE;
     } else
     {
@@ -761,7 +712,6 @@ Int32 SNCPUExecuteDebug(SNCpuT *pCpu)
 	return 0;
 }
 
-
 void SNCPUSetDebug(Bool bDebug, Int32 nDebugCycles)
 {
 	if (_SNCPU_bDebug!=bDebug)
@@ -781,7 +731,6 @@ void SNCPUSetDebug(Bool bDebug, Int32 nDebugCycles)
 	_SNCPU_nDebugCycles = nDebugCycles;
 }
 
-
 void SNCPUAbort(SNCpuT *pCpu)
 {
 	if (pCpu->bRunning)
@@ -794,14 +743,11 @@ void SNCPUAbort(SNCpuT *pCpu)
 	}
 }
 
-
 void SNCPUSignalIRQ(SNCpuT *pCpu, Uint32 bEnable)
 {
-    //
     // IRQs will continuously occur while the IRQ signal is set.
     // IRQs can be enabled/disabled by CPU flags
     // IRQ can be cleared by reading timeup register or setting nmitimen v-en, h-en to 0
-    //
 	if (bEnable)
 	{
 		pCpu->uSignal |= SNCPU_SIGNAL_IRQ;
@@ -844,12 +790,10 @@ Bool SNCPUExecuteIRQDelay(SNCpuT *pCpu)
 
 void SNCPUSignalNMI(SNCpuT *pCpu, Uint32 bEnable)
 {
-    //
-    // NMIs are edge triggered. 
+    // NMIs are edge triggered.
     // If the signal transitions from 0 -> 1 then the NMIEDGE flag becomes set.
     // When NMIEDGE is set, a cpu nmi will trigger with a one instruction delay.
     // Lowering the input does not cancel an edge already latched by the CPU.
-    // 
 	if (bEnable)
 	{
 		if (!(pCpu->uSignal & SNCPU_SIGNAL_NMI))
@@ -870,7 +814,6 @@ void SNCPUSignalNMI(SNCpuT *pCpu, Uint32 bEnable)
 		pCpu->uSignal &= ~SNCPU_SIGNAL_NMI;
 	}
 }
-
 
 void SNCPUSignalDMA(SNCpuT *pCpu, Uint32 bEnable)
 {

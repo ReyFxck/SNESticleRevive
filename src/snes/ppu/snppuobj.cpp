@@ -1,4 +1,10 @@
-
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snppuobj behavior for SNES picture processing.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,8 +17,6 @@
 #include "snmask.h"
 #include "prof.h"
 #include "sndbglog.h"
-
-
 
 // OBSEL.5-7 escolhe dois tamanhos. Os modos 6/7 sao retangulares e nao
 // podem ser representados por um unico shift, como fazia o renderer antigo.
@@ -52,7 +56,6 @@ Bool _SnesPPUOBJTileCountedX(Uint16 uObjectX, Int32 iTileX)
 	       (iTileX > -8 && iTileX < 256);
 }
 
-
 #if SNDBG_DEEP
 static Uint32 _ObjCountBits8(Uint32 v)
 {
@@ -62,7 +65,6 @@ static Uint32 _ObjCountBits8(Uint32 v)
 	return (v + (v >> 4)) & 0x0F;
 }
 #endif
-
 
 void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	const SnesRenderObj8T *pObjLine, Int32 nObjLine,
@@ -228,7 +230,6 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	PROF_LEAVE("_RenderOBJPlanar");
 }
 
-
 void _DecodeOBJEX(Uint8 *pObjEx, SnesRenderObjT *pObjs, Int32 nObjs, Uint32 uBaseSize)
 {
 	uBaseSize &= 7;
@@ -279,14 +280,12 @@ void _DecodeOBJEX(Uint8 *pObjEx, SnesRenderObjT *pObjs, Int32 nObjs, Uint32 uBas
 
 }
 
-
 void _DecodeOBJ(SnesPPUOBJT *pPPUObj, SnesRenderObjT *pObjs, Int32 nObjs, Uint8 *pObjY, Uint8 *pObjSize)
 {
 	// xxxxxxxx
 	// yyyyyyyy
 	// CCCCCCCC
 	// vhppcccC
-
 
 	while (nObjs > 0)
 	{
@@ -325,8 +324,6 @@ void _DecodeOBJ(SnesPPUOBJT *pPPUObj, SnesRenderObjT *pObjs, Int32 nObjs, Uint8 
 	}
 }
 
-
-
 Int32 SnesPPURender::CheckOBJ(SnesRenderObjT *pObjs, Int32 iObj, Int32 nObjs, Uint8 *pObjList, Int32 MaxObjLine, Int32 iLine)
 {
 	Int32 nObjLine = 0;
@@ -353,19 +350,12 @@ Int32 SnesPPURender::CheckOBJ(SnesRenderObjT *pObjs, Int32 iObj, Int32 nObjs, Ui
 			if (nObjLine >= MaxObjLine) break;
 		}
 
-		
 		iObj++;
 		nObjs--;
 	}
 
 	return nObjLine;
 }
-
-
-
-
-
-
 
 Int32 SnesPPURender::CheckOBJ(Uint8 *pObjY, Uint8 *pObjSize, Int32 iObj, Int32 nObjs, Uint8 *pObjList, Int32 MaxObjLine, Int32 iLine)
 {
@@ -384,7 +374,7 @@ Int32 SnesPPURender::CheckOBJ(Uint8 *pObjY, Uint8 *pObjSize, Int32 iObj, Int32 n
 		uObjY = iLine - uObjY;
 		uObjY&= 0xFF;
 
-		if (uObjY < uObjSize) 
+		if (uObjY < uObjSize)
 		{
 			// we got an obj
 			*pObjList =  iObj;
@@ -401,8 +391,6 @@ Int32 SnesPPURender::CheckOBJ(Uint8 *pObjY, Uint8 *pObjSize, Int32 iObj, Int32 n
 	return nObjLine;
 }
 
-
-
 Int32 SnesPPURender::CheckOBJ(Uint8 *pObjList, Int32 iLine)
 {
     if (iLine >= 0 && iLine < SNPPU_MAXLINE)
@@ -414,8 +402,6 @@ Int32 SnesPPURender::CheckOBJ(Uint8 *pObjList, Int32 iLine)
         return 0;
     }
 }
-
-
 
 void SnesPPURender::UpdateOBJVisibility(Uint8 *pObjY, Uint8 *pObjSize, Int32 iObj, Int32 nObjs)
 {
@@ -446,18 +432,13 @@ void SnesPPURender::UpdateOBJVisibility(Uint8 *pObjY, Uint8 *pObjSize, Int32 iOb
 
             uObjY++;
             uObjSize--;
-    		uObjY&= 0xFF;
+		uObjY&= 0xFF;
         }
 
 		iObj++;
 		nObjs--;
 	}
 }
-
-
-
-
-
 
 void SnesPPURender::UpdateOBJ(Uint8 *pObjY, Uint8 *pObjSize)
 {

@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the netplay rpc interface for the emulator netplay frontend.
+ */
 
 #ifndef _NETPLAY_RPC_H
 #define _NETPLAY_RPC_H
@@ -33,7 +40,6 @@ typedef struct
     int                 OutputSize[NETPLAY_RPC_NUMPEERS];
 } NetPlayRPCInputT;
 
-
 typedef struct
 {
     NetPlayStatusE      eStatus;
@@ -44,13 +50,12 @@ typedef struct
     int                 OutputSize;
 } NetPlayRPCPeerStatusT;
 
-typedef struct 
+typedef struct
 {
     NetPlayStatusE          eServerStatus;
     NetPlayStatusE          eClientStatus;
     NetPlayGameStateE       eGameState;
     NetPlayRPCPeerStatusT   peer[NETPLAY_RPC_NUMPEERS];
 } NetPlayRPCStatusT;
-
 
 #endif

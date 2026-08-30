@@ -1,4 +1,12 @@
 /*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements sncx4 behavior for the SNES emulation core.
+ */
+
+/*
  * sncx4.cpp - CX4 (Capcom/Hitachi HG51B169) coprocessor HLE
  *
  * Implementacao clean-room a partir do comportamento documentado do chip.
@@ -27,9 +35,7 @@
 
 #include <string.h>
 
-// ---------------------------------------------------------------------------
 // Tabelas numericas (dados factuais)
-// ---------------------------------------------------------------------------
 
 // multiplicador fracionario usado na interpolacao de seno/cosseno
 static const Int16 C4MulTable[256] =
@@ -181,9 +187,7 @@ static inline Int16 cx4_cos(Int32 i) { return C4SinTable[(i + 128) & 0x1FF]; }
 
 #define CX4_ABS(x) ((x) < 0 ? -(x) : (x))
 
-// ---------------------------------------------------------------------------
 // Construcao / reset
-// ---------------------------------------------------------------------------
 
 SNCX4::SNCX4()
 {
@@ -201,9 +205,7 @@ void SNCX4::Reset()
     m_tanval = 0;
 }
 
-// ---------------------------------------------------------------------------
 // Nucleo matematico
-// ---------------------------------------------------------------------------
 
 Int16 SNCX4::Sin(Int16 Angle)
 {
@@ -366,9 +368,7 @@ void SNCX4::CalcWireFrame()
     }
 }
 
-// ---------------------------------------------------------------------------
 // Operacoes
-// ---------------------------------------------------------------------------
 
 void SNCX4::ConvOAM()
 {
@@ -1007,9 +1007,7 @@ void SNCX4::Command(Uint8 uByte)
     }
 }
 
-// ---------------------------------------------------------------------------
 // Interface de barramento ($6000-$7FFF)
-// ---------------------------------------------------------------------------
 
 Uint8 SNCX4::Read(Uint32 uAddr)
 {

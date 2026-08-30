@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Declares the snes interface for the SNES emulation core.
+ */
 
 #ifndef _SNES_H
 #define _SNES_H
@@ -67,7 +74,6 @@ public:
 
     static const Char *GetRegName(Uint32 uAddr);
 
-
 private:
 	SNCpuT		m_Cpu;
 	SnesPPU		m_PPU;
@@ -122,7 +128,6 @@ private:
 	Uint8		m_Ram[SNES_RAMSIZE] _ALIGN(16);
 	Uint8		m_SRam[SNES_SRAMSIZE] _ALIGN(16);
 
-
 private:
 	static Uint8 SNCPU_TRAPFUNC ReadMem(SNCpuT *pCpu, Uint32 uAddr);
 	static void SNCPU_TRAPFUNC  WriteMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
@@ -146,8 +151,6 @@ private:
     static Uint8 SNCPU_TRAPFUNC Read4000Debug(SNCpuT *pCpu, Uint32 uAddr);
     static void SNCPU_TRAPFUNC  Write2000Debug(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
     static void SNCPU_TRAPFUNC  Write4000Debug(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
-
-
 
 	void	MapLoRom();
 	void	MapHiRom();

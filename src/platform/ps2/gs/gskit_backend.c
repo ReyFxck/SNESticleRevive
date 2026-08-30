@@ -1,9 +1,9 @@
-/* gskit_backend.c
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
  *
- * gsKit-based replacement for the original direct-GS pipeline.
- * See gskit_backend.h for the public API.
- *
- * Fase 1 GS->gsKit migration.
+ * Description:
+ *   Implements gskit backend behavior for the PlayStation 2 Graphics Synthesizer backend.
  */
 
 #include <stdio.h>

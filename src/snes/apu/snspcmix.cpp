@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 1997-2004-2022 Icer Addis
+ * Re-Worked By ReyFxck, Claude Aí, ChatGPT
+ *
+ * Description:
+ *   Implements snspcmix behavior for SNES audio processing.
+ */
 
 #include <string.h>
 #include <stdio.h>
@@ -20,15 +27,12 @@ extern "C" {
 #define SNSPCDSP_INFOSCRATCHPAD ((CODE_PLATFORM == CODE_PS2) && TRUE)
 #define SNSPCDSP_MIXSILENCE (FALSE)
 
-
 #define SNSPCDSP_MIXASM ((CODE_PLATFORM == CODE_PS2) && 1)
 
 Uint32 _ChMask=0xFF;
 
-
 typedef Int16 SNSpcEchoSampleT;
 typedef Int32 SNSpcMixSampleT;
-
 
 /*
 SPC Timing:
@@ -40,7 +44,7 @@ sample rate: 32000hz (31.25 microseconds)
 Envelope updates at 32000hz
 
 Attack:
-Linear 0->1 Increments by 1/64 
+Linear 0->1 Increments by 1/64
 Requires 64 steps to reach 1.0
 envticks = AttackTimeMS * 32000hz / 64
 
@@ -58,16 +62,11 @@ envticks = TimeMS * 32000hz / 112
 
 */
 
-
-// channel[i].mix = channel[i].envx * channel[i].outx 
+// channel[i].mix = channel[i].envx * channel[i].outx
 // main_mix = channel[i].mix *  * channel_vol
 // echo_mix = channel[i].echo_enabled ? (channel[i].mix * channel_vol) : 0
-// echo_out = filter(echo_buffer);
 // echo_buffer = echo_out * echo_feedback + echo_mix
 // output = main_mix * main_vol + echo_mix * echo_vol
-
-
-
 
 static Uint32 _SNSpcDsp_AttackTimeMS[16]=
 {
@@ -97,22 +96,16 @@ static Uint32 _SNSpcDsp_BentLineMS[32]=
 	0xFFFFFFF,
 		7200, 5400, 4600, 3500, 2600, 2300, 1800,
 		1300, 1100, 900, 670, 580, 450, 340, 280,
-		220, 170, 140, 110, 84, 70, 56, 42, 
+		220, 170, 140, 110, 84, 70, 56, 42,
 		35, 28, 21, 18, 14, 11, 7, 3
 };
 
 static Uint32 _SNSpcDsp_NoiseFreq[32]=
 {
-	0,	16,	21,	25,	31,	42,	50,	63,	83,	100,	
+	0,	16,	21,	25,	31,	42,	50,	63,	83,	100,
 	125,	107,	200,	250,	333,	400,	500,	667,	800,	1000,	1300,
 	1600,	2000,	2700,	3200,	4000,	5300,	6400,	8000,	10700,	16000,	32000
 };
-
-
-
-//
-//
-//
 
 void SNSpcDspMix::BuildLookupTables(Uint32 nSampleRate)
 {
@@ -133,7 +126,7 @@ void SNSpcDspMix::BuildLookupTables(Uint32 nSampleRate)
 
 	for (i=0; i < 32; i++)
 	{
-		if (_SNSpcDsp_SustainTimeMS[i] != 0xFFFFFFF) 
+		if (_SNSpcDsp_SustainTimeMS[i] != 0xFFFFFFF)
 		{
 			m_SustainTicks[i] = _SNSpcDsp_SustainTimeMS[i] * (32 * uFactor / 595);
 		} else
@@ -142,10 +135,9 @@ void SNSpcDspMix::BuildLookupTables(Uint32 nSampleRate)
 		}
 	}
 
-
 	for (i=0; i < 32; i++)
 	{
-		if (_SNSpcDsp_LinearMS[i] != 0xFFFFFFF) 
+		if (_SNSpcDsp_LinearMS[i] != 0xFFFFFFF)
 		{
 			m_LinearTicks[i] = _SNSpcDsp_LinearMS[i] * (32 * uFactor / 64);
 		} else
@@ -156,7 +148,7 @@ void SNSpcDspMix::BuildLookupTables(Uint32 nSampleRate)
 
 	for (i=0; i < 32; i++)
 	{
-		if (_SNSpcDsp_BentLineMS[i] != 0xFFFFFFF) 
+		if (_SNSpcDsp_BentLineMS[i] != 0xFFFFFFF)
 		{
 			m_BentLineTicks[i] = _SNSpcDsp_BentLineMS[i] * (32 * uFactor / 112);
 		} else
@@ -165,7 +157,6 @@ void SNSpcDspMix::BuildLookupTables(Uint32 nSampleRate)
 		}
 	}
 }
-
 
 void SNSpcDspMix::Reset()
 {
@@ -183,7 +174,6 @@ void SNSpcDspMix::KeyOn(Int32 iChannel)
     // clear endx
 	pChannel->endx		 = FALSE;
 }
-
 
 void SNSpcDspMix::KeyOff(Int32 iChannel)
 {
@@ -209,7 +199,6 @@ Bool SNSpcDspMix::GetChannelState(Int32 iChannel, Uint8 *pEnvX, Uint8 *pOutX)
 	return endx;
 }
 
-
 Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
 {
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
@@ -220,7 +209,7 @@ Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
 	Int32 iEnvTarget;
 
 	// envx=0 by default
-	pChannel->envx = 0;					
+	pChannel->envx = 0;
 	pChannel->outx = 0;
 
 	#if !SNSPCDSP_MIXSILENCE
@@ -231,13 +220,11 @@ Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
 	}
 	#endif
 
-	//
 	// initialze envelope state based on register settings
-	//
 	if (!(pRegs->adsr1 & 0x80))
 	{
 		SNSpcEnvStateE eNewState = pChannel->eEnvState;
-		
+
 		#if !SNSPCDSP_MIXSILENCE
 		if (!pRegs->gain)
 		{
@@ -273,7 +260,7 @@ Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
 				pChannel->nEnvCount = 0;
 			}
 		}
-	} 
+	}
 
 #if !SNSPCDSP_MIXSILENCE
 	if (pChannel->eEnvState==SNSPCDSP_ENVSTATE_SILENCE)
@@ -281,13 +268,10 @@ Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
 		return 0;
 	}
 #endif
-	
 
 	PROF_ENTER("SNSpcDspOutputEnvelope");
 
-	//
 	// process envelope
-	//
 	iEnvelope = pChannel->iEnvelope;
 	nEnvCount = pChannel->nEnvCount;
 	while (nSamples > 0)
@@ -460,9 +444,7 @@ Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
 	return 1;
 }
 
-//
 // full (real) mixer
-//
 
 void SNSpcDspMixFull::Reset()
 {
@@ -528,7 +510,7 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	pChannel->BlockData[0][15] = pChannel->BlockData[1][15];
 
 	// decode next block
-	if (pChannel->uBlockAddr!=0) 
+	if (pChannel->uBlockAddr!=0)
 	{
 		PROF_ENTER("SNSpcBRRDecode");
 		uFlags = SNSpcBRRDecode((m_pDsp->GetMem() + pChannel->uBlockAddr), pChannel->BlockData[1], pChannel->BlockData[0][15], pChannel->BlockData[0][14]);
@@ -537,7 +519,6 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	}  else
 	{
 		// fade out slowly
-//		SNSpcBRRClear(pChannel->BlockData[1], pChannel->BlockData[0][15] - (pChannel->BlockData[0][15]>>1));
 		SNSpcBRRClear(pChannel->BlockData[1], 0);
 	}
 
@@ -560,7 +541,6 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 		}
 	}
 }
-
 
 Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate)
 {
@@ -592,23 +572,20 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 		pBlockData[14] = pBlockData[(pChannel->iPhase >> 16) + 0];
 		pBlockData[15] = pBlockData[(pChannel->iPhase >> 16) + 1];
 
-		// trigger decode, retain fractional component 
+		// trigger decode, retain fractional component
 		pChannel->iPhase &= 0xFFFF;
-		pChannel->iPhase |= 14 << 16;		
+		pChannel->iPhase |= 14 << 16;
 	}
-
-
 
 	// get pitch
 	uPitch = pRegs->pitch_lo | (pRegs->pitch_hi<<8);
 	uPitch&= 0x3FFF;
 
 	iPhase = pChannel->iPhase;
-	
-	// output at correct pitch based on sample rate
-	iPhaseInc = uPitch * SNSPCDSP_SAMPLERATE / nSampleRate; 
-	iPhaseInc <<= 4;
 
+	// output at correct pitch based on sample rate
+	iPhaseInc = uPitch * SNSPCDSP_SAMPLERATE / nSampleRate;
+	iPhaseInc <<= 4;
 
 	while (nSamples > 0)
 	{
@@ -634,13 +611,11 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 		pOut[1] = iSample1;
 		pOut+=2;
 
-
 		// next sample
 		iPhase+= iPhaseInc;
 
 		nSamples--;
 	}
-
 
 	// voice ended?
 	if (pChannel->uBlockAddr == 0)
@@ -658,26 +633,19 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 	return 1;
 }
 
-
-
-
-
-
-
 #if SNSPCDSP_MIXASM
 
 __attribute__((noinline))
 void _MixChannel(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pIn, Uint8 *pEnvelope, Uint16 *pFrac, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
 	__asm__ (
-		"pcpyh       %0,%0           \n"    
-		"pcpyld      %0,%0,%0           \n"    
-		"pcpyh       %1,%1           \n"    
-		"pcpyld      %1,%1,%1           \n"    
+		"pcpyh       %0,%0           \n"
+		"pcpyld      %0,%0,%0           \n"
+		"pcpyh       %1,%1           \n"
+		"pcpyld      %1,%1,%1           \n"
 
 		: "+r" (iVolLeft), "+r" (iVolRight)
-		);    
-
+		);
 
 	__asm__ __volatile__ (
 		".set noreorder \n"
@@ -693,7 +661,7 @@ void _MixChannel(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pIn, Uint8 *pEnvelope
 		"psrlh      $12,$12,1        \n"    // $12 = invfrace frac x 4  1.0.15
 		"psrlh      $13,$13,1        \n"    // $13 = invfrace frac x 4  1.0.15
 
-		"ld         $10,0x00(%4)     \n"    // $10 = 8x8 envelope 0.1.7   
+		"ld         $10,0x00(%4)     \n"    // $10 = 8x8 envelope 0.1.7
 
 		"phmadh     $8,$8,$12        \n"    // $8  = 4 interpolated samplse 2.15.15
 		"pextlb     $10,$0,$10       \n"    // $10 =  8x8 envelope  8.1.7
@@ -742,25 +710,23 @@ void _MixChannel(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pIn, Uint8 *pEnvelope
 
 		".set reorder \n"
 
-		: 
+		:
 	: "r" (pIn), "r" (pFrac), "r" (pOutLeft), "r" (pOutRight), "r" (pEnvelope), "r" (iVolLeft), "r" (iVolRight), "r" (nSamples)
 		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
-		);    
+		);
 }
-
 
 __attribute__((noinline))
 void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pEchoLeft, Int16 *pEchoRight, Int16 *pIn, Uint8 *pEnvelope, Uint16 *pFrac, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
 	__asm__ (
-		"pcpyh       %0,%0           \n"    
-		"pcpyld      %0,%0,%0           \n"    
-		"pcpyh       %1,%1           \n"    
-		"pcpyld      %1,%1,%1           \n"    
+		"pcpyh       %0,%0           \n"
+		"pcpyld      %0,%0,%0           \n"
+		"pcpyh       %1,%1           \n"
+		"pcpyld      %1,%1,%1           \n"
 
 		: "+r" (iVolLeft), "+r" (iVolRight)
-		);    
-
+		);
 
 	__asm__ __volatile__ (
 		".set noreorder \n"
@@ -776,7 +742,7 @@ void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pEchoLeft, Int16 
 		"psrlh      $12,$12,1        \n"    // $12 = invfrace frac x 4  1.0.15
 		"psrlh      $13,$13,1        \n"    // $13 = invfrace frac x 4  1.0.15
 
-		"ld         $10,0x00(%4)     \n"    // $10 = 8x8 envelope 0.1.7   
+		"ld         $10,0x00(%4)     \n"    // $10 = 8x8 envelope 0.1.7
 
 		"phmadh     $8,$8,$12        \n"    // $8  = 4 interpolated samplse 2.15.15
 		"pextlb     $10,$0,$10       \n"    // $10 =  8x8 envelope  8.1.7
@@ -841,14 +807,11 @@ void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pEchoLeft, Int16 
 
 		".set reorder \n"
 
-		: 
+		:
 	: "r" (pIn), "r" (pFrac), "r" (pOutLeft), "r" (pOutRight), "r" (pEnvelope), "r" (iVolLeft), "r" (iVolRight), "r" (nSamples), "r" (pEchoLeft), "r" (pEchoRight)
 		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
-		);    
+		);
 }
-
-
-
 
 #else
 
@@ -863,10 +826,10 @@ void _MixChannel(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pIn, Uint8 *pEnvelope
 
 		iSample  = pIn[0];
 		iSample1 = pIn[1];
-		
+
 		iFrac0   = pFrac[0] >> 1;
 		iFrac1   = iFrac0 ^ 0x7FFF;
-		
+
 		iSample  =  iSample * iFrac1 + iSample1 * iFrac0;
 		iSample >>= 15;
 
@@ -889,7 +852,6 @@ void _MixChannel(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pIn, Uint8 *pEnvelope
 	}
 }
 
-
 void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight, Int16 *pIn, Uint8 *pEnvelope, Uint16 *pFrac, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
 	while (nSamples > 0)
@@ -901,10 +863,10 @@ void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, SNSpcEchoSampleT *pEchoL
 
 		iSample  = pIn[0];
 		iSample1 = pIn[1];
-		
+
 		iFrac0   = pFrac[0] >> 1;
 		iFrac1   = iFrac0 ^ 0x7FFF;
-		
+
 		iSample  =  iSample * iFrac1 + iSample1 * iFrac0;
 		iSample >>= 15;
 
@@ -920,33 +882,8 @@ void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, SNSpcEchoSampleT *pEchoL
 		iSampleLeft >>= 7;
 		iSampleRight >>= 7;
 
-
 		iSampleLeft += *pEchoLeft;
 		iSampleRight += *pEchoRight;
-
-#if 0
-		if (iSampleLeft > 0x7FFF)
-		{
-			ConDebug("%d\n", iSampleLeft);
-			iSampleLeft = 0x7FFF;
-		}
-		if (iSampleLeft < -0x8000)
-		{
-			ConDebug("%d\n", iSampleLeft);
-			iSampleLeft = -0x8000;
-		}
-		if (iSampleRight > 0x7FFF)
-		{
-			ConDebug("%d\n", iSampleRight);
-			iSampleRight = 0x7FFF;
-		}
-		if (iSampleRight < -0x8000)
-		{
-			ConDebug("%d\n", iSampleRight);
-			iSampleRight = -0x8000;
-		}
-#endif
-
 
 		*pEchoLeft  = iSampleLeft;
 		*pEchoRight = iSampleRight;
@@ -964,9 +901,6 @@ void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, SNSpcEchoSampleT *pEchoL
 }
 
 #endif
-
-
-
 
 static void _SNSpcDspMemset64(Uint64 *pDest, Int32 nDwords)
 {
@@ -988,7 +922,6 @@ static void _SNSpcDspMemset64(Uint64 *pDest, Int32 nDwords)
 	}
 }
 
-
 #if SNSPCDSP_MIXASM
 
 #if 1
@@ -997,10 +930,10 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 {
 
 	__asm__ __volatile__ (
-		"pcpyh       %4,%4           \n"    
-		"pcpyld      %4,%4,%4           \n"    
-		"pcpyh       %5,%5           \n"    
-		"pcpyld      %5,%5,%5           \n"    
+		"pcpyh       %4,%4           \n"
+		"pcpyld      %4,%4,%4           \n"
+		"pcpyh       %5,%5           \n"
+		"pcpyld      %5,%5,%5           \n"
 
 		"pnor		 $14, $0,$0			\n"
 		"psrlw		 $14,$14,17         \n" // 7FFF
@@ -1019,12 +952,12 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 		"pminw       $9,$9,$14       \n"
 		"pmaxw       $8,$8,$15       \n"
 		"pmaxw       $9,$9,$15       \n"
-		"ppach		 $8,$9,$8         \n" 
+		"ppach		 $8,$9,$8         \n"
 		"pmulth		 $0,$8,%4         \n"     // lo = 5 4 1 0
 		"pmaddh		 $0,$10,%5        \n"     // hi = 7 6 3 2
 
 		"pmflo		 $8				\n"  // 8 = 5 4 1 0
-		"pmfhi		 $9				\n"  // 9 = 7 6 3 2 
+		"pmfhi		 $9				\n"  // 9 = 7 6 3 2
 		"psraw		 $8,$8,6		 \n"
 		"psraw		 $9,$9,6		 \n"
 		"pminw       $8,$8,$14       \n"
@@ -1032,9 +965,9 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 		"pmaxw       $8,$8,$15       \n"
 		"pmaxw       $9,$9,$15       \n"
 		"pcpyld		$10,$9,$8       \n"    // 3 2 1 0
- 		"pcpyud		$11,$8,$9       \n"    // 7 6 5 4 
+		"pcpyud		$11,$8,$9       \n"    // 7 6 5 4
 		"ppach		$10,$11,$10        \n" // 76543210
-		"sq			$10,0x00(%0)     \n" 
+		"sq			$10,0x00(%0)     \n"
 		"addiu      %0,%0,0x10         \n"
 
 		"addiu      %3,%3,-8         \n"
@@ -1044,10 +977,10 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 
 		".set reorder \n"
 
-		: 
+		:
 		: "r" (pOut), "r" (pMain), "r" (pEcho), "r" (nSamples), "r" (iMainVol), "r" (iEchoVol)
 		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
-		);    
+		);
 }
 #endif
 
@@ -1119,9 +1052,8 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, SNSpcEchoSampleT *pEcho, Int32 nSamples
 }
 #endif
 
-
 /*
- 
+
             FLG(ECEN) ESA EDL    C0-C7           |
                  \/  \/  \/      \/     EVOL(L) |
                  *--------*   *------*    \/    |   *--------*
@@ -1216,7 +1148,6 @@ static Int32 _FilterEchoStereo(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pE
 	return uEchoAddr;
 }
 
-
 struct SNSpcDspDataT
 {
 	Int16 iSampleData[SNSPCDSP_BUFFERSIZE*2] _ALIGN(16);
@@ -1231,23 +1162,6 @@ struct SNSpcDspDataT
 typedef char SNSpcScratchLookupLayoutCheck[
 	(sizeof(SNSpcDspDataT) <= PS2MEM_SNES_LOOKUP_OFFSET) ? 1 : -1];
 #endif
-
-
-#if 0
-Int32 _MixTemp(Int32 level, Int16 *pSamples, Int32 nSamples)
-{
-	while (nSamples > 0)
-	{
-		pSamples[0] = (level&0x10000) ? 4096 : -4096;
-
-		level += 0x10000 * 220 / 48000;
-		pSamples++;
-		nSamples--;
-	}
-	return level;
-}
-#endif
-
 
 // filter echo buffer into echo memory
 
@@ -1293,12 +1207,11 @@ void SNSpcDspMixFull::FilterEcho(Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSam
 
 	PROF_ENTER("SNSpcDspFilterEchoStereo");
 	// filter echo (left)
-	m_Echo.uEchoAddr = _FilterEchoStereo(pLeftEcho, pRightEcho, nSamples, 
+	m_Echo.uEchoAddr = _FilterEchoStereo(pLeftEcho, pRightEcho, nSamples,
 		(Int8)m_pDsp->GetReg(SNSPCDSP_REG_EFB), pEchoBuf, uEchoAddr, uEchoSize, FilterCoeff, m_Echo.Filter);
 
 	PROF_LEAVE("SNSpcDspFilterEchoStereo");
 }
-
 
 void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 {
@@ -1397,14 +1310,14 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		}
 
 		// check mute
-		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40)) 
+		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40))
 		{
 			for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 			{
 				#if CODE_DEBUG
 				if (_ChMask & (1<<iChannel))
 				#endif
-				
+
 				// calculate envelope values for channel
 				if (OutputEnvelope(iChannel, pData->EnvData, nSamples))
 				{
@@ -1420,7 +1333,6 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						// output sample data (pitch modulation!)
 						bMix = OutputSample(iChannel, pSampleData, pFracData, nSamples, nSampleRate);
 						#if CODE_DEBUG
-						//ConDebug("PitchModulation %d\n", iChannel);
 						#endif
 					} else
 					{
@@ -1440,9 +1352,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 							pFracData   = m_iNoiseFrac;
 						}
 
-						//
 						// mix channel into main and echo buffers
-						//
 
 						PROF_ENTER("SNSpcDspMixStereo");
 						if ( uEchoEnable & (1<<iChannel) )
@@ -1450,9 +1360,9 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 							// Echo is enabled, so mix channel into both the main and the echo buffers
 							// mix using channel volume
 							_MixChannelEcho(
-								pData->Main[0], pData->Main[1], 
-								pData->Echo[0], pData->Echo[1], 
-								pSampleData, pData->EnvData, pFracData, nSamples, 
+								pData->Main[0], pData->Main[1],
+								pData->Echo[0], pData->Echo[1],
+								pSampleData, pData->EnvData, pFracData, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						} else
@@ -1460,8 +1370,8 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 							// Echo is not enabled, so mix channel into the main channel only
 							// mix using channel volume
 							_MixChannel(
-								pData->Main[0], pData->Main[1], 
-								pSampleData, pData->EnvData, pFracData, nSamples, 
+								pData->Main[0], pData->Main[1],
+								pSampleData, pData->EnvData, pFracData, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						}
@@ -1480,9 +1390,9 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 
 		// mix main + echo to output buffer
 		PROF_ENTER("SNSpcDspMixEcho");
-		_MixEcho(OutLeftData, pData->Main[0], pData->Echo[0], nSamples, 
+		_MixEcho(OutLeftData, pData->Main[0], pData->Echo[0], nSamples,
 			(Int8)m_pDsp->GetReg(SNSPCDSP_REG_MVOLL), (Int8)m_pDsp->GetReg(SNSPCDSP_REG_EVOLL));
-		_MixEcho(OutRightData, pData->Main[1], pData->Echo[1], nSamples, 
+		_MixEcho(OutRightData, pData->Main[1], pData->Echo[1], nSamples,
 			(Int8)m_pDsp->GetReg(SNSPCDSP_REG_MVOLR), (Int8)m_pDsp->GetReg(SNSPCDSP_REG_EVOLR));
 		PROF_LEAVE("SNSpcDspMixEcho");
 
@@ -1503,20 +1413,14 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 	pMixBuf->Flush();
 }
 
-
-
-
-//
 // silent (deterministic) mixer
-//
-
 
 void SNSpcDspMixSilent::FetchBlock(Int32 iChannel)
 {
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 
 	// decode next block
-	if (pChannel->uBlockAddr!=0) 
+	if (pChannel->uBlockAddr!=0)
 	{
 		Uint8 uFlags = 0;
 
@@ -1540,12 +1444,8 @@ void SNSpcDspMixSilent::FetchBlock(Int32 iChannel)
 			}
 		}
 
-	}  
+	}
 }
-
-
-
-
 
 Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples, Int32 nSampleRate)
 {
@@ -1569,9 +1469,9 @@ Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples, Int32 nSam
 	uPitch&= 0x3FFF;
 
 	iPhase = pChannel->iPhase;
-	
+
 	// output at correct pitch based on sample rate
-	iPhaseInc = uPitch * SNSPCDSP_SAMPLERATE / nSampleRate; 
+	iPhaseInc = uPitch * SNSPCDSP_SAMPLERATE / nSampleRate;
 	iPhaseInc <<= 4;
 
 	while (nSamples > 0)
@@ -1604,9 +1504,6 @@ Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples, Int32 nSam
 	PROF_LEAVE("SNSpcDspOutputSampleSilent");
 	return 1;
 }
-
-
-
 
 void SNSpcDspMixSilent::Mix(CMixBuffer *pMixBuf)
 {
