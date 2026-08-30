@@ -118,6 +118,20 @@ static SnesMemMapT _SnesMemMap_LoRom_DSP1[]={
     {0xC0,0xCF,0xC000,0xFFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
     {0,0,0,0,SNESMEM_TYPE_NONE}
 };
+
+// DSP-4 decodes only $30-$3F/$B0-$BF:$8000-$FFFF. Each row is one
+// 8 KiB CPU page because MapMem clamps trapped devices to SNCPU_BANK_SIZE.
+static SnesMemMapT _SnesMemMap_LoRom_DSP4[]={
+    {0x30,0x3F,0x8000,0x9FFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0x30,0x3F,0xA000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0x30,0x3F,0xC000,0xDFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0x30,0x3F,0xE000,0xFFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0xB0,0xBF,0x8000,0x9FFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0xB0,0xBF,0xA000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0xB0,0xBF,0xC000,0xDFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0xB0,0xBF,0xE000,0xFFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
+    {0,0,0,0,SNESMEM_TYPE_NONE}
+};
 #endif
 
 // OBC1 (Metal Combat): 8KB de RAM + registradores em $6000-$7FFF,
@@ -526,7 +540,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 			// DSP e' sempre mapeada e m_pDsp aponta para o HLE.
 			if (uFlags & SNROM_FLAG_DSP4)
 			{
-				MapMem(_SnesMemMap_LoRom_DSP1);
+				MapMem(_SnesMemMap_LoRom_DSP4);
 				m_pDsp = &m_DSP4;
 			}
 #endif

@@ -21,6 +21,8 @@ ln -sf "$ROOT/src/snes/core/dsp4emu.cpp" dsp4emu.cpp
 CXXFLAGS=(-O0 -g -fsigned-char -fpermissive
     -I . -I "$ROOT/src/common/base" -I "$ROOT/src/snes/core")
 
+PYTHONDONTWRITEBYTECODE=1 python3 map_test.py
+
 g++ "${CXXFLAGS[@]}" dsp4_test.cpp sndsp4.cpp dsp4emu.cpp -o dsp4_test
 echo "OK -> ./dsp4_test"
 
