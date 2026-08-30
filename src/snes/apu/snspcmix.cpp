@@ -1339,7 +1339,19 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 	// get number of samples needed to mix
 	nTotalSamples = pMixBuf->GetOutputSamples();
 #if SNDBG_LOG
-	g_DbgAudioSamples += (Uint32)nTotalSamples;
+	g_DbgAudioMixCalls++;
+	if (nTotalSamples <= 0)
+	{
+		g_DbgAudioZeroMixes++;
+		SnesDbgRequestCapture(SNDBG_CAPTURE_AUDIO);
+	}
+	else
+	{
+		Uint32 uSamples = (Uint32)nTotalSamples;
+		g_DbgAudioSamples += uSamples;
+		if (uSamples < g_DbgAudioMinSamples) g_DbgAudioMinSamples = uSamples;
+		if (uSamples > g_DbgAudioMaxSamples) g_DbgAudioMaxSamples = uSamples;
+	}
 #endif
 
 	// build envelope lookup tables based on sample rate

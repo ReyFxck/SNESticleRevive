@@ -15,31 +15,33 @@
 #if SNDBG_LOG
 static Uint32 g_TmgFrameStart = 0;   // COP0 cycle no inicio do frame
 static Uint32 g_TmgWinFrames  = 0;   // frames acumulados na janela
-static Uint32 g_TmgWinSumCyc  = 0;   // soma de ciclos/frame na janela
+static Uint64 g_TmgWinSumCyc  = 0;   // 64-bit: nao transborda em jogos travados
+static Uint32 g_TmgWinMinCyc  = 0xFFFFFFFFu;
 static Uint32 g_TmgWinMaxCyc  = 0;   // pior frame (ciclos) na janela
-static Uint32 g_TmgWinSumM7   = 0;   // soma de ciclos do Mode-7 na janela
-static Uint32 g_TmgWinSumObj  = 0;   // soma de ciclos de sprites na janela
-static Uint32 g_TmgWinSumPPU  = 0;
-static Uint32 g_TmgWinSumCPU  = 0;
-static Uint32 g_TmgWinSumGSU  = 0;
-static Uint32 g_TmgWinSumMDMA = 0;
-static Uint32 g_TmgWinSumHDMA = 0;
-static Uint32 g_TmgWinSumAPU  = 0;
-static Uint32 g_TmgWinSumMix  = 0;
-static Uint32 g_TmgWinSumBlend = 0;
-static Uint32 g_TmgWinSumPPUSync = 0;
-static Uint32 g_TmgWinSumBGInfo = 0;
-static Uint32 g_TmgWinSumBGOffset = 0;
-static Uint32 g_TmgWinSumBGMap = 0;
-static Uint32 g_TmgWinSumBGChr = 0;
-static Uint32 g_TmgWinSumBGMain = 0;
-static Uint32 g_TmgWinSumBGSub = 0;
-static Uint32 g_TmgWinSumColorMath = 0;
-static Uint32 g_TmgWinSumObjUpdate = 0;
-static Uint32 g_TmgWinSumObjFetch = 0;
-static Uint32 g_TmgWinSumObjDraw = 0;
-static Uint32 g_TmgWinSumHDMAData = 0;
-static Uint32 g_TmgWinSumHDMATable = 0;
+static Uint32 g_TmgWinSlowFrames = 0;
+static Uint64 g_TmgWinSumM7   = 0;   // soma de ciclos do Mode-7 na janela
+static Uint64 g_TmgWinSumObj  = 0;   // soma de ciclos de sprites na janela
+static Uint64 g_TmgWinSumPPU  = 0;
+static Uint64 g_TmgWinSumCPU  = 0;
+static Uint64 g_TmgWinSumGSU  = 0;
+static Uint64 g_TmgWinSumMDMA = 0;
+static Uint64 g_TmgWinSumHDMA = 0;
+static Uint64 g_TmgWinSumAPU  = 0;
+static Uint64 g_TmgWinSumMix  = 0;
+static Uint64 g_TmgWinSumBlend = 0;
+static Uint64 g_TmgWinSumPPUSync = 0;
+static Uint64 g_TmgWinSumBGInfo = 0;
+static Uint64 g_TmgWinSumBGOffset = 0;
+static Uint64 g_TmgWinSumBGMap = 0;
+static Uint64 g_TmgWinSumBGChr = 0;
+static Uint64 g_TmgWinSumBGMain = 0;
+static Uint64 g_TmgWinSumBGSub = 0;
+static Uint64 g_TmgWinSumColorMath = 0;
+static Uint64 g_TmgWinSumObjUpdate = 0;
+static Uint64 g_TmgWinSumObjFetch = 0;
+static Uint64 g_TmgWinSumObjDraw = 0;
+static Uint64 g_TmgWinSumHDMAData = 0;
+static Uint64 g_TmgWinSumHDMATable = 0;
 static Int32  g_TmgIrqLineMin = 9999;
 static Int32  g_TmgIrqLineMax = -1;
 static Uint32 g_TmgIrqCount   = 0;   // total de H-IRQs na janela
@@ -78,17 +80,19 @@ Uint32 g_DbgCGRAMCommits = 0;
 Uint32 g_DbgCGRAMUnchanged = 0;
 Uint32 g_DbgVideoRenderedFrames = 0;
 Uint32 g_DbgVideoSkippedFrames = 0;
+Uint32 g_DbgHostRefreshHz = 60;
+Uint32 g_DbgSessionId = 0;
 Uint32 g_DbgObjEnabledLines = 0;
 Uint32 g_DbgObjOamRefs = 0;
 Uint32 g_DbgObjTiles = 0;
 Uint32 g_DbgObjCacheHits = 0;
 Uint32 g_DbgObjCacheMisses = 0;
-Uint32 g_DbgObjCacheRefreshes = 0;
-Uint32 g_DbgBGCacheHits = 0;
-Uint32 g_DbgBGCacheMisses = 0;
-Uint32 g_DbgBGCacheRefreshes = 0;
-Uint32 g_DbgChrCacheInvalidations = 0;
+Uint32 g_DbgObjCacheInvalidations = 0;
 Uint32 g_DbgAudioSamples = 0;
+Uint32 g_DbgAudioMixCalls = 0;
+Uint32 g_DbgAudioZeroMixes = 0;
+Uint32 g_DbgAudioMinSamples = 0xFFFFFFFFu;
+Uint32 g_DbgAudioMaxSamples = 0;
 Uint32 g_DbgObjOpaqueTiles = 0;
 Uint32 g_DbgObjCandidatePixels = 0;
 Uint32 g_DbgObjDrawnPixels = 0;
@@ -126,8 +130,38 @@ Uint32 g_DbgBGMapReloads = 0;
 Uint32 g_DbgBGChrRows = 0;
 Uint32 g_DbgBGChrBlankRows = 0;
 Uint32 g_DbgBGChrRepeatRows = 0;
+Uint32 g_DbgBGChrRowsByDepth[3] = {0,0,0};
+Uint32 g_DbgPPUModeLines[8] = {0,0,0,0,0,0,0,0};
+Uint32 g_DbgPPUModeChanges = 0;
+Uint8  g_DbgPPULastMode = 0xFF;
+Uint32 g_DbgPPUMainLayerLines[4] = {0,0,0,0};
+Uint32 g_DbgPPUSubLayerLines[4] = {0,0,0,0};
+Uint32 g_DbgPPUFetchLayerLines[4] = {0,0,0,0};
+Uint32 g_DbgPPUForcedBlankLines = 0;
+Uint32 g_DbgPPUMosaicLines = 0;
+Uint32 g_DbgPPUOffsetLines = 0;
+Uint32 g_DbgPPUWindowLines = 0;
+Uint32 g_DbgPPUColorMathLines = 0;
+Uint32 g_DbgPPUDirectColorLines = 0;
+Uint32 g_DbgPPUInterlaceLines = 0;
+Uint32 g_DbgPPUObjInterlaceLines = 0;
+Uint32 g_DbgPPUOverscanLines = 0;
+Uint32 g_DbgPPUHiresLines = 0;
+Uint32 g_DbgPPUExtBGLines = 0;
+Uint32 g_DbgChipReads[SNDBG_CHIP_COUNT] = {0,0,0,0,0,0};
+Uint32 g_DbgChipWrites[SNDBG_CHIP_COUNT] = {0,0,0,0,0,0};
+Uint32 g_DbgSDD1DmaTransfers = 0;
+Uint32 g_DbgSDD1DecompressedBytes = 0;
+Uint32 g_DbgSDD1Remaps = 0;
+Uint32 g_DbgSDD1SourceFailures = 0;
 Bool   g_DbgCaptureActive = FALSE;
 Uint32 g_DbgCaptureFrameNo = 0;
+Uint32 g_DbgCaptureReasons = 0;
+#if SNDBG_DEEP
+Uint32 g_DbgCapturePendingReasons = 0;
+Uint32 g_DbgPPURegWrites[0x40] = {0};
+static Uint32 g_DbgCaptureCooldown = 0;
+#endif
 // contagem de acessos ao DSP por janela (diagnostico de carga)
 static Uint32 g_TmgDspRd = 0;
 static Uint32 g_TmgDspWr = 0;
@@ -159,6 +193,158 @@ static Uint32 SnesDbgHash32(const void *pData, Uint32 nBytes)
 	return h;
 }
 #endif
+
+/* A report window and a game session have different lifetimes. Keeping the
+   reset policy in one place prevents a newly loaded ROM from inheriting the
+   previous game's counters, capture cooldown or last PPU mode. */
+static void SnesDbgResetWindow(void)
+{
+	g_TmgWinFrames = 0;
+	g_TmgWinSumCyc = 0;
+	g_TmgWinMinCyc = 0xFFFFFFFFu;
+	g_TmgWinMaxCyc = 0;
+	g_TmgWinSlowFrames = 0;
+	g_TmgWinSumM7 = 0;
+	g_TmgWinSumObj = 0;
+	g_TmgWinSumPPU = 0;
+	g_TmgWinSumCPU = 0;
+	g_TmgWinSumGSU = 0;
+	g_TmgWinSumMDMA = 0;
+	g_TmgWinSumHDMA = 0;
+	g_TmgWinSumAPU = 0;
+	g_TmgWinSumMix = 0;
+	g_TmgWinSumBlend = 0;
+	g_TmgWinSumPPUSync = 0;
+	g_TmgWinSumBGInfo = 0;
+	g_TmgWinSumBGOffset = 0;
+	g_TmgWinSumBGMap = 0;
+	g_TmgWinSumBGChr = 0;
+	g_TmgWinSumBGMain = 0;
+	g_TmgWinSumBGSub = 0;
+	g_TmgWinSumColorMath = 0;
+	g_TmgWinSumObjUpdate = 0;
+	g_TmgWinSumObjFetch = 0;
+	g_TmgWinSumObjDraw = 0;
+	g_TmgWinSumHDMAData = 0;
+	g_TmgWinSumHDMATable = 0;
+	g_TmgDspRd = 0;
+	g_TmgDspWr = 0;
+	g_TmgIrqCount = 0;
+	g_TmgIrqRearms = 0;
+	g_TmgIrqInstant = 0;
+	g_TmgIrqLineMin = 9999;
+	g_TmgIrqLineMax = -1;
+	g_DbgOAMWrites = 0;
+	g_DbgVRAMWrites = 0;
+	g_DbgCGRAMWrites = 0;
+	g_DbgCGRAMCommits = 0;
+	g_DbgCGRAMUnchanged = 0;
+	g_DbgVideoRenderedFrames = 0;
+	g_DbgVideoSkippedFrames = 0;
+	g_DbgObjEnabledLines = 0;
+	g_DbgObjOamRefs = 0;
+	g_DbgObjTiles = 0;
+	g_DbgObjCacheHits = 0;
+	g_DbgObjCacheMisses = 0;
+	g_DbgObjCacheInvalidations = 0;
+	g_DbgAudioSamples = 0;
+	g_DbgAudioMixCalls = 0;
+	g_DbgAudioZeroMixes = 0;
+	g_DbgAudioMinSamples = 0xFFFFFFFFu;
+	g_DbgAudioMaxSamples = 0;
+	g_DbgObjOpaqueTiles = 0;
+	g_DbgObjCandidatePixels = 0;
+	g_DbgObjDrawnPixels = 0;
+	g_DbgObjClippedTiles = 0;
+	g_DbgObjEmptyLines = 0;
+	g_DbgObjRangeLimitLines = 0;
+	g_DbgObjLimitLines = 0;
+	g_DbgPPUSyncCalls = 0;
+	g_DbgPPURenderLines = 0;
+	g_DbgDMAStarts = 0;
+	g_DbgDMAReadBytes = 0;
+	g_DbgDMAOAMBytes = 0;
+	g_DbgDMAVRAMBytes = 0;
+	g_DbgDMACGRAMBytes = 0;
+	g_DbgDMAOtherBytes = 0;
+	g_DbgDMAWraps = 0;
+	g_DbgDMAMaxBytes = 0;
+	memset(g_DbgDMAModes, 0, sizeof(g_DbgDMAModes));
+	g_DbgHDMAScrollBytes = 0;
+	g_DbgHDMACGRAMBytes = 0;
+	g_DbgHDMAWindowColorBytes = 0;
+	g_DbgHDMAOtherBytes = 0;
+	g_DbgPPUQueuedWrites = 0;
+	g_DbgPPUAppliedWrites = 0;
+	g_DbgPPUQueueFull = 0;
+	g_DbgHDMALines = 0;
+	g_DbgHDMAActiveChannels = 0;
+	g_DbgHDMATransferChannels = 0;
+	g_DbgBGActiveLayers = 0;
+	g_DbgBGMapReloads = 0;
+	g_DbgBGChrRows = 0;
+	g_DbgBGChrBlankRows = 0;
+	g_DbgBGChrRepeatRows = 0;
+	memset(g_DbgBGChrRowsByDepth, 0, sizeof(g_DbgBGChrRowsByDepth));
+	memset(g_DbgPPUModeLines, 0, sizeof(g_DbgPPUModeLines));
+	g_DbgPPUModeChanges = 0;
+	memset(g_DbgPPUMainLayerLines, 0, sizeof(g_DbgPPUMainLayerLines));
+	memset(g_DbgPPUSubLayerLines, 0, sizeof(g_DbgPPUSubLayerLines));
+	memset(g_DbgPPUFetchLayerLines, 0, sizeof(g_DbgPPUFetchLayerLines));
+	g_DbgPPUForcedBlankLines = 0;
+	g_DbgPPUMosaicLines = 0;
+	g_DbgPPUOffsetLines = 0;
+	g_DbgPPUWindowLines = 0;
+	g_DbgPPUColorMathLines = 0;
+	g_DbgPPUDirectColorLines = 0;
+	g_DbgPPUInterlaceLines = 0;
+	g_DbgPPUObjInterlaceLines = 0;
+	g_DbgPPUOverscanLines = 0;
+	g_DbgPPUHiresLines = 0;
+	g_DbgPPUExtBGLines = 0;
+	memset(g_DbgChipReads, 0, sizeof(g_DbgChipReads));
+	memset(g_DbgChipWrites, 0, sizeof(g_DbgChipWrites));
+	g_DbgSDD1DmaTransfers = 0;
+	g_DbgSDD1DecompressedBytes = 0;
+	g_DbgSDD1Remaps = 0;
+	g_DbgSDD1SourceFailures = 0;
+#if SNDBG_DEEP
+	memset(g_DbgPPURegWrites, 0, sizeof(g_DbgPPURegWrites));
+#endif
+}
+
+static void SnesDbgResetSession(void)
+{
+	g_DbgSessionId++;
+	if (!g_DbgSessionId)
+		g_DbgSessionId = 1;
+	SnesDbgResetWindow();
+	g_TmgFrameStart = 0;
+	g_DbgHostRefreshHz = 60;
+	g_DbgObjOBSEL = 0;
+	g_DbgObjTM = 0;
+	g_DbgObjTS = 0;
+	g_DbgObjPriority = 0;
+	g_DbgPPULastMode = 0xFF;
+	g_DbgCaptureActive = FALSE;
+	g_DbgCaptureFrameNo = 0;
+	g_DbgCaptureReasons = 0;
+#if SNDBG_DEEP
+	g_DbgCapturePendingReasons = 0;
+	g_DbgCaptureCooldown = 0;
+	g_DbgFrameBaseOAM = 0;
+	g_DbgFrameBaseVRAM = 0;
+	g_DbgFrameBaseCGRAM = 0;
+	g_DbgFrameBaseEnabled = 0;
+	g_DbgFrameBaseRefs = 0;
+	g_DbgFrameBaseTiles = 0;
+	g_DbgFrameBaseOpaque = 0;
+	g_DbgFrameBaseCandidate = 0;
+	g_DbgFrameBaseDrawn = 0;
+	g_DbgPrevObjDrawn = 0;
+	g_DbgObjEventCooldown = 0;
+#endif
+}
 
 #endif
 
@@ -290,7 +476,12 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 
 	// S-RTC: relogio em $2800 (leitura)
 	if (pSnes->m_bSRTC && uAddr == 0x2800)
+	{
+		#if SNDBG_LOG
+		g_DbgChipReads[SNDBG_CHIP_SRTC]++;
+		#endif
 		return pSnes->m_SRTC.ReadReg();
+	}
 
 	// SuperFX/GSU: registradores em $3000-34FF.  Roteados aqui (dentro do
 	// handler do PPU0) porque a granularidade de trap e' 8KB e a pagina
@@ -299,6 +490,9 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	// aproximado com a CPU principal.
 	if (pSnes->m_bSuperFX && uAddr >= 0x3000 && uAddr <= 0x34FF)
 	{
+		#if SNDBG_LOG
+		g_DbgChipReads[SNDBG_CHIP_GSU]++;
+		#endif
 		Uint8 v = pSnes->m_GSU.ReadReg((Uint16)uAddr);
 		// ler o SFR ($3031) limpa o flag de IRQ do GSU -> baixa a linha de IRQ.
 		if (!pSnes->m_GSU.IrqPending())
@@ -425,6 +619,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	// S-RTC: relogio em $2801 (escrita)
 	if (pSnes->m_bSRTC && uAddr == 0x2801)
 	{
+		#if SNDBG_LOG
+		g_DbgChipWrites[SNDBG_CHIP_SRTC]++;
+		#endif
 		pSnes->m_SRTC.WriteReg(uData);
 		return;
 	}
@@ -434,6 +631,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	// scanline, evitando bloquear a EE por uma rotina inteira do coprocessador.
 	if (pSnes->m_bSuperFX && uAddr >= 0x3000 && uAddr <= 0x34FF)
 	{
+		#if SNDBG_LOG
+		g_DbgChipWrites[SNDBG_CHIP_GSU]++;
+		#endif
 		pSnes->m_GSU.WriteReg((Uint16)uAddr, uData);
 		return;
 	}
@@ -539,6 +739,9 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 	if (pSnes->m_bSDD1 && uAddr >= 0x4800 && uAddr <= 0x4807)
 	{
 		// S-DD1 registradores
+		#if SNDBG_LOG
+		g_DbgChipReads[SNDBG_CHIP_SDD1]++;
+		#endif
 		return pSnes->m_SDD1.ReadReg(uAddr);
 	} else
 	switch (uAddr)
@@ -669,6 +872,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	if (pSnes->m_bSDD1 && uAddr >= 0x4800 && uAddr <= 0x4807)
 	{
 		// S-DD1 registradores; $4804-$4807 mudam o mapa de bancos $C0-$FF
+		#if SNDBG_LOG
+		g_DbgChipWrites[SNDBG_CHIP_SDD1]++;
+		#endif
 		pSnes->m_SDD1.WriteReg(uAddr, uData);
 		if (pSnes->m_SDD1.MapDirty())
 		{
@@ -902,6 +1108,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 		Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
 #if SNDBG_LOG
 		g_TmgDspRd++;
+		g_DbgChipReads[SNDBG_CHIP_DSP]++;
 #endif
 		return s;
 	}
@@ -910,6 +1117,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 		Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
 #if SNDBG_LOG
 		g_TmgDspRd++;
+		g_DbgChipReads[SNDBG_CHIP_DSP]++;
 #endif
 		return d;
 	}
@@ -929,6 +1137,7 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	{
 #if SNDBG_LOG
 		g_TmgDspWr++;
+		g_DbgChipWrites[SNDBG_CHIP_DSP]++;
 #endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
 	}
@@ -940,12 +1149,18 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadGSU(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	#if SNDBG_LOG
+	g_DbgChipReads[SNDBG_CHIP_GSU]++;
+	#endif
 	return pSnes->m_GSU.ReadReg((Uint16)(uAddr & 0xFFFF));
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteGSU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	#if SNDBG_LOG
+	g_DbgChipWrites[SNDBG_CHIP_GSU]++;
+	#endif
 	pSnes->m_GSU.WriteReg((Uint16)(uAddr & 0xFFFF), uData);
 }
 
@@ -953,12 +1168,18 @@ void SNCPU_TRAPFUNC SnesSystem::WriteGSU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadOBC1(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	#if SNDBG_LOG
+	g_DbgChipReads[SNDBG_CHIP_OBC1]++;
+	#endif
 	return pSnes->m_OBC1.Read(uAddr & 0xFFFF);
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteOBC1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	#if SNDBG_LOG
+	g_DbgChipWrites[SNDBG_CHIP_OBC1]++;
+	#endif
 	pSnes->m_OBC1.Write(uAddr & 0xFFFF, uData);
 }
 
@@ -973,12 +1194,18 @@ Uint8 SnesSystem::CX4ReadMem(void *pCtx, Uint32 uAddr)
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadCX4(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	#if SNDBG_LOG
+	g_DbgChipReads[SNDBG_CHIP_CX4]++;
+	#endif
 	return pSnes->m_CX4.Read(uAddr & 0xFFFF);
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteCX4(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	#if SNDBG_LOG
+	g_DbgChipWrites[SNDBG_CHIP_CX4]++;
+	#endif
 	pSnes->m_CX4.Write(uAddr & 0xFFFF, uData);
 }
 
@@ -1107,6 +1334,10 @@ void SnesSystem::Reset()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+#if SNDBG_LOG
+	SnesDbgResetSession();
+	m_GSU.ClearDiagWindow();
+#endif
 }
 
 void SnesSystem::SoftReset()
@@ -1114,6 +1345,10 @@ void SnesSystem::SoftReset()
 	// reset cpu
 	SNCPUReset(&m_Cpu, false);
 	SNSPCReset(&m_Spc, false);
+#if SNDBG_LOG
+	SnesDbgResetSession();
+	m_GSU.ClearDiagWindow();
+#endif
 }
 
 
@@ -1124,6 +1359,10 @@ void SnesSystem::SetRom(class Emu::Rom *pRom)
 
 void SnesSystem::SetSnesRom(SnesRom *pRom)
 {
+#if SNDBG_LOG
+	SnesDbgResetSession();
+	m_GSU.ClearDiagWindow();
+#endif
 	if (m_pRom)
 	{
 		// disconnect from current rom
@@ -1617,15 +1856,38 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 	#if SNDBG_DEEP
 	g_DbgCaptureFrameNo = g_TmgFrameNo + 1;
-	g_DbgCaptureActive =
-		(g_DbgCaptureFrameNo % (SNDBG_FRAME_PERIOD * 5u)) == 0;
+	g_DbgCaptureActive = FALSE;
+	g_DbgCaptureReasons = 0;
+	if (g_DbgCaptureCooldown)
+		g_DbgCaptureCooldown--;
+	{
+		Uint32 uReasons = g_DbgCapturePendingReasons;
+		g_DbgCapturePendingReasons = 0;
+		if (uReasons &&
+		    (!g_DbgCaptureCooldown || (uReasons & SNDBG_CAPTURE_MANUAL)))
+		{
+			g_DbgCaptureActive = TRUE;
+			g_DbgCaptureReasons = uReasons;
+			g_DbgCaptureCooldown = SNDBG_CAPTURE_COOLDOWN;
+		}
+	}
 	if (g_DbgCaptureActive)
 	{
-		DLog("[snes-capture] begin f=%u (light OBJ/DMA trace)",
-			(unsigned)g_DbgCaptureFrameNo);
+		DLog("[snes-capture] schema=%s begin f=%u reasons=%02X manual/slow/queue/dma/obj/skip/audio/chip=%u/%u/%u/%u/%u/%u/%u/%u",
+			SNDBG_SCHEMA, (unsigned)g_DbgCaptureFrameNo,
+			(unsigned)g_DbgCaptureReasons,
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_MANUAL) != 0),
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_SLOW_FRAME) != 0),
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_PPU_QUEUE) != 0),
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_DMA_WRAP) != 0),
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_OBJ) != 0),
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_FRAMESKIP) != 0),
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_AUDIO) != 0),
+			(unsigned)((g_DbgCaptureReasons & SNDBG_CAPTURE_CHIP) != 0));
 	}
 	#else
 	g_DbgCaptureActive = FALSE;
+	g_DbgCaptureReasons = 0;
 	#endif
 	// --- timing: marca inicio do frame ---
 	g_TmgFrameStart  = ProfCtrGetCycle();
@@ -1796,6 +2058,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	// --- timing: fecha o frame e resume a janela ---
 	{
 		Uint32 cyc = ProfCtrGetCycle() - g_TmgFrameStart;  // ciclos de emulacao deste frame
+		Uint32 uBudget = SnesDbgFrameBudget(g_DbgHostRefreshHz);
 		g_TmgWinSumCyc += cyc;
 		g_TmgWinSumM7  += g_TmgCycM7;
 		g_TmgWinSumObj += g_TmgCycObj;
@@ -1820,7 +2083,15 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 		g_TmgWinSumObjDraw += g_TmgCycObjDraw;
 		g_TmgWinSumHDMAData += g_TmgCycHDMAData;
 		g_TmgWinSumHDMATable += g_TmgCycHDMATable;
+		if (cyc < g_TmgWinMinCyc) g_TmgWinMinCyc = cyc;
 		if (cyc > g_TmgWinMaxCyc) g_TmgWinMaxCyc = cyc;
+		if (SnesDbgFrameIsSlow(cyc, uBudget))
+		{
+			g_TmgWinSlowFrames++;
+			#if SNDBG_DEEP
+			SnesDbgRequestCapture(SNDBG_CAPTURE_SLOW_FRAME);
+			#endif
+		}
 		g_TmgWinFrames++;
 		g_TmgFrameNo++;
 
@@ -1863,6 +2134,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)pr->oampri.w, (unsigned)pr->bg1sc,
 					(unsigned)pr->bg2sc, (unsigned)pr->bg3sc,
 					(unsigned)pr->bg4sc);
+				SnesDbgRequestCapture(SNDBG_CAPTURE_OBJ);
 				g_DbgObjEventCooldown = 30;
 			}
 			g_DbgPrevObjDrawn = fDrawn;
@@ -1878,14 +2150,35 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)pr->oamaddr.w, (unsigned)pr->oamaddrlatch.w,
 				(unsigned)pr->oampri.w, (unsigned)(Uint8)pr->vmain,
 				(unsigned)pr->vmaddr.w, (unsigned)pr->cgadd.w);
-			DLog("[snes-capture] end f=%u", (unsigned)g_TmgFrameNo);
+			DLog("[snes-cpu-state] f=%u pc=%06X a/x/y/s/dp=%04X/%04X/%04X/%04X/%04X db=%02X p/e=%02X/%u signal=%02X irq-delay=%u nmi-delay=%u",
+				(unsigned)g_TmgFrameNo, (unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+				(unsigned)m_Cpu.Regs.rA.w, (unsigned)m_Cpu.Regs.rX.w,
+				(unsigned)m_Cpu.Regs.rY.w, (unsigned)m_Cpu.Regs.rS.w,
+				(unsigned)m_Cpu.Regs.rDP, (unsigned)(m_Cpu.Regs.rDB >> 16),
+				(unsigned)m_Cpu.Regs.rP, (unsigned)m_Cpu.Regs.rE,
+				(unsigned)m_Cpu.uSignal, (unsigned)m_Cpu.uIrqPending,
+				(unsigned)m_Cpu.uNmiDmaDelay);
+			DLog("[snes-apu-state] f=%u pc=%04X a/x/y/sp/psw=%02X/%02X/%02X/%02X/%02X cycles=%d rom=%u",
+				(unsigned)g_TmgFrameNo, (unsigned)m_Spc.Regs.rPC,
+				(unsigned)m_Spc.Regs.rA, (unsigned)m_Spc.Regs.rX,
+				(unsigned)m_Spc.Regs.rY, (unsigned)m_Spc.Regs.rSP,
+				(unsigned)m_Spc.Regs.rPSW, (int)m_Spc.Cycles,
+				(unsigned)m_Spc.bRomEnable);
+			DLog("[snes-capture] end f=%u reasons=%02X",
+				(unsigned)g_TmgFrameNo, (unsigned)g_DbgCaptureReasons);
 		}
 		#endif
 		if (g_TmgWinFrames >= SNDBG_FRAME_PERIOD)
 		{
-			Uint32 sum   = g_TmgWinSumCyc ? g_TmgWinSumCyc : 1;
-			Uint32 avg   = g_TmgWinSumCyc / g_TmgWinFrames;
-			Uint32 ratio = avg ? (g_TmgWinMaxCyc * 100u / avg) : 0;
+			Uint64 sum   = g_TmgWinSumCyc ? g_TmgWinSumCyc : 1;
+			Uint32 avg   = (Uint32)(g_TmgWinSumCyc / g_TmgWinFrames);
+			Bool bPAL = (m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL)
+				? TRUE : FALSE;
+			Uint32 uTargetFPS = g_DbgHostRefreshHz ? g_DbgHostRefreshHz : 60u;
+			Uint32 uBudget = SnesDbgFrameBudget(uTargetFPS);
+			Uint32 uMinCyc = (g_TmgWinMinCyc == 0xFFFFFFFFu)
+				? 0u : g_TmgWinMinCyc;
+			Uint32 ratio = avg ? (Uint32)(((Uint64)g_TmgWinMaxCyc * 100u) / avg) : 0;
 			/* CP0 Count avanca a metade do clock de 294.912 MHz da EE. */
 			Uint32 fps10 = avg
 				? (Uint32)(1474560000ull / (Uint64)avg) : 0;
@@ -1923,7 +2216,18 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
 			// diretamente qual rotina esta consumindo o tempo da EE.
-			DLog("[snes-perf] diag=%s f=%u avg=%u snes=%u.%u fps peak=%u%% cpu=%u%% ppu=%u%% gsu=%u%% apu=%u%% mix=%u%% mdma=%u%% hdma=%u%%",
+			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=0 obj-cache=%u",
+				SNDBG_SCHEMA, (unsigned)(SNDBG_DEEP ? 2 : 1),
+				(unsigned)g_DbgSessionId, (unsigned)g_TmgWinFrames,
+				(unsigned)SNPPU_OBJ_CACHE);
+			DLog("[snes-frame] f=%u rom-video=%s host-target=%u budget=%u cycles min/avg/max=%u/%u/%u slow=%u threshold=%u%% capacity=%u.%u fps",
+				(unsigned)g_TmgFrameNo, bPAL ? "pal" : "ntsc",
+				(unsigned)uTargetFPS, (unsigned)uBudget,
+				(unsigned)uMinCyc, (unsigned)avg,
+				(unsigned)g_TmgWinMaxCyc, (unsigned)g_TmgWinSlowFrames,
+				(unsigned)SNDBG_SLOW_PERCENT,
+				(unsigned)(fps10 / 10), (unsigned)(fps10 % 10));
+			DLog("[snes-perf] diag=%s f=%u avg=%u capacity=%u.%u fps peak=%u%% cpu=%u%% ppu=%u%% gsu=%u%% apu=%u%% mix=%u%% mdma=%u%% hdma=%u%%",
 				SNDBG_DEEP ? "deep" : "general",
 				(unsigned)g_TmgFrameNo, (unsigned)avg,
 				(unsigned)(fps10 / 10), (unsigned)(fps10 % 10),
@@ -1939,7 +2243,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_TmgIrqCount,
 				(unsigned)g_TmgIrqRearms,
 				(unsigned)g_TmgIrqInstant);
-			DLog("[snes-hot-bg] schema=topgear-r29 pct sync/info/off/map/chr/main/sub/cmath=%u/%u/%u/%u/%u/%u/%u/%u",
+			DLog("[snes-ppu-stage] schema=%s pct sync/info/off/map/chr/main/sub/cmath=%u/%u/%u/%u/%u/%u/%u/%u",
+				SNDBG_SCHEMA,
 				(unsigned)pPPUSync, (unsigned)pBGInfo,
 				(unsigned)pBGOffset, (unsigned)pBGMap,
 				(unsigned)pBGChr, (unsigned)pBGMain,
@@ -1970,10 +2275,45 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGActiveLayers,
 				(unsigned)g_DbgBGMapReloads,
 				(unsigned)g_DbgBGChrRows);
+			DLog("[snes-ppu-modes] lines m0/m1/m2/m3/m4/m5/m6/m7=%u/%u/%u/%u/%u/%u/%u/%u changes=%u blank=%u",
+				(unsigned)g_DbgPPUModeLines[0], (unsigned)g_DbgPPUModeLines[1],
+				(unsigned)g_DbgPPUModeLines[2], (unsigned)g_DbgPPUModeLines[3],
+				(unsigned)g_DbgPPUModeLines[4], (unsigned)g_DbgPPUModeLines[5],
+				(unsigned)g_DbgPPUModeLines[6], (unsigned)g_DbgPPUModeLines[7],
+				(unsigned)g_DbgPPUModeChanges,
+				(unsigned)g_DbgPPUForcedBlankLines);
+			DLog("[snes-ppu-layers] main bg1/bg2/bg3/bg4=%u/%u/%u/%u sub=%u/%u/%u/%u fetch=%u/%u/%u/%u",
+				(unsigned)g_DbgPPUMainLayerLines[0],
+				(unsigned)g_DbgPPUMainLayerLines[1],
+				(unsigned)g_DbgPPUMainLayerLines[2],
+				(unsigned)g_DbgPPUMainLayerLines[3],
+				(unsigned)g_DbgPPUSubLayerLines[0],
+				(unsigned)g_DbgPPUSubLayerLines[1],
+				(unsigned)g_DbgPPUSubLayerLines[2],
+				(unsigned)g_DbgPPUSubLayerLines[3],
+				(unsigned)g_DbgPPUFetchLayerLines[0],
+				(unsigned)g_DbgPPUFetchLayerLines[1],
+				(unsigned)g_DbgPPUFetchLayerLines[2],
+				(unsigned)g_DbgPPUFetchLayerLines[3]);
+			DLog("[snes-ppu-features] lines mosaic/offset/window/cmath/direct/interlace/obj-int/overscan/hires/extbg=%u/%u/%u/%u/%u/%u/%u/%u/%u/%u",
+				(unsigned)g_DbgPPUMosaicLines,
+				(unsigned)g_DbgPPUOffsetLines,
+				(unsigned)g_DbgPPUWindowLines,
+				(unsigned)g_DbgPPUColorMathLines,
+				(unsigned)g_DbgPPUDirectColorLines,
+				(unsigned)g_DbgPPUInterlaceLines,
+				(unsigned)g_DbgPPUObjInterlaceLines,
+				(unsigned)g_DbgPPUOverscanLines,
+				(unsigned)g_DbgPPUHiresLines,
+				(unsigned)g_DbgPPUExtBGLines);
 			DLog("[snes-bg-rows] total/blank/repeat=%u/%u/%u",
 				(unsigned)g_DbgBGChrRows,
 				(unsigned)g_DbgBGChrBlankRows,
 				(unsigned)g_DbgBGChrRepeatRows);
+			DLog("[snes-bg-depth] chrrows 2bpp/4bpp/8bpp=%u/%u/%u",
+				(unsigned)g_DbgBGChrRowsByDepth[0],
+				(unsigned)g_DbgBGChrRowsByDepth[1],
+				(unsigned)g_DbgBGChrRowsByDepth[2]);
 			DLog("[snes-obj] ports oam=%u vram=%u cgram=%u | lines=%u refs=%u tiles=%u range/time=%u/%u",
 				(unsigned)g_DbgOAMWrites, (unsigned)g_DbgVRAMWrites,
 				(unsigned)g_DbgCGRAMWrites, (unsigned)g_DbgObjEnabledLines,
@@ -1982,14 +2322,16 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			DLog("[snes-obj-cache] enabled=%u hit/miss=%u/%u",
 				(unsigned)SNPPU_OBJ_CACHE, (unsigned)g_DbgObjCacheHits,
 				(unsigned)g_DbgObjCacheMisses);
-			DLog("[snes-bg-cache] enabled=%u hit/miss=%u/%u",
-				(unsigned)SNPPU_BG_CACHE, (unsigned)g_DbgBGCacheHits,
-				(unsigned)g_DbgBGCacheMisses);
-			DLog("[snes-chr-cache] direct=1 bytes=448512 invalidated-tiles=%u",
-				(unsigned)g_DbgChrCacheInvalidations);
-			DLog("[snes-audio] samples=%u avg/frame=%u",
+			DLog("[snes-obj-cache] bytes=149504 invalidated-slots=%u bg-path=direct",
+				(unsigned)g_DbgObjCacheInvalidations);
+			DLog("[snes-audio] samples=%u avg/frame=%u mix calls/zero=%u/%u min/max=%u/%u",
 				(unsigned)g_DbgAudioSamples,
-				(unsigned)(g_DbgAudioSamples / g_TmgWinFrames));
+				(unsigned)(g_DbgAudioSamples / g_TmgWinFrames),
+				(unsigned)g_DbgAudioMixCalls,
+				(unsigned)g_DbgAudioZeroMixes,
+				(unsigned)(g_DbgAudioMinSamples == 0xFFFFFFFFu
+					? 0u : g_DbgAudioMinSamples),
+				(unsigned)g_DbgAudioMaxSamples);
 			DLog("[snes-cgram] bytes/commits/unchanged=%u/%u/%u",
 				(unsigned)g_DbgCGRAMWrites,
 				(unsigned)g_DbgCGRAMCommits,
@@ -2063,7 +2405,66 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)(Uint8)pr->bghofslo,
 					(unsigned)(Uint8)pr->m7latch);
 			}
+			DLog("[snes-cart] video=%s mapping=%u flags=%08X io r/w dsp=%u/%u gsu=%u/%u obc1=%u/%u cx4=%u/%u sdd1=%u/%u srtc=%u/%u",
+				bPAL ? "pal" : "ntsc",
+				(unsigned)(m_pRom ? m_pRom->m_eMapping : SNROM_MAPPING_NUM),
+				(unsigned)(m_pRom ? m_pRom->m_Flags : 0u),
+				(unsigned)g_DbgChipReads[SNDBG_CHIP_DSP],
+				(unsigned)g_DbgChipWrites[SNDBG_CHIP_DSP],
+				(unsigned)g_DbgChipReads[SNDBG_CHIP_GSU],
+				(unsigned)g_DbgChipWrites[SNDBG_CHIP_GSU],
+				(unsigned)g_DbgChipReads[SNDBG_CHIP_OBC1],
+				(unsigned)g_DbgChipWrites[SNDBG_CHIP_OBC1],
+				(unsigned)g_DbgChipReads[SNDBG_CHIP_CX4],
+				(unsigned)g_DbgChipWrites[SNDBG_CHIP_CX4],
+				(unsigned)g_DbgChipReads[SNDBG_CHIP_SDD1],
+				(unsigned)g_DbgChipWrites[SNDBG_CHIP_SDD1],
+				(unsigned)g_DbgChipReads[SNDBG_CHIP_SRTC],
+				(unsigned)g_DbgChipWrites[SNDBG_CHIP_SRTC]);
+			DLog("[snes-sdd1] dma/bytes/remaps/source-fail=%u/%u/%u/%u seg=%u/%u/%u/%u",
+				(unsigned)g_DbgSDD1DmaTransfers,
+				(unsigned)g_DbgSDD1DecompressedBytes,
+				(unsigned)g_DbgSDD1Remaps,
+				(unsigned)g_DbgSDD1SourceFailures,
+				(unsigned)m_SDD1.BankSegment(0),
+				(unsigned)m_SDD1.BankSegment(1),
+				(unsigned)m_SDD1.BankSegment(2),
+				(unsigned)m_SDD1.BankSegment(3));
+			DLog("[snes-core-state] cpu pc/p/e/signal=%06X/%02X/%u/%02X spc pc/psw=%04X/%02X",
+				(unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+				(unsigned)m_Cpu.Regs.rP, (unsigned)m_Cpu.Regs.rE,
+				(unsigned)m_Cpu.uSignal, (unsigned)m_Spc.Regs.rPC,
+				(unsigned)m_Spc.Regs.rPSW);
 			#if SNDBG_DEEP
+			{
+				Uint32 uTopReg[4] = {0,0,0,0};
+				Uint32 uTopCount[4] = {0,0,0,0};
+				Uint32 iReg;
+				for (iReg = 0; iReg < 0x40; iReg++)
+				{
+					Uint32 iSlot;
+					for (iSlot = 0; iSlot < 4; iSlot++)
+					{
+						if (g_DbgPPURegWrites[iReg] > uTopCount[iSlot])
+						{
+							Int32 iMove;
+							for (iMove = 3; iMove > (Int32)iSlot; iMove--)
+							{
+								uTopCount[iMove] = uTopCount[iMove - 1];
+								uTopReg[iMove] = uTopReg[iMove - 1];
+							}
+							uTopCount[iSlot] = g_DbgPPURegWrites[iReg];
+							uTopReg[iSlot] = iReg;
+							break;
+						}
+					}
+				}
+				DLog("[snes-ppu-reg] top port/count=%04X/%u %04X/%u %04X/%u %04X/%u",
+					(unsigned)(0x2100u + uTopReg[0]), (unsigned)uTopCount[0],
+					(unsigned)(0x2100u + uTopReg[1]), (unsigned)uTopCount[1],
+					(unsigned)(0x2100u + uTopReg[2]), (unsigned)uTopCount[2],
+					(unsigned)(0x2100u + uTopReg[3]), (unsigned)uTopCount[3]);
+			}
 			DLog("[snes-gsu] ins=%u start/stop/abort/wd=%u/%u/%u/%u max=%u cur=%u plot/rpix=%u/%u ramw=%u",
 				(unsigned)gd.Instructions, (unsigned)gd.Starts,
 				(unsigned)gd.Stops, (unsigned)gd.Aborts,
@@ -2080,93 +2481,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)gd.Aborts, (unsigned)gd.Watchdogs,
 				(unsigned)(m_GSU.IsRunning() ? 1 : 0));
 			#endif
-			g_TmgWinFrames  = 0;
-			g_TmgWinSumCyc  = 0;
-			g_TmgWinMaxCyc  = 0;
-			g_TmgWinSumM7   = 0;
-			g_TmgWinSumObj  = 0;
-			g_TmgWinSumPPU  = 0;
-			g_TmgWinSumCPU  = 0;
-			g_TmgWinSumGSU  = 0;
-			g_TmgWinSumMDMA = 0;
-			g_TmgWinSumHDMA = 0;
-			g_TmgWinSumAPU  = 0;
-			g_TmgWinSumMix  = 0;
-			g_TmgWinSumBlend = 0;
-			g_TmgWinSumPPUSync = 0;
-			g_TmgWinSumBGInfo = 0;
-			g_TmgWinSumBGOffset = 0;
-			g_TmgWinSumBGMap = 0;
-			g_TmgWinSumBGChr = 0;
-			g_TmgWinSumBGMain = 0;
-			g_TmgWinSumBGSub = 0;
-			g_TmgWinSumColorMath = 0;
-			g_TmgWinSumObjUpdate = 0;
-			g_TmgWinSumObjFetch = 0;
-			g_TmgWinSumObjDraw = 0;
-			g_TmgWinSumHDMAData = 0;
-			g_TmgWinSumHDMATable = 0;
-			g_TmgDspRd      = 0;
-			g_TmgDspWr      = 0;
-			g_TmgIrqCount   = 0;
-			g_TmgIrqRearms  = 0;
-			g_TmgIrqInstant = 0;
-			g_TmgIrqLineMin = 9999;
-			g_TmgIrqLineMax = -1;
-			g_DbgOAMWrites = 0;
-			g_DbgVRAMWrites = 0;
-			g_DbgCGRAMWrites = 0;
-			g_DbgCGRAMCommits = 0;
-			g_DbgCGRAMUnchanged = 0;
-			g_DbgVideoRenderedFrames = 0;
-			g_DbgVideoSkippedFrames = 0;
-			g_DbgObjEnabledLines = 0;
-			g_DbgObjOamRefs = 0;
-			g_DbgObjTiles = 0;
-			g_DbgObjCacheHits = 0;
-			g_DbgObjCacheMisses = 0;
-			g_DbgObjCacheRefreshes = 0;
-			g_DbgBGCacheHits = 0;
-			g_DbgBGCacheMisses = 0;
-			g_DbgBGCacheRefreshes = 0;
-			g_DbgChrCacheInvalidations = 0;
-			g_DbgAudioSamples = 0;
-			g_DbgObjOpaqueTiles = 0;
-			g_DbgObjCandidatePixels = 0;
-			g_DbgObjDrawnPixels = 0;
-			g_DbgObjClippedTiles = 0;
-			g_DbgObjEmptyLines = 0;
-			g_DbgObjRangeLimitLines = 0;
-			g_DbgObjLimitLines = 0;
-			g_DbgPPUSyncCalls = 0;
-			g_DbgPPURenderLines = 0;
-			g_DbgDMAStarts = 0;
-			g_DbgDMAReadBytes = 0;
-			g_DbgDMAOAMBytes = 0;
-			g_DbgDMAVRAMBytes = 0;
-			g_DbgDMACGRAMBytes = 0;
-			g_DbgDMAOtherBytes = 0;
-			g_DbgDMAWraps = 0;
-			g_DbgDMAMaxBytes = 0;
-			memset(g_DbgDMAModes, 0, sizeof(g_DbgDMAModes));
-			g_DbgHDMAScrollBytes = 0;
-			g_DbgHDMACGRAMBytes = 0;
-			g_DbgHDMAWindowColorBytes = 0;
-			g_DbgHDMAOtherBytes = 0;
-			g_DbgPPUQueuedWrites = 0;
-			g_DbgPPUAppliedWrites = 0;
-			g_DbgPPUQueueFull = 0;
-			g_DbgHDMALines = 0;
-			g_DbgHDMAActiveChannels = 0;
-			g_DbgHDMATransferChannels = 0;
-			g_DbgBGActiveLayers = 0;
-			g_DbgBGMapReloads = 0;
-			g_DbgBGChrRows = 0;
-			g_DbgBGChrBlankRows = 0;
-			g_DbgBGChrRepeatRows = 0;
+			SnesDbgResetWindow();
 			m_GSU.ClearDiagWindow();
 		}
 		g_DbgCaptureActive = FALSE;
+		g_DbgCaptureReasons = 0;
 	}
 #endif
 

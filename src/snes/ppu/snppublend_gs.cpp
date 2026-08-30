@@ -42,6 +42,7 @@ typedef char SNPPUScratchLayoutCheck[
 #define SNPPU_GS_DIAG_SAMPLES 8
 struct SNPPUGSDiagT
 {
+	Uint32 Session;
 	Uint32 Frames;
 	Uint32 Lines;
 	Uint32 SyncCalls;
@@ -61,6 +62,15 @@ struct SNPPUGSDiagT
 };
 
 static SNPPUGSDiagT _SNPPUGSDiag;
+
+static void _SNPPUGSDiagEnsureSession(void)
+{
+	if (_SNPPUGSDiag.Session != g_DbgSessionId)
+	{
+		memset(&_SNPPUGSDiag, 0, sizeof(_SNPPUGSDiag));
+		_SNPPUGSDiag.Session = g_DbgSessionId;
+	}
+}
 
 #if SNDBG_DEEP
 static Uint32 _SNPPUGSSample(const SNPPUBlendInfoT *pInfo,
@@ -434,6 +444,7 @@ static void _SNPPURenderLine(Int32 iDestLine, int abe)
 void SNPPUBlendGS::Begin(CRenderSurface *pTarget)
 {
 #if SNDBG_LOG
+	_SNPPUGSDiagEnsureSession();
 	/* End() ja esperou a ultima chain. O mixer de audio tambem usa o
 	   scratchpad entre quadros, portanto uma expectativa antiga nao deve ser
 	   comparada com o primeiro scanline do quadro seguinte. */
@@ -557,6 +568,7 @@ void SNPPUBlendGS::End()
     GSK_InvalidateTextureCache();
 
 #if SNDBG_LOG
+	_SNPPUGSDiagEnsureSession();
 	_SNPPUGSDiag.Frames++;
 	if (_SNPPUGSDiag.Frames >= SNDBG_FRAME_PERIOD)
 	{
@@ -583,6 +595,7 @@ void SNPPUBlendGS::End()
 			(unsigned)SNPPU_DMA_BLENDINFO_ADDR);
 		#endif
 		memset(&_SNPPUGSDiag, 0, sizeof(_SNPPUGSDiag));
+		_SNPPUGSDiag.Session = g_DbgSessionId;
 	}
 #endif
 

@@ -13,6 +13,7 @@
 #include "input.h"
 #include "memcard.h"
 #include "prof.h"
+#include "sndbglog.h"
 
 extern "C" {
 #include "audio.h"
@@ -237,16 +238,19 @@ void _MainLoopInputProcess(Uint32 buttons)
 	}
 
 	#if 1
-	/* Profiler capture: R3 (right-stick click) OR hold L2+R2 together.
+	/* Profiler/deep diagnostic capture: R3 (right-stick click) OR hold L2+R2.
 	   L2+R2 is easy to reach on the NetherSX2 touch layout (L3/R3 usually
-	   aren't shown there) and isn't used by SNES/NES games or the menu.
-	   Only does anything in a PROFILE=1 build. */
+	   aren't shown there) and isn't used by SNES/NES games. */
 	if ((trigger & PAD_R3) ||
 	    (((buttons & PAD_L2) && (buttons & PAD_R2)) && (trigger & (PAD_L2 | PAD_R2))))
 	{
-        #if PROF_ENABLED
+	        #if PROF_ENABLED
 		ProfStartProfile(1);
-        #endif
+	        #endif
+		#if SNDBG_DEEP
+		if (_pSystem == _pSnes)
+			SnesDbgRequestCapture(SNDBG_CAPTURE_MANUAL);
+		#endif
 //		BMPWriteFile("/pc/mnt/c/out.bmp", &_fbTexture[0]);
 	}
 

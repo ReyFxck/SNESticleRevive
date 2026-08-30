@@ -5,36 +5,25 @@
 #include "types.h"
 
 /*
- * Cache fisico de CHR decodificado.
+ * Cache fisico de CHR 4bpp exclusivo de OBJ.
  *
- * A VRAM do SNES pode ser interpretada como tiles 2bpp ou 4bpp dependendo
- * do modo/camada. Por isso mantemos uma tabela direta para cada formato:
- *
- *   2bpp: 32768 palavras /  8 palavras por tile = 4096 tiles
- *   4bpp: 32768 palavras / 16 palavras por tile = 2048 tiles
- *
- * Cada linha guarda oito indices de cor sem paleta. BG e OBJ 4bpp usam a
- * MESMA tabela; trocar CGRAM, prioridade ou paleta nao invalida os pixels.
- * A orientacao canonica e' sem H-flip. O flip e' feito somente na saida,
- * evitando duplicar quase 450 KiB de dados.
+ * BG segue sempre o decoder direto: o antigo cache custava mais do que
+ * economizava e foi removido, inclusive sua tabela 2bpp. A unica tabela
+ * restante cobre os 2048 tiles 4bpp possiveis na VRAM. Cada linha guarda
+ * oito indices de cor sem paleta; CGRAM e prioridade nao invalidam pixels.
+ * A orientacao canonica e' sem H-flip e o flip acontece somente na saida.
  *
  * Diferente dos caches experimentais de linha, um hit nao le a fonte da
  * VRAM, nao calcula hash e nao disputa uma entrada de 512 slots. Escritas em
  * $2118/$2119 invalidam diretamente os tiles fisicos afetados.
  */
 
-#define SNPPU_CHR2_TILE_WORDS  8u
 #define SNPPU_CHR4_TILE_WORDS 16u
-#define SNPPU_CHR2_TILE_COUNT 4096u
 #define SNPPU_CHR4_TILE_COUNT 2048u
 #define SNPPU_VRAM_WORD_MASK  0x7FFFu
 
 struct SnesPPUChrCacheT
 {
-	Uint64 uData2[SNPPU_CHR2_TILE_COUNT][8];
-	Uint8  uOpaque2[SNPPU_CHR2_TILE_COUNT][8];
-	Uint8  uValid2[SNPPU_CHR2_TILE_COUNT];
-
 	Uint64 uData4[SNPPU_CHR4_TILE_COUNT][8];
 	Uint8  uOpaque4[SNPPU_CHR4_TILE_COUNT][8];
 	Uint8  uValid4[SNPPU_CHR4_TILE_COUNT];
@@ -62,23 +51,6 @@ _INLINE void SnesPPUChrCacheFlipRow(Uint64 *pData, Uint32 *pOpaque)
 	*pOpaque = SnesPPUChrCacheReverseMask((Uint8)*pOpaque);
 }
 
-_INLINE Bool SnesPPUChrCacheLookup2(const SnesPPUChrCacheT *pCache,
-	Uint32 uRowAddress, Bool bHFlip, Uint64 *pData, Uint32 *pOpaque)
-{
-	Uint32 uAddress = uRowAddress & SNPPU_VRAM_WORD_MASK;
-	Uint32 uTile = uAddress >> 3;
-	Uint32 uRow = uAddress & 7u;
-
-	if (!(pCache->uValid2[uTile] & (1u << uRow)))
-		return FALSE;
-
-	*pData = pCache->uData2[uTile][uRow];
-	*pOpaque = pCache->uOpaque2[uTile][uRow];
-	if (bHFlip)
-		SnesPPUChrCacheFlipRow(pData, pOpaque);
-	return TRUE;
-}
-
 _INLINE Bool SnesPPUChrCacheLookup4(const SnesPPUChrCacheT *pCache,
 	Uint32 uRowAddress, Bool bHFlip, Uint64 *pData, Uint32 *pOpaque)
 {
@@ -96,18 +68,6 @@ _INLINE Bool SnesPPUChrCacheLookup4(const SnesPPUChrCacheT *pCache,
 	return TRUE;
 }
 
-_INLINE void SnesPPUChrCacheStore2(SnesPPUChrCacheT *pCache,
-	Uint32 uRowAddress, Uint64 uData, Uint32 uOpaque)
-{
-	Uint32 uAddress = uRowAddress & SNPPU_VRAM_WORD_MASK;
-	Uint32 uTile = uAddress >> 3;
-	Uint32 uRow = uAddress & 7u;
-
-	pCache->uData2[uTile][uRow] = uData;
-	pCache->uOpaque2[uTile][uRow] = (Uint8)uOpaque;
-	pCache->uValid2[uTile] |= (Uint8)(1u << uRow);
-}
-
 _INLINE void SnesPPUChrCacheStore4(SnesPPUChrCacheT *pCache,
 	Uint32 uRowAddress, Uint64 uData, Uint32 uOpaque)
 {
@@ -122,7 +82,6 @@ _INLINE void SnesPPUChrCacheStore4(SnesPPUChrCacheT *pCache,
 
 _INLINE void SnesPPUChrCacheInvalidateAll(SnesPPUChrCacheT *pCache)
 {
-	memset(pCache->uValid2, 0, sizeof(pCache->uValid2));
 	memset(pCache->uValid4, 0, sizeof(pCache->uValid4));
 }
 
@@ -137,24 +96,17 @@ _INLINE Uint32 SnesPPUChrCacheInvalidateRange(SnesPPUChrCacheT *pCache,
 	if (nWords >= 0x8000u)
 	{
 		SnesPPUChrCacheInvalidateAll(pCache);
-		return SNPPU_CHR2_TILE_COUNT + SNPPU_CHR4_TILE_COUNT;
+		return SNPPU_CHR4_TILE_COUNT;
 	}
 
-	/* Avanca por limites de tile 2bpp. Isso visita no maximo 4097
-	   posicoes ate em uma transferencia com wrap e tambem cobre cada tile
-	   4bpp tocado, sem um laco por byte de DMA. */
+	/* Avanca por limites de tile OBJ 4bpp: no maximo 2049 iteracoes mesmo
+	   em uma transferencia que cruza $7FFF->$0000, sem laco por byte. */
 	while (nWords)
 	{
 		Uint32 uAddress = uWordAddress & SNPPU_VRAM_WORD_MASK;
-		Uint32 uTile2 = uAddress >> 3;
 		Uint32 uTile4 = uAddress >> 4;
-		Uint32 nStep = 8u - (uAddress & 7u);
+		Uint32 nStep = 16u - (uAddress & 15u);
 
-		if (pCache->uValid2[uTile2])
-		{
-			pCache->uValid2[uTile2] = 0;
-			nValidTiles++;
-		}
 		if (pCache->uValid4[uTile4])
 		{
 			pCache->uValid4[uTile4] = 0;

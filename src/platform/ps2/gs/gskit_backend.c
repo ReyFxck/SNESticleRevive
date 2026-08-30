@@ -392,6 +392,13 @@ int GSK_GetActiveVideoMode(void)
     return _gsk_active_mode;
 }
 
+int GSK_GetRefreshHz(void)
+{
+    if (!_pGsGlobal)
+        return 60;
+    return (_pGsGlobal->Mode == GS_MODE_PAL) ? 50 : 60;
+}
+
 Uint32 GSK_VramAllocTBP(Uint32 nBytes)
 {
     u32 addr;

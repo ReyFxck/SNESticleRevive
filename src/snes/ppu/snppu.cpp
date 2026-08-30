@@ -17,6 +17,9 @@ void SnesPPU::WriteCGDATA(Uint8 uData)
 #if SNDBG_LOG
 	g_DbgCGRAMWrites++;
 #endif
+#if SNDBG_DEEP
+	g_DbgPPURegWrites[0x22]++;
+#endif
 	Uint32 uCGAddr = (m_Regs.cgadd.w >> 1) &
 	                 (SNESPPU_CGRAM_NUM - 1);
 
@@ -102,6 +105,9 @@ void SnesPPU::WriteVMDATAL(Uint8 uData)
 #if SNDBG_LOG
 	g_DbgVRAMWrites++;
 #endif
+#if SNDBG_DEEP
+	g_DbgPPURegWrites[0x18]++;
+#endif
 	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
 	Uint32 uVramAddr;
 
@@ -124,6 +130,9 @@ void SnesPPU::WriteVMDATAH(Uint8 uData)
 {
 #if SNDBG_LOG
 	g_DbgVRAMWrites++;
+#endif
+#if SNDBG_DEEP
+	g_DbgPPURegWrites[0x19]++;
 #endif
 	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
 	Uint32 uVramAddr;
@@ -149,6 +158,10 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 {
 #if SNDBG_LOG
 	g_DbgVRAMWrites += 2;
+#endif
+#if SNDBG_DEEP
+	g_DbgPPURegWrites[0x18]++;
+	g_DbgPPURegWrites[0x19]++;
 #endif
 	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
 	Uint32 uVramAddr, uFirstVramAddr;
@@ -223,6 +236,10 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 		m_Regs.vmreadlatch.w = uLastAddress;
 #if SNDBG_LOG
 		g_DbgVRAMWrites += nWords * 2;
+#endif
+#if SNDBG_DEEP
+		g_DbgPPURegWrites[0x18] += (Uint32)nWords;
+		g_DbgPPURegWrites[0x19] += (Uint32)nWords;
 #endif
 		m_pRender->UpdateVRAMRange(uFirstPhysical, (Uint32)nWords);
 
@@ -302,6 +319,27 @@ static Uint32 _MapOAMAddress(Uint32 uAddress)
 }
 
 #if SNDBG_DEEP
+static void _TracePPUControlWrite(Uint32 uPort, Uint8 uData, Uint32 uLine)
+{
+	static Uint32 s_uFrame = (Uint32)-1;
+	static Uint32 s_uWrites = 0;
+
+	if (!g_DbgCaptureActive)
+		return;
+	if (s_uFrame != g_DbgCaptureFrameNo)
+	{
+		s_uFrame = g_DbgCaptureFrameNo;
+		s_uWrites = 0;
+	}
+	if (s_uWrites < 32)
+	{
+		DLog("[snes-ppu-write] f=%u line=%u port=%04X data=%02X",
+			(unsigned)g_DbgCaptureFrameNo, (unsigned)uLine,
+			(unsigned)uPort, (unsigned)uData);
+	}
+	s_uWrites++;
+}
+
 static void _TraceOAMAddressWrite(Uint32 uPort, Uint8 uData,
 	Uint16 uOldAddress, Uint16 uOldBase, const SnesPPURegsT *pRegs)
 {
@@ -348,6 +386,9 @@ void SnesPPU::WriteOAMDATA(Uint8 uData)
 #if SNDBG_LOG
 	g_DbgOAMWrites++;
 #endif
+#if SNDBG_DEEP
+	g_DbgPPURegWrites[0x04]++;
+#endif
 	Uint8	*pOamData = (Uint8 *)&m_OAM;
 	Uint32 uAddress = m_Regs.oamaddr.w & 0x3FF;
 	Bool bChanged = FALSE;
@@ -389,6 +430,10 @@ void SnesPPU::WriteOAMBlock(const Uint8 *pData, Int32 nBytes)
 
 #if SNDBG_LOG
 	g_DbgOAMWrites += nBytes;
+#endif
+#if SNDBG_DEEP
+	if (nBytes > 0)
+		g_DbgPPURegWrites[0x04] += (Uint32)nBytes;
 #endif
 
 	/* OAM is normally refreshed by one 544-byte DMA every frame. Preserve
@@ -463,6 +508,20 @@ void SnesPPU::UpdateMatMul()
 
 void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 {
+	#if SNDBG_DEEP
+	if (uAddr >= 0x2100 && uAddr < 0x2140)
+	{
+		Uint32 uPort = uAddr & 0x3F;
+		/* Bulk data ports have aggregate counters; tracing every byte would
+		   perturb the exact frame that the capture is meant to explain. */
+		if (uPort != 0x04 && uPort != 0x18 && uPort != 0x19 &&
+		    uPort != 0x22)
+		{
+			g_DbgPPURegWrites[uPort]++;
+			_TracePPUControlWrite(uAddr, uData, m_uLine);
+		}
+	}
+	#endif
 	//if (uAddr!= 0x2118 && uAddr!= 0x2119 && uAddr!= 0x2122  && uAddr!= 0x2104)
 	//ConDebug("write8[%06X]:ppu.%s=%02X\n", uAddr, GetRegName(uAddr), uData);
 

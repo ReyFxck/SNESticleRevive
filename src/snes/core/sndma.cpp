@@ -97,6 +97,34 @@ struct SNDmaOAMCaptureT
 };
 
 static SNDmaOAMCaptureT _SNDmaOAMCapture;
+static Uint32 _SNDmaTraceFrame = (Uint32)-1;
+static Uint32 _SNDmaTraceCount = 0;
+static Uint32 _SNDmaSDD1TraceFrame = (Uint32)-1;
+static Uint32 _SNDmaSDD1TraceCount = 0;
+
+static Bool _SNDmaTraceGeneral(void)
+{
+	if (!g_DbgCaptureActive)
+		return FALSE;
+	if (_SNDmaTraceFrame != g_DbgCaptureFrameNo)
+	{
+		_SNDmaTraceFrame = g_DbgCaptureFrameNo;
+		_SNDmaTraceCount = 0;
+	}
+	return (_SNDmaTraceCount++ < 16u) ? TRUE : FALSE;
+}
+
+static Bool _SNDmaTraceSDD1(void)
+{
+	if (!g_DbgCaptureActive)
+		return FALSE;
+	if (_SNDmaSDD1TraceFrame != g_DbgCaptureFrameNo)
+	{
+		_SNDmaSDD1TraceFrame = g_DbgCaptureFrameNo;
+		_SNDmaSDD1TraceCount = 0;
+	}
+	return (_SNDmaSDD1TraceCount++ < 8u) ? TRUE : FALSE;
+}
 
 static Uint32 _SNDmaHashBytes(const Uint8 *pData, Uint32 nBytes)
 {
@@ -264,7 +292,7 @@ void SnesDMAC::SetMDMAEnable(Uint8 uData)
 			g_DbgDMAMaxBytes = uBytes;
 
 		#if SNDBG_DEEP
-		if (g_DbgCaptureActive)
+		if (_SNDmaTraceGeneral())
 		{
 			const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
 			DLog("[snes-dma-start] f=%u ch=%u dmap=%02X mode=%u dir=%s src=%02X:%04X len=%u bbad=%02X oam/vm/cg=%04X/%04X/%04X vmain=%02X",
@@ -309,7 +337,10 @@ void SnesDMAC::SetMDMAEnable(Uint8 uData)
 
 		if ((iDelta > 0 && uBytes > 0x10000u - pChan->a1tx) ||
 		    (iDelta < 0 && uBytes > (Uint32)pChan->a1tx + 1u))
+		{
 			g_DbgDMAWraps++;
+			SnesDbgRequestCapture(SNDBG_CAPTURE_DMA_WRAP);
+		}
 
 		if (pChan->dmapx & 0x80)
 		{
@@ -623,31 +654,36 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 			// pMem ja' inclui (-base do banco), entao soma-se o endereco
 			// completo (mesma convencao de SNCPUPeek8: pMem[Addr]).
 			pIn += srcAddr;
-			m_pSDD1->Decompress(s_DecodeBuf, pIn, (Int32)pChan->dasx);
+			m_pSDD1->Decompress(s_DecodeBuf, pIn, count);
 			TransferData(pChan, s_DecodeBuf, count);
 #if SNDBG_LOG
+			g_DbgSDD1DmaTransfers++;
+			g_DbgSDD1DecompressedBytes += (Uint32)count;
+#endif
+#if SNDBG_DEEP
+			if (_SNDmaTraceSDD1())
 			{
-				static int n = 0;
-				if (n < 120) {
-					DLog("[sdd1] dma ch=%d src=%06X cnt=%d bbad=%02X mode=%d hdr=%02X out=%02X%02X%02X%02X",
-						(int)uChan, (unsigned)srcAddr, (int)count,
-						(int)pChan->bbadx, (int)(pChan->dmapx & 7),
-						(int)pIn[0], (int)s_DecodeBuf[0], (int)s_DecodeBuf[1],
-						(int)s_DecodeBuf[2], (int)s_DecodeBuf[3]);
-					n++;
-				}
+				DLog("[snes-sdd1-trace] f=%u ch=%u src=%06X bytes=%u bbad=%02X mode=%u hdr=%02X out=%02X%02X%02X%02X",
+					(unsigned)g_DbgCaptureFrameNo, (unsigned)uChan,
+					(unsigned)srcAddr, (unsigned)count,
+					(unsigned)pChan->bbadx, (unsigned)(pChan->dmapx & 7),
+					(unsigned)pIn[0], (unsigned)s_DecodeBuf[0],
+					(unsigned)s_DecodeBuf[1], (unsigned)s_DecodeBuf[2],
+					(unsigned)s_DecodeBuf[3]);
 			}
 #endif
 		}
 #if SNDBG_LOG
 		else
 		{
-			static int nn = 0;
-			if (nn < 40) {
-				DLog("[sdd1] dma ch=%d src=%06X SEM PONTEIRO (banco nao mapeado!)",
-					(int)uChan, (unsigned)srcAddr);
-				nn++;
-			}
+			g_DbgSDD1SourceFailures++;
+			SnesDbgRequestCapture(SNDBG_CAPTURE_CHIP);
+			#if SNDBG_DEEP
+			if (_SNDmaTraceSDD1())
+				DLog("[snes-sdd1-error] f=%u ch=%u src=%06X reason=unmapped-source",
+					(unsigned)g_DbgCaptureFrameNo, (unsigned)uChan,
+					(unsigned)srcAddr);
+			#endif
 		}
 #endif
 

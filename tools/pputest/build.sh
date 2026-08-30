@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bancada host-side para regressões pequenas do renderer SNES/PPU.
 #
-# Uso:  cd tools/pputest && ./build.sh && execute os cinco *_test
+# Uso:  cd tools/pputest && ./build.sh && execute os *_test
 set -e
 cd "$(dirname "$0")"
 ROOT=../..
@@ -68,4 +68,12 @@ ROOT=../..
     -I "$ROOT/src/platform/ps2/system" \
     safe_frameskip_test.cpp -o safe_frameskip_test
 
-echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./safe_frameskip_test"
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
+    -DSNDBG_LOG=1 -DSNDBG_DEEP=1 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/snes/core" \
+    diag_test.cpp -o diag_test
+
+echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./safe_frameskip_test && ./diag_test"

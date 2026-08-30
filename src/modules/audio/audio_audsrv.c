@@ -68,7 +68,9 @@ extern void ScrPrintf(const char *pFormat, ...);
    Tag: each line is prefixed with "[snes-aud] " so the user can grep
    the log file. */
 static int   _sio_inited = 0;
-static char  _dlog_buf[256];
+/* Universal SNES records carry several named counters. Keep one complete
+   schema line intact instead of silently cutting it at the old 256 bytes. */
+static char  _dlog_buf[512];
 
 /* Non-static so other translation units can extern it for one-off
    audio-path tracing. Mirror of the local prototype:
@@ -87,10 +89,11 @@ void DLog(const char *fmt, ...)
     }
 
     va_start(ap, fmt);
-    n = vsnprintf(_dlog_buf, sizeof(_dlog_buf) - 2, fmt, ap);
+    /* Leave one byte for a forced newline and one for the terminator. */
+    n = vsnprintf(_dlog_buf, sizeof(_dlog_buf) - 1, fmt, ap);
     va_end(ap);
     if (n < 0) return;
-    if (n > (int)sizeof(_dlog_buf) - 2) n = sizeof(_dlog_buf) - 2;
+    if (n >= (int)sizeof(_dlog_buf) - 1) n = sizeof(_dlog_buf) - 2;
 
     /* Make sure the line ends with \n so the emulator log flushes it. */
     if (n == 0 || _dlog_buf[n - 1] != '\n')

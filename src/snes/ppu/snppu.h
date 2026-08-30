@@ -186,7 +186,10 @@ public:
 		if (bQueued)
 			g_DbgPPUQueuedWrites++;
 		else if (bCountFailure)
+		{
 			g_DbgPPUQueueFull++;
+			SnesDbgRequestCapture(SNDBG_CAPTURE_PPU_QUEUE);
+		}
 #else
 		(void)bCountFailure;
 #endif

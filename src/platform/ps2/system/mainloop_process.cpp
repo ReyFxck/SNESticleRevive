@@ -20,6 +20,7 @@
 #include "mainloop_exec.h"
 #include "mainloop_iop.h"
 #include "mainloop_safe_frameskip.h"
+#include "gskit_backend.h"
 
 #include "types.h"
 #include "console.h"
@@ -227,6 +228,9 @@ Bool MainLoopProcess()
             }
             else
             {
+#if SNDBG_LOG
+				g_DbgHostRefreshHz = (Uint32)GSK_GetRefreshHz();
+#endif
 				/* Recover after missed host VBlanks by running the missing SNES
 				   frames without video before drawing the newest one.  Unlike merely
 				   presenting the old texture, these hidden frames do not perform a
@@ -241,6 +245,7 @@ Bool MainLoopProcess()
 				{
 #if SNDBG_LOG
 					g_DbgVideoSkippedFrames++;
+					SnesDbgRequestCapture(SNDBG_CAPTURE_FRAMESKIP);
 #endif
 					_ExecuteSnes(NULL, pMixBuffer, &Input, eMode);
 				}

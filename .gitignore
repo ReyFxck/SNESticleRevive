@@ -10,6 +10,7 @@ build/
 *.elf
 *.log
 *.bak*
+__pycache__/
 
 # Local PS2DEV environment
 .ps2dev-env

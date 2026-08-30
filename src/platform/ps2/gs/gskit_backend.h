@@ -68,6 +68,10 @@ void GSK_ReinitVideo(void);
    GSK_ReinitVideo() runs. */
 int GSK_GetActiveVideoMode(void);
 
+/* Refresh cadence of the active physical output. PAL SD modes are 50 Hz;
+   NTSC and DTV modes are 60 Hz. Returns 60 before initialisation. */
+int GSK_GetRefreshHz(void);
+
 /* Returns the active gsKit global, or NULL if GSK_Init has not run. */
 struct gsGlobal *GSK_GetGlobal(void);
 

@@ -1,13 +1,12 @@
 /*
- * sndbglog.h - Instrumentacao TEMPORARIA de diagnostico de TIMING.
+ * sndbglog.h - diagnostico universal do core SNES (schema snesdiag-v1).
  *
- *  SNES_DIAGNOSTICS=1 mede os blocos quentes e resume a cada 60 frames.
- *  SNES_DIAGNOSTICS=2 acrescenta hashes/capturas e contadores de hot loops;
- *  esse modo profundo e' intencionalmente mais intrusivo.
+ *  SNES_DIAGNOSTICS=1 mede subsistemas e resume uma janela de 120 frames.
+ *  SNES_DIAGNOSTICS=2 acrescenta captura profunda, acionada por anomalia
+ *  ou manualmente; nao existe temporizador de captura nem regra por ROM.
  *
- *  Saida via DLog() (EE SIO) -> logs.txt do NetherSX2, prefixo [snes-tmg].
- *
- *  O build normal define SNDBG_LOG=0.
+ *  Saida via DLog() (EE SIO) -> arquivo TXT do emulador Android.
+ *  O build normal define SNDBG_LOG=0 e elimina todos estes probes.
  */
 #ifndef _SNDBGLOG_H
 #define _SNDBGLOG_H
@@ -29,22 +28,52 @@
 #define SNPPU_OBJ_CACHE 1
 #endif
 
-#ifndef SNPPU_BG_CACHE
-#define SNPPU_BG_CACHE 0
-#endif
-
 #if SNDBG_DEEP && !SNDBG_LOG
 #undef SNDBG_LOG
 #define SNDBG_LOG 1
 #endif
 
-// resume a cada N frames (60 = ~1 s)
-#define SNDBG_FRAME_PERIOD 60
+/* Contrato estavel consumido por scripts e comparacoes entre jogos. */
+#define SNDBG_SCHEMA             "snesdiag-v1"
+#define SNDBG_FRAME_PERIOD       120u
+#define SNDBG_EE_COUNT_HZ        147456000u
+#define SNDBG_SLOW_PERCENT       105u
+#define SNDBG_CAPTURE_COOLDOWN   60u
+
+/* Razoes combinaveis para a proxima captura profunda. */
+#define SNDBG_CAPTURE_MANUAL     0x0001u
+#define SNDBG_CAPTURE_SLOW_FRAME 0x0002u
+#define SNDBG_CAPTURE_PPU_QUEUE  0x0004u
+#define SNDBG_CAPTURE_DMA_WRAP   0x0008u
+#define SNDBG_CAPTURE_OBJ        0x0010u
+#define SNDBG_CAPTURE_FRAMESKIP  0x0020u
+#define SNDBG_CAPTURE_AUDIO      0x0040u
+#define SNDBG_CAPTURE_CHIP       0x0080u
+
+/* Categorias de coprocessador: identidade informa, nunca muda o renderer. */
+#define SNDBG_CHIP_DSP           0u
+#define SNDBG_CHIP_GSU           1u
+#define SNDBG_CHIP_OBC1          2u
+#define SNDBG_CHIP_CX4           3u
+#define SNDBG_CHIP_SDD1          4u
+#define SNDBG_CHIP_SRTC          5u
+#define SNDBG_CHIP_COUNT         6u
+
+_INLINE Uint32 SnesDbgFrameBudget(Uint32 uTargetHz)
+{
+	return SNDBG_EE_COUNT_HZ / (uTargetHz ? uTargetHz : 60u);
+}
+
+_INLINE Bool SnesDbgFrameIsSlow(Uint32 uCycles, Uint32 uBudget)
+{
+	return ((Uint64)uCycles * 100u >
+	        (Uint64)uBudget * SNDBG_SLOW_PERCENT) ? TRUE : FALSE;
+}
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-void DLog(const char *fmt, ...);   // definido em src/modules/sjpcm/sjpcm_rpc.c
+void DLog(const char *fmt, ...);   // definido em src/modules/audio/audio_audsrv.c
 #ifdef __cplusplus
 }
 #endif
@@ -76,7 +105,7 @@ extern Uint32 g_TmgCycObjDraw;    // composicao OBJ main/sub
 extern Uint32 g_TmgCycHDMAData;   // fase de transferencia dos canais HDMA
 extern Uint32 g_TmgCycHDMATable;  // contador/tabela dos canais HDMA
 
-// Totais da janela atual (60 frames), alimentados pela PPU/render.
+// Totais da janela atual (120 frames), alimentados pela PPU/render.
 extern Uint32 g_DbgOAMWrites;
 extern Uint32 g_DbgVRAMWrites;
 extern Uint32 g_DbgCGRAMWrites;
@@ -84,17 +113,19 @@ extern Uint32 g_DbgCGRAMCommits;
 extern Uint32 g_DbgCGRAMUnchanged;
 extern Uint32 g_DbgVideoRenderedFrames;
 extern Uint32 g_DbgVideoSkippedFrames;
+extern Uint32 g_DbgHostRefreshHz;
+extern Uint32 g_DbgSessionId;
 extern Uint32 g_DbgObjEnabledLines;
 extern Uint32 g_DbgObjOamRefs;
 extern Uint32 g_DbgObjTiles;
 extern Uint32 g_DbgObjCacheHits;
 extern Uint32 g_DbgObjCacheMisses;
-extern Uint32 g_DbgObjCacheRefreshes;
-extern Uint32 g_DbgBGCacheHits;
-extern Uint32 g_DbgBGCacheMisses;
-extern Uint32 g_DbgBGCacheRefreshes;
-extern Uint32 g_DbgChrCacheInvalidations;
+extern Uint32 g_DbgObjCacheInvalidations;
 extern Uint32 g_DbgAudioSamples;
+extern Uint32 g_DbgAudioMixCalls;
+extern Uint32 g_DbgAudioZeroMixes;
+extern Uint32 g_DbgAudioMinSamples;
+extern Uint32 g_DbgAudioMaxSamples;
 extern Uint32 g_DbgObjOpaqueTiles;
 extern Uint32 g_DbgObjCandidatePixels;
 extern Uint32 g_DbgObjDrawnPixels;
@@ -136,11 +167,52 @@ extern Uint32 g_DbgBGMapReloads;
 extern Uint32 g_DbgBGChrRows;
 extern Uint32 g_DbgBGChrBlankRows;
 extern Uint32 g_DbgBGChrRepeatRows;
+extern Uint32 g_DbgBGChrRowsByDepth[3];
 
-// Periodicamente uma build diagnostica captura dois scanlines OBJ e suas
-// fontes em VRAM. O dump e' pequeno para nao bloquear o SIO do NetherSX2.
+// Cobertura universal de modos, camadas e recursos PPU por scanline.
+extern Uint32 g_DbgPPUModeLines[8];
+extern Uint32 g_DbgPPUModeChanges;
+extern Uint8  g_DbgPPULastMode;
+extern Uint32 g_DbgPPUMainLayerLines[4];
+extern Uint32 g_DbgPPUSubLayerLines[4];
+extern Uint32 g_DbgPPUFetchLayerLines[4];
+extern Uint32 g_DbgPPUForcedBlankLines;
+extern Uint32 g_DbgPPUMosaicLines;
+extern Uint32 g_DbgPPUOffsetLines;
+extern Uint32 g_DbgPPUWindowLines;
+extern Uint32 g_DbgPPUColorMathLines;
+extern Uint32 g_DbgPPUDirectColorLines;
+extern Uint32 g_DbgPPUInterlaceLines;
+extern Uint32 g_DbgPPUObjInterlaceLines;
+extern Uint32 g_DbgPPUOverscanLines;
+extern Uint32 g_DbgPPUHiresLines;
+extern Uint32 g_DbgPPUExtBGLines;
+
+extern Uint32 g_DbgChipReads[SNDBG_CHIP_COUNT];
+extern Uint32 g_DbgChipWrites[SNDBG_CHIP_COUNT];
+extern Uint32 g_DbgSDD1DmaTransfers;
+extern Uint32 g_DbgSDD1DecompressedBytes;
+extern Uint32 g_DbgSDD1Remaps;
+extern Uint32 g_DbgSDD1SourceFailures;
+
+// Captura profunda: o pedido e' consumido no inicio do proximo frame.
 extern Bool   g_DbgCaptureActive;
 extern Uint32 g_DbgCaptureFrameNo;
+extern Uint32 g_DbgCaptureReasons;
+#if SNDBG_DEEP
+extern Uint32 g_DbgCapturePendingReasons;
+extern Uint32 g_DbgPPURegWrites[0x40];
+
+_INLINE void SnesDbgRequestCapture(Uint32 uReason)
+{
+	g_DbgCapturePendingReasons |= uReason;
+}
+#else
+_INLINE void SnesDbgRequestCapture(Uint32 uReason)
+{
+	(void)uReason;
+}
+#endif
 #endif
 
 #endif // _SNDBGLOG_H

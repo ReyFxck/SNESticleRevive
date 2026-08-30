@@ -156,7 +156,7 @@ void SNGSU::FlushCodeCache()
 #if SNDBG_LOG
 void SNGSU::ClearDiagWindow()
 {
-    // Um comando pode atravessar a fronteira da janela de 60 frames. Mantem
+    // Um comando pode atravessar a fronteira da janela de diagnostico. Mantem
     // seu tamanho corrente para que o maximo continue significativo.
     Uint32 current = m_Diag.CurrentJobInstructions;
     memset(&m_Diag, 0, sizeof(m_Diag));
@@ -601,6 +601,9 @@ SNGSU_ALWAYS_INLINE void SNGSU::Step()
         if (!m_WatchdogReported)
         {
             m_WatchdogReported = TRUE;
+#if SNDBG_DEEP
+            SnesDbgRequestCapture(SNDBG_CAPTURE_CHIP);
+#endif
             DLog("[gsu-watchdog] PBR=%02X PC=%04X CBR=%04X PIPE=%02X NEXT=%02X SFR=%02X%02X",
                  (unsigned)m_PBR, (unsigned)m_R[15], (unsigned)m_CBR,
                  (unsigned)m_Pipeline, (unsigned)RawCodeRead(m_R[15]),

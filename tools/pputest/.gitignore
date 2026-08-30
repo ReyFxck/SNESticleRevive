@@ -5,3 +5,4 @@ chrcache_test
 audioschedule_test
 queue_test
 safe_frameskip_test
+diag_test

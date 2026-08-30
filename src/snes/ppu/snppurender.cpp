@@ -199,8 +199,40 @@ void SnesPPURender::UpdateCGRAM(Uint32 uAddr, Uint16 uData)
 void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 {
 	SnesRender8pInfoT *pRenderInfo;
-    SNPPUBlendInfoT *pBlendInfo;
+	SNPPUBlendInfoT *pBlendInfo;
 	const SnesPPURegsT *pRegs  = m_pPPU->GetRegs();
+
+#if SNDBG_LOG
+	{
+		Uint8 uMode = (Uint8)pRegs->bgmode & 7u;
+		Uint8 uSetIni = (Uint8)pRegs->setini;
+		Uint8 uMainSub = ((Uint8)pRegs->tm | (Uint8)pRegs->ts) & 0x1Fu;
+
+		g_DbgPPUModeLines[uMode]++;
+		if (g_DbgPPULastMode != 0xFF && g_DbgPPULastMode != uMode)
+			g_DbgPPUModeChanges++;
+		g_DbgPPULastMode = uMode;
+
+		if ((Uint8)pRegs->inidisp & 0x80u) g_DbgPPUForcedBlankLines++;
+		if (((Uint8)pRegs->mosaic & 0x0Fu) &&
+		    ((Uint8)pRegs->mosaic >> 4)) g_DbgPPUMosaicLines++;
+		if ((uMode == 2u || uMode == 4u) &&
+		    (uMainSub & (SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2)))
+			g_DbgPPUOffsetLines++;
+		if (((Uint8)pRegs->tmw | (Uint8)pRegs->tsw) ||
+		    ((Uint8)pRegs->cgwsel & 0xF0u)) g_DbgPPUWindowLines++;
+		if ((Uint8)pRegs->cgadsub & 0x3Fu) g_DbgPPUColorMathLines++;
+		if (((Uint8)pRegs->cgwsel & 0x01u) &&
+		    (uMode == 3u || uMode == 4u || uMode == 7u))
+			g_DbgPPUDirectColorLines++;
+		if (uSetIni & 0x01u) g_DbgPPUInterlaceLines++;
+		if (uSetIni & 0x02u) g_DbgPPUObjInterlaceLines++;
+		if (uSetIni & 0x04u) g_DbgPPUOverscanLines++;
+		if ((uSetIni & 0x08u) || uMode == 5u || uMode == 6u)
+			g_DbgPPUHiresLines++;
+		if (uSetIni & 0x40u) g_DbgPPUExtBGLines++;
+	}
+#endif
 
 	pRenderInfo = m_pRenderInfo;
     pBlendInfo = &pRenderInfo->BlendInfo;
@@ -466,8 +498,8 @@ void SnesPPURender::UpdateVRAMRange(Uint32 uVramAddr, Uint32 nWords)
 {
 	SnesPPUInvalidateChrCache(uVramAddr, nWords);
 
-	/* O cache CHR ja foi invalidado acima. Estes bits cuidam dos caches
-	   derivados de tilemap/scroll na proxima scanline. */
+	/* O cache CHR exclusivo de OBJ ja foi invalidado acima. Estes bits
+	   atualizam os dados derivados de BG/tilemap na proxima scanline. */
 	SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR |
 	               SNESPPURENDER_UPDATE_BGCHR);
 }

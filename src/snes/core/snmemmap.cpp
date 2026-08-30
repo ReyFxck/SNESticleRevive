@@ -633,6 +633,10 @@ void SnesSystem::RemapSDD1(void)
 	if (!pRomData || uRomBytes == 0)
 		return;
 
+#if SNDBG_LOG
+	g_DbgSDD1Remaps++;
+#endif
+
 	for (g = 0; g < 4; g++)
 	{
 		Uint32 uSeg     = m_SDD1.BankSegment(g);
@@ -643,18 +647,22 @@ void SnesSystem::RemapSDD1(void)
 		SNCPUSetBank    (&m_Cpu, uBankBase, 0x100000, pRomData + uRomOff, FALSE);
 	}
 
-#if SNDBG_LOG
+#if SNDBG_DEEP
+	if (g_DbgCaptureActive)
 	{
-		// loga so' quando a config de segmentos muda (evita flood)
-		static Uint32 uLast = 0xFFFFFFFF;
-		Uint32 uCur = (Uint32)(m_SDD1.BankSegment(0) | (m_SDD1.BankSegment(1) << 8)
-		            | (m_SDD1.BankSegment(2) << 16) | (m_SDD1.BankSegment(3) << 24));
-		if (uCur != uLast)
+		static Uint32 s_uFrame = (Uint32)-1;
+		static Uint32 s_uCount = 0;
+		if (s_uFrame != g_DbgCaptureFrameNo)
 		{
-			uLast = uCur;
-			DLog("[sdd1] remap seg=%d,%d,%d,%d romBytes=%06X",
-				(int)m_SDD1.BankSegment(0), (int)m_SDD1.BankSegment(1),
-				(int)m_SDD1.BankSegment(2), (int)m_SDD1.BankSegment(3),
+			s_uFrame = g_DbgCaptureFrameNo;
+			s_uCount = 0;
+		}
+		if (s_uCount++ < 8u)
+		{
+			DLog("[snes-sdd1-map] f=%u seg=%u/%u/%u/%u rom-bytes=%u",
+				(unsigned)g_DbgCaptureFrameNo,
+				(unsigned)m_SDD1.BankSegment(0), (unsigned)m_SDD1.BankSegment(1),
+				(unsigned)m_SDD1.BankSegment(2), (unsigned)m_SDD1.BankSegment(3),
 				(unsigned)uRomBytes);
 		}
 	}
