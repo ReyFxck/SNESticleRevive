@@ -1,3 +1,8 @@
+CABO O GPT KAKAKAKAKAKAKAKAKAKAKA
+E A OPENAI TIROU O BOTÃO DE PROMOÇÃO 🤡
+FAZ O F 🥲
+N TENHO 40,00/99,00 PARA O GO/PLUS
+
 <p align="center" style="margin-bottom: 4px;">
   <img src="docs/controls/SNESTICLE.png" alt="SNESTICLE" width="500">
 </p>
