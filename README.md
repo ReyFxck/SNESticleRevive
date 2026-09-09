@@ -46,18 +46,15 @@ On top of the SNES core, the project now also integrates **InfoNES** to bring
 <h2>☕ Apoie o SNESticleRevive</h2>
 
 <p>
-Mesmo usando ferramentas de IA como auxílio, cada ajuste, debug, teste e pesquisa
+💚 Mesmo usando ferramentas de IA como auxílio, cada ajuste, debug, teste e pesquisa
 exige bastante tempo e dedicação.<br>
 Se o projeto te ajuda, qualquer contribuição via Pix já faz diferença.<br>
-Não é obrigatório, claro haha.
+Não é obrigatório, claro haha. 💚
 </p>
 
-<p>
-💚 <b>Chave Pix:</b><br>
-<code>d187732a-28d1-4f93-8243-a8e8a2800cb6</code>
+<p align="center">
+  <img src="docs/controls/pix.jpg" alt="Doação via Pix" width="350">
 </p>
-
-</div>
 
 ---
 
