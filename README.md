@@ -1,7 +1,6 @@
-CABO O GPT KAKAKAKAKAKAKAKAKAKAKA
-E A OPENAI TIROU O BOTÃO DE PROMOÇÃO 🤡
-FAZ O F 🥲
-N TENHO 40,00/99,00 PARA O GO/PLUS
+PS: CONSEGUI MAS CHATGPT PLUS MAIS NÃO IREI MEXER MAIS AQUI!
+FIQUE DE OLHO NO OUTRO REPOSITÓRIO:
+https://github.com/ReyFxck/SNESstation-Decomp
 
 <p align="center" style="margin-bottom: 4px;">
   <img src="docs/controls/SNESTICLE.png" alt="SNESTICLE" width="500">
