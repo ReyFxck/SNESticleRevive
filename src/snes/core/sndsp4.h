@@ -10,6 +10,11 @@
  *
  * Description:
  *   Emulates the NEC uPD7725 used as DSP-4 by Top Gear 3000.
+ *
+ *   A real firmware image may still be loaded for validation, but normal
+ *   SNESticleRevive builds use the self-contained replacement-program path.
+ *   That path reproduces the public DSP-4 DR/SR command protocol without
+ *   embedding Nintendo/NEC microcode.
  */
 
 #ifndef _SNDSP4_H
@@ -23,12 +28,9 @@ class SNDSP4 : public ISNDSP
 public:
     SNDSP4();
 
-    /* Combined firmware layout used by MesenCE:
-       0x0000-0x17ff: 2048 x 24-bit program ROM
-       0x1800-0x1fff: 1024 x 16-bit data ROM
-       Standard MesenCE dumps are little-endian. A big-endian fallback is
-       accepted for older uPD7725 dump sets. */
     Bool LoadFirmware(const Uint8 *pImage, Uint32 nBytes);
+    void UseReplacementProgram();
+
     Bool IsLoaded() const { return m_bLoaded; }
     Bool IsReady() const;
 
@@ -47,7 +49,10 @@ private:
         FIRMWARE_BYTES= 0x2000,
         RAM_WORDS     = 0x100,
         STACK_WORDS   = 4,
-        BUS_CYCLE_BUDGET = 0x40000
+        BUS_CYCLE_BUDGET = 0x40000,
+
+        REPL_INPUT_BYTES  = 512,
+        REPL_OUTPUT_BYTES = 4096
     };
 
     enum StatusFlags
@@ -96,6 +101,62 @@ private:
         Uint8 SP;
     };
 
+    struct ReplacementState
+    {
+        Bool WaitingCommand;
+        Bool HalfCommand;
+        Uint16 Command;
+        Uint16 Need;
+        Uint16 InPos;
+        Uint16 OutCount;
+        Uint16 OutPos;
+        Uint8 Phase;
+        Uint8 Input[REPL_INPUT_BYTES];
+        Uint8 Output[REPL_OUTPUT_BYTES];
+
+        Int32 WorldX;
+        Int32 WorldY;
+        Int32 WorldDx;
+        Int32 WorldDy;
+        Int32 WorldXEnv;
+
+        Int16 WorldYOfs;
+        Int16 WorldDdx;
+        Int16 WorldDdy;
+        Int16 ViewYOfsEnv;
+        Int16 Distance;
+
+        Int16 PolyBottom;
+        Int16 PolyTop;
+        Int16 PolyCxX;
+        Int16 PolyCxY;
+        Int16 PolyPtr;
+        Int16 PolyRaster;
+        Int16 ViewportBottom;
+
+        Int16 ViewX1;
+        Int16 ViewY1;
+        Int16 ViewX2;
+        Int16 ViewY2;
+        Int16 ViewXOfs1;
+        Int16 ViewYOfs1;
+        Int16 ViewXOfs2;
+        Int16 ViewYOfs2;
+        Int16 ViewDx;
+        Int16 ViewDy;
+        Int16 TurnX;
+        Int16 TurnDx;
+
+        Uint8 OamRow[32];
+        Uint8 OamAttr[32];
+        Uint16 OamIndex;
+        Uint16 OamBits;
+        Uint16 SpriteCount;
+        Uint16 OamRowMax;
+
+        Uint32 UnsupportedMask;
+    };
+
     State  m_State;
     Uint32 m_OpCode;
     Uint32 m_Program[PROGRAM_WORDS];
@@ -106,7 +167,10 @@ private:
     Bool m_bLoaded;
     Bool m_bFaulted;
     Bool m_bLittleEndianFirmware;
+    Bool m_bReplacementProgram;
+    ReplacementState m_Repl;
 
+    /* Real uPD7725 execution path (debug/reference firmware mode). */
     void DecodeFirmware(const Uint8 *pImage, Bool bLittleEndian);
     void RunUntilRqm();
     void StepOne();
@@ -122,6 +186,30 @@ private:
     Uint16 ReadRom(Uint32 uAddr) const;
     Uint16 ReadRam(Uint32 uAddr) const;
     void WriteRam(Uint32 uAddr, Uint16 uValue);
+
+    /* Self-contained replacement-program path.  This is intentionally
+       implemented behind the same DR/SR interface as the real uPD7725. */
+    void ReplacementReset();
+    void ReplacementWrite(Uint8 uData);
+    Uint8 ReplacementRead();
+    Uint8 ReplacementStatus() const;
+
+    void ReplacementBeginCommand(Uint16 uCommand);
+    void ReplacementDispatch();
+    void ReplacementFinish();
+    void ReplacementExpect(Uint16 nBytes, Uint8 uPhase);
+
+    Uint16 ReplacementReadWord(Uint16 uOffset) const;
+    Int16 ReplacementReadSWord(Uint16 uOffset) const;
+    Int32 ReplacementReadDword(Uint16 uOffset) const;
+    void ReplacementClearOutput();
+    void ReplacementWriteByte(Uint8 uValue);
+    void ReplacementWriteWord(Uint16 uValue);
+
+    Int16 ReplacementInverse(Int16 nLines) const;
+    void ReplacementProject01();
+    void ReplacementProject07();
+    void ReplacementOp0B(Int16 x, Int16 y, Int16 attr, Bool bLarge, Bool bEmitStop);
 };
 
 #endif
