@@ -211,6 +211,152 @@ static int exerciseReplacement()
 
     writeWord(dsp, 0x8000);              // terminate op0F stream
 
+    // Op 0008: solid polygon/window projection. This also verifies the
+    // 106-byte initial packet length, which is critical for bus alignment.
+    writeWord(dsp, 0x0008);
+
+    // clip-right[2][2]
+    for (int i = 0; i < 4; ++i) writeWord(dsp, 255);
+    // clip-left[2][2]
+    for (int i = 0; i < 4; ++i) writeWord(dsp, 0);
+    // 8 internal constant words
+    for (int i = 0; i < 8; ++i) writeWord(dsp, 0);
+
+    // centers: polygon 0/1 left/right
+    writeWord(dsp, 0);
+    writeWord(dsp, 255);
+    writeWord(dsp, 0);
+    writeWord(dsp, 255);
+
+    // HDMA pointers
+    writeWord(dsp, 0x2000);
+    writeWord(dsp, 0x2000);
+    writeWord(dsp, 0x3000);
+    writeWord(dsp, 0x3000);
+
+    // bottoms
+    for (int i = 0; i < 4; ++i) writeWord(dsp, 120);
+    // tops
+    for (int i = 0; i < 4; ++i) writeWord(dsp, 0);
+    // 4 internal words
+    for (int i = 0; i < 4; ++i) writeWord(dsp, 0);
+
+    writeWord(dsp, 0x4000); // starting distance
+    writeWord(dsp, 100);    // view x 0
+    writeWord(dsp, 100);    // view y 0
+    writeWord(dsp, 100);    // view x 1
+    writeWord(dsp, 100);    // view y 1
+    for (int i = 0; i < 4; ++i) writeWord(dsp, 0); // envelopes
+
+    Uint8 winL = dsp.ReadData(0);
+    Uint8 winR = dsp.ReadData(0);
+    if (winL != 0 || winR != 155)
+    {
+        std::printf("FAIL replacement: op08 initial window=%u,%u\n",
+                    (unsigned)winL, (unsigned)winR);
+        failed++;
+    }
+
+    // One projected slice, 10 raster lines for each polygon.
+    writeWord(dsp, 0x4000);
+    writeWord(dsp, 100);
+    writeWord(dsp, 90);
+    writeWord(dsp, 100);
+    writeWord(dsp, 90);
+    for (int i = 0; i < 4; ++i) writeWord(dsp, 0);
+
+    for (int poly = 0; poly < 2; ++poly)
+    {
+        Uint16 pseg = readWord(dsp);
+        if (pseg != 10)
+        {
+            std::printf("FAIL replacement: op08 polygon %d segments=%u\n",
+                        poly, (unsigned)pseg);
+            failed++;
+        }
+
+        for (int line = 0; line < 10; ++line)
+        {
+            Uint16 ptr = readWord(dsp);
+            Uint8 left = dsp.ReadData(0);
+            Uint8 right = dsp.ReadData(0);
+            Uint16 base = poly ? 0x3000 : 0x2000;
+            Uint16 expected = (Uint16)(base - line * 4);
+
+            if (ptr != expected || left > right)
+            {
+                std::printf("FAIL replacement: op08 poly=%d line=%d ptr=%04X L=%u R=%u\n",
+                            poly, line, ptr,
+                            (unsigned)left, (unsigned)right);
+                failed++;
+                break;
+            }
+        }
+    }
+
+    writeWord(dsp, 0x8000);
+    if (readWord(dsp) != 0)
+    {
+        std::printf("FAIL replacement: op08 terminator\n");
+        failed++;
+    }
+
+    // Op 0009: terrain-sprite projection and tile/OAM streaming.
+    writeWord(dsp, 0x0003);
+    writeWord(dsp, 0x0005);
+    writeWord(dsp, 0x0009);
+    writeWord(dsp, 128);    // viewport center X
+    writeWord(dsp, 112);    // viewport center Y
+    writeWord(dsp, 0);      // reserved
+    writeWord(dsp, 0);      // left
+    writeWord(dsp, 255);    // right
+    writeWord(dsp, 0);      // top
+    writeWord(dsp, 224);    // bottom
+
+    writeWord(dsp, 100);    // raster
+    writeWord(dsp, 0x4000); // distance
+
+    writeWord(dsp, 0);      // road center
+    writeWord(dsp, 0);      // auxiliary raster
+    writeWord(dsp, 0);      // world x
+    writeWord(dsp, 0);      // world y
+    writeWord(dsp, 0x2000); // base attribute
+
+    writeWord(dsp, 0x2000); // valid 16x16 tile header
+    writeWord(dsp, 0);      // tile dy
+    writeWord(dsp, 0);      // tile dx
+
+    // The projected tile may produce a clipping tile plus the normal tile.
+    // Every OAM record begins with word 1 and the packet ends with word 0.
+    Uint16 firstMarker = readWord(dsp);
+    if (firstMarker != 1)
+    {
+        std::printf("FAIL replacement: op09 first OAM marker=%04X\n",
+                    firstMarker);
+        failed++;
+    }
+    (void)readWord(dsp);
+    (void)readWord(dsp);
+
+    Uint16 marker = readWord(dsp);
+    if (marker == 1)
+    {
+        (void)readWord(dsp);
+        (void)readWord(dsp);
+        marker = readWord(dsp);
+    }
+    if (marker != 0)
+    {
+        std::printf("FAIL replacement: op09 OAM terminator=%04X\n", marker);
+        failed++;
+    }
+
+    // End tile list: toggle to 8x8, then zero again means return to sprite loop.
+    writeWord(dsp, 0);
+    writeWord(dsp, 0);
+    writeWord(dsp, 100);
+    writeWord(dsp, 0x8000); // terminate op09
+
     // OAM command sequence: select 1P, clear, add one sprite, fetch high table.
     writeWord(dsp, 0x0003);
     writeWord(dsp, 0x0005);
