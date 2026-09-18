@@ -14,9 +14,30 @@
 
 #include "types.h"
 #include "sndsp4.h"
+#include "sndbglog.h"
 
 #include <stdio.h>
 #include <string.h>
+
+#ifndef DSP4_TRACE
+#define DSP4_TRACE 0
+#endif
+
+#if DSP4_TRACE
+#define DSP4_TRACE_LIMIT 4096u
+#define DSP4_TLOG(...) \
+    do { \
+        if (m_Repl.TraceLines < DSP4_TRACE_LIMIT) { \
+            DLog(__VA_ARGS__); \
+            m_Repl.TraceLines++; \
+        } else if (m_Repl.TraceLines == DSP4_TRACE_LIMIT) { \
+            DLog("[dsp4] trace-cap reached lines=%u", (unsigned)DSP4_TRACE_LIMIT); \
+            m_Repl.TraceLines++; \
+        } \
+    } while (0)
+#else
+#define DSP4_TLOG(...) do { } while (0)
+#endif
 
 SNDSP4::SNDSP4()
 {
@@ -603,6 +624,7 @@ void SNDSP4::ReplacementReset()
     memset(&m_Repl, 0, sizeof(m_Repl));
     m_Repl.WaitingCommand = TRUE;
     m_Repl.OamRowMax = 33;
+    DSP4_TLOG("[dsp4] reset replacement-program");
 }
 
 Uint8 SNDSP4::ReplacementStatus() const
@@ -658,10 +680,25 @@ void SNDSP4::ReplacementExpect(Uint16 nBytes, Uint8 uPhase)
     m_Repl.Need = nBytes;
     m_Repl.InPos = 0;
     m_Repl.Phase = uPhase;
+    DSP4_TLOG("[dsp4] #%u wait cmd=%04X phase=%u need=%u out=%u/%u",
+              (unsigned)m_Repl.TraceSeq,
+              (unsigned)m_Repl.Command,
+              (unsigned)m_Repl.Phase,
+              (unsigned)m_Repl.Need,
+              (unsigned)m_Repl.OutPos,
+              (unsigned)m_Repl.OutCount);
 }
 
 void SNDSP4::ReplacementFinish()
 {
+    DSP4_TLOG("[dsp4] #%u finish cmd=%04X phase=%u out=%u unread=%u reads=%u writes=%u",
+              (unsigned)m_Repl.TraceSeq,
+              (unsigned)m_Repl.Command,
+              (unsigned)m_Repl.Phase,
+              (unsigned)m_Repl.OutCount,
+              (unsigned)(m_Repl.OutCount - m_Repl.OutPos),
+              (unsigned)m_Repl.TraceReads,
+              (unsigned)m_Repl.TraceWrites);
     m_Repl.WaitingCommand = TRUE;
     m_Repl.HalfCommand = FALSE;
     m_Repl.Need = 0;
@@ -1331,6 +1368,12 @@ void SNDSP4::ReplacementSprite09Tile()
 void SNDSP4::ReplacementBeginCommand(Uint16 uCommand)
 {
     m_Repl.Command = uCommand;
+    m_Repl.TraceSeq++;
+    m_Repl.TraceCommands++;
+    DSP4_TLOG("[dsp4] #%u begin cmd=%04X total=%u",
+              (unsigned)m_Repl.TraceSeq,
+              (unsigned)uCommand,
+              (unsigned)m_Repl.TraceCommands);
     m_Repl.Phase = 0;
     m_Repl.InPos = 0;
     m_Repl.Need = 0;
@@ -1367,6 +1410,16 @@ void SNDSP4::ReplacementBeginCommand(Uint16 uCommand)
 
 void SNDSP4::ReplacementDispatch()
 {
+    DSP4_TLOG("[dsp4] #%u dispatch cmd=%04X phase=%u in=%u/%u w=%04X,%04X,%04X,%04X",
+              (unsigned)m_Repl.TraceSeq,
+              (unsigned)m_Repl.Command,
+              (unsigned)m_Repl.Phase,
+              (unsigned)m_Repl.InPos,
+              (unsigned)m_Repl.Need,
+              (unsigned)ReplacementReadWord(0),
+              (unsigned)ReplacementReadWord(2),
+              (unsigned)ReplacementReadWord(4),
+              (unsigned)ReplacementReadWord(6));
     switch (m_Repl.Command)
     {
         case 0x0000:
@@ -2133,11 +2186,20 @@ void SNDSP4::ReplacementDispatch()
 
 void SNDSP4::ReplacementWrite(Uint8 uData)
 {
+    m_Repl.TraceWrites++;
+
     if (m_Repl.OutPos < m_Repl.OutCount)
     {
         /* Real games do not normally write while unread output is pending.
-           Keep the historical DSP-4 bus behaviour: a write consumes one
-           pending byte rather than letting command framing drift. */
+           Log this because it is exactly the kind of protocol mismatch that
+           can leave Top Gear 3000 alive with a black video frame. */
+        DSP4_TLOG("[dsp4] #%u WRITE-WHILE-OUT cmd=%04X phase=%u data=%02X out=%u/%u",
+                  (unsigned)m_Repl.TraceSeq,
+                  (unsigned)m_Repl.Command,
+                  (unsigned)m_Repl.Phase,
+                  (unsigned)uData,
+                  (unsigned)m_Repl.OutPos,
+                  (unsigned)m_Repl.OutCount);
         m_Repl.OutPos++;
         return;
     }
@@ -2160,7 +2222,17 @@ void SNDSP4::ReplacementWrite(Uint8 uData)
     }
 
     if (m_Repl.InPos < REPL_INPUT_BYTES)
+    {
         m_Repl.Input[m_Repl.InPos++] = uData;
+    }
+    else
+    {
+        DSP4_TLOG("[dsp4] #%u INPUT-OVERFLOW cmd=%04X phase=%u need=%u",
+                  (unsigned)m_Repl.TraceSeq,
+                  (unsigned)m_Repl.Command,
+                  (unsigned)m_Repl.Phase,
+                  (unsigned)m_Repl.Need);
+    }
 
     if (m_Repl.InPos >= m_Repl.Need)
         ReplacementDispatch();
@@ -2168,17 +2240,35 @@ void SNDSP4::ReplacementWrite(Uint8 uData)
 
 Uint8 SNDSP4::ReplacementRead()
 {
+    m_Repl.TraceReads++;
+
     if (m_Repl.OutPos < m_Repl.OutCount)
     {
+        Uint16 uTotal = m_Repl.OutCount;
         Uint8 uValue = m_Repl.Output[m_Repl.OutPos++];
         if (m_Repl.OutPos >= m_Repl.OutCount)
         {
+            DSP4_TLOG("[dsp4] #%u out-drain cmd=%04X phase=%u bytes=%u",
+                      (unsigned)m_Repl.TraceSeq,
+                      (unsigned)m_Repl.Command,
+                      (unsigned)m_Repl.Phase,
+                      (unsigned)uTotal);
             m_Repl.OutPos = 0;
             m_Repl.OutCount = 0;
         }
         return uValue;
     }
 
-    /* Public DSP-4 protocol requires DR=0xffff after command completion. */
+    /* Public DSP-4 protocol requires DR=0xffff after command completion.
+       Trace unexpected empty reads while a command still expects input. */
+    if (!m_Repl.WaitingCommand && m_Repl.Need)
+    {
+        DSP4_TLOG("[dsp4] #%u EMPTY-READ cmd=%04X phase=%u in=%u/%u",
+                  (unsigned)m_Repl.TraceSeq,
+                  (unsigned)m_Repl.Command,
+                  (unsigned)m_Repl.Phase,
+                  (unsigned)m_Repl.InPos,
+                  (unsigned)m_Repl.Need);
+    }
     return 0xff;
 }
