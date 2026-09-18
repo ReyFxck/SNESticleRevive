@@ -232,6 +232,14 @@ ifeq ($(PROFILE),1)
   CXXFLAGS += -DCODE_PROFILE=1
 endif
 
+# DSP4_TRACE=1 enables a bounded DSP-4 protocol trace on EE SIO.
+# Intended for short Top Gear 3000 diagnostic builds only.
+DSP4_TRACE ?= 0
+ifeq ($(DSP4_TRACE),1)
+  CFLAGS   += -DDSP4_TRACE=1
+  CXXFLAGS += -DDSP4_TRACE=1
+endif
+
 # ----------------------------------------------------------------------
 
 INCS := \
@@ -623,7 +631,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
+	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE) DSP4_TRACE=$(DSP4_TRACE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
