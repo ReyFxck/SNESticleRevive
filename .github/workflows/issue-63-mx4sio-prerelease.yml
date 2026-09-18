@@ -1,0 +1,112 @@
+name: Issue 63 MX4SIO prerelease
+
+on:
+  push:
+    branches:
+      - fix/issue-63-mx4sio-bdm
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  TEST_VERSION: 1.0.8-issue63-test1
+  RELEASE_TAG: issue-63-mx4sio-bdm-test1
+
+jobs:
+  build-and-prerelease:
+    name: Build PS2 test package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v4
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git wget xorriso
+
+      - name: Install/check PS2DEV toolchain
+        run: |
+          make check-env AUTO_INSTALL=yes COLOR=0
+
+      - name: Build standalone ELF and ISO
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          make elf \
+            APP_VERSION="$TEST_VERSION" \
+            AUTO_INSTALL=yes \
+            COLOR=0 \
+            JOBS=2 \
+            PACK=1 \
+            out="$GITHUB_WORKSPACE/dist"
+          make iso \
+            APP_VERSION="$TEST_VERSION" \
+            AUTO_INSTALL=yes \
+            COLOR=0 \
+            JOBS=2 \
+            PACK=1 \
+            out="$GITHUB_WORKSPACE/dist"
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          ls -lh dist
+
+      - name: Upload CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticle-Revive-issue-63-MX4SIO-test1
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          cat > /tmp/release-notes.md <<'EOF'
+          ## MX4SIO boot regression test for #63
+
+          This prerelease tests a focused fix for issue #63, where MX4SIO works
+          after manually toggling it Off/On but can show `Driver Error` and lose
+          `mass0:` after restarting SNESticle Revive.
+
+          ### What changed
+
+          - Split the common `bdm.irx + bdmfs_fatfs.irx` core from the
+            USB-specific `usbd_mini + usbmass_bd` path.
+          - MX4SIO now loads the common BDM/FatFs core before
+            `mx4sio_bd.irx`.
+          - USB remains lazy, so this does **not** revert the OPL boot-hang fix
+            that removed USB initialization from the boot-critical path.
+          - Video Config now shows the numeric MX4SIO error as `Err <code>`
+            if the driver still fails.
+
+          ### Please test
+
+          1. Enable **MX4SIO (SD)** and save the setting.
+          2. Fully power off the PS2, power it back on, and launch this build.
+          3. Check whether MX4SIO stays **On** and whether `mass0:` is present
+             without toggling MX4SIO Off/On.
+          4. Repeat using Reset/IGR if available.
+          5. If it still fails, report the exact `Err <code>`, PS2 model
+             (SCPH-xxxxx), launch method (FMCB/wLaunchELF/OPL Apps/ISO), and
+             whether USB storage is connected.
+
+          Related: #63.
+          EOF
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+            gh release edit "$RELEASE_TAG" \
+              --title "MX4SIO #63 test 1" \
+              --notes-file /tmp/release-notes.md \
+              --prerelease
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --target "$GITHUB_SHA" \
+              --title "MX4SIO #63 test 1" \
+              --notes-file /tmp/release-notes.md \
+              --prerelease
+          fi
