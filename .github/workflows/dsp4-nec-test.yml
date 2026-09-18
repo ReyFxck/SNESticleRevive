@@ -1,0 +1,72 @@
+name: DSP4 NEC LLE test
+
+on:
+  push:
+    branches:
+      - feat/dsp4-nec-lle
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test NEC DSP core with synthetic firmware
+        run: |
+          chmod +x tools/necdsptest/build.sh
+          tools/necdsptest/build.sh
+
+      - name: Validate DSP-4 cartridge map
+        run: |
+          python3 tools/dsp4_map_test.py
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git wget
+
+      - name: Install/check PS2DEV
+        run: |
+          make check-env AUTO_INSTALL=yes COLOR=0
+
+      - name: Build test ELF
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          make elf \
+            APP_VERSION="1.0.8-dsp4-nec-test1" \
+            AUTO_INSTALL=yes \
+            COLOR=0 \
+            JOBS=2 \
+            PACK=1 \
+            out="$GITHUB_WORKSPACE/dist"
+          (cd dist && sha256sum *.elf > SHA256SUMS.txt)
+          cat > "$GITHUB_WORKSPACE/dist/DSP4_FIRMWARE.txt" <<'EOF'
+          DSP-4 NEC LLE test build
+          
+          Top Gear 3000 requires a user-supplied 8192-byte dsp4.rom.
+          Put it in one of these paths:
+            mc0:/SNESticle/dsp/dsp4.rom
+            mc1:/SNESticle/dsp/dsp4.rom
+            mass:/SNESticle/dsp/dsp4.rom
+            mass0:/SNESticle/dsp/dsp4.rom
+            mmce0:/SNESticle/dsp/dsp4.rom
+            mmce1:/SNESticle/dsp/dsp4.rom
+          
+          Split dsp4.program.rom (0x1800) + dsp4.data.rom (0x0800)
+          files are also supported.
+          EOF
+          ls -lh dist
+
+      - name: Upload test ELF
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticle-Revive-dsp4-nec-test1
+          path: dist/*
+          if-no-files-found: error
