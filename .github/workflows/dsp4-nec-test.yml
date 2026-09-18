@@ -40,11 +40,13 @@ jobs:
           set -euxo pipefail
           mkdir -p "$GITHUB_WORKSPACE/dist"
           make elf \
-            APP_VERSION="1.0.8-dsp4-selfcontained-test4" \
+            APP_VERSION="1.0.8-dsp4-trace-test5" \
             AUTO_INSTALL=yes \
             COLOR=0 \
             JOBS=2 \
             PACK=1 \
+            SNES_DIAGNOSTICS=2 \
+            DSP4_TRACE=1 \
             out="$GITHUB_WORKSPACE/dist"
           (cd dist && sha256sum *.elf > SHA256SUMS.txt)
           ls -lh dist
@@ -52,6 +54,6 @@ jobs:
       - name: Upload test ELF
         uses: actions/upload-artifact@v4
         with:
-          name: SNESticle-Revive-dsp4-selfcontained-test4
+          name: SNESticle-Revive-dsp4-trace-test5
           path: dist/*
           if-no-files-found: error
