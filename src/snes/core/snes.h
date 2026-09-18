@@ -52,7 +52,6 @@ public:
 
     Uint32	GetFrame() {return m_uFrame;}
     Uint8	*GetSRAM() {return m_SRam;}
-    const char *GetMissingDspFirmware() { return m_pMissingDspFw; }
 
     void 	SetRom(class Emu::Rom *pRom);
     void	SetSnesRom(SnesRom *pRom);
@@ -86,7 +85,6 @@ private:
 
 	// extra hardware
 	ISNDSP		*m_pDsp;
-	const char	*m_pMissingDspFw;
 
 #if SNES_DSP1
 	SNDSP1		m_DSP1;
@@ -160,7 +158,6 @@ private:
 	void	MapMem(struct SnesMemMapT *pMemMap);
 	void	MapMem(SNRomMappingE eRomMapping, Uint32 uFlags);
 	void	MapMemExLoRom(void);
-	Bool	LoadDspFirmware(const char *pName, SNDSP4 &rDsp);
 	void	RemapSDD1(void);   // (re)mapeia $C0-$FF conforme $4804-$4807
 	void	DumpMemMap();
 
