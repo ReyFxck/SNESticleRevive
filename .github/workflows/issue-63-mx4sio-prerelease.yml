@@ -87,6 +87,37 @@ jobs:
           - Video Config now shows the numeric MX4SIO error as `Err <code>`
             if the driver still fails.
 
+          ### Included 1.0.8 development/test commits
+
+          This package is built on the current 1.0.8 development tree and
+          therefore also includes these code/test changes made after v1.0.7:
+
+          - [`f5d62b7`](https://github.com/ReyFxck/SNESticleRevive/commit/f5d62b7e4cb06e83f23fd86dc0ac1eceb841ee4c)
+            **Add universal SNES diagnostics and remove BG cache** — adds the
+            `snesdiag-v1` diagnostic framework, bounded deep captures and the
+            host-side analyzer/tests, while removing the experimental BG cache.
+          - [`1ee62bb`](https://github.com/ReyFxck/SNESticleRevive/commit/1ee62bbeb73e66aae2fc7e2eaecb9b4b6e35ac9e)
+            **Normalize project-owned source headers and comments** — source
+            normalization/cleanup used by the current 1.0.8 test tree.
+          - [`ccfc61b`](https://github.com/ReyFxck/SNESticleRevive/commit/ccfc61b6cc46fcbc19adab6b95e719a1eeb07573)
+            **Fix DSP-4 LoROM mapping for Top Gear 3000** — gives DSP-4 its
+            correct LoROM decode range and adds a dedicated mapping regression
+            test.
+
+          README, donation-image and old-changelog-only commits after v1.0.7 are
+          intentionally omitted from this runtime-test list.
+
+          ### Issue #63 test commits
+
+          - [`a775c31`](https://github.com/ReyFxck/SNESticleRevive/commit/a775c31caa05b58cd41cdfabfc5f4c761dfec8b5)
+            **fix(mx4sio): load shared BDM core before SD driver**
+          - [`c3c8e97`](https://github.com/ReyFxck/SNESticleRevive/commit/c3c8e9733947d8ba8e71d1968f43b2a72798bff1)
+            **chore(mx4sio): expose driver error code in test UI**
+          - [`40dfbd7`](https://github.com/ReyFxck/SNESticleRevive/commit/40dfbd75c3e903d35e90037fdf9d92d856a6ad7c)
+            **ci: publish MX4SIO issue 63 test prerelease**
+          - [`41ca9ad`](https://github.com/ReyFxck/SNESticleRevive/commit/41ca9addaf4314ac62f12d67352f38f4c06b9f5f)
+            **ci: validate issue 63 fix on pull requests**
+
           ### Please test
 
           1. Enable **MX4SIO (SD)** and save the setting.
