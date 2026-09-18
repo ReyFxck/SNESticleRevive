@@ -150,11 +150,38 @@ private:
         Uint8 LightIndex;
 
         Uint8 OamRow[32];
-        Uint8 OamAttr[32];
+        Uint16 OamAttr[16];
         Uint16 OamIndex;
         Uint16 OamBits;
         Uint16 SpriteCount;
         Uint16 OamRowMax;
+
+        /* Op 0008 solid-polygon state. */
+        Int16 Poly8ClipRt[2][2];
+        Int16 Poly8ClipLf[2][2];
+        Int16 Poly8Cx[2][2];
+        Int16 Poly8Ptr[2][2];
+        Int16 Poly8Bottom[2][2];
+        Int16 Poly8Top[2][2];
+        Int16 Poly8Raster[2][2];
+        Int16 Poly8Start[2];
+        Int16 Poly8Plane[2];
+        Int16 Poly8ViewX[2];
+        Int16 Poly8ViewY[2];
+        Int16 Poly8Envelope[2][2];
+
+        /* Op 0009 sprite-projection state. */
+        Int16 ViewportCx;
+        Int16 ViewportCy;
+        Int16 ViewportLeft;
+        Int16 ViewportRight;
+        Int16 ViewportTop;
+        Int16 SpriteClipY;
+        Int16 SpriteRaster;
+        Int16 SpriteX;
+        Int16 SpriteY;
+        Int16 SpriteAttr;
+        Uint8 SpriteSize;
 
         Uint32 UnsupportedMask;
     };
@@ -213,6 +240,8 @@ private:
     void ReplacementProject07();
     void ReplacementProject0F();
     void ReplacementProject10();
+    void ReplacementProject08();
+    void ReplacementSprite09Tile();
     void ReplacementAppendRaster();
     void ReplacementPostRoad(Bool bAdvanceWorld);
     Uint16 ReplacementLightColor(Int16 nDistance, Uint16 uColor) const;
