@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "mainloop_debug.h"
+#include "mainloop.h"
 #include "mainloop_shared.h"
 #include "mainloop_input.h"
 #include "mainloop_state.h"
@@ -263,5 +264,5 @@ Bool MainLoopProcess()
     ProfProcess();
     #endif
 
-    return TRUE;
+    return MainLoopGetSystemAction() == MAINLOOP_SYSTEM_NONE ? TRUE : FALSE;
 }

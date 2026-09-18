@@ -10,6 +10,7 @@
 
 #include "types.h"
 #include "mainloop_install.h"
+#include "mainloop.h"
 #include "mainloop_input.h"
 #include "mainloop_menu.h"
 #include "mainloop_iop.h"
@@ -45,6 +46,16 @@ int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                 ppInstallFiles[0] = (char *)"BOOT.ELF"; // dest
                                 switch (Parm1)
                                 {
+                                        case 0:
+                                                MainLoopRequestSystemAction(
+                                                        MAINLOOP_SYSTEM_BROWSER
+                                                );
+                                                break;
+                                        case 1:
+                                                MainLoopRequestSystemAction(
+                                                        MAINLOOP_SYSTEM_BOOT_ELF
+                                                );
+                                                break;
                                         case 2:
                                                 ppInstallFiles[1] = (char *)"SNESTICLE.ELF"; // src
                                                 InstallFiles(mc0, (char *)"host:", ppInstallFiles, _MainLoopInstallCallback);
@@ -75,6 +86,11 @@ int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                                 break;
                                         case 9: // copy rom0:libsd -> host
                                                 CopyFile((char *)"host:LIBSD.IRX", (char *)"rom0:LIBSD", NULL);
+                                                break;
+                                        case 10:
+                                                MainLoopRequestSystemAction(
+                                                        MAINLOOP_SYSTEM_POWEROFF
+                                                );
                                                 break;
                                         default:
                                                 return 0;
@@ -700,8 +716,8 @@ int _MainLoopMemCardFormatMenuEvent(
 
 const char *_MainLoopMenuEntries[]=
 {
-        (char *)"Copy cdrom0: -> mc0:",
-        (char *)"Copy cdrom0: -> mc1:",
+        (char *)"Return to PS2 Browser",
+        (char *)"Launch mc?:/BOOT/BOOT.ELF",
         (char *)"Copy host: -> mc0:",
         (char *)"Copy mc0: -> mc1:",
         (char *)"Copy mc1: -> mc0:",
@@ -710,6 +726,7 @@ const char *_MainLoopMenuEntries[]=
         (char *)"Add PSX CD to mc0:title.db",
         (char *)"Dump mc0:title.db -> tty0:",
         (char *)"Copy rom0:libsd -> host:",
+        (char *)"Power Off PS2",
         NULL
 };
 
