@@ -23,9 +23,11 @@ SNDSP4::SNDSP4()
     m_bLoaded = FALSE;
     m_bFaulted = FALSE;
     m_bLittleEndianFirmware = TRUE;
+    m_bReplacementProgram = TRUE;
     memset(m_Program, 0, sizeof(m_Program));
     memset(m_DataRom, 0, sizeof(m_DataRom));
-    Reset();
+    memset(&m_Repl, 0, sizeof(m_Repl));
+    UseReplacementProgram();
 }
 
 void SNDSP4::DecodeFirmware(const Uint8 *pImage, Bool bLittleEndian)
@@ -56,6 +58,8 @@ Bool SNDSP4::LoadFirmware(const Uint8 *pImage, Uint32 nBytes)
     if (!pImage || nBytes != FIRMWARE_BYTES)
         return FALSE;
 
+    m_bReplacementProgram = FALSE;
+
     /* MesenCE's firmware loader treats the combined image as little-endian.
        Keep a big-endian fallback because older standalone uPD7725 dump sets
        circulate in that byte order. Booting to RQM is a cheap validity test. */
@@ -85,8 +89,18 @@ Bool SNDSP4::LoadFirmware(const Uint8 *pImage, Uint32 nBytes)
     return FALSE;
 }
 
+void SNDSP4::UseReplacementProgram()
+{
+    m_bReplacementProgram = TRUE;
+    m_bLoaded = TRUE;
+    Reset();
+}
+
 Bool SNDSP4::IsReady() const
 {
+    if (m_bReplacementProgram)
+        return TRUE;
+
     return (m_bLoaded && !m_bFaulted && (m_State.SR & SR_RQM)) ? TRUE : FALSE;
 }
 
@@ -97,6 +111,12 @@ void SNDSP4::Reset()
     memset(m_Stack, 0, sizeof(m_Stack));
     m_OpCode = 0;
     m_bFaulted = FALSE;
+
+    if (m_bReplacementProgram)
+    {
+        ReplacementReset();
+        return;
+    }
 
     if (m_bLoaded)
         RunUntilRqm();
@@ -481,6 +501,9 @@ Uint16 SNDSP4::GetSourceValue(Uint8 uSource)
 
 Uint8 SNDSP4::ReadStatus(Uint32 /*uAddr*/)
 {
+    if (m_bReplacementProgram)
+        return ReplacementStatus();
+
     RunUntilRqm();
     return m_bLoaded ? (Uint8)(m_State.SR >> 8) : 0x00;
 }
@@ -488,6 +511,9 @@ Uint8 SNDSP4::ReadStatus(Uint32 /*uAddr*/)
 Uint8 SNDSP4::ReadData(Uint32 /*uAddr*/)
 {
     Uint8 uValue;
+
+    if (m_bReplacementProgram)
+        return ReplacementRead();
 
     if (!m_bLoaded)
         return 0x00;
@@ -521,6 +547,12 @@ Uint8 SNDSP4::ReadData(Uint32 /*uAddr*/)
 
 void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
 {
+    if (m_bReplacementProgram)
+    {
+        ReplacementWrite(uData);
+        return;
+    }
+
     if (!m_bLoaded)
         return;
 
