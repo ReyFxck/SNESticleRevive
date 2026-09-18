@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Test NEC DSP core with synthetic firmware
+      - name: Test NEC DSP core and replacement program
         run: |
           chmod +x tools/necdsptest/build.sh
           tools/necdsptest/build.sh
@@ -47,26 +47,11 @@ jobs:
             PACK=1 \
             out="$GITHUB_WORKSPACE/dist"
           (cd dist && sha256sum *.elf > SHA256SUMS.txt)
-          cat > "$GITHUB_WORKSPACE/dist/DSP4_FIRMWARE.txt" <<'EOF'
-          DSP-4 NEC LLE test build
-          
-          Top Gear 3000 requires a user-supplied 8192-byte dsp4.rom.
-          Put it in one of these paths:
-            mc0:/SNESticle/dsp/dsp4.rom
-            mc1:/SNESticle/dsp/dsp4.rom
-            mass:/SNESticle/dsp/dsp4.rom
-            mass0:/SNESticle/dsp/dsp4.rom
-            mmce0:/SNESticle/dsp/dsp4.rom
-            mmce1:/SNESticle/dsp/dsp4.rom
-          
-          Split dsp4.program.rom (0x1800) + dsp4.data.rom (0x0800)
-          files are also supported.
-          EOF
           ls -lh dist
 
       - name: Upload test ELF
         uses: actions/upload-artifact@v4
         with:
-          name: SNESticle-Revive-dsp4-nec-test1
+          name: SNESticle-Revive-dsp4-selfcontained-test1
           path: dist/*
           if-no-files-found: error
