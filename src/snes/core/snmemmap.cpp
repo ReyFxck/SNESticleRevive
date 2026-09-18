@@ -515,7 +515,6 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 	m_bSuperFX = (uFlags & SNROM_FLAG_SUPERFX) ? TRUE : FALSE;
 #if SNES_DSP1
 	m_pDsp = NULL;
-	m_pMissingDspFw = NULL;
 #endif
 
 	switch (eRomMapping)
