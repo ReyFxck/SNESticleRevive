@@ -154,7 +154,7 @@ void SNDSP4::StepOne()
     {
         Int32 nProduct = (Int32)(Int16)m_State.K * (Int32)(Int16)m_State.L;
         m_State.M = (Uint16)(nProduct >> 15);
-        m_State.N = (Uint16)(nProduct << 1);
+        m_State.N = (Uint16)((Uint32)nProduct << 1);
     }
 
     m_State.CycleCount++;
