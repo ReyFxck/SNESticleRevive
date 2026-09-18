@@ -1479,8 +1479,8 @@ void SNDSP4::ReplacementDispatch()
         {
             Uint32 i;
             ReplacementClearOutput();
-            for (i = 0; i < sizeof(m_Repl.OamAttr); ++i)
-                ReplacementWriteByte(m_Repl.OamAttr[i]);
+            for (i = 0; i < 16; ++i)
+                ReplacementWriteWord(m_Repl.OamAttr[i]);
             ReplacementFinish();
             break;
         }
@@ -1543,6 +1543,318 @@ void SNDSP4::ReplacementDispatch()
 
                 ReplacementProject07();
                 ReplacementExpect(2, 1);
+            }
+            break;
+
+        case 0x0008:
+            if (m_Repl.Phase == 0)
+            {
+                Uint16 o = 0;
+                Int16 winLeft;
+                Int16 winRight;
+                int p;
+                int s;
+
+                for (p = 0; p < 2; ++p)
+                    for (s = 0; s < 2; ++s)
+                    {
+                        m_Repl.Poly8ClipRt[p][s] =
+                            ReplacementReadSWord(o);
+                        o = (Uint16)(o + 2);
+                    }
+
+                for (p = 0; p < 2; ++p)
+                    for (s = 0; s < 2; ++s)
+                    {
+                        m_Repl.Poly8ClipLf[p][s] =
+                            ReplacementReadSWord(o);
+                        o = (Uint16)(o + 2);
+                    }
+
+                /* Eight constant words used by the original microprogram
+                   for internal tables. They do not participate directly in
+                   the externally visible projection. */
+                o = (Uint16)(o + 16);
+
+                for (p = 0; p < 2; ++p)
+                    for (s = 0; s < 2; ++s)
+                    {
+                        m_Repl.Poly8Cx[p][s] =
+                            ReplacementReadSWord(o);
+                        o = (Uint16)(o + 2);
+                    }
+
+                for (p = 0; p < 2; ++p)
+                    for (s = 0; s < 2; ++s)
+                    {
+                        m_Repl.Poly8Ptr[p][s] =
+                            ReplacementReadSWord(o);
+                        o = (Uint16)(o + 2);
+                    }
+
+                for (p = 0; p < 2; ++p)
+                    for (s = 0; s < 2; ++s)
+                    {
+                        m_Repl.Poly8Bottom[p][s] =
+                            ReplacementReadSWord(o);
+                        o = (Uint16)(o + 2);
+                    }
+
+                for (p = 0; p < 2; ++p)
+                    for (s = 0; s < 2; ++s)
+                    {
+                        m_Repl.Poly8Top[p][s] =
+                            ReplacementReadSWord(o);
+                        o = (Uint16)(o + 2);
+                    }
+
+                /* Four more internal constant words. */
+                o = (Uint16)(o + 8);
+
+                m_Repl.Distance = ReplacementReadSWord(o); o += 2;
+                m_Repl.Poly8ViewX[0] = ReplacementReadSWord(o); o += 2;
+                m_Repl.Poly8ViewY[0] = ReplacementReadSWord(o); o += 2;
+                m_Repl.Poly8ViewX[1] = ReplacementReadSWord(o); o += 2;
+                m_Repl.Poly8ViewY[1] = ReplacementReadSWord(o); o += 2;
+
+                for (p = 0; p < 2; ++p)
+                    for (s = 0; s < 2; ++s)
+                    {
+                        m_Repl.Poly8Envelope[p][s] =
+                            ReplacementReadSWord(o);
+                        o = (Uint16)(o + 2);
+                    }
+
+                for (p = 0; p < 2; ++p)
+                {
+                    m_Repl.Poly8Start[p] = m_Repl.Poly8ViewX[p];
+                    m_Repl.Poly8Raster[p][0] = m_Repl.Poly8ViewY[p];
+                    m_Repl.Poly8Raster[p][1] = m_Repl.Poly8ViewY[p];
+                    m_Repl.Poly8Plane[p] = m_Repl.Distance;
+                }
+
+                winLeft = (Int16)(
+                    m_Repl.Poly8Cx[0][0] -
+                    m_Repl.Poly8ViewX[0] +
+                    m_Repl.Poly8Envelope[0][0]
+                );
+                winRight = (Int16)(
+                    m_Repl.Poly8Cx[0][1] -
+                    m_Repl.Poly8ViewX[0] +
+                    m_Repl.Poly8Envelope[0][1]
+                );
+
+                if (winLeft < m_Repl.Poly8ClipLf[0][0])
+                    winLeft = m_Repl.Poly8ClipLf[0][0];
+                if (winLeft > m_Repl.Poly8ClipRt[0][0])
+                    winLeft = m_Repl.Poly8ClipRt[0][0];
+                if (winRight < m_Repl.Poly8ClipLf[0][1])
+                    winRight = m_Repl.Poly8ClipLf[0][1];
+                if (winRight > m_Repl.Poly8ClipRt[0][1])
+                    winRight = m_Repl.Poly8ClipRt[0][1];
+
+                ReplacementClearOutput();
+                ReplacementWriteByte((Uint8)winLeft);
+                ReplacementWriteByte((Uint8)winRight);
+                ReplacementExpect(2, 1);
+            }
+            else if (m_Repl.Phase == 1)
+            {
+                m_Repl.Distance = ReplacementReadSWord(0);
+
+                if (m_Repl.Distance == (Int16)0x8000)
+                {
+                    ReplacementClearOutput();
+                    ReplacementWriteWord(0);
+                    ReplacementFinish();
+                }
+                else
+                {
+                    ReplacementExpect(16, 2);
+                }
+            }
+            else
+            {
+                m_Repl.Poly8ViewX[0] = ReplacementReadSWord(0);
+                m_Repl.Poly8ViewY[0] = ReplacementReadSWord(2);
+                m_Repl.Poly8ViewX[1] = ReplacementReadSWord(4);
+                m_Repl.Poly8ViewY[1] = ReplacementReadSWord(6);
+
+                m_Repl.Poly8Envelope[0][0] = ReplacementReadSWord(8);
+                m_Repl.Poly8Envelope[0][1] = ReplacementReadSWord(10);
+                m_Repl.Poly8Envelope[1][0] = ReplacementReadSWord(12);
+                m_Repl.Poly8Envelope[1][1] = ReplacementReadSWord(14);
+
+                ReplacementProject08();
+                ReplacementExpect(2, 1);
+            }
+            break;
+
+        case 0x0009:
+            if (m_Repl.Phase == 0)
+            {
+                m_Repl.ViewportCx = ReplacementReadSWord(0);
+                m_Repl.ViewportCy = ReplacementReadSWord(2);
+                (void)ReplacementReadWord(4);
+                m_Repl.ViewportLeft = ReplacementReadSWord(6);
+                m_Repl.ViewportRight = ReplacementReadSWord(8);
+                m_Repl.ViewportTop = ReplacementReadSWord(10);
+                m_Repl.ViewportBottom = ReplacementReadSWord(12);
+
+                m_Repl.PolyBottom =
+                    (Int16)(m_Repl.ViewportBottom - m_Repl.ViewportCy);
+                m_Repl.PolyRaster = 0x0100;
+                m_Repl.SpriteClipY = m_Repl.ViewportBottom;
+
+                ReplacementExpect(4, 1);
+            }
+            else if (m_Repl.Phase == 1)
+            {
+                m_Repl.SpriteRaster = ReplacementReadSWord(0);
+                m_Repl.Distance = ReplacementReadSWord(2);
+
+                if (m_Repl.SpriteRaster < m_Repl.PolyRaster)
+                {
+                    m_Repl.SpriteClipY = (Int16)(
+                        m_Repl.ViewportBottom -
+                        (m_Repl.PolyBottom - m_Repl.SpriteRaster)
+                    );
+                    m_Repl.PolyRaster = m_Repl.SpriteRaster;
+                }
+
+                if (m_Repl.Distance == (Int16)0x8000)
+                {
+                    ReplacementFinish();
+                }
+                else if (m_Repl.Distance == 0)
+                {
+                    ReplacementExpect(4, 1);
+                }
+                else if ((Uint16)m_Repl.Distance == 0x9000)
+                {
+                    ReplacementExpect(14, 2);
+                }
+                else
+                {
+                    ReplacementExpect(10, 4);
+                }
+            }
+            else if (m_Repl.Phase == 2)
+            {
+                Uint16 energy = ReplacementReadWord(0);
+                Int16 impactBack = ReplacementReadSWord(2);
+                Int16 carBack = ReplacementReadSWord(4);
+                Int16 impactLeft = ReplacementReadSWord(6);
+                Int16 carLeft = ReplacementReadSWord(8);
+                Int16 distance = ReplacementReadSWord(10);
+                Int16 carRight = ReplacementReadSWord(12);
+                Int32 worldX = (Int32)carRight - (Int32)carLeft;
+                Int32 worldY = carBack;
+                Int32 viewX;
+                Int32 viewY;
+
+                worldX -=
+                    ((Int32)energy *
+                     ((Int32)impactLeft - (Int32)carLeft)) >> 16;
+                worldY -=
+                    ((Int32)energy *
+                     ((Int32)carBack - (Int32)impactBack)) >> 16;
+
+                viewX = (worldX * (Int32)distance) >> 15;
+                viewY = (worldY * (Int32)distance) >> 15;
+
+                m_Repl.Distance = distance;
+                m_Repl.SpriteX = (Int16)(
+                    m_Repl.ViewportCx + viewX
+                );
+                m_Repl.SpriteY = (Int16)(
+                    m_Repl.ViewportBottom -
+                    (m_Repl.PolyBottom - viewY)
+                );
+
+                ReplacementClearOutput();
+                ReplacementWriteWord((Uint16)(Int16)worldX);
+                ReplacementExpect(4, 3);
+            }
+            else if (m_Repl.Phase == 3)
+            {
+                m_Repl.SpriteY = (Int16)(
+                    m_Repl.SpriteY + ReplacementReadSWord(0)
+                );
+                m_Repl.SpriteAttr = ReplacementReadSWord(2);
+                m_Repl.SpriteSize = 1;
+                ReplacementExpect(2, 5);
+            }
+            else if (m_Repl.Phase == 4)
+            {
+                Int16 roadCx = ReplacementReadSWord(0);
+                Int16 roadRaster = ReplacementReadSWord(2);
+                Int16 worldX = ReplacementReadSWord(4);
+                Int16 worldY = ReplacementReadSWord(6);
+                Int32 viewX =
+                    ((Int32)worldX * (Int32)m_Repl.Distance) >> 15;
+                Int32 viewY =
+                    ((Int32)worldY * (Int32)m_Repl.Distance) >> 15;
+                Int16 segments =
+                    (Int16)(m_Repl.PolyBottom - m_Repl.SpriteRaster);
+
+                (void)roadRaster;
+
+                m_Repl.SpriteX = (Int16)(
+                    m_Repl.ViewportCx + viewX - roadCx
+                );
+                m_Repl.SpriteY = (Int16)(
+                    m_Repl.ViewportBottom - segments + viewY
+                );
+                m_Repl.SpriteAttr = ReplacementReadSWord(8);
+                m_Repl.SpriteSize = 1;
+                ReplacementExpect(2, 5);
+            }
+            else if (m_Repl.Phase == 5)
+            {
+                Uint16 header;
+
+                m_Repl.SpriteRaster = ReplacementReadSWord(0);
+
+                if (m_Repl.SpriteRaster == (Int16)0x8000)
+                {
+                    ReplacementFinish();
+                    break;
+                }
+
+                if (m_Repl.SpriteRaster == 0)
+                {
+                    if (!m_Repl.SpriteSize)
+                    {
+                        ReplacementExpect(4, 1);
+                    }
+                    else
+                    {
+                        m_Repl.SpriteSize = 0;
+                        ReplacementExpect(2, 5);
+                    }
+                    break;
+                }
+
+                header = (Uint16)m_Repl.SpriteRaster >> 8;
+                if (header != 0x20 &&
+                    header != 0x2e &&
+                    header != 0x40 &&
+                    header != 0x60 &&
+                    header != 0xa0 &&
+                    header != 0xc0 &&
+                    header != 0xe0)
+                {
+                    ReplacementExpect(4, 1);
+                    break;
+                }
+
+                ReplacementExpect(4, 6);
+            }
+            else
+            {
+                ReplacementSprite09Tile();
+                ReplacementExpect(2, 5);
             }
             break;
 
@@ -1797,10 +2109,7 @@ void SNDSP4::ReplacementDispatch()
             break;
         }
 
-        /* These are recognised so the host protocol cannot desynchronise,
-           but their geometry is deliberately left for the next milestone. */
-        case 0x0008:
-        case 0x0009:
+        /* Multiplayer road projection is the remaining large command. */
         case 0x000d:
         {
             Uint32 bit = (Uint32)m_Repl.Command & 31u;
