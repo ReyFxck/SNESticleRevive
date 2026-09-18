@@ -121,22 +121,20 @@ static int _UIGetIdx(void)
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pStateScreen ||
         _MainLoop_pScreen == (CScreen*)_MainLoop_pStateBrowserScreen) return 1;
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pNetworkScreen) return 2;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pMenuScreen)    return 3;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 4;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pVideoScreen)   return 5;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 3;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pVideoScreen)   return 4;
     return 0;
 }
 
 static CScreen* _UIByIdx(int idx)
 {
-    switch (idx % 6)
+    switch (idx % 5)
     {
         case 0: return (CScreen*)_MainLoop_pBrowserScreen;
         case 1: return (CScreen*)_MainLoop_pStateScreen;
         case 2: return (CScreen*)_MainLoop_pNetworkScreen;
-        case 3: return (CScreen*)_MainLoop_pMenuScreen;
-        case 4: return (CScreen*)_MainLoop_pLogScreen;
-        case 5: return (CScreen*)_MainLoop_pVideoScreen;
+        case 3: return (CScreen*)_MainLoop_pLogScreen;
+        case 4: return (CScreen*)_MainLoop_pVideoScreen;
     }
     return (CScreen*)_MainLoop_pBrowserScreen;
 }
@@ -144,9 +142,9 @@ static CScreen* _UIByIdx(int idx)
 void _UICycle(int dir)
 {
     int idx = _UIGetIdx();
-    for (int n = 0; n < 6; n++)
+    for (int n = 0; n < 5; n++)
     {
-        idx = (idx + dir + 6) % 6;
+        idx = (idx + dir + 5) % 5;
         CScreen *scr = _UIByIdx(idx);
         if (scr)
         {
@@ -172,22 +170,20 @@ static int _MainLoopGetScreenIndex(void)
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pStateScreen ||
         _MainLoop_pScreen == (CScreen*)_MainLoop_pStateBrowserScreen) return 1;
     if (_MainLoop_pScreen == (CScreen*)_MainLoop_pNetworkScreen) return 2;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pMenuScreen)    return 3;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 4;
-    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pVideoScreen)   return 5;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pLogScreen)     return 3;
+    if (_MainLoop_pScreen == (CScreen*)_MainLoop_pVideoScreen)   return 4;
     return 0;
 }
 
 static CScreen* _MainLoopGetScreenByIndex(int idx)
 {
-    switch (idx % 6)
+    switch (idx % 5)
     {
         case 0: return (CScreen*)_MainLoop_pBrowserScreen;
         case 1: return (CScreen*)_MainLoop_pStateScreen;
         case 2: return (CScreen*)_MainLoop_pNetworkScreen;
-        case 3: return (CScreen*)_MainLoop_pMenuScreen;
-        case 4: return (CScreen*)_MainLoop_pLogScreen;
-        case 5: return (CScreen*)_MainLoop_pVideoScreen;
+        case 3: return (CScreen*)_MainLoop_pLogScreen;
+        case 4: return (CScreen*)_MainLoop_pVideoScreen;
     }
     return (CScreen*)_MainLoop_pBrowserScreen;
 }
@@ -195,9 +191,9 @@ static CScreen* _MainLoopGetScreenByIndex(int idx)
 void _MainLoopCycleScreen(int dir)
 {
     int idx = _MainLoopGetScreenIndex();
-    for (int n = 0; n < 6; n++)
+    for (int n = 0; n < 5; n++)
     {
-        idx = (idx + dir + 6) % 6;
+        idx = (idx + dir + 5) % 5;
         CScreen *scr = _MainLoopGetScreenByIndex(idx);
         if (scr)
         {

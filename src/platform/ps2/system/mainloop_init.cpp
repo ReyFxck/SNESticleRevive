@@ -462,7 +462,7 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 
 	_MainLoop_pMenuScreen = new CMenuScreen();
 	_MainLoop_pMenuScreen->SetMsgFunc(_MainLoopMenuEvent);
-	_MainLoop_pMenuScreen->SetTitle("Install Menu");
+	_MainLoop_pMenuScreen->SetTitle("System / Tools");
 	_MainLoop_pMenuScreen->SetEntries((char **)_MainLoopMenuEntries );
 
 	_MainLoopSetScreen(_MainLoop_pBrowserScreen);

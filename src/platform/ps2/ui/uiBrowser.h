@@ -86,6 +86,7 @@ public:
 	int GetEntryPath(char *pStr, int nChars);
 	Char *GetEntryName();
 	BrowserEntryTypeE GetEntryType();
+	Bool IsRoot() const { return m_Dir[0] == 0 ? TRUE : FALSE; }
 
 	void SetDir(const Char *pDir);
 	void Chdir(const Char *pSubDir);

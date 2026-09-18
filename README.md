@@ -178,6 +178,7 @@ frames later and reports completion without the old fixed one-second pause.
 | <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/cross.svg" height="20" alt="Cross"> | Save state to the current slot |
 | <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/circle.svg" height="20" alt="Circle"> | Load state from the current slot |
 | <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | Open the menu and flush changed SRAM |
+| L1 + L2 + R1 + R2 + Start + Select | Save changed SRAM and return cleanly to the PS2 Browser |
 
 </details>
 
@@ -193,9 +194,14 @@ frames later and reports completion without the old fixed one-second pause.
 | <img src="docs/controls/triangle.svg" height="20" alt="Triangle"> | Go up one folder (`..`) |
 | <img src="docs/controls/square.svg" height="20" alt="Square"> | Page up — *or swap the cover image when cover art is on (see below)* |
 | <img src="docs/controls/circle.svg" height="20" alt="Circle"> | Page down |
-| <img src="docs/controls/select.svg" height="20" alt="Select"> | File menu (copy / paste / delete) |
-| <img src="docs/controls/l1.svg" height="20" alt="L1"> / <img src="docs/controls/r1.svg" height="20" alt="R1"> | Switch screen (Browser ⇆ State Manager ⇆ Network ⇆ Menu ⇆ Log ⇆ Video Config), including while a game is paused. |
+| <img src="docs/controls/select.svg" height="20" alt="Select"> | At the device root: open/close **System / Tools**. Inside a folder: file menu (copy / paste / delete) |
+| <img src="docs/controls/l1.svg" height="20" alt="L1"> / <img src="docs/controls/r1.svg" height="20" alt="R1"> | Switch screen (Browser ⇆ State Manager ⇆ Network ⇆ Log ⇆ Video Config), including while a game is paused. |
 | <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | Return to the game |
+
+The **System / Tools** screen can return to the PS2 Browser, launch
+`mc0:/BOOT/BOOT.ELF` (falling back to `mc1:/BOOT/BOOT.ELF`), or power off
+the console. Changed SRAM is saved synchronously before leaving; if the save
+fails, the exit is cancelled rather than discarding the pending SRAM change.
 
 </details>
 

@@ -309,5 +309,8 @@ int main(int argc, char **argv)
 
 	ConShutdown();
 
+	/* Browser/BOOT.ELF/power-off run only after the normal shutdown path. */
+	MainLoopPerformSystemAction();
+
 	return 0;
 }

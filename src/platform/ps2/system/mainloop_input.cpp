@@ -163,7 +163,8 @@ void _MainLoopInputProcess(Uint32 buttons)
         (PAD_L1 | PAD_L2 | PAD_R1 | PAD_R2 |
          PAD_START | PAD_SELECT))
     {
-        Exit(0);
+        MainLoopRequestSystemAction(MAINLOOP_SYSTEM_BROWSER);
+        return;
     }
 	if (!(buttons & PAD_L2) ||
 	    !(buttons & (PAD_CROSS | PAD_CIRCLE)))
@@ -410,6 +411,32 @@ void _MainLoopInputProcess(Uint32 buttons)
 	{
 		if (_MainLoop_pScreen)
 		{
+		    /* Keep the old tools screen out of the normal L1/R1 screen ring.
+		       At the browser root, Select toggles System / Tools.  Inside an
+		       actual directory, Select is still owned by CBrowserScreen and
+		       opens the existing copy/paste/delete file submenu. */
+		    if (_MainLoop_pScreen == (CScreen *)_MainLoop_pMenuScreen)
+		    {
+		        if (trigger & PAD_SELECT)
+		        {
+		            _MainLoop_pBrowserScreen->RefreshRootDevices();
+		            _MainLoopSetScreen((CScreen *)_MainLoop_pBrowserScreen);
+		        }
+		        else
+		        {
+		            _MainLoop_pMenuScreen->Input(buttons, trigger);
+		        }
+		        return;
+		    }
+
+		    if (_MainLoop_pScreen == (CScreen *)_MainLoop_pBrowserScreen &&
+		        _MainLoop_pBrowserScreen->IsRoot() &&
+		        (trigger & PAD_SELECT))
+		    {
+		        _MainLoopSetScreen((CScreen *)_MainLoop_pMenuScreen);
+		        return;
+		    }
+
 		    if (_MainLoop_pScreen ==
 		            (CScreen *)_MainLoop_pStateBrowserScreen &&
 		        (trigger & PAD_L1))
@@ -419,13 +446,9 @@ void _MainLoopInputProcess(Uint32 buttons)
 		        return;
 		    }
 
-		    /* L1 / R1 cycle through every available screen including
-		       the message Log. The previous hand-written chain stopped
-		       at Menu when going right and never reached Log when going
-		       left, so the Log tab was effectively unreachable from the
-		       UI. _MainLoopCycleScreen iterates Browser->State Manager
-		       ->Network->Menu->Log->Video Config in either direction.
-		       State Manager remains available while a game is paused. */
+		    /* L1 / R1 cycle through the normal runtime screens only:
+		       Browser -> State Manager -> Network -> Log -> Video Config.
+		       System / Tools is intentionally Select-only at browser root. */
 		    if (trigger & PAD_R1)
 		    {
 		        _MainLoopCycleScreen(+1);
