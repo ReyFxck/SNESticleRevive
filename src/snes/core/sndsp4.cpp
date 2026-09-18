@@ -1397,6 +1397,191 @@ void SNDSP4::ReplacementDispatch()
             ReplacementFinish();
             break;
 
+        case 0x000f:
+            if (m_Repl.Phase == 0)
+            {
+                m_Repl.WorldY = ReplacementReadDword(2);
+                m_Repl.PolyBottom = ReplacementReadSWord(6);
+                m_Repl.PolyTop = ReplacementReadSWord(8);
+                m_Repl.PolyCxY = ReplacementReadSWord(10);
+                m_Repl.ViewportBottom = ReplacementReadSWord(12);
+                m_Repl.WorldX = ReplacementReadDword(14);
+                m_Repl.PolyCxX = ReplacementReadSWord(18);
+                m_Repl.PolyPtr = ReplacementReadSWord(20);
+                m_Repl.WorldYOfs = ReplacementReadSWord(22);
+                m_Repl.WorldDy = ReplacementReadDword(24);
+                m_Repl.WorldDx = ReplacementReadDword(28);
+                m_Repl.Distance = ReplacementReadSWord(32);
+                m_Repl.WorldXEnv = ReplacementReadDword(36);
+                m_Repl.WorldDdy = ReplacementReadSWord(40);
+                m_Repl.WorldDdx = ReplacementReadSWord(42);
+                m_Repl.ViewYOfsEnv = ReplacementReadSWord(44);
+
+                m_Repl.ViewX1 =
+                    (Int16)((m_Repl.WorldX + m_Repl.WorldXEnv) >> 16);
+                m_Repl.ViewY1 = (Int16)(m_Repl.WorldY >> 16);
+                m_Repl.ViewXOfs1 = (Int16)(m_Repl.WorldX >> 16);
+                m_Repl.ViewYOfs1 = m_Repl.WorldYOfs;
+                m_Repl.TurnX = 0;
+                m_Repl.TurnDx = 0;
+                m_Repl.PolyRaster = m_Repl.PolyBottom;
+
+                ReplacementProject0F();
+            }
+            else if (m_Repl.Phase == 1)
+            {
+                Uint16 color = ReplacementLightColor(
+                    ReplacementReadSWord(0),
+                    ReplacementReadWord(2)
+                );
+
+                ReplacementClearOutput();
+                ReplacementWriteWord(color);
+                m_Repl.LightIndex++;
+
+                if (m_Repl.LightIndex < 4)
+                {
+                    ReplacementExpect(4, 1);
+                }
+                else
+                {
+                    ReplacementAppendRaster();
+                    ReplacementPostRoad(TRUE);
+                    ReplacementExpect(2, 2);
+                }
+            }
+            else if (m_Repl.Phase == 2)
+            {
+                m_Repl.Distance = ReplacementReadSWord(0);
+
+                if (m_Repl.Distance == (Int16)0x8000)
+                {
+                    ReplacementFinish();
+                }
+                else if ((Uint16)m_Repl.Distance == 0x8001)
+                {
+                    ReplacementExpect(6, 3);
+                }
+                else
+                {
+                    ReplacementExpect(6, 4);
+                }
+            }
+            else if (m_Repl.Phase == 3)
+            {
+                Int32 turn;
+
+                m_Repl.Distance = ReplacementReadSWord(0);
+                m_Repl.TurnX = ReplacementReadSWord(2);
+                m_Repl.TurnDx = ReplacementReadSWord(4);
+
+                turn =
+                    ((Int32)m_Repl.TurnX *
+                     (Int32)m_Repl.Distance) >> 15;
+                m_Repl.ViewX1 = (Int16)(m_Repl.ViewX1 + turn);
+                m_Repl.ViewXOfs1 =
+                    (Int16)(m_Repl.ViewXOfs1 + turn);
+                m_Repl.TurnX =
+                    (Int16)(m_Repl.TurnX + m_Repl.TurnDx);
+
+                ReplacementExpect(2, 2);
+            }
+            else
+            {
+                m_Repl.WorldDdy = ReplacementReadSWord(0);
+                m_Repl.WorldDdx = ReplacementReadSWord(2);
+                m_Repl.ViewYOfsEnv = ReplacementReadSWord(4);
+                m_Repl.WorldXEnv = 0;
+
+                ReplacementProject0F();
+            }
+            break;
+
+        case 0x0010:
+            if (m_Repl.Phase == 0)
+            {
+                m_Repl.WorldY = ReplacementReadDword(2);
+                m_Repl.PolyBottom = ReplacementReadSWord(6);
+                m_Repl.PolyTop = ReplacementReadSWord(8);
+                m_Repl.PolyCxY = ReplacementReadSWord(10);
+                m_Repl.ViewportBottom = ReplacementReadSWord(12);
+                m_Repl.WorldX = ReplacementReadDword(14);
+                m_Repl.PolyCxX = ReplacementReadSWord(18);
+                m_Repl.PolyPtr = ReplacementReadSWord(20);
+                m_Repl.WorldYOfs = ReplacementReadSWord(22);
+                m_Repl.Distance = ReplacementReadSWord(24);
+                m_Repl.ViewY2 = ReplacementReadSWord(26);
+                m_Repl.ViewDy = (Int16)(
+                    ((Int32)ReplacementReadSWord(28) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+                m_Repl.ViewX2 = ReplacementReadSWord(30);
+                m_Repl.ViewDx = (Int16)(
+                    ((Int32)ReplacementReadSWord(32) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+                m_Repl.ViewYOfsEnv = ReplacementReadSWord(34);
+
+                m_Repl.ViewX1 = (Int16)(m_Repl.WorldX >> 16);
+                m_Repl.ViewY1 = (Int16)(m_Repl.WorldY >> 16);
+                m_Repl.ViewXOfs1 = m_Repl.ViewX1;
+                m_Repl.ViewYOfs1 = m_Repl.WorldYOfs;
+                m_Repl.PolyRaster = m_Repl.PolyBottom;
+
+                ReplacementProject10();
+            }
+            else if (m_Repl.Phase == 1)
+            {
+                Uint16 color = ReplacementLightColor(
+                    ReplacementReadSWord(0),
+                    ReplacementReadWord(2)
+                );
+
+                ReplacementClearOutput();
+                ReplacementWriteWord(color);
+                m_Repl.LightIndex++;
+
+                if (m_Repl.LightIndex < 4)
+                {
+                    ReplacementExpect(4, 1);
+                }
+                else
+                {
+                    ReplacementAppendRaster();
+                    ReplacementPostRoad(FALSE);
+                    ReplacementExpect(2, 2);
+                }
+            }
+            else if (m_Repl.Phase == 2)
+            {
+                m_Repl.Distance = ReplacementReadSWord(0);
+                if (m_Repl.Distance == (Int16)0x8000)
+                    ReplacementFinish();
+                else
+                    ReplacementExpect(10, 3);
+            }
+            else
+            {
+                m_Repl.ViewY2 = ReplacementReadSWord(0);
+                m_Repl.ViewDy = (Int16)(
+                    ((Int32)ReplacementReadSWord(2) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+                m_Repl.ViewX2 = ReplacementReadSWord(4);
+                m_Repl.ViewDx = (Int16)(
+                    ((Int32)ReplacementReadSWord(6) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+
+                /* The fifth word in this continuation packet is not used by
+                   the public DSP-4 algorithm. Keep consuming it so command
+                   framing stays byte-exact. */
+                (void)ReplacementReadWord(8);
+
+                ReplacementProject10();
+            }
+            break;
+
         case 0x0011:
         {
             Int32 d = ReplacementReadSWord(0);
@@ -1423,8 +1608,6 @@ void SNDSP4::ReplacementDispatch()
         case 0x0008:
         case 0x0009:
         case 0x000d:
-        case 0x000f:
-        case 0x0010:
         {
             Uint32 bit = (Uint32)m_Repl.Command & 31u;
             Uint32 mask = (Uint32)1u << bit;
