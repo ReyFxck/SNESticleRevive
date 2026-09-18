@@ -942,6 +942,198 @@ void SNDSP4::ReplacementProject07()
     m_Repl.ViewYOfs1 = m_Repl.ViewYOfs2;
 }
 
+
+Uint16 SNDSP4::ReplacementLightColor(Int16 nDistance, Uint16 uColor) const
+{
+    Int32 r = (Int32)(uColor & 0x1f);
+    Int32 g = (Int32)((uColor >> 5) & 0x1f);
+    Int32 b = (Int32)((uColor >> 10) & 0x1f);
+
+    r = (r * (Int32)nDistance) >> 15;
+    g = (g * (Int32)nDistance) >> 15;
+    b = (b * (Int32)nDistance) >> 15;
+
+    return (Uint16)(
+        ((Uint16)r & 0x1f) |
+        (((Uint16)g & 0x1f) << 5) |
+        (((Uint16)b & 0x1f) << 10)
+    );
+}
+
+void SNDSP4::ReplacementAppendRaster()
+{
+    Int32 scrollX;
+    Int32 scrollY;
+    Int32 stepX;
+    Int32 stepY;
+    Int16 inverse;
+    Int32 i;
+
+    if (m_Repl.Segments <= 0)
+        return;
+
+    inverse = ReplacementInverse(m_Repl.Segments);
+    stepX =
+        (Int32)(m_Repl.ViewXOfs2 - m_Repl.ViewXOfs1) *
+        (Int32)inverse * 2;
+    stepY =
+        (Int32)(m_Repl.ViewYOfs2 - m_Repl.ViewYOfs1) *
+        (Int32)inverse * 2;
+
+    scrollX =
+        (Int32)(m_Repl.PolyCxX + m_Repl.ViewXOfs1) * 65536;
+    scrollY =
+        (Int32)(
+            -m_Repl.ViewportBottom +
+            m_Repl.ViewYOfs1 +
+            m_Repl.ViewYOfsEnv +
+            m_Repl.PolyCxY -
+            m_Repl.WorldYOfs
+        ) * 65536;
+
+    for (i = 0; i < m_Repl.Segments; ++i)
+    {
+        ReplacementWriteWord((Uint16)m_Repl.PolyPtr);
+        ReplacementWriteWord((Uint16)((scrollY + 0x8000) >> 16));
+        ReplacementWriteWord((Uint16)((scrollX + 0x8000) >> 16));
+
+        m_Repl.PolyPtr = (Int16)(m_Repl.PolyPtr - 4);
+        scrollX += stepX;
+        scrollY += stepY;
+    }
+}
+
+void SNDSP4::ReplacementPostRoad(Bool bAdvanceWorld)
+{
+    m_Repl.ViewX1 = m_Repl.ViewX2;
+    m_Repl.ViewY1 = m_Repl.ViewY2;
+    m_Repl.ViewXOfs1 = m_Repl.ViewXOfs2;
+    m_Repl.ViewYOfs1 = m_Repl.ViewYOfs2;
+
+    if (bAdvanceWorld)
+    {
+        m_Repl.WorldDx += (Int32)m_Repl.WorldDdx * 256;
+        m_Repl.WorldDy += (Int32)m_Repl.WorldDdy * 256;
+        m_Repl.WorldX += m_Repl.WorldDx + m_Repl.WorldXEnv;
+        m_Repl.WorldY += m_Repl.WorldDy;
+        m_Repl.TurnX = (Int16)(m_Repl.TurnX + m_Repl.TurnDx);
+    }
+}
+
+void SNDSP4::ReplacementProject0F()
+{
+    Int32 projectedX;
+    Int32 projectedY;
+    Int16 segments;
+
+    projectedX =
+        (((m_Repl.WorldX + m_Repl.WorldXEnv) >> 16) *
+         (Int32)m_Repl.Distance) >> 15;
+    projectedY =
+        ((m_Repl.WorldY >> 16) * (Int32)m_Repl.Distance) >> 15;
+
+    m_Repl.ViewX2 = (Int16)projectedX;
+    m_Repl.ViewY2 = (Int16)projectedY;
+    m_Repl.ViewXOfs2 = m_Repl.ViewX2;
+    m_Repl.ViewYOfs2 = (Int16)(
+        (((Int32)m_Repl.WorldYOfs * (Int32)m_Repl.Distance) >> 15) +
+        m_Repl.PolyBottom -
+        m_Repl.ViewY2
+    );
+
+    ReplacementClearOutput();
+    ReplacementWriteWord((Uint16)((m_Repl.WorldX + m_Repl.WorldXEnv) >> 16));
+    ReplacementWriteWord((Uint16)m_Repl.ViewX2);
+    ReplacementWriteWord((Uint16)(m_Repl.WorldY >> 16));
+    ReplacementWriteWord((Uint16)m_Repl.ViewY2);
+
+    segments = (Int16)(m_Repl.PolyRaster - m_Repl.ViewY2);
+    if (m_Repl.ViewY2 >= m_Repl.PolyRaster)
+    {
+        segments = 0;
+    }
+    else
+    {
+        m_Repl.PolyRaster = m_Repl.ViewY2;
+    }
+
+    if (m_Repl.ViewY2 < m_Repl.PolyTop)
+    {
+        segments = 0;
+        if (m_Repl.ViewY1 >= m_Repl.PolyTop)
+            segments = (Int16)(m_Repl.ViewY1 - m_Repl.PolyTop);
+    }
+
+    if (segments < 0)
+        segments = 0;
+
+    m_Repl.Segments = segments;
+    m_Repl.LightIndex = 0;
+    ReplacementWriteWord((Uint16)segments);
+
+    if (segments > 0)
+    {
+        ReplacementExpect(4, 1);
+    }
+    else
+    {
+        ReplacementPostRoad(TRUE);
+        ReplacementExpect(2, 2);
+    }
+}
+
+void SNDSP4::ReplacementProject10()
+{
+    Int16 segments;
+
+    m_Repl.ViewX2 = (Int16)(m_Repl.ViewX2 + m_Repl.ViewDx);
+    m_Repl.ViewY2 = (Int16)(m_Repl.ViewY2 + m_Repl.ViewDy);
+    m_Repl.ViewXOfs2 = m_Repl.ViewX2;
+    m_Repl.ViewYOfs2 = (Int16)(
+        (((Int32)m_Repl.WorldYOfs * (Int32)m_Repl.Distance) >> 15) +
+        m_Repl.PolyBottom -
+        m_Repl.ViewY2
+    );
+
+    ReplacementClearOutput();
+    ReplacementWriteWord((Uint16)m_Repl.ViewX2);
+    ReplacementWriteWord((Uint16)m_Repl.ViewY2);
+
+    segments = (Int16)(m_Repl.ViewY1 - m_Repl.ViewY2);
+    if (m_Repl.ViewY2 >= m_Repl.PolyRaster)
+    {
+        segments = 0;
+    }
+    else
+    {
+        m_Repl.PolyRaster = m_Repl.ViewY2;
+    }
+
+    if (m_Repl.ViewY2 < m_Repl.PolyTop)
+    {
+        segments = 0;
+        if (m_Repl.ViewY1 >= m_Repl.PolyTop)
+            segments = (Int16)(m_Repl.ViewY1 - m_Repl.PolyTop);
+    }
+
+    if (segments < 0)
+        segments = 0;
+
+    m_Repl.Segments = segments;
+    m_Repl.LightIndex = 0;
+    ReplacementWriteWord((Uint16)segments);
+
+    if (segments > 0)
+    {
+        ReplacementExpect(4, 1);
+    }
+    else
+    {
+        ReplacementPostRoad(FALSE);
+        ReplacementExpect(2, 2);
+    }
+}
+
 void SNDSP4::ReplacementBeginCommand(Uint16 uCommand)
 {
     m_Repl.Command = uCommand;
