@@ -733,19 +733,19 @@ void SNDSP4::ReplacementOp0B(
     ReplacementWriteWord((Uint16)attr);
     m_Repl.SpriteCount++;
 
-    if (m_Repl.OamIndex < 32)
+    if (m_Repl.OamIndex < 16)
     {
         Uint16 bit = m_Repl.OamBits;
         if (x < 0 || x > 255)
-            m_Repl.OamAttr[m_Repl.OamIndex] |= (Uint8)(1u << bit);
+            m_Repl.OamAttr[m_Repl.OamIndex] |= (Uint16)(1u << bit);
 
         bit++;
         if (bLarge)
-            m_Repl.OamAttr[m_Repl.OamIndex] |= (Uint8)(1u << bit);
+            m_Repl.OamAttr[m_Repl.OamIndex] |= (Uint16)(1u << bit);
 
         bit++;
         m_Repl.OamBits = bit;
-        if (m_Repl.OamBits >= 8)
+        if (m_Repl.OamBits >= 16)
         {
             m_Repl.OamBits = 0;
             m_Repl.OamIndex++;
@@ -1134,6 +1134,200 @@ void SNDSP4::ReplacementProject10()
     }
 }
 
+
+void SNDSP4::ReplacementProject08()
+{
+    Int16 polygon;
+
+    ReplacementClearOutput();
+
+    for (polygon = 0; polygon < 2; ++polygon)
+    {
+        Int16 segments =
+            (Int16)(m_Repl.Poly8Raster[polygon][0] -
+                    m_Repl.Poly8ViewY[polygon]);
+
+        if (segments > 0)
+        {
+            m_Repl.Poly8Raster[polygon][0] = m_Repl.Poly8ViewY[polygon];
+            m_Repl.Poly8Raster[polygon][1] = m_Repl.Poly8ViewY[polygon];
+        }
+        else
+        {
+            segments = 0;
+        }
+
+        if (m_Repl.Poly8ViewY[polygon] <
+            m_Repl.Poly8Top[polygon][0])
+        {
+            segments = 0;
+        }
+
+        ReplacementWriteWord((Uint16)segments);
+
+        if (segments > 0)
+        {
+            Int16 poly = polygon;
+            Int16 envLeftOld;
+            Int16 envLeftNew;
+            Int16 envRightOld;
+            Int16 envRightNew;
+            Int16 x1Final;
+            Int16 x2Final;
+            Int32 leftInc;
+            Int32 rightInc;
+            Int32 wLeft;
+            Int32 wRight;
+            Int16 inverse;
+            Int32 line;
+
+            if ((Uint16)m_Repl.Poly8Envelope[polygon][0] == 0xc001 ||
+                (Uint16)m_Repl.Poly8Envelope[polygon][1] == 0x3fff)
+            {
+                poly = 1;
+            }
+
+            envLeftOld = (Int16)(
+                ((Int32)m_Repl.Poly8Envelope[polygon][0] *
+                 (Int32)m_Repl.Poly8Plane[poly]) >> 15
+            );
+            envLeftNew = (Int16)(
+                ((Int32)m_Repl.Poly8Envelope[polygon][0] *
+                 (Int32)m_Repl.Distance) >> 15
+            );
+
+            x1Final = (Int16)(m_Repl.Poly8ViewX[poly] + envLeftOld);
+            x2Final = (Int16)(m_Repl.Poly8Start[poly] + envLeftNew);
+
+            inverse = ReplacementInverse(segments);
+            leftInc =
+                (Int32)(x2Final - x1Final) *
+                (Int32)inverse * 2;
+            if (segments == 1)
+                leftInc = -leftInc;
+
+            envRightOld = (Int16)(
+                ((Int32)m_Repl.Poly8Envelope[polygon][1] *
+                 (Int32)m_Repl.Poly8Plane[poly]) >> 15
+            );
+            envRightNew = (Int16)(
+                ((Int32)m_Repl.Poly8Envelope[polygon][1] *
+                 (Int32)m_Repl.Distance) >> 15
+            );
+
+            x1Final = (Int16)(m_Repl.Poly8ViewX[poly] + envRightOld);
+            x2Final = (Int16)(m_Repl.Poly8Start[poly] + envRightNew);
+
+            rightInc =
+                (Int32)(x2Final - x1Final) *
+                (Int32)inverse * 2;
+            if (segments == 1)
+                rightInc = -rightInc;
+
+            wLeft =
+                (Int32)(Int16)(
+                    m_Repl.Poly8Cx[polygon][0] -
+                    m_Repl.Poly8Start[poly] +
+                    envLeftOld
+                ) * 65536;
+            wRight =
+                (Int32)(Int16)(
+                    m_Repl.Poly8Cx[polygon][1] -
+                    m_Repl.Poly8Start[poly] +
+                    envRightOld
+                ) * 65536;
+
+            m_Repl.Poly8Plane[polygon] = m_Repl.Distance;
+
+            for (line = 0; line < segments; ++line)
+            {
+                Int16 xLeft;
+                Int16 xRight;
+
+                wLeft += leftInc;
+                wRight += rightInc;
+
+                xLeft = (Int16)(wLeft >> 16);
+                xRight = (Int16)(wRight >> 16);
+
+                if (xLeft < m_Repl.Poly8ClipLf[polygon][0])
+                    xLeft = m_Repl.Poly8ClipLf[polygon][0];
+                if (xLeft > m_Repl.Poly8ClipRt[polygon][0])
+                    xLeft = m_Repl.Poly8ClipRt[polygon][0];
+                if (xRight < m_Repl.Poly8ClipLf[polygon][1])
+                    xRight = m_Repl.Poly8ClipLf[polygon][1];
+                if (xRight > m_Repl.Poly8ClipRt[polygon][1])
+                    xRight = m_Repl.Poly8ClipRt[polygon][1];
+
+                ReplacementWriteWord(
+                    (Uint16)m_Repl.Poly8Ptr[polygon][0]
+                );
+                ReplacementWriteByte((Uint8)xLeft);
+                ReplacementWriteByte((Uint8)xRight);
+
+                m_Repl.Poly8Ptr[polygon][0] =
+                    (Int16)(m_Repl.Poly8Ptr[polygon][0] - 4);
+                m_Repl.Poly8Ptr[polygon][1] =
+                    (Int16)(m_Repl.Poly8Ptr[polygon][1] - 4);
+            }
+        }
+
+        m_Repl.Poly8Start[polygon] =
+            m_Repl.Poly8ViewX[
+                ((Uint16)m_Repl.Poly8Envelope[polygon][0] == 0xc001 ||
+                 (Uint16)m_Repl.Poly8Envelope[polygon][1] == 0x3fff)
+                    ? 1 : polygon
+            ];
+    }
+}
+
+void SNDSP4::ReplacementSprite09Tile()
+{
+    Int16 spDy = ReplacementReadSWord(0);
+    Int16 spDx = ReplacementReadSWord(2);
+    Int16 spDAttr = m_Repl.SpriteRaster;
+    Int16 spX = (Int16)(m_Repl.SpriteX + spDx);
+    Int16 spY = (Int16)(m_Repl.SpriteY + spDy);
+    Int16 spAttr = (Int16)(m_Repl.SpriteAttr + spDAttr);
+    Int16 pixels = m_Repl.SpriteSize ? 15 : 7;
+
+    ReplacementClearOutput();
+
+    if ((m_Repl.SpriteClipY - pixels) <= spY &&
+        spY <= m_Repl.SpriteClipY &&
+        spX >= (m_Repl.ViewportLeft - pixels) &&
+        spX <= m_Repl.ViewportRight &&
+        m_Repl.SpriteClipY >= (m_Repl.ViewportTop - pixels) &&
+        m_Repl.SpriteClipY <= m_Repl.ViewportBottom)
+    {
+        ReplacementOp0B(
+            spX,
+            m_Repl.SpriteClipY,
+            0x00ee,
+            m_Repl.SpriteSize ? TRUE : FALSE,
+            FALSE
+        );
+    }
+
+    if (spX >= (m_Repl.ViewportLeft - pixels) &&
+        spX <= m_Repl.ViewportRight &&
+        spY >= (m_Repl.ViewportTop - pixels) &&
+        spY <= m_Repl.ViewportBottom &&
+        spY <= m_Repl.SpriteClipY)
+    {
+        ReplacementOp0B(
+            spX,
+            spY,
+            spAttr,
+            m_Repl.SpriteSize ? TRUE : FALSE,
+            FALSE
+        );
+    }
+
+    /* End-of-OAM list marker for this tile packet. */
+    ReplacementWriteWord(0);
+}
+
 void SNDSP4::ReplacementBeginCommand(Uint16 uCommand)
 {
     m_Repl.Command = uCommand;
@@ -1150,7 +1344,7 @@ void SNDSP4::ReplacementBeginCommand(Uint16 uCommand)
         case 0x0005: ReplacementExpect(0, 0); break;
         case 0x0006: ReplacementExpect(0, 0); break;
         case 0x0007: ReplacementExpect(34, 0); break;
-        case 0x0008: ReplacementExpect(90, 0); break;
+        case 0x0008: ReplacementExpect(106, 0); break;
         case 0x0009: ReplacementExpect(14, 0); break;
         case 0x000a: ReplacementExpect(6, 0); break;
         case 0x000b: ReplacementExpect(6, 0); break;
