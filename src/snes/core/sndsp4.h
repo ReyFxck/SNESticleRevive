@@ -146,6 +146,8 @@ private:
         Int16 ViewDy;
         Int16 TurnX;
         Int16 TurnDx;
+        Int16 Segments;
+        Uint8 LightIndex;
 
         Uint8 OamRow[32];
         Uint8 OamAttr[32];
@@ -209,6 +211,11 @@ private:
     Int16 ReplacementInverse(Int16 nLines) const;
     void ReplacementProject01();
     void ReplacementProject07();
+    void ReplacementProject0F();
+    void ReplacementProject10();
+    void ReplacementAppendRaster();
+    void ReplacementPostRoad(Bool bAdvanceWorld);
+    Uint16 ReplacementLightColor(Int16 nDistance, Uint16 uColor) const;
     void ReplacementOp0B(Int16 x, Int16 y, Int16 attr, Bool bLarge, Bool bEmitStop);
 };
 
