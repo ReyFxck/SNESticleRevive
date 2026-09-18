@@ -788,24 +788,6 @@ make clean
 
 Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 
-### DSP-4 firmware
-
-Top Gear 3000 uses the NEC uPD7725 DSP-4. SNESticleRevive emulates the actual
-processor and does **not** bundle the chip's proprietary microcode. Supply an
-8192-byte `dsp4.rom` (0x1800-byte program ROM + 0x0800-byte data ROM) in one
-of these locations:
-
-- `mc0:/SNESticle/dsp/dsp4.rom`
-- `mc1:/SNESticle/dsp/dsp4.rom`
-- `mass:/SNESticle/dsp/dsp4.rom`
-- `mass0:/SNESticle/dsp/dsp4.rom`
-- `mmce0:/SNESticle/dsp/dsp4.rom`
-
-MesenCE-style little-endian combined dumps are supported directly; a
-big-endian fallback is also detected at boot. Split
-`dsp4.program.rom` + `dsp4.data.rom` files are supported as well.
-
-
 ### Handy build flags
 
 | Flag | What it does |
