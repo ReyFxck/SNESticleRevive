@@ -232,26 +232,6 @@ ifeq ($(PROFILE),1)
   CXXFLAGS += -DCODE_PROFILE=1
 endif
 
-# Captura de protocolo do DSP-4 (diagnostico).  Com DSP4_CAPTURE=1 o HLE
-# do DSP-4 registra a sequencia de comandos/params que o jogo envia e
-# despeja no log (logs.txt no emulador), pra reconstruir o protocolo a
-# partir do proprio jogo.  Ex.:  make DSP4_CAPTURE=1
-DSP4_CAPTURE ?= 0
-ifeq ($(DSP4_CAPTURE),1)
-  CFLAGS   += -DDSP4_CAPTURE=1
-  CXXFLAGS += -DDSP4_CAPTURE=1
-endif
-
-# A/B diagnostico: DSP4_STUB=1 desliga o HLE do DSP-4 (writes ignorados,
-# reads devolvem 0xFFFF), igual ao stub antigo.  Serve para comparar uma
-# cena bugada com/sem o HLE e isolar se o problema e' o coprocessador ou
-# o render (PPU/HDMA) do emulador.  Ex.:  make DSP4_STUB=1
-DSP4_STUB ?= 0
-ifeq ($(DSP4_STUB),1)
-  CFLAGS   += -DDSP4_INERT_STUB=1
-  CXXFLAGS += -DDSP4_INERT_STUB=1
-endif
-
 # ----------------------------------------------------------------------
 
 INCS := \
@@ -422,7 +402,6 @@ SRCS := \
 	src/snes/core/sndsp1.cpp \
 	src/snes/core/sndsp2.cpp \
 	src/snes/core/sndsp4.cpp \
-	src/snes/core/dsp4emu.cpp \
 	src/snes/core/sngsu.cpp \
 	src/snes/core/snobc1.cpp \
 	src/snes/core/sncx4.cpp \
@@ -644,7 +623,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE) DSP4_CAPTURE=$(DSP4_CAPTURE) DSP4_STUB=$(DSP4_STUB)'; \
+	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi

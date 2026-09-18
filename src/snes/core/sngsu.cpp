@@ -10,7 +10,7 @@
  * sngsu.cpp - SuperFX / GSU core
  *
  * Clean-room a partir da documentacao publica (fullsnes/sneslab/nesdev).
- * Nenhum codigo de emulador foi copiado.  GPLv2 (veja LICENSE).
+ * Nenhum codigo de emulador foi copiado. GPLv3-or-later (veja LICENSE).
  *
  * Implementacao funcional do conjunto de opcodes, MMIO, code-cache,
  * prefetch de ROM e PLOT/RPIX. A temporizacao e' aproximada pelo scheduler

@@ -12,7 +12,7 @@
  * RISC-like 16-bit CPU usado por Star Fox, Yoshi's Island, Stunt Race FX,
  * Doom, etc.  Implementacao clean-room a partir da documentacao publica
  * (nocash fullsnes, sneslab, nesdev) -- nenhum codigo de emulador foi
- * copiado.  Projeto sob GPLv2 (veja LICENSE).
+ * copiado. Projeto sob GPLv3-or-later (veja LICENSE).
  *
  * O core cobre o conjunto de opcodes, registradores, cache de codigo,
  * prefetch de ROM e o caminho grafico PLOT/RPIX. A temporizacao ainda e'

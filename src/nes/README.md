@@ -19,7 +19,7 @@ mainloop have full integration scaffolding for NES support, gated behind
 
 InfoNES was chosen as the NES core because:
 
-- Apache 2.0 license is compatible with this GPLv2 project
+- Apache 2.0 license is compatible with this GPLv3-or-later project
 - The codebase is small (~5500 LoC) and self-contained
 - It already targets multiple platforms including embedded ones (GBA, PSP)
   so porting to PS2 bare-metal is straightforward

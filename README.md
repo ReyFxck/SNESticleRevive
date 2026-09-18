@@ -1,7 +1,3 @@
-PS: CONSEGUI MAS CHATGPT PLUS MAIS NÃO IREI MEXER MAIS AQUI!
-FIQUE DE OLHO NO OUTRO REPOSITÓRIO:
-https://github.com/ReyFxck/SNESstation-Decomp
-
 <p align="center" style="margin-bottom: 4px;">
   <img src="docs/controls/SNESTICLE.png" alt="SNESTICLE" width="500">
 </p>
@@ -97,10 +93,9 @@ Não é obrigatório, claro haha. 💚
 **SNES special chips (coprocessors):**
 - **DSP‑1 / DSP‑1B** — Pilotwings, Super Mario Kart, etc. (`sndsp1`) — clean‑room
 - **DSP‑2** — Dungeon Master (`sndsp2`) — clean‑room
-- **DSP‑4** — Top Gear 3000 (`sndsp4` + `dsp4emu`), **HLE / self‑contained** (no
-  external files). The full track‑projection math is the **ZSNES** DSP‑4 HLE
-  (GPLv2, © ZSNES Team), ported here with attribution — which is why this fork
-  is now **GPLv2** (see [License](#license)).
+- **DSP‑4** — Top Gear 3000 (`sndsp4`) — the previous ZSNES-derived HLE has
+  been removed. The current tree keeps a small project-owned placeholder while
+  a GPLv3-compatible NEC DSP implementation is prepared.
 - **CX4** — Mega Man X2 / X3 (`sncx4`)
 - **OBC1** — Metal Combat (`snobc1`)
 - **S‑DD1** — Star Ocean, Street Fighter Alpha 2 (`snsdd1`)
@@ -833,12 +828,9 @@ The release notes for the current version are available in
 
 
 - **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
-  written clean‑room and verified bit‑exact host‑side against public references.
-  **DSP‑4** (Top Gear 3000) is **HLE / self‑contained** (no external files): the
-  bus protocol plus the full track‑projection math come from the **ZSNES** DSP‑4
-  HLE (GPLv2, © ZSNES Team — zsKnight, _Demo_, pagefault, Nach), ported with
-  attribution. Incorporating that GPLv2 code is why the project was relicensed
-  from MIT to **GPLv2**.
+  written clean‑room and verified host‑side against public references.
+  The former ZSNES-derived DSP‑4 HLE has been removed; `sndsp4` is currently a
+  project-owned placeholder pending a new GPLv3-compatible NEC DSP core.
 - **NES (InfoNES) integration**: full PS2 platform layer (render, input, audio,
   one‑frame stepper). The five base 2A03 channels now use Shay Green's
   cycle-timed **Nes_Snd_Emu + Blip_Buffer** at 32 kHz, and video uses Mesen2's
@@ -986,7 +978,6 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 - **[SingleStepTests/65816](https://github.com/SingleStepTests/65816)** —
   complete per-opcode state, memory and bus-cycle vectors used by
   `tools/cputest`.
-- **[ZSNES Team](https://www.zsnes.com)** — zsKnight, _Demo_, pagefault, Nach; their GPLv2 DSP‑4 HLE (`chips/dsp4emu.c`) is ported here as `src/snes/core/dsp4emu.*` (Top Gear 3000 support).
 - **[tmaul/SNESticle](https://github.com/tmaul/SNESticle)** — many later improvements.
 - **[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle)** — fork used as one of the bases for this repository.
 - **Sardu** — for releasing the recovered source under the MIT license (2022).
@@ -1012,16 +1003,16 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 <summary>Show details</summary>
 
 
-**GNU GPL v2** — see [`LICENSE`](LICENSE).
+**GNU GPL v3 or later** — see [`LICENSE`](LICENSE), matching the licensing
+model used by MesenCE.
 
-The original SNESticle source (Icer Addis, 2022) was MIT‑licensed; the MIT
-permits relicensing, so this fork distributes the combined work under GPLv2 in
-order to incorporate the ZSNES DSP‑4 HLE (GPLv2). The original MIT notice for
-Icer Addis's portions is preserved verbatim inside [`LICENSE`](LICENSE).
+The original recovered SNESticle source remains covered by its MIT grant; that
+notice is preserved verbatim in [`NOTICE`](NOTICE), together with the
+third‑party component notices. The current source tree contains no ZSNES
+DSP‑4 implementation.
 
 - Copyright (c) 2022 Icer Addis (iaddis) — original SNESticle source
 - Copyright (c) 2026 ReyFxck — SNESticleRevive fork
-- DSP‑4 HLE (`src/snes/core/dsp4emu.*`): © 1997–2008 ZSNES Team (GPLv2)
 
 </details>
 

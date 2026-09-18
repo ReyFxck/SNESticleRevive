@@ -58,8 +58,6 @@ EXCLUDED_FILES = {
     "src/platform/ps2/lowlevel/libxpad.h",
     "src/platform/ps2/system/titleman.c",
     "src/platform/ps2/system/titleman.h",
-    "src/snes/core/dsp4emu.cpp",
-    "src/snes/core/dsp4emu.h",
 }
 
 AREA_DESCRIPTIONS = (
@@ -122,7 +120,6 @@ PROTECTED_OVERVIEW_MARKERS = (
     "nick van veen",
     "sjeep",
     "vzzrzzn",
-    "zsnes",
     "snes9x",
     "ps2dev",
     "pukko",
