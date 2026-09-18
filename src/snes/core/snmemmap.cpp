@@ -483,132 +483,6 @@ static void _MapExLoRomRegion(SNCpuT *pCpu, Uint8 *pRom, Uint32 romBytes,
 	}
 }
 
-static Bool _SnesReadExactFile(const char *pPath, Uint8 *pData, Uint32 nBytes)
-{
-	FILE *pFile;
-	long nSize;
-	size_t nRead;
-
-	pFile = fopen(pPath, "rb");
-	if (!pFile)
-		return FALSE;
-
-	fseek(pFile, 0, SEEK_END);
-	nSize = ftell(pFile);
-	fseek(pFile, 0, SEEK_SET);
-	if (nSize != (long)nBytes)
-	{
-		fclose(pFile);
-		return FALSE;
-	}
-
-	nRead = fread(pData, 1, nBytes, pFile);
-	fclose(pFile);
-	return nRead == nBytes ? TRUE : FALSE;
-}
-
-/* Load a user-supplied uPD7725 firmware image.
- *
- * MesenCE accepts an 0x2000-byte combined dump:
- *   0x1800 bytes program ROM + 0x0800 bytes data ROM.
- * Split program/data files are accepted too. Firmware is copyrighted chip
- * microcode and is intentionally not distributed with SNESticleRevive.
- */
-Bool SnesSystem::LoadDspFirmware(const char *pName, SNDSP4 &rDsp)
-{
-	static Uint8 s_Image[0x2000];
-	static Uint8 s_Program[0x1800];
-	static Uint8 s_Data[0x0800];
-	static const char *s_Dirs[] =
-	{
-#ifdef DSP_FIRMWARE_PATH
-		DSP_FIRMWARE_PATH "/",
-#endif
-		"mc0:/SNESticle/dsp/",
-		"mc1:/SNESticle/dsp/",
-		"mass:/SNESticle/dsp/",
-		"mass0:/SNESticle/dsp/",
-		"mass1:/SNESticle/dsp/",
-		"mmce0:/SNESticle/dsp/",
-		"mmce1:/SNESticle/dsp/",
-		"cdfs:/DSP/",
-		"host:",
-		""
-	};
-	char szLower[24];
-	char szUpper[24];
-	char szPath[192];
-	Uint32 i;
-	Uint32 d;
-
-	for (i = 0; pName[i] && i + 1 < sizeof(szLower); ++i)
-	{
-		char ch = pName[i];
-		szLower[i] = (ch >= 'A' && ch <= 'Z') ? (char)(ch + ('a' - 'A')) : ch;
-		szUpper[i] = (ch >= 'a' && ch <= 'z') ? (char)(ch - ('a' - 'A')) : ch;
-	}
-	szLower[i] = 0;
-	szUpper[i] = 0;
-
-	for (d = 0; d < sizeof(s_Dirs) / sizeof(s_Dirs[0]); ++d)
-	{
-		const char *pNames[2] = { szLower, szUpper };
-		const char *pExts[2] = { ".rom", ".ROM" };
-		int n;
-		int e;
-
-		for (n = 0; n < 2; ++n)
-		{
-			for (e = 0; e < 2; ++e)
-			{
-				snprintf(szPath, sizeof(szPath), "%s%s%s",
-				         s_Dirs[d], pNames[n], pExts[e]);
-				if (_SnesReadExactFile(szPath, s_Image, sizeof(s_Image)))
-				{
-					if (rDsp.LoadFirmware(s_Image, sizeof(s_Image)))
-					{
-						printf("[dsp] loaded %s from %s\n", pName, szPath);
-						return TRUE;
-					}
-					printf("[dsp] invalid NEC firmware: %s\n", szPath);
-				}
-			}
-		}
-
-		/* MesenCE also supports split program/data dumps. */
-		for (n = 0; n < 2; ++n)
-		{
-			const char *pProgSuffix = n ? ".PROGRAM.ROM" : ".program.rom";
-			const char *pDataSuffix = n ? ".DATA.ROM" : ".data.rom";
-			const char *pBase = n ? szUpper : szLower;
-			char szProg[192];
-			char szData[192];
-
-			snprintf(szProg, sizeof(szProg), "%s%s%s",
-			         s_Dirs[d], pBase, pProgSuffix);
-			snprintf(szData, sizeof(szData), "%s%s%s",
-			         s_Dirs[d], pBase, pDataSuffix);
-
-			if (_SnesReadExactFile(szProg, s_Program, sizeof(s_Program)) &&
-			    _SnesReadExactFile(szData, s_Data, sizeof(s_Data)))
-			{
-				memcpy(s_Image, s_Program, sizeof(s_Program));
-				memcpy(s_Image + sizeof(s_Program), s_Data, sizeof(s_Data));
-				if (rDsp.LoadFirmware(s_Image, sizeof(s_Image)))
-				{
-					printf("[dsp] loaded split %s firmware from %s\n",
-					       pName, s_Dirs[d]);
-					return TRUE;
-				}
-				printf("[dsp] invalid split NEC firmware in %s\n", s_Dirs[d]);
-			}
-		}
-	}
-
-	printf("[dsp] %s.rom missing or invalid (expected 8192 bytes)\n", pName);
-	return FALSE;
-}
-
 void SnesSystem::MapMemExLoRom(void)
 {
 	SNCpuT *pCpu     = &m_Cpu;
@@ -665,21 +539,13 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 				MapMem(_SnesMemMap_LoRom_DSP1);
 				// m_pDsp permanece NULL (inerte)
 			}
-			// DSP-4: execute the real NEC uPD7725 microcode. The program/data
-			// ROM is user-supplied (dsp4.rom); never bundle proprietary
-			// firmware in the emulator. Map the DSP registers only after a
-			// valid firmware image boots to RQM.
+			// DSP-4: self-contained replacement program running behind the
+			// NEC uPD7725 DR/SR interface. No external dsp4.rom is required.
 			if (uFlags & SNROM_FLAG_DSP4)
 			{
-				if (LoadDspFirmware("dsp4", m_DSP4))
-				{
-					MapMem(_SnesMemMap_LoRom_DSP4);
-					m_pDsp = &m_DSP4;
-				}
-				else
-				{
-					m_pMissingDspFw = "dsp4";
-				}
+				m_DSP4.UseReplacementProgram();
+				MapMem(_SnesMemMap_LoRom_DSP4);
+				m_pDsp = &m_DSP4;
 			}
 #endif
 			if (uFlags & SNROM_FLAG_OBC1) { MapMem(_SnesMemMap_OBC1); }
