@@ -184,6 +184,12 @@ private:
         Uint8 SpriteSize;
 
         Uint32 UnsupportedMask;
+
+        Uint32 TraceSeq;
+        Uint32 TraceLines;
+        Uint32 TraceCommands;
+        Uint32 TraceReads;
+        Uint32 TraceWrites;
     };
 
     State  m_State;
