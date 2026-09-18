@@ -581,3 +581,726 @@ void SNDSP4::WriteData(Uint32 /*uAddr*/, Uint8 uData)
     if (!(m_State.SR & SR_RQM))
         RunUntilRqm();
 }
+
+
+/* -------------------------------------------------------------------------
+ * Self-contained DSP-4 replacement program
+ * -------------------------------------------------------------------------
+ *
+ * This is not Nintendo/NEC firmware data. It is a project-authored command
+ * engine that lives behind the same 16-bit DR/SR interface exposed by the
+ * uPD7725. Command framing and arithmetic are reconstructed from public
+ * hardware research by Overload/The Dumper and the published DSP-4 protocol.
+ *
+ * The first milestone covers the command stream used to initialise OAM and
+ * the single-player road projection path. More complex solid-polygon,
+ * lighting and sprite-projection commands are intentionally reported as
+ * unsupported rather than silently pretending to be correct.
+ */
+
+void SNDSP4::ReplacementReset()
+{
+    memset(&m_Repl, 0, sizeof(m_Repl));
+    m_Repl.WaitingCommand = TRUE;
+    m_Repl.OamRowMax = 33;
+}
+
+Uint8 SNDSP4::ReplacementStatus() const
+{
+    /* Public DSP-4 documentation: all transfers are 16-bit and RQM is the
+       only status bit Top Gear 3000 needs for normal handshaking. */
+    return 0x80;
+}
+
+Uint16 SNDSP4::ReplacementReadWord(Uint16 uOffset) const
+{
+    if ((Uint32)uOffset + 1 >= REPL_INPUT_BYTES)
+        return 0xffff;
+
+    return (Uint16)(
+        (Uint16)m_Repl.Input[uOffset] |
+        ((Uint16)m_Repl.Input[uOffset + 1] << 8)
+    );
+}
+
+Int16 SNDSP4::ReplacementReadSWord(Uint16 uOffset) const
+{
+    return (Int16)ReplacementReadWord(uOffset);
+}
+
+Int32 SNDSP4::ReplacementReadDword(Uint16 uOffset) const
+{
+    Uint32 lo = ReplacementReadWord(uOffset);
+    Uint32 hi = ReplacementReadWord((Uint16)(uOffset + 2));
+    return (Int32)(lo | (hi << 16));
+}
+
+void SNDSP4::ReplacementClearOutput()
+{
+    m_Repl.OutCount = 0;
+    m_Repl.OutPos = 0;
+}
+
+void SNDSP4::ReplacementWriteByte(Uint8 uValue)
+{
+    if (m_Repl.OutCount < REPL_OUTPUT_BYTES)
+        m_Repl.Output[m_Repl.OutCount++] = uValue;
+}
+
+void SNDSP4::ReplacementWriteWord(Uint16 uValue)
+{
+    ReplacementWriteByte((Uint8)(uValue & 0xff));
+    ReplacementWriteByte((Uint8)(uValue >> 8));
+}
+
+void SNDSP4::ReplacementExpect(Uint16 nBytes, Uint8 uPhase)
+{
+    m_Repl.Need = nBytes;
+    m_Repl.InPos = 0;
+    m_Repl.Phase = uPhase;
+}
+
+void SNDSP4::ReplacementFinish()
+{
+    m_Repl.WaitingCommand = TRUE;
+    m_Repl.HalfCommand = FALSE;
+    m_Repl.Need = 0;
+    m_Repl.InPos = 0;
+    m_Repl.Phase = 0;
+}
+
+Int16 SNDSP4::ReplacementInverse(Int16 nLines) const
+{
+    Int32 n = nLines;
+
+    if (n <= 0)
+        return 0;
+    if (n > 63)
+        n = 63;
+
+    return (Int16)(0x8000 / n);
+}
+
+void SNDSP4::ReplacementOp0B(
+    Int16 x,
+    Int16 y,
+    Int16 attr,
+    Bool bLarge,
+    Bool bEmitStop)
+{
+    Uint16 row0 = (Uint16)((y >> 3) & 0x1f);
+    Uint16 row1 = (Uint16)((row0 + 1) & 0x1f);
+    Bool bDraw = TRUE;
+
+    if (!((y < 0) || (((Uint16)y & 0x01ff) < 0x00eb)))
+        bDraw = FALSE;
+
+    if (bLarge)
+    {
+        if ((Uint16)(m_Repl.OamRow[row0] + 1) >= m_Repl.OamRowMax)
+            bDraw = FALSE;
+        if ((Uint16)(m_Repl.OamRow[row1] + 1) >= m_Repl.OamRowMax)
+            bDraw = FALSE;
+    }
+    else if (m_Repl.OamRow[row0] >= m_Repl.OamRowMax)
+    {
+        bDraw = FALSE;
+    }
+
+    if (m_Repl.SpriteCount >= 128)
+        bDraw = FALSE;
+
+    if (!bDraw)
+    {
+        if (bEmitStop)
+            ReplacementWriteWord(0);
+        return;
+    }
+
+    if (bLarge)
+    {
+        m_Repl.OamRow[row0] = (Uint8)(m_Repl.OamRow[row0] + 2);
+        m_Repl.OamRow[row1] = (Uint8)(m_Repl.OamRow[row1] + 2);
+    }
+    else
+    {
+        m_Repl.OamRow[row0]++;
+    }
+
+    ReplacementWriteWord(1);
+    ReplacementWriteByte((Uint8)x);
+    ReplacementWriteByte((Uint8)y);
+    ReplacementWriteWord((Uint16)attr);
+    m_Repl.SpriteCount++;
+
+    if (m_Repl.OamIndex < 32)
+    {
+        Uint16 bit = m_Repl.OamBits;
+        if (x < 0 || x > 255)
+            m_Repl.OamAttr[m_Repl.OamIndex] |= (Uint8)(1u << bit);
+
+        bit++;
+        if (bLarge)
+            m_Repl.OamAttr[m_Repl.OamIndex] |= (Uint8)(1u << bit);
+
+        bit++;
+        m_Repl.OamBits = bit;
+        if (m_Repl.OamBits >= 8)
+        {
+            m_Repl.OamBits = 0;
+            m_Repl.OamIndex++;
+        }
+    }
+}
+
+void SNDSP4::ReplacementProject01()
+{
+    Int32 projectedX;
+    Int32 projectedY;
+    Int32 scrollX;
+    Int32 scrollY;
+    Int32 stepX;
+    Int32 stepY;
+    Int16 segments;
+    Int16 inverse;
+    Int32 i;
+
+    projectedX =
+        ((((m_Repl.WorldX + m_Repl.WorldXEnv) >> 16) *
+          (Int32)m_Repl.Distance) >> 15) +
+        (((Int32)m_Repl.TurnX * (Int32)m_Repl.Distance) >> 15);
+
+    projectedY =
+        (((m_Repl.WorldY >> 16) * (Int32)m_Repl.Distance) >> 15);
+
+    m_Repl.ViewX2 = (Int16)projectedX;
+    m_Repl.ViewY2 = (Int16)projectedY;
+    m_Repl.ViewXOfs2 = m_Repl.ViewX2;
+    m_Repl.ViewYOfs2 = (Int16)(
+        (((Int32)m_Repl.WorldYOfs * (Int32)m_Repl.Distance) >> 15) +
+        m_Repl.PolyBottom -
+        m_Repl.ViewY2
+    );
+
+    ReplacementClearOutput();
+    ReplacementWriteWord((Uint16)((m_Repl.WorldX + m_Repl.WorldXEnv) >> 16));
+    ReplacementWriteWord((Uint16)m_Repl.ViewX2);
+    ReplacementWriteWord((Uint16)(m_Repl.WorldY >> 16));
+    ReplacementWriteWord((Uint16)m_Repl.ViewY2);
+
+    segments = (Int16)(m_Repl.PolyRaster - m_Repl.ViewY2);
+
+    if (m_Repl.ViewY2 >= m_Repl.PolyRaster)
+    {
+        segments = 0;
+    }
+    else
+    {
+        m_Repl.PolyRaster = m_Repl.ViewY2;
+    }
+
+    if (m_Repl.ViewY2 < m_Repl.PolyTop)
+    {
+        segments = 0;
+        if (m_Repl.ViewY1 >= m_Repl.PolyTop)
+            segments = (Int16)(m_Repl.ViewY1 - m_Repl.PolyTop);
+    }
+
+    if (segments < 0)
+        segments = 0;
+
+    ReplacementWriteWord((Uint16)segments);
+
+    if (segments > 0)
+    {
+        inverse = ReplacementInverse(segments);
+        stepX =
+            (Int32)(m_Repl.ViewXOfs2 - m_Repl.ViewXOfs1) *
+            (Int32)inverse * 2;
+        stepY =
+            (Int32)(m_Repl.ViewYOfs2 - m_Repl.ViewYOfs1) *
+            (Int32)inverse * 2;
+
+        scrollX =
+            (Int32)(m_Repl.PolyCxX + m_Repl.ViewXOfs1) * 65536;
+        scrollY =
+            (Int32)(
+                -m_Repl.ViewportBottom +
+                m_Repl.ViewYOfs1 +
+                m_Repl.ViewYOfsEnv +
+                m_Repl.PolyCxY -
+                m_Repl.WorldYOfs
+            ) * 65536;
+
+        for (i = 0; i < segments; ++i)
+        {
+            ReplacementWriteWord((Uint16)m_Repl.PolyPtr);
+            ReplacementWriteWord((Uint16)((scrollY + 0x8000) >> 16));
+            ReplacementWriteWord((Uint16)((scrollX + 0x8000) >> 16));
+
+            m_Repl.PolyPtr = (Int16)(m_Repl.PolyPtr - 4);
+            scrollX += stepX;
+            scrollY += stepY;
+        }
+    }
+
+    m_Repl.ViewX1 = m_Repl.ViewX2;
+    m_Repl.ViewY1 = m_Repl.ViewY2;
+    m_Repl.ViewXOfs1 = m_Repl.ViewXOfs2;
+    m_Repl.ViewYOfs1 = m_Repl.ViewYOfs2;
+
+    m_Repl.WorldDx += (Int32)m_Repl.WorldDdx * 256;
+    m_Repl.WorldDy += (Int32)m_Repl.WorldDdy * 256;
+    m_Repl.WorldX += m_Repl.WorldDx + m_Repl.WorldXEnv;
+    m_Repl.WorldY += m_Repl.WorldDy;
+
+    m_Repl.TurnX = (Int16)(m_Repl.TurnX + m_Repl.TurnDx);
+}
+
+void SNDSP4::ReplacementProject07()
+{
+    Int32 scrollX;
+    Int32 scrollY;
+    Int32 stepX;
+    Int32 stepY;
+    Int16 segments;
+    Int16 inverse;
+    Int32 i;
+
+    m_Repl.ViewX2 = (Int16)(m_Repl.ViewX2 + m_Repl.ViewDx);
+    m_Repl.ViewY2 = (Int16)(m_Repl.ViewY2 + m_Repl.ViewDy);
+    m_Repl.ViewXOfs2 = m_Repl.ViewX2;
+    m_Repl.ViewYOfs2 = (Int16)(
+        (((Int32)m_Repl.WorldYOfs * (Int32)m_Repl.Distance) >> 15) +
+        m_Repl.PolyBottom -
+        m_Repl.ViewY2
+    );
+
+    ReplacementClearOutput();
+    ReplacementWriteWord((Uint16)m_Repl.ViewX2);
+    ReplacementWriteWord((Uint16)m_Repl.ViewY2);
+
+    segments = (Int16)(m_Repl.ViewY1 - m_Repl.ViewY2);
+
+    if (m_Repl.ViewY2 >= m_Repl.PolyRaster)
+    {
+        segments = 0;
+    }
+    else
+    {
+        m_Repl.PolyRaster = m_Repl.ViewY2;
+    }
+
+    if (m_Repl.ViewY2 < m_Repl.PolyTop)
+    {
+        segments = 0;
+        if (m_Repl.ViewY1 >= m_Repl.PolyTop)
+            segments = (Int16)(m_Repl.ViewY1 - m_Repl.PolyTop);
+    }
+
+    if (segments < 0)
+        segments = 0;
+
+    ReplacementWriteWord((Uint16)segments);
+
+    if (segments > 0)
+    {
+        inverse = ReplacementInverse(segments);
+        stepX =
+            (Int32)(m_Repl.ViewXOfs2 - m_Repl.ViewXOfs1) *
+            (Int32)inverse * 2;
+        stepY =
+            (Int32)(m_Repl.ViewYOfs2 - m_Repl.ViewYOfs1) *
+            (Int32)inverse * 2;
+
+        scrollX =
+            (Int32)(m_Repl.PolyCxX + m_Repl.ViewXOfs1) * 65536;
+        scrollY =
+            (Int32)(
+                -m_Repl.ViewportBottom +
+                m_Repl.ViewYOfs1 +
+                m_Repl.ViewYOfsEnv +
+                m_Repl.PolyCxY -
+                m_Repl.WorldYOfs
+            ) * 65536;
+
+        for (i = 0; i < segments; ++i)
+        {
+            ReplacementWriteWord((Uint16)m_Repl.PolyPtr);
+            ReplacementWriteWord((Uint16)((scrollY + 0x8000) >> 16));
+            ReplacementWriteWord((Uint16)((scrollX + 0x8000) >> 16));
+
+            m_Repl.PolyPtr = (Int16)(m_Repl.PolyPtr - 4);
+            scrollX += stepX;
+            scrollY += stepY;
+        }
+    }
+
+    m_Repl.ViewX1 = m_Repl.ViewX2;
+    m_Repl.ViewY1 = m_Repl.ViewY2;
+    m_Repl.ViewXOfs1 = m_Repl.ViewXOfs2;
+    m_Repl.ViewYOfs1 = m_Repl.ViewYOfs2;
+}
+
+void SNDSP4::ReplacementBeginCommand(Uint16 uCommand)
+{
+    m_Repl.Command = uCommand;
+    m_Repl.Phase = 0;
+    m_Repl.InPos = 0;
+    m_Repl.Need = 0;
+    ReplacementClearOutput();
+
+    switch (uCommand)
+    {
+        case 0x0000: ReplacementExpect(4, 0); break;
+        case 0x0001: ReplacementExpect(44, 0); break;
+        case 0x0003: ReplacementExpect(0, 0); break;
+        case 0x0005: ReplacementExpect(0, 0); break;
+        case 0x0006: ReplacementExpect(0, 0); break;
+        case 0x0007: ReplacementExpect(34, 0); break;
+        case 0x0008: ReplacementExpect(90, 0); break;
+        case 0x0009: ReplacementExpect(14, 0); break;
+        case 0x000a: ReplacementExpect(6, 0); break;
+        case 0x000b: ReplacementExpect(6, 0); break;
+        case 0x000d: ReplacementExpect(42, 0); break;
+        case 0x000e: ReplacementExpect(0, 0); break;
+        case 0x000f: ReplacementExpect(46, 0); break;
+        case 0x0010: ReplacementExpect(36, 0); break;
+        case 0x0011: ReplacementExpect(8, 0); break;
+
+        default:
+            printf("[dsp4] replacement program: unknown command %04X\n",
+                   (unsigned)uCommand);
+            ReplacementFinish();
+            return;
+    }
+
+    if (m_Repl.Need == 0)
+        ReplacementDispatch();
+}
+
+void SNDSP4::ReplacementDispatch()
+{
+    switch (m_Repl.Command)
+    {
+        case 0x0000:
+        {
+            Int32 a = ReplacementReadSWord(0);
+            Int32 b = ReplacementReadSWord(2);
+            Int32 product = a * b;
+
+            ReplacementClearOutput();
+            ReplacementWriteWord((Uint16)product);
+            ReplacementWriteWord((Uint16)((Uint32)product >> 16));
+            ReplacementFinish();
+            break;
+        }
+
+        case 0x0001:
+            if (m_Repl.Phase == 0)
+            {
+                m_Repl.WorldY = ReplacementReadDword(0);
+                m_Repl.PolyBottom = ReplacementReadSWord(4);
+                m_Repl.PolyTop = ReplacementReadSWord(6);
+                m_Repl.PolyCxY = ReplacementReadSWord(8);
+                m_Repl.ViewportBottom = ReplacementReadSWord(10);
+                m_Repl.WorldX = ReplacementReadDword(12);
+                m_Repl.PolyCxX = ReplacementReadSWord(16);
+                m_Repl.PolyPtr = ReplacementReadSWord(18);
+                m_Repl.WorldYOfs = ReplacementReadSWord(20);
+                m_Repl.WorldDy = ReplacementReadDword(22);
+                m_Repl.WorldDx = ReplacementReadDword(26);
+                m_Repl.Distance = ReplacementReadSWord(30);
+                m_Repl.WorldXEnv = ReplacementReadDword(34);
+                m_Repl.WorldDdy = ReplacementReadSWord(38);
+                m_Repl.WorldDdx = ReplacementReadSWord(40);
+                m_Repl.ViewYOfsEnv = ReplacementReadSWord(42);
+
+                m_Repl.ViewX1 =
+                    (Int16)((m_Repl.WorldX + m_Repl.WorldXEnv) >> 16);
+                m_Repl.ViewY1 = (Int16)(m_Repl.WorldY >> 16);
+                m_Repl.ViewXOfs1 = (Int16)(m_Repl.WorldX >> 16);
+                m_Repl.ViewYOfs1 = m_Repl.WorldYOfs;
+                m_Repl.TurnX = 0;
+                m_Repl.TurnDx = 0;
+                m_Repl.PolyRaster = m_Repl.PolyBottom;
+
+                ReplacementProject01();
+                ReplacementExpect(2, 1);
+            }
+            else if (m_Repl.Phase == 1)
+            {
+                m_Repl.Distance = ReplacementReadSWord(0);
+                if (m_Repl.Distance == (Int16)0x8000)
+                {
+                    ReplacementFinish();
+                }
+                else if ((Uint16)m_Repl.Distance == 0x8001)
+                {
+                    ReplacementExpect(6, 2);
+                }
+                else
+                {
+                    ReplacementExpect(6, 3);
+                }
+            }
+            else if (m_Repl.Phase == 2)
+            {
+                m_Repl.Distance = ReplacementReadSWord(0);
+                m_Repl.TurnX = ReplacementReadSWord(2);
+                m_Repl.TurnDx = ReplacementReadSWord(4);
+
+                {
+                    Int32 turn =
+                        ((Int32)m_Repl.TurnX *
+                         (Int32)m_Repl.Distance) >> 15;
+                    m_Repl.ViewX1 = (Int16)(m_Repl.ViewX1 + turn);
+                    m_Repl.ViewXOfs1 =
+                        (Int16)(m_Repl.ViewXOfs1 + turn);
+                }
+
+                m_Repl.TurnX =
+                    (Int16)(m_Repl.TurnX + m_Repl.TurnDx);
+                ReplacementExpect(2, 1);
+            }
+            else
+            {
+                m_Repl.WorldDdy = ReplacementReadSWord(0);
+                m_Repl.WorldDdx = ReplacementReadSWord(2);
+                m_Repl.ViewYOfsEnv = ReplacementReadSWord(4);
+                m_Repl.WorldXEnv = 0;
+
+                ReplacementProject01();
+                ReplacementExpect(2, 1);
+            }
+            break;
+
+        case 0x0003:
+            m_Repl.OamRowMax = 33;
+            memset(m_Repl.OamRow, 0, sizeof(m_Repl.OamRow));
+            ReplacementFinish();
+            break;
+
+        case 0x0005:
+            m_Repl.OamIndex = 0;
+            m_Repl.OamBits = 0;
+            m_Repl.SpriteCount = 0;
+            memset(m_Repl.OamAttr, 0, sizeof(m_Repl.OamAttr));
+            ReplacementFinish();
+            break;
+
+        case 0x0006:
+        {
+            Uint32 i;
+            ReplacementClearOutput();
+            for (i = 0; i < sizeof(m_Repl.OamAttr); ++i)
+                ReplacementWriteByte(m_Repl.OamAttr[i]);
+            ReplacementFinish();
+            break;
+        }
+
+        case 0x0007:
+            if (m_Repl.Phase == 0)
+            {
+                m_Repl.WorldY = ReplacementReadDword(0);
+                m_Repl.PolyBottom = ReplacementReadSWord(4);
+                m_Repl.PolyTop = ReplacementReadSWord(6);
+                m_Repl.PolyCxY = ReplacementReadSWord(8);
+                m_Repl.ViewportBottom = ReplacementReadSWord(10);
+                m_Repl.WorldX = ReplacementReadDword(12);
+                m_Repl.PolyCxX = ReplacementReadSWord(16);
+                m_Repl.PolyPtr = ReplacementReadSWord(18);
+                m_Repl.WorldYOfs = ReplacementReadSWord(20);
+                m_Repl.Distance = ReplacementReadSWord(22);
+                m_Repl.ViewY2 = ReplacementReadSWord(24);
+                m_Repl.ViewDy = (Int16)(
+                    ((Int32)ReplacementReadSWord(26) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+                m_Repl.ViewX2 = ReplacementReadSWord(28);
+                m_Repl.ViewDx = (Int16)(
+                    ((Int32)ReplacementReadSWord(30) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+                m_Repl.ViewYOfsEnv = ReplacementReadSWord(32);
+
+                m_Repl.ViewX1 = (Int16)(m_Repl.WorldX >> 16);
+                m_Repl.ViewY1 = (Int16)(m_Repl.WorldY >> 16);
+                m_Repl.ViewXOfs1 = m_Repl.ViewX1;
+                m_Repl.ViewYOfs1 = m_Repl.WorldYOfs;
+                m_Repl.PolyRaster = m_Repl.PolyBottom;
+
+                ReplacementProject07();
+                ReplacementExpect(2, 1);
+            }
+            else if (m_Repl.Phase == 1)
+            {
+                m_Repl.Distance = ReplacementReadSWord(0);
+                if (m_Repl.Distance == (Int16)0x8000)
+                    ReplacementFinish();
+                else
+                    ReplacementExpect(10, 2);
+            }
+            else
+            {
+                m_Repl.ViewY2 = ReplacementReadSWord(0);
+                m_Repl.ViewDy = (Int16)(
+                    ((Int32)ReplacementReadSWord(2) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+                m_Repl.ViewX2 = ReplacementReadSWord(4);
+                m_Repl.ViewDx = (Int16)(
+                    ((Int32)ReplacementReadSWord(6) *
+                     (Int32)m_Repl.Distance) >> 15
+                );
+                m_Repl.ViewYOfsEnv = ReplacementReadSWord(8);
+
+                ReplacementProject07();
+                ReplacementExpect(2, 1);
+            }
+            break;
+
+        case 0x000a:
+        {
+            Uint16 v = ReplacementReadWord(2);
+            Uint16 nib[4];
+            Uint16 mapped[4];
+            int i;
+
+            for (i = 0; i < 4; ++i)
+            {
+                Int32 n;
+                nib[i] = (Uint16)((v >> (i * 4)) & 0x0f);
+                n = nib[i];
+                if (n < 8)
+                    mapped[i] = (Uint16)(n * 0x30);
+                else
+                    mapped[i] = (Uint16)(-0x180 + (n - 8) * 0x30);
+            }
+
+            ReplacementClearOutput();
+            ReplacementWriteWord(mapped[2]);
+            ReplacementWriteWord(mapped[3]);
+            ReplacementWriteWord(mapped[0]);
+            ReplacementWriteWord(mapped[1]);
+            ReplacementFinish();
+            break;
+        }
+
+        case 0x000b:
+            ReplacementClearOutput();
+            ReplacementOp0B(
+                ReplacementReadSWord(0),
+                ReplacementReadSWord(2),
+                ReplacementReadSWord(4),
+                FALSE,
+                TRUE
+            );
+            ReplacementFinish();
+            break;
+
+        case 0x000e:
+            m_Repl.OamRowMax = 16;
+            memset(m_Repl.OamRow, 0, sizeof(m_Repl.OamRow));
+            ReplacementFinish();
+            break;
+
+        case 0x0011:
+        {
+            Int32 d = ReplacementReadSWord(0);
+            Int32 c = ReplacementReadSWord(2);
+            Int32 b = ReplacementReadSWord(4);
+            Int32 a = ReplacementReadSWord(6);
+            Uint16 result;
+
+            result = (Uint16)(
+                (((a * 341) >> 2)  & 0xf000) |
+                (((b * 341) >> 6)  & 0x0f00) |
+                (((c * 341) >> 10) & 0x00f0) |
+                (((d * 341) >> 14) & 0x000f)
+            );
+
+            ReplacementClearOutput();
+            ReplacementWriteWord(result);
+            ReplacementFinish();
+            break;
+        }
+
+        /* These are recognised so the host protocol cannot desynchronise,
+           but their geometry is deliberately left for the next milestone. */
+        case 0x0008:
+        case 0x0009:
+        case 0x000d:
+        case 0x000f:
+        case 0x0010:
+        {
+            Uint32 bit = (Uint32)m_Repl.Command & 31u;
+            Uint32 mask = (Uint32)1u << bit;
+            if (!(m_Repl.UnsupportedMask & mask))
+            {
+                printf("[dsp4] replacement program: command %04X recognised but not implemented yet\n",
+                       (unsigned)m_Repl.Command);
+                m_Repl.UnsupportedMask |= mask;
+            }
+            ReplacementClearOutput();
+            ReplacementFinish();
+            break;
+        }
+
+        default:
+            ReplacementFinish();
+            break;
+    }
+}
+
+void SNDSP4::ReplacementWrite(Uint8 uData)
+{
+    if (m_Repl.OutPos < m_Repl.OutCount)
+    {
+        /* Real games do not normally write while unread output is pending.
+           Keep the historical DSP-4 bus behaviour: a write consumes one
+           pending byte rather than letting command framing drift. */
+        m_Repl.OutPos++;
+        return;
+    }
+
+    if (m_Repl.WaitingCommand)
+    {
+        if (!m_Repl.HalfCommand)
+        {
+            m_Repl.Command = uData;
+            m_Repl.HalfCommand = TRUE;
+            return;
+        }
+
+        m_Repl.Command =
+            (Uint16)(m_Repl.Command | ((Uint16)uData << 8));
+        m_Repl.HalfCommand = FALSE;
+        m_Repl.WaitingCommand = FALSE;
+        ReplacementBeginCommand(m_Repl.Command);
+        return;
+    }
+
+    if (m_Repl.InPos < REPL_INPUT_BYTES)
+        m_Repl.Input[m_Repl.InPos++] = uData;
+
+    if (m_Repl.InPos >= m_Repl.Need)
+        ReplacementDispatch();
+}
+
+Uint8 SNDSP4::ReplacementRead()
+{
+    if (m_Repl.OutPos < m_Repl.OutCount)
+    {
+        Uint8 uValue = m_Repl.Output[m_Repl.OutPos++];
+        if (m_Repl.OutPos >= m_Repl.OutCount)
+        {
+            m_Repl.OutPos = 0;
+            m_Repl.OutCount = 0;
+        }
+        return uValue;
+    }
+
+    /* Public DSP-4 protocol requires DR=0xffff after command completion. */
+    return 0xff;
+}
