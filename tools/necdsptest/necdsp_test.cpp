@@ -212,7 +212,7 @@ static int exerciseReplacement()
     writeWord(dsp, 0x8000);              // terminate op0F stream
 
     // Op 0008: solid polygon/window projection. This also verifies the
-    // 106-byte initial packet length, which is critical for bus alignment.
+    // 90-byte initial packet length, which is critical for bus alignment.
     writeWord(dsp, 0x0008);
 
     // clip-right[2][2]
