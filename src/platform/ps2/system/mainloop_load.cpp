@@ -438,20 +438,6 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 
 	pSystem->Reset();
 
-	if (pSystem == _pSnes)
-	{
-		const char *pMissing = _pSnes->GetMissingDspFirmware();
-		if (pMissing)
-		{
-			MainLoopModalPrintf(
-				60 * 6,
-				"DSP-4 firmware missing/invalid: %s.rom (8192 bytes)\n"
-				"Put it in mc0:/SNESticle/dsp/ or mass:/SNESticle/dsp/",
-				pMissing
-			);
-		}
-	}
-
     _pSystem = pSystem;
     snprintf(_RomPath, sizeof(_RomPath), "%s", OriginalPath);
     MainLoopStateOnRomChanged();
