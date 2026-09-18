@@ -127,20 +127,10 @@ jobs:
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             # Keep prereleases ELF-only. Remove any ISO uploaded by an older run.
-            for asset in $(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Ei '\.iso            gh release edit "$RELEASE_TAG" \
-              --title "MX4SIO #63 test 1" \
-              --notes-file /tmp/release-notes.md \
-              --prerelease
-          else
-            gh release create "$RELEASE_TAG" dist/* \
-              --target "$GITHUB_SHA" \
-              --title "MX4SIO #63 test 1" \
-              --notes-file /tmp/release-notes.md \
-              --prerelease
-          fi
- || true); do
+            while IFS= read -r asset; do
+              [ -n "$asset" ] || continue
               gh release delete-asset "$RELEASE_TAG" "$asset" --yes
-            done
+            done < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Ei '\\.iso$' || true)
             gh release upload "$RELEASE_TAG" dist/* --clobber
             gh release edit "$RELEASE_TAG" \
               --title "MX4SIO #63 test 1" \
