@@ -1344,7 +1344,7 @@ void SNDSP4::ReplacementBeginCommand(Uint16 uCommand)
         case 0x0005: ReplacementExpect(0, 0); break;
         case 0x0006: ReplacementExpect(0, 0); break;
         case 0x0007: ReplacementExpect(34, 0); break;
-        case 0x0008: ReplacementExpect(106, 0); break;
+        case 0x0008: ReplacementExpect(90, 0); break;
         case 0x0009: ReplacementExpect(14, 0); break;
         case 0x000a: ReplacementExpect(6, 0); break;
         case 0x000b: ReplacementExpect(6, 0); break;
