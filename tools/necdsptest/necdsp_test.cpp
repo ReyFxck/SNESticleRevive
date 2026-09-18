@@ -114,7 +114,7 @@ static int exerciseReplacement()
     Uint16 a1 = readWord(dsp);
     Uint16 a2 = readWord(dsp);
     Uint16 a3 = readWord(dsp);
-    if (a0 != 0x0060 || a1 != 0x0090 || a2 != 0x0000 || a3 != 0x0030)
+    if (a0 != 0x0030 || a1 != 0x0000 || a2 != 0x0090 || a3 != 0x0060)
     {
         std::printf("FAIL replacement: op0A=%04X %04X %04X %04X\n",
                     a0, a1, a2, a3);
