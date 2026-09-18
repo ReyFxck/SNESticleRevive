@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/issue-63-mx4sio-bdm
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -61,6 +64,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub prerelease
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
