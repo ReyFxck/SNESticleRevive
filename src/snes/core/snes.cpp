@@ -1236,6 +1236,7 @@ SnesSystem::SnesSystem()
 
 #if SNES_DSP1
 	m_pDsp = NULL;
+	m_pMissingDspFw = NULL;
 #endif
 }
 
