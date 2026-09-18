@@ -779,10 +779,11 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
         }
     case 0x4212:	// HVBJOY
         {
-            /* Line 0 is not part of VBlank even though the PPU does not draw
-               it. Derive bit 7 from the live vertical counter so frame-wrap
-               polling sees the same state as real hardware. Aero 2 exposed
-               this first; Top Gear 3000 also depends on tight frame timing. */
+            /* Aero the Acro-Bat 2 polls VBlank around the frame wrap.
+               Line 0 is not part of VBlank even though the PPU does not draw
+               it.  Derive bit 7 from the live vertical counter so a stale
+               latched status (for example after restoring state) cannot keep
+               the game waiting forever. */
             Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0x80;
             if (SNES_LINE_IN_VBLANK(pSnes->m_uLine))
                 uData |= 0x80;
@@ -1648,15 +1649,18 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
         // set irq flag
         m_IO.m_Regs.timeup |= 0x80;
 
-		/* A V-only timer targeting scanline 0 does not vector exactly at
-		   the frame boundary on real hardware. The edge occurs inside an
-		   opcode, so an opcode-based core must let a short pending window
-		   retire before entering the handler. This is hardware behaviour,
-		   not an Aero-2-specific quirk; applying it generically also keeps
-		   frame-wrap effects (such as Top Gear 3000's intro) in sync. */
+		/* Aero the Acro-Bat 2 waits for $4212.VBlank to clear while its
+		   V-only timer targets line 0.  The real timer edge occurs inside an
+		   opcode; entering the handler before that polling opcode retires
+		   leaves the game in the black-screen loop after the intro.  Snes9x's
+		   opcode core uses the same two-opcode deferral for this title. */
+		const char *pTitle = m_pRom ? m_pRom->GetRomTitle() : NULL;
 		if (m_uLine == 0 &&
 			(m_IO.m_Regs.nmitimen & 0x30) == 0x20 &&
-			m_IO.m_Regs.vtime.w == 0)
+			m_IO.m_Regs.vtime.w == 0 &&
+			pTitle &&
+			(strcmp(pTitle, "Aero the AcroBat 2") == 0 ||
+			 strcmp(pTitle, "AERO THE ACROBAT 2") == 0))
 		{
 			SNCPUSetIRQDelay(&m_Cpu, 2);
 		}
