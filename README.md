@@ -788,6 +788,24 @@ make clean
 
 Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 
+### DSP-4 firmware
+
+Top Gear 3000 uses the NEC uPD7725 DSP-4. SNESticleRevive emulates the actual
+processor and does **not** bundle the chip's proprietary microcode. Supply an
+8192-byte `dsp4.rom` (0x1800-byte program ROM + 0x0800-byte data ROM) in one
+of these locations:
+
+- `mc0:/SNESticle/dsp/dsp4.rom`
+- `mc1:/SNESticle/dsp/dsp4.rom`
+- `mass:/SNESticle/dsp/dsp4.rom`
+- `mass0:/SNESticle/dsp/dsp4.rom`
+- `mmce0:/SNESticle/dsp/dsp4.rom`
+
+MesenCE-style little-endian combined dumps are supported directly; a
+big-endian fallback is also detected at boot. Split
+`dsp4.program.rom` + `dsp4.data.rom` files are supported as well.
+
+
 ### Handy build flags
 
 | Flag | What it does |
@@ -974,7 +992,8 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 - **[iaddis/SNESticle](https://github.com/iaddis/SNESticle)** — Icer Addis, the original emulator.
 - **[nesdev-org/MesenCE](https://github.com/nesdev-org/MesenCE)** — current
   Mesen2-derived reference for 65816, interrupt and SNES DMA/HDMA behavior
-  used by the r19 audit.
+  used by the r19 audit; its GPLv3 NEC DSP execution core is also the basis
+  for the new DSP-4 low-level implementation.
 - **[SingleStepTests/65816](https://github.com/SingleStepTests/65816)** —
   complete per-opcode state, memory and bus-cycle vectors used by
   `tools/cputest`.
