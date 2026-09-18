@@ -3,13 +3,13 @@
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
 #
 # Description:
-#   Exercises map test behavior in the dsp4test regression suite.
+#   Validates the DSP-4 cartridge address map.
 
 import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE_PATH = ROOT / "src/snes/core/snmemmap.cpp"
 TABLE_NAME = "_SnesMemMap_LoRom_DSP4"
 ENTRY_RE = re.compile(
