@@ -80,6 +80,12 @@ static Uint16 readWord(SNDSP4 &dsp)
     return (Uint16)(lo | (hi << 8));
 }
 
+static void writeDword(SNDSP4 &dsp, Uint32 v)
+{
+    writeWord(dsp, (Uint16)v);
+    writeWord(dsp, (Uint16)(v >> 16));
+}
+
 static int exerciseReplacement()
 {
     SNDSP4 dsp;
@@ -132,6 +138,78 @@ static int exerciseReplacement()
         std::printf("FAIL replacement: op11 zero vector\n");
         failed++;
     }
+
+    // Op 000F: single-player road projection with lighting.
+    // Use a tiny synthetic road slice that produces 10 raster lines, then
+    // exercise all four light/color exchanges and terminate the stream.
+    writeWord(dsp, 0x000f);
+    writeWord(dsp, 0x0000);              // reserved
+    writeDword(dsp, (Uint32)(100u << 16)); // world_y
+    writeWord(dsp, 60);                  // bottom
+    writeWord(dsp, 0);                   // top
+    writeWord(dsp, 0);                   // center y
+    writeWord(dsp, 0);                   // viewport bottom
+    writeDword(dsp, 0);                  // world_x
+    writeWord(dsp, 0);                   // center x
+    writeWord(dsp, 0x1000);              // HDMA pointer
+    writeWord(dsp, 0);                   // world y offset
+    writeDword(dsp, 0);                  // world dy
+    writeDword(dsp, 0);                  // world dx
+    writeWord(dsp, 0x4000);              // distance = 0.5
+    writeWord(dsp, 0);                   // reserved
+    writeDword(dsp, 0);                  // x envelope
+    writeWord(dsp, 0);                   // ddy
+    writeWord(dsp, 0);                   // ddx
+    writeWord(dsp, 0);                   // y envelope
+
+    Uint16 p0 = readWord(dsp);
+    Uint16 p1 = readWord(dsp);
+    Uint16 p2 = readWord(dsp);
+    Uint16 p3 = readWord(dsp);
+    Uint16 seg = readWord(dsp);
+    if (p0 != 0 || p1 != 0 || p2 != 100 || p3 != 50 || seg != 10)
+    {
+        std::printf("FAIL replacement: op0F header=%04X %04X %04X %04X seg=%u\n",
+                    p0, p1, p2, p3, (unsigned)seg);
+        failed++;
+    }
+
+    for (int light = 0; light < 4; ++light)
+    {
+        writeWord(dsp, 0x4000);
+        writeWord(dsp, 0x7fff);
+
+        Uint16 lit = readWord(dsp);
+        if (lit != 0x3def)
+        {
+            std::printf("FAIL replacement: op0F light[%d]=%04X\n",
+                        light, lit);
+            failed++;
+        }
+
+        if (light == 3)
+        {
+            // Final light response is followed by 10 raster records,
+            // each containing pointer, vertical scroll and horizontal scroll.
+            for (int line = 0; line < 10; ++line)
+            {
+                Uint16 ptr = readWord(dsp);
+                (void)readWord(dsp);
+                (void)readWord(dsp);
+
+                Uint16 expected = (Uint16)(0x1000 - line * 4);
+                if (ptr != expected)
+                {
+                    std::printf("FAIL replacement: op0F ptr[%d]=%04X expected=%04X\n",
+                                line, ptr, expected);
+                    failed++;
+                    break;
+                }
+            }
+        }
+    }
+
+    writeWord(dsp, 0x8000);              // terminate op0F stream
 
     // OAM command sequence: select 1P, clear, add one sprite, fetch high table.
     writeWord(dsp, 0x0003);
