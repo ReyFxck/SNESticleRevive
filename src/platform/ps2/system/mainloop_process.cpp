@@ -43,6 +43,52 @@ extern "C" {
 
 static Uint32 _iframetex=0;
 
+/* Convert physical GS refresh ticks into emulated frames. PAL ROMs must
+   remain 50 Hz even when the PS2 is outputting NTSC/60 Hz; likewise an
+   NTSC ROM on a 50 Hz GS mode occasionally needs two emulated frames on
+   one host tick. The phase accumulator keeps the long-term ratio exact. */
+static Emu::System *_CadenceSystem = NULL;
+static Uint32 _CadenceHostHz = 0;
+static Uint32 _CadenceEmuHz = 0;
+static Uint32 _CadencePhase = 0;
+
+static void _MainLoopCadenceReset()
+{
+	_CadenceSystem = NULL;
+	_CadenceHostHz = 0;
+	_CadenceEmuHz = 0;
+	_CadencePhase = 0;
+}
+
+static Uint32 _MainLoopCadenceFrames(Emu::System *pSystem,
+	Uint32 uHostHz, Uint32 uHostTicks)
+{
+	if (!pSystem || !uHostTicks)
+		return 0;
+
+	Uint32 uEmuHz = pSystem->GetFrameRate();
+	if (!uHostHz) uHostHz = 60;
+	if (!uEmuHz) uEmuHz = uHostHz;
+
+	if (_CadenceSystem != pSystem ||
+	    _CadenceHostHz != uHostHz ||
+	    _CadenceEmuHz != uEmuHz)
+	{
+		_CadenceSystem = pSystem;
+		_CadenceHostHz = uHostHz;
+		_CadenceEmuHz = uEmuHz;
+		/* Make the first host tick render immediately when emulation is
+		   slower than the display (50-on-60), then settle into 5/6 cadence. */
+		_CadencePhase = (uHostHz > uEmuHz) ? (uHostHz - uEmuHz) : 0;
+	}
+
+	Uint64 uAccum = (Uint64)_CadencePhase +
+		(Uint64)uEmuHz * (Uint64)uHostTicks;
+	Uint32 uFrames = (Uint32)(uAccum / uHostHz);
+	_CadencePhase = (Uint32)(uAccum % uHostHz);
+	return uFrames;
+}
+
 Bool MainLoopProcess()
 {
     NetPlayRPCInputT NetInput;
@@ -75,6 +121,9 @@ Bool MainLoopProcess()
 	    _MainLoopInputProcess(buttons);
 	}
 
+    if (_bMenu || !_pSystem || _MainLoop_BlackScreen)
+		_MainLoopCadenceReset();
+
     if (!_bMenu && _pSystem && !_MainLoop_BlackScreen)
     {
         CRenderSurface *pSurface;
@@ -95,6 +144,8 @@ Bool MainLoopProcess()
         }
         */
         pMixBuffer = _AudMix;
+		if (_AudMix)
+			_AudMix->SetFrameRate(_pSystem->GetFrameRate());
 
 		// read inputs
 		for (iPad=0; iPad < 5; iPad++)
@@ -207,6 +258,7 @@ Bool MainLoopProcess()
                and CLUT bookkeeping.  NesSystem renders directly into
                the surface (Phase 2 = diagnostic test pattern) and we
                upload to the EE texture from here. */
+            Bool bRenderedEmuFrame = TRUE;
             if (_pSystem == _pNes)
             {
                 PROF_ENTER("NesExecuteFrame");
@@ -218,33 +270,57 @@ Bool MainLoopProcess()
             }
             else
             {
+				const Uint32 uHostHz = (Uint32)GSK_GetRefreshHz();
 #if SNDBG_LOG
-				g_DbgHostRefreshHz = (Uint32)GSK_GetRefreshHz();
+				g_DbgHostRefreshHz = uHostHz;
 #endif
-				/* Recover after missed host VBlanks by running the missing SNES
-				   frames without video before drawing the newest one.  Unlike merely
-				   presenting the old texture, these hidden frames do not perform a
-				   GS flip/wait, so CPU, SPC and input can regain real-time cadence. */
-				Bool bFrameskipAllowed =
+				/* Local gameplay is paced in emulated time, not GS time. Safe
+				   frameskip reports missed host ticks; convert the current tick plus
+				   those missed ticks through the same rational cadence so recovery
+				   remains correct for both 50-on-60 and 60-on-50. Movies/netplay
+				   retain their one-logical-frame contract. */
+				Bool bCadenceAllowed =
 					(NetInput.eGameState == NETPLAY_GAMESTATE_IDLE &&
 					 !s_pMovieClip->IsPlaying() &&
 					 !s_pMovieClip->IsRecording()) ? TRUE : FALSE;
-				Uint32 uCatchupFrames =
-					MainLoopSafeFrameskipTake(bFrameskipAllowed);
-				for (Uint32 uCatchup = 0; uCatchup < uCatchupFrames; ++uCatchup)
+				Uint32 uCatchupTicks =
+					MainLoopSafeFrameskipTake(bCadenceAllowed);
+				Uint32 uFramesDue;
+				if (bCadenceAllowed)
 				{
-#if SNDBG_LOG
-					g_DbgVideoSkippedFrames++;
-					SnesDbgRequestCapture(SNDBG_CAPTURE_FRAMESKIP);
-#endif
-					_ExecuteSnes(NULL, pMixBuffer, &Input, eMode);
+					uFramesDue = _MainLoopCadenceFrames(
+						_pSystem, uHostHz, 1 + uCatchupTicks);
 				}
+				else
+				{
+					_MainLoopCadenceReset();
+					uFramesDue = 1;
+				}
+
+				if (uFramesDue == 0)
+				{
+					/* 50 Hz PAL on a 60 Hz display: repeat the previously uploaded
+					   texture for this host tick and consume no emulated time/audio. */
+					bRenderedEmuFrame = FALSE;
+				}
+				else
+				{
+					for (Uint32 uHidden = 1; uHidden < uFramesDue; ++uHidden)
+					{
 #if SNDBG_LOG
-				g_DbgVideoRenderedFrames++;
+						g_DbgVideoSkippedFrames++;
+						SnesDbgRequestCapture(SNDBG_CAPTURE_FRAMESKIP);
 #endif
-				_ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
+						_ExecuteSnes(NULL, pMixBuffer, &Input, eMode);
+					}
+#if SNDBG_LOG
+					g_DbgVideoRenderedFrames++;
+#endif
+					_ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
+				}
             }
-		    _iframetex^=1;
+		    if (bRenderedEmuFrame)
+				_iframetex^=1;
         }
 
         Aud_BufferedAsyncStart();
