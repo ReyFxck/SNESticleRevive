@@ -119,6 +119,36 @@ static void TestCleanHiRom(void)
 		"HiROM limpa deve preservar o titulo");
 }
 
+static void TestVideoRegionHeaderCodes(void)
+{
+	struct RegionCaseT {
+		Uint8 country;
+		SNRomVideoE expected;
+		const char *name;
+	};
+	static const RegionCaseT cases[] = {
+		{ 0x02, SNROM_VIDEO_PAL,  "Europe must select PAL" },
+		{ 0x11, SNROM_VIDEO_PAL,  "Australia must select PAL" },
+		{ 0x0D, SNROM_VIDEO_NTSC, "Korea must select NTSC" },
+		{ 0x10, SNROM_VIDEO_NTSC, "Brazil PAL-M must keep 60 Hz timing" },
+	};
+
+	for (Uint32 i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+	{
+		std::vector<Uint8> rom(0x100000, 0xFF);
+		PutHeader(rom, 0x7FC0, "REGION TEST", 0x20, 0x2345,
+			0x8000, 0x0000);
+		((SNRomInfoT *)&rom[0x7FC0])->Country = cases[i].country;
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"region fixture must load");
+		CHECK(snesRom.m_eVideoType == cases[i].expected, cases[i].name);
+	}
+}
+
 static void TestPinocchioFalseType1Regression(void)
 {
 	std::vector<Uint8> rom(0x300000, 0xFF);
@@ -173,6 +203,7 @@ int main(void)
 {
 	TestCleanLoRom();
 	TestCleanHiRom();
+	TestVideoRegionHeaderCodes();
 	TestPinocchioFalseType1Regression();
 	TestRealType1StillWorks();
 
