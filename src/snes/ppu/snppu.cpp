@@ -963,6 +963,17 @@ void SnesPPU::Sync(Uint32 uLine)
 #endif
 }
 
+void SnesPPU::SetVideoRegion(Bool bPAL)
+{
+	/* STAT78 ($213F) bit 4 is a hardware region flag:
+	   0 = NTSC/60 Hz, 1 = PAL/50 Hz. Preserve the PPU2 version and field
+	   bits while changing only the cartridge-visible region identity. */
+	if (bPAL)
+		m_Regs.stat78 |= 0x10;
+	else
+		m_Regs.stat78 &= (Uint8)~0x10;
+}
+
 void SnesPPU::Reset()
 {
 	m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_ALL);
