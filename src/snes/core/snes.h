@@ -173,6 +173,7 @@ private:
 	void	SetSlowRom();
 
 	void	SyncSPC(Int32 uExtra = 0);
+	Int32	CpuMasterToSpcTime(Int32 nMasterCycles) const;
 	void	SyncPPU();
 	Int32	CalculateLineIRQCycle();
 	void	RescheduleLineIRQ(Bool bAllowImmediate);
