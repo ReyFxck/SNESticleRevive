@@ -252,6 +252,51 @@ static Bool _IsMassPath(const char *p)
     return (p && strncmp(p, "mass", 4) == 0) ? TRUE : FALSE;
 }
 
+/* OPL and older launchers can report the boot device as the legacy mass:
+   alias, while the BDM stack used by USB/MX4SIO exposes the same medium as
+   mass0: or mass1: after SNESticle resets the IOP. The unit number can also
+   change across that reset when more than one BDM device exists.
+
+   Scan the exact path first, then retry the same suffix on the modern BDM
+   units and finally the legacy alias. Stop as soon as one spelling adds
+   tracks so a single SD card is not indexed twice through aliases. */
+static void _ScanMassDirCompat(const char *path)
+{
+    static const char *devices[] = { "mass0:", "mass1:", "mass:" };
+    const char *colon;
+    const char *tail;
+    int before;
+    size_t i;
+
+    if (!_IsMassPath(path) || s_indexCount >= BGM_INDEX_MAX)
+        return;
+
+    colon = strchr(path, ':');
+    if (!colon)
+        return;
+    tail = colon + 1;
+    before = s_indexCount;
+
+    _ScanDir(path, 0);
+    if (s_indexCount > before || s_indexCount >= BGM_INDEX_MAX)
+        return;
+
+    for (i = 0; i < sizeof(devices) / sizeof(devices[0]); i++)
+    {
+        char candidate[256];
+        int written = snprintf(candidate, sizeof(candidate), "%s%s",
+                               devices[i], tail);
+
+        if (written < 0 || written >= (int)sizeof(candidate) ||
+            !strcmp(candidate, path))
+            continue;
+
+        _ScanDir(candidate, 0);
+        if (s_indexCount > before || s_indexCount >= BGM_INDEX_MAX)
+            return;
+    }
+}
+
 /* Retorna o slot fisico de um caminho MMCE, ou -1 para outro device.
    Separar esses caminhos impede opendir("mmceN:") antes de mmceman estar
    residente e antes de o cartao real ter respondido ao PING. */
@@ -503,11 +548,11 @@ static void _MassScanStep(void)
 
     before = s_indexCount;
     if (_IsMassPath(s_bootBgm))
-        _ScanDir(s_bootBgm, 0);
+        _ScanMassDirCompat(s_bootBgm);
 
     for (d = 0; d < BGM_NUM_DIRS && s_indexCount < BGM_INDEX_MAX; d++)
         if (_IsMassPath(s_dirs[d]))
-            _ScanDir(s_dirs[d], 0);
+            _ScanMassDirCompat(s_dirs[d]);
 
     s_massScanDone = TRUE;
     _WakeAfterNewSource(before);
