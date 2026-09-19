@@ -1518,8 +1518,14 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 
 	if (m_pRom)
 	{
+		/* Pilotwings and the DSP-4 Top Gear 3000 program both rewrite
+		   H/V IRQ control while the current scanline is already executing.
+		   The timer compare must be re-evaluated immediately; deferring the
+		   new $4200 mode until the next scanline makes TG3000's raster IRQ
+		   drift and eventually leaves the pre-race transition in forced blank. */
 		m_bDynamicHVIRQ =
-			(m_pRom->m_Flags & SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ)
+			((m_pRom->m_Flags & SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ) ||
+			 (m_pRom->m_Flags & SNROM_FLAG_DSP4))
 				? TRUE : FALSE;
 		#ifdef SNES_DSP1
 		m_DSP1.SetTargetYSubtract(
