@@ -930,7 +930,7 @@ void SnesPPU::Sync(Uint32 uLine)
 			}
 
             // are we within a frame?
-            if (m_uLine > 0 && m_uLine < (224 + 1))
+            if (m_uLine > 0 && m_uLine < m_uVBlankStartLine)
             {
                 // render a line
 				PROF_ENTER("PPURender");
@@ -979,6 +979,7 @@ void SnesPPU::Reset()
 	m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_ALL);
 	m_Queue.Reset();
 	m_uLine = 0;
+	m_uVBlankStartLine = 225;
 
 	memset(&m_Regs, 0, sizeof(m_Regs));
 	memset(&m_CGRAM, 0, sizeof(m_CGRAM));
@@ -996,6 +997,7 @@ void SnesPPU::Reset()
 SnesPPU::SnesPPU()
 {
 	m_pRender = NULL;
+	m_uVBlankStartLine = 225;
 	m_OAMLatch = 0;
 	m_CGRAMLatch = 0;
 }
