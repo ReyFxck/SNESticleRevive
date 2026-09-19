@@ -252,6 +252,8 @@ static Bool _IsMassPath(const char *p)
     return (p && strncmp(p, "mass", 4) == 0) ? TRUE : FALSE;
 }
 
+static int _ScanDir(const char *scanDir, int depth);
+
 /* OPL and older launchers can report the boot device as the legacy mass:
    alias, while the BDM stack used by USB/MX4SIO exposes the same medium as
    mass0: or mass1: after SNESticle resets the IOP. The unit number can also
