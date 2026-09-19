@@ -2003,9 +2003,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 
 	if (m_IO.m_Regs.nmitimen & 1)
 	{
-		// set joy enable flag at start of vblank
-		m_IO.m_Regs.hvbjoy|= 0x01;
-		m_IO.UpdateJoyPads();
+		/* Automatic joypad read is a multi-scanline operation.  Do not publish
+		   the finished JOY1-4 values at VBlank entry; keep HVBJOY.Busy high
+		   until the serial sequence has had roughly three scanlines to run. */
+		m_IO.m_Regs.hvbjoy |= 0x01;
 	}
 
     // set 'BLANK NMI' flag at beginning of v-blank
@@ -2016,10 +2017,14 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	{
 		ExecuteLine();
 
-		if (m_uLine == uVBlankStartLine + 2)
+		if ((m_IO.m_Regs.hvbjoy & 0x01) &&
+		    m_uLine == uVBlankStartLine + 3)
 		{
-			// done reading joypad
-			m_IO.m_Regs.hvbjoy&= ~0x01;
+			/* The recovered SnesIO routine was originally documented to run
+			   about three scanlines into VBlank.  Complete the serial read here
+			   and only then lower HVBJOY.Busy. */
+			m_IO.UpdateJoyPads();
+			m_IO.m_Regs.hvbjoy &= ~0x01;
 		}
 	}
 
