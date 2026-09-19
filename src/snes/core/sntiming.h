@@ -19,8 +19,13 @@
 #define SNES_NTSC_FRAME_RATE (60)
 #define SNES_PAL_FRAME_RATE  (50)
 
-#define SNES_LINECYCLEDELAY (40)
-#define SNES_HBLANKCYCLES  (SNES_CYCLESPERLINE - 1024)
+/* S-CPU/PPU bus events within a normal 1364-master-clock scanline.
+   DRAM refresh starts at 538-(masterClock&7) and stalls the CPU for 40.
+   HVBJOY.HBlank asserts around dot 274; HDMA begins at dot 276. */
+#define SNES_DRAM_REFRESH_BASE_CYCLES (538)
+#define SNES_DRAM_REFRESH_CYCLES      (40)
+#define SNES_HBLANK_START_CYCLES      (274 * 4)
+#define SNES_HDMA_START_CYCLES        (276 * 4)
 
 /* The S-CPU's H/V timer compare is not visible at H=HTIME*4 immediately.
    The counter reset/compare circuit and IRQ pipeline add 14 master clocks
