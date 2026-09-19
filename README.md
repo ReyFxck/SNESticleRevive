@@ -823,9 +823,7 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 <summary>Show details</summary>
 
 
-The release notes for the current version are available in
-[`CHANGELOG_v1.0.8.md`](CHANGELOG_v1.0.8.md).
-
+Release notes are published directly on the [GitHub Releases](https://github.com/ReyFxck/SNESticleRevive/releases) page.
 
 - **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
   written clean‑room and verified host‑side against public references.
