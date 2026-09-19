@@ -138,6 +138,8 @@ Uint32 g_DbgBGMapReloads = 0;
 Uint32 g_DbgBGChrRows = 0;
 Uint32 g_DbgBGChrBlankRows = 0;
 Uint32 g_DbgBGChrRepeatRows = 0;
+Uint32 g_DbgBGAddrCacheHits = 0;
+Uint32 g_DbgBGAddrCacheMisses = 0;
 Uint32 g_DbgBGChrRowsByDepth[3] = {0,0,0};
 Uint32 g_DbgPPUModeLines[8] = {0,0,0,0,0,0,0,0};
 Uint32 g_DbgPPUModeChanges = 0;
@@ -293,6 +295,8 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrRows = 0;
 	g_DbgBGChrBlankRows = 0;
 	g_DbgBGChrRepeatRows = 0;
+	g_DbgBGAddrCacheHits = 0;
+	g_DbgBGAddrCacheMisses = 0;
 	memset(g_DbgBGChrRowsByDepth, 0, sizeof(g_DbgBGChrRowsByDepth));
 	memset(g_DbgPPUModeLines, 0, sizeof(g_DbgPPUModeLines));
 	g_DbgPPUModeChanges = 0;
@@ -2248,7 +2252,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
 			// diretamente qual rotina esta consumindo o tempo da EE.
-			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=row-reuse obj-cache=%u",
+			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=addr-8slot obj-cache=%u",
 				SNDBG_SCHEMA, (unsigned)(SNDBG_DEEP ? 2 : 1),
 				(unsigned)g_DbgSessionId, (unsigned)g_TmgWinFrames,
 				(unsigned)SNPPU_OBJ_CACHE);
@@ -2347,6 +2351,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGChrRowsByDepth[0],
 				(unsigned)g_DbgBGChrRowsByDepth[1],
 				(unsigned)g_DbgBGChrRowsByDepth[2]);
+			DLog("[snes-bg-addr] cache hit/miss=%u/%u slots=8",
+				(unsigned)g_DbgBGAddrCacheHits,
+				(unsigned)g_DbgBGAddrCacheMisses);
 			DLog("[snes-obj] ports oam=%u vram=%u cgram=%u | lines=%u refs=%u tiles=%u range/time=%u/%u",
 				(unsigned)g_DbgOAMWrites, (unsigned)g_DbgVRAMWrites,
 				(unsigned)g_DbgCGRAMWrites, (unsigned)g_DbgObjEnabledLines,
@@ -2355,7 +2362,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			DLog("[snes-obj-cache] enabled=%u hit/miss=%u/%u",
 				(unsigned)SNPPU_OBJ_CACHE, (unsigned)g_DbgObjCacheHits,
 				(unsigned)g_DbgObjCacheMisses);
-			DLog("[snes-obj-cache] bytes=149504 invalidated-slots=%u bg-path=direct",
+			DLog("[snes-obj-cache] bytes=149504 invalidated-slots=%u bg-path=addr-cache",
 				(unsigned)g_DbgObjCacheInvalidations);
 			DLog("[snes-audio] samples=%u avg/frame=%u mix calls/zero=%u/%u min/max=%u/%u",
 				(unsigned)g_DbgAudioSamples,
