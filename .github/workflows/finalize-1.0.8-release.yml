@@ -1,0 +1,71 @@
+name: Finalize 1.0.8 release text
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/finalize-1.0.8-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Update GitHub release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/release-notes.txt <<'EOF'
+          # SNESticle Revive v1.0.8
+
+          Released: 2026-09-19
+
+          ## Highlights
+
+          - Fixed the MX4SIO restart regression reported in #63.
+            - The shared BDM + FatFs core is loaded before `mx4sio_bd.irx`.
+            - USB transport remains lazy, preserving the safer OPL-style hardware boot path.
+            - The fix was validated on real PS2 hardware across a full restart and IGR.
+            - Video Config now reports the numeric MX4SIO driver error as `Err <code>` when initialization fails.
+            - Commit: [`e468943`](https://github.com/ReyFxck/SNESticleRevive/commit/e4689432db63)
+          - Added clean PS2 system-exit actions from the UI (#17):
+            - return to the PS2 Browser;
+            - launch `mc0:/BOOT/BOOT.ELF`, with `mc1:` fallback;
+            - power off the console cleanly.
+            - Changed SRAM is saved synchronously first; if that save fails, the requested exit is cancelled.
+            - Restored the original Select-only access behavior for the System / Tools screen and kept it out of the L1/R1 screen cycle.
+            - Commit: [`ac3bc40`](https://github.com/ReyFxck/SNESticleRevive/commit/ac3bc40f3587)
+          - Added the universal SNES diagnostic modes used for low-overhead CPU/PPU/APU/DMA/chip logging and bounded deep captures, while removing the experimental BG CHR cache from the normal build path.
+            - Commit: [`f5d62b7`](https://github.com/ReyFxck/SNESticleRevive/commit/f5d62b7e4cb0)
+          - Normalized project-owned source headers/comments and performed source/build maintenance cleanup.
+            - Commit: [`1ee62bb`](https://github.com/ReyFxck/SNESticleRevive/commit/1ee62bbeb73e)
+          - Updated the project support section with Pix donation support and the QR image used by the README.
+            - Commits: [`644be22`](https://github.com/ReyFxck/SNESticleRevive/commit/644be220e046), [`5805199`](https://github.com/ReyFxck/SNESticleRevive/commit/5805199c4b22), [`38381cd`](https://github.com/ReyFxck/SNESticleRevive/commit/38381cd1787c)
+          - Updated README/repository references during the 1.0.8 development cycle.
+            - Commit: [`b670fdf`](https://github.com/ReyFxck/SNESticleRevive/commit/b670fdf1be44)
+          - Bumped the default build version and the Homebrew fallback version string to 1.0.8.
+            - Commits: [`1b64c9b`](https://github.com/ReyFxck/SNESticleRevive/commit/1b64c9be15ed), [`4b3cfe4`](https://github.com/ReyFxck/SNESticleRevive/commit/4b3cfe4113fd)
+
+          ## Commit references
+
+          - [`f5d62b7`](https://github.com/ReyFxck/SNESticleRevive/commit/f5d62b7e4cb0) — universal SNES diagnostics and BG-cache cleanup
+          - [`644be22`](https://github.com/ReyFxck/SNESticleRevive/commit/644be220e046) — donation support section
+          - [`1ee62bb`](https://github.com/ReyFxck/SNESticleRevive/commit/1ee62bbeb73e) — project-owned source/header normalization
+          - [`b670fdf`](https://github.com/ReyFxck/SNESticleRevive/commit/b670fdf1be44) — README/repository reference update
+          - [`5805199`](https://github.com/ReyFxck/SNESticleRevive/commit/5805199c4b22) — support asset upload
+          - [`38381cd`](https://github.com/ReyFxck/SNESticleRevive/commit/38381cd1787c) — Pix QR donation-section update
+          - [`ac3bc40`](https://github.com/ReyFxck/SNESticleRevive/commit/ac3bc40f3587) — clean system-exit options (#17)
+          - [`e468943`](https://github.com/ReyFxck/SNESticleRevive/commit/e4689432db63) — MX4SIO BDM dependency-order fix (#63)
+          - [`1b64c9b`](https://github.com/ReyFxck/SNESticleRevive/commit/1b64c9be15ed) — default version bump to 1.0.8
+          - [`4b3cfe4`](https://github.com/ReyFxck/SNESticleRevive/commit/4b3cfe4113fd) — Homebrew fallback version set to 1.0.8
+
+          Internal release-workflow/documentation housekeeping is intentionally omitted from this list.
+          EOF
+
+          gh release edit 1.0.8 \
+            --title "SNESTICLE REVIVE 1.0.8 [STABLE]" \
+            --notes-file /tmp/release-notes.txt \
+            --latest
