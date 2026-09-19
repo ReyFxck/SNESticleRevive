@@ -1727,8 +1727,8 @@ void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
 	const Uint32 uLineCycles = GetLineMasterCycles(m_uLine);
-	const Int32 nHBlankCycles =
-		SNES_HBLANKCYCLES + (Int32)uLineCycles - SNES_CYCLESPERLINE;
+	const Int32 nRefreshCycle =
+		SNES_DRAM_REFRESH_BASE_CYCLES - (m_uMasterClockPhase & 7);
 
     // don't trigger IRQ by default
     int nHIRQCycles = -1;
@@ -1766,8 +1766,6 @@ void SnesSystem::ExecuteLine()
 	m_nLineIRQClock = 0;
 
 #if SNDBG_LOG
-	// rastreia a scanline em que um H-IRQ esta agendado (divisao de tela).
-	// Se min..max variam muito frame a frame, a divisao "treme".
 	if (nHIRQCycles >= 0)
 	{
 		Int32 ln = (Int32)m_uLine;
@@ -1779,45 +1777,55 @@ void SnesSystem::ExecuteLine()
 
 	PROF_ENTER("ExecLine");
 
-	SNCPUConsumeCycles(&m_Cpu, SNES_LINECYCLEDELAY);
-
-    // execute CPU during scanline
 #if SNDBG_LOG
 	Uint32 _tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(SNES_CYCLESPERLINE - SNES_HBLANKCYCLES, nHIRQCycles);
+
+	/* MesenCE schedules DRAM refresh around H=534/538 depending on the
+	   master-clock phase.  The old core removed the same 40 clocks at H=0,
+	   which gave roughly the right CPU budget but wrong bus/IRQ timing. */
+	ExecuteWithIRQ(nRefreshCycle, nHIRQCycles);
+	SNCPUConsumeCycles(&m_Cpu, SNES_DRAM_REFRESH_CYCLES);
+
+	/* Continue to the real HBlank boundary (dot 274). */
+	ExecuteWithIRQ(SNES_HBLANK_START_CYCLES - nRefreshCycle, nHIRQCycles);
+
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
 
-	// set h-blank enable flag
-	m_IO.m_Regs.hvbjoy|= 0x40;
+	m_IO.m_Regs.hvbjoy |= 0x40;
 
-    // are we not in vblank?
-    if ( !(m_IO.m_Regs.hvbjoy & 0x80) )
-    {
-        // perform HDMA
-#if SNDBG_LOG
-		Uint32 _tHDMA = ProfCtrGetCycle();
-#endif
-        m_DMAC.ProcessHDMA(m_uLine);
-#if SNDBG_LOG
-		g_TmgCycHDMA += ProfCtrGetCycle() - _tHDMA;
-#endif
-    }
-
-    // execute CPU during h-blank
+	/* HDMA starts at dot 276, eight master clocks after HBlank asserts. */
 #if SNDBG_LOG
 	_tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(nHBlankCycles, nHIRQCycles);
+	ExecuteWithIRQ(SNES_HDMA_START_CYCLES - SNES_HBLANK_START_CYCLES,
+	               nHIRQCycles);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
 
-	// O hardware GSU roda em paralelo com o 65816. Este emulador sincroniza
-	// os dois uma vez por scanline, como uma aproximacao de baixo custo para
-	// o PS2: ~370 instrucoes em 10,7 MHz e ~925 em 21,4 MHz.
+	if (!(m_IO.m_Regs.hvbjoy & 0x80))
+	{
+#if SNDBG_LOG
+		Uint32 _tHDMA = ProfCtrGetCycle();
+#endif
+		m_DMAC.ProcessHDMA(m_uLine);
+#if SNDBG_LOG
+		g_TmgCycHDMA += ProfCtrGetCycle() - _tHDMA;
+#endif
+	}
+
+#if SNDBG_LOG
+	_tCPU = ProfCtrGetCycle();
+#endif
+	ExecuteWithIRQ((Int32)uLineCycles - SNES_HDMA_START_CYCLES,
+	               nHIRQCycles);
+#if SNDBG_LOG
+	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
+#endif
+
 	if (m_bSuperFX && m_GSU.IsRunning())
 	{
 #if SNDBG_LOG
@@ -1831,13 +1839,14 @@ void SnesSystem::ExecuteLine()
 	if (m_bSuperFX && m_GSU.IrqPending())
 		SNCPUSignalIRQ(&m_Cpu, 1);
 
-	// clear h-blank enable flag
-	m_IO.m_Regs.hvbjoy&= ~0x40;
+	m_IO.m_Regs.hvbjoy &= ~0x40;
 	m_bLineIRQActive = FALSE;
 	m_bLineIRQReschedule = FALSE;
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = (Int32)uLineCycles;
+	m_uMasterClockPhase =
+		(Uint8)((m_uMasterClockPhase + uLineCycles) & 7);
 	PROF_LEAVE("ExecLine");
 }
 
