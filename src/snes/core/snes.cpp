@@ -1014,7 +1014,18 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
             // set new nmi signal
             SNCPUSignalNMI(pCpu, pIO->m_Regs.rdnmi & pIO->m_Regs.nmitimen & 0x80);
 			if ((uOldNmitimen ^ uData) & 0x30)
-				pSnes->RescheduleLineIRQ(TRUE);
+			{
+				/* Changing between two enabled IRQ modes (for example TG3000
+				   B1 -> 91) recomputes the next timer edge but must not create
+				   another instantaneous IRQ on the already-passed compare.
+				   An immediate edge is only possible when the timer is being
+				   switched wholly on/off, matching the reference scheduler. */
+				const Uint8 uOldIrqMode = uOldNmitimen & 0x30;
+				const Uint8 uNewIrqMode = uData & 0x30;
+				const Bool bAllowImmediate =
+					(uOldIrqMode == 0 || uNewIrqMode == 0) ? TRUE : FALSE;
+				pSnes->RescheduleLineIRQ(bAllowImmediate);
+			}
             break;
 		}
 
