@@ -66,6 +66,7 @@ jobs:
           EOF
 
           gh release edit 1.0.8 \
+            --repo "$GITHUB_REPOSITORY" \
             --title "SNESTICLE REVIVE 1.0.8 [STABLE]" \
             --notes-file /tmp/release-notes.txt \
             --latest
