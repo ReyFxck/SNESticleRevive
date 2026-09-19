@@ -66,6 +66,24 @@ int main()
 	Check("PAL 32k maximum", nMax, 640);
 	Check("PAL 32k final phase", uPhase, 0);
 
+	/* Hardware-accurate cadence from MesenCE. Rounded 60/50 Hz drifts against
+	   the SNES master clock and eventually forces an audio correction. */
+	{
+		Uint64 uExactPhase = 0;
+		nTotal = 0;
+		for (i = 0; i < 60; i++)
+			nTotal += AudFrameScheduleNextRatio(
+				&uExactPhase, 32000, 21477272u, 357366u, 4);
+		Check("NTSC exact cadence 60 frames", nTotal, 31944);
+
+		uExactPhase = 0;
+		nTotal = 0;
+		for (i = 0; i < 50; i++)
+			nTotal += AudFrameScheduleNextRatio(
+				&uExactPhase, 32000, 21281370u, 425568u, 4);
+		Check("PAL exact cadence 50 frames", nTotal, 31992);
+	}
+
 	uPhase = 0;
 	nTotal = 0;
 	for (i = 0; i < 60; i++)
