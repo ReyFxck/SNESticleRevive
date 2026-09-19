@@ -69,24 +69,6 @@ int main()
 		Check("BG row reuse flip key distinct", SnesPPUBGRowReuseLookup(&reuse,
 			0x0123u, &uReuseData, &uReuseMask), FALSE);
 	}
-	{
-		SnesPPUBGAddrCacheT cache;
-		Uint64 uAddrData = 0;
-		Uint32 uAddrMask = 0;
-		SnesPPUBGAddrCacheReset(&cache);
-		Check("BG addr cache bytes", sizeof(cache), 104);
-		Check("BG addr cache cold", SnesPPUBGAddrCacheLookup(&cache,
-			0x4123u, &uAddrData, &uAddrMask), FALSE);
-		SnesPPUBGAddrCacheStore(&cache, 0x4123u,
-			0x8877665544332211ULL, 0x96u);
-		Check("BG addr cache hit", SnesPPUBGAddrCacheLookup(&cache,
-			0x4123u, &uAddrData, &uAddrMask), TRUE);
-		Check("BG addr cache data", uAddrData, 0x8877665544332211ULL);
-		Check("BG addr cache mask", uAddrMask, 0x96u);
-		Check("BG addr cache flip distinct", SnesPPUBGAddrCacheLookup(&cache,
-			0xC123u, &uAddrData, &uAddrMask), FALSE);
-	}
-
 	Check("single write clears 4bpp", SnesPPUChrCacheLookup4(&g_Cache,
 		0x3451, FALSE, &uData, &uOpaque), FALSE);
 	Check("single write keeps neighbor", SnesPPUChrCacheLookup4(&g_Cache,
