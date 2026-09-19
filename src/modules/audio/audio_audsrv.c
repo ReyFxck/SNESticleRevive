@@ -292,15 +292,24 @@ int Aud_Available(void)
 }
 
 /*
-    Interleave separate left/right channels and push to audsrv. `wait`
-    selects between blocking until enough room is available
-    (audsrv_wait_audio) and best-effort (drop overflow if the IOP ring
-    is full).
+    Interleave separate left/right channels and push to audsrv.
+
+    Important: audsrv_play_audio() is allowed to accept only the bytes that
+    currently fit in its IOP ring. The PS2SDK EE wrapper returns that short
+    byte count; it does NOT retain the unsent tail for the next call. Calling
+    it without back-pressure therefore creates an audible cut exactly at the
+    end of that audio block.
+
+    `wait != 0` is the lossless game-audio path: reserve room for the entire
+    block with audsrv_wait_audio() before sending it. Menu BGM intentionally
+    keeps using wait=0 because its producer already budgets against
+    Aud_Available() and is allowed to be best-effort.
 */
 void Aud_Enqueue(short *left, short *right, int size, int wait)
 {
     int i;
     int bytes;
+    int sent;
 
     if (!sjpcm_inited) return;
     if (size <= 0) return;
@@ -316,19 +325,32 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
 
     if (wait)
     {
-        audsrv_wait_audio(bytes);
+        if (audsrv_wait_audio(bytes) < 0)
+            return;
     }
 
-    if (audsrv_play_audio((const char *)_interleave_buf, bytes) >= 0)
+    sent = audsrv_play_audio((const char *)_interleave_buf, bytes);
+    if (sent > 0)
         sjpcm_playing = 1;
+
+#if SNDBG_LOG
+    if (sent >= 0 && sent != bytes)
+        DLog("[snes-audio-backend] short enqueue bytes=%d/%d wait=%d queued=%d avail=%d",
+             sent, bytes, wait, Aud_Buffered() * AUD_BYTES_PER_SAMPLE,
+             Aud_Available() * AUD_BYTES_PER_SAMPLE);
+#endif
 }
 
 /*
-    The original async API let AudMixBuffer overlap RPC traffic with
-    the next SNES frame via a SIF callback + semaphore handshake.
-    audsrv_play_audio is already non-blocking when there is room in the
-    ring buffer, and audsrv_wait_audio handles back-pressure when there
-    isn't, so the async path collapses into the synchronous one.
+    The original SjPCM async API kept ownership of a whole block until the IOP
+    had consumed the transfer. audsrv has no equivalent producer-side pending
+    block here, so "fire and forget" is not lossless: when the ring has only
+    partial room, audsrv_play_audio() truncates the block.
+
+    Keep the public async API for AudMixBuffer, but give it lossless
+    back-pressure. In the normal 50/60 Hz path wait_audio returns immediately;
+    after a slow/catch-up frame it waits only until one complete block fits,
+    preventing the periodic chopped tails reported by both SNES and NES games.
 */
 void Aud_BufferedAsyncStart(void)
 {
@@ -342,7 +364,7 @@ int Aud_BufferedAsyncGet(void)
 
 void Aud_EnqueueAsync(short *left, short *right, int size)
 {
-    Aud_Enqueue(left, right, size, 0);
+    Aud_Enqueue(left, right, size, 1);
 }
 
 void Aud_Wait(void)
