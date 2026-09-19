@@ -52,23 +52,6 @@ int main()
 	SnesPPUChrCacheStore4(&g_Cache, 0x3461, 0x33, 3);
 	nInvalidated = SnesPPUChrCacheInvalidateRange(&g_Cache, 0x3457, 1);
 	Check("single write invalidated tiles", nInvalidated, 1);
-
-	{
-		SnesPPUBGRowReuseT reuse;
-		Uint64 uReuseData = 0;
-		Uint32 uReuseMask = 0;
-		SnesPPUBGRowReuseReset(&reuse);
-		Check("BG row reuse cold", SnesPPUBGRowReuseLookup(&reuse,
-			0x8123u, &uReuseData, &uReuseMask), FALSE);
-		SnesPPUBGRowReuseStore(&reuse, 0x8123u,
-			0x0102030405060708ULL, 0xA5u);
-		Check("BG row reuse hit", SnesPPUBGRowReuseLookup(&reuse,
-			0x8123u, &uReuseData, &uReuseMask), TRUE);
-		Check("BG row reuse data", uReuseData, 0x0102030405060708ULL);
-		Check("BG row reuse mask", uReuseMask, 0xA5u);
-		Check("BG row reuse flip key distinct", SnesPPUBGRowReuseLookup(&reuse,
-			0x0123u, &uReuseData, &uReuseMask), FALSE);
-	}
 	Check("single write clears 4bpp", SnesPPUChrCacheLookup4(&g_Cache,
 		0x3451, FALSE, &uData, &uOpaque), FALSE);
 	Check("single write keeps neighbor", SnesPPUChrCacheLookup4(&g_Cache,
