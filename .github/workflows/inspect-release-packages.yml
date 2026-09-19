@@ -1,0 +1,34 @@
+name: Inspect release packages
+
+on:
+  push:
+    branches:
+      - ci/inspect-108-package
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download 1.0.7 and 1.0.8 ZIP assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p old current
+          gh release download 1.0.7 -R "$GITHUB_REPOSITORY" -p 'SNESticleRevive.v1.0.7.zip' -D old
+          gh release download 1.0.8 -R "$GITHUB_REPOSITORY" -p 'SNESticleRevive.v1.0.8.zip' -D current
+
+      - name: Show ZIP listings
+        run: |
+          echo '===== 1.0.7 ====='
+          unzip -l old/SNESticleRevive.v1.0.7.zip
+          echo '===== 1.0.8 ====='
+          unzip -l current/SNESticleRevive.v1.0.8.zip
+          echo '===== 1.0.7 names ====='
+          unzip -Z1 old/SNESticleRevive.v1.0.7.zip | sort
+          echo '===== 1.0.8 names ====='
+          unzip -Z1 current/SNESticleRevive.v1.0.8.zip | sort
