@@ -57,6 +57,7 @@ public:
 
 	virtual const char *				GetString(StringE eString)					{return "";}
 	virtual Uint32				GetSampleRate()								{return 0;}
+	virtual Uint32				GetFrameRate()								{return 60;}
 
 protected:
     Uint32						m_uLine;
