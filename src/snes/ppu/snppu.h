@@ -166,6 +166,7 @@ public:
 
 	void                    Reset();
 	void                    SetVideoRegion(Bool bPAL);
+	void                    SetVBlankStartLine(Uint32 uLine) {m_uVBlankStartLine = uLine;}
 	void                    BeginFrame();
 	void                    EndFrame();
 	void                    SetPPURender(ISnesPPURender *pPPURender)    {m_pRender=pPPURender;}
@@ -224,6 +225,7 @@ private:
     friend class SnesDMAC;
 
     Uint32			        m_uLine;
+    Uint32                  m_uVBlankStartLine;
     Bool                    m_bVBlank;
 
     SnesPPURegsT	        m_Regs;
