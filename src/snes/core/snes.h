@@ -144,6 +144,7 @@ private:
 	   the live bit after that point. */
 	Bool		m_bFrameInterlace;
 	Bool		m_bFrameField;
+	Uint8		m_uMasterClockPhase;
 	Uint8		m_Ram[SNES_RAMSIZE] _ALIGN(16);
 	Uint8		m_SRam[SNES_SRAMSIZE] _ALIGN(16);
 
