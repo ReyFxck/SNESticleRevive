@@ -86,7 +86,11 @@ static SNRomCountryT _SNRom_Country[]=
     { "Italy"                                   ,   SNROM_VIDEO_PAL     },
     { "Hong Kong and China"                     ,   SNROM_VIDEO_PAL     },
     { "Indonesia"                               ,   SNROM_VIDEO_PAL     },
-    { "Korea"                                   ,   SNROM_VIDEO_PAL     },
+    { "Korea"                                   ,   SNROM_VIDEO_NTSC    },
+    { "Common"                                  ,   SNROM_VIDEO_NTSC    },
+    { "Canada"                                  ,   SNROM_VIDEO_NTSC    },
+    { "Brazil"                                  ,   SNROM_VIDEO_NTSC    },
+    { "Australia"                               ,   SNROM_VIDEO_PAL     },
 };
 
 static SNRomLicenseT _SNRom_License[]=
