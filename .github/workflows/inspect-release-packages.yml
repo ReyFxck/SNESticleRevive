@@ -1,4 +1,4 @@
-name: Inspect release packages
+name: Repack 1.0.8 release
 
 on:
   push:
@@ -7,37 +7,88 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect:
+  repack:
     runs-on: ubuntu-24.04
     steps:
-      - name: Download 1.0.7 and 1.0.8 ZIP assets
+      - name: Download reference and current release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
-          mkdir -p old current
+          mkdir -p old current pkg out
           gh release download 1.0.7 -R "$GITHUB_REPOSITORY" -p 'SNESticleRevive.v1.0.7.zip' -D old
           gh release download 1.0.8 -R "$GITHUB_REPOSITORY" -p 'SNESticleRevive.v1.0.8.zip' -D current
+          unzip -q old/SNESticleRevive.v1.0.7.zip -d pkg
+          unzip -q current/SNESticleRevive.v1.0.8.zip 'SNESticle_Revive_v1.0.8.packed.elf' -d current
 
-      - name: Show ZIP listings
+      - name: Rebuild package in 1.0.7 layout
         run: |
-          echo '===== 1.0.7 ====='
-          unzip -l old/SNESticleRevive.v1.0.7.zip
-          echo '===== 1.0.8 ====='
-          unzip -l current/SNESticleRevive.v1.0.8.zip
-          echo '===== 1.0.7 names ====='
-          unzip -Z1 old/SNESticleRevive.v1.0.7.zip | sort
-          echo '===== 1.0.8 names ====='
-          unzip -Z1 current/SNESticleRevive.v1.0.8.zip | sort
-          rm -rf old_extract
-          mkdir old_extract
-          unzip -q old/SNESticleRevive.v1.0.7.zip -d old_extract
-          echo '===== 1.0.7 title.cfg ====='
-          cat 'old_extract/APPS/title.cfg'
-          echo '===== 1.0.7 SYSTEM.CNF ====='
-          cat 'old_extract/SYSTEM.CNF'
-          echo '===== 1.0.7 README.txt ====='
-          cat 'old_extract/README.txt'
+          set -euxo pipefail
+
+          rm -f pkg/APPS/*.elf
+          cp current/SNESticle_Revive_v1.0.8.packed.elf              'pkg/APPS/SNESticleRevive v1.0.8.elf'
+
+          cat > pkg/APPS/title.cfg <<'EOF'
+          title=Snesticle Revive v1.0.8
+          boot=SNESticleRevive v1.0.8.elf
+          EOF
+
+          # Keep README.txt, SYSTEM.CNF and the original BGM bundle exactly
+          # like the v1.0.7 package requested by the maintainer.
+          test -f pkg/README.txt
+          test -f pkg/SYSTEM.CNF
+          test -f 'pkg/bgm/4mat_-_eternity.xm'
+          test -f 'pkg/bgm/an-path.xm'
+          test -f 'pkg/bgm/nwk-last.xm'
+          test -f 'pkg/bgm/playing_.xm'
+          test -f 'pkg/bgm/the love trap.xm'
+
+          # The final archive must never contain an ISO.
+          if find pkg -type f -iname '*.iso' | grep -q .; then
+            echo 'ERROR: ISO found in final package tree'
+            find pkg -type f -iname '*.iso' -print
+            exit 1
+          fi
+
+          (
+            cd pkg
+            zip -9 -r ../out/SNESticleRevive.v1.0.8.zip               APPS README.txt SYSTEM.CNF bgm
+          )
+
+          (
+            cd out
+            sha256sum SNESticleRevive.v1.0.8.zip               > SNESticleRevive.v1.0.8.zip.sha256
+          )
+
+      - name: Verify final ZIP
+        run: |
+          set -euxo pipefail
+          unzip -t out/SNESticleRevive.v1.0.8.zip
+          unzip -l out/SNESticleRevive.v1.0.8.zip
+
+          test "$(unzip -Z1 out/SNESticleRevive.v1.0.8.zip | grep -ci '\.iso$' || true)" = 0
+          test "$(unzip -Z1 out/SNESticleRevive.v1.0.8.zip | grep -c '^APPS/SNESticleRevive v1.0.8.elf$')" = 1
+
+          echo '===== title.cfg ====='
+          unzip -p out/SNESticleRevive.v1.0.8.zip APPS/title.cfg
+          echo '===== sha256 ====='
+          cat out/SNESticleRevive.v1.0.8.zip.sha256
+
+      - name: Replace 1.0.8 release package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          gh release upload 1.0.8 -R "$GITHUB_REPOSITORY"             out/SNESticleRevive.v1.0.8.zip             out/SNESticleRevive.v1.0.8.zip.sha256             --clobber
+
+      - name: Upload verified package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticleRevive-v1.0.8-final-package
+          path: |
+            out/SNESticleRevive.v1.0.8.zip
+            out/SNESticleRevive.v1.0.8.zip.sha256
+          if-no-files-found: error
