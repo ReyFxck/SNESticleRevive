@@ -114,6 +114,11 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_Spc.uPad = 0;
 
 	m_PPU.RestoreState(&pState->PPU);
+	/* Region is hardware identity, not game state. Older PAL save states were
+	   written while STAT78 bit 4 was incorrectly clear, so re-derive it from
+	   the currently loaded ROM after restoring the serialized PPU registers. */
+	m_PPU.SetVideoRegion(
+		m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE);
 	m_DMAC.RestoreState(&pState->DMAC);
 	m_IO.RestoreState(&pState->IO);
 	/* The legacy state payload does not contain the DSP write queue,
