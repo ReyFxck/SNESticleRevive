@@ -12,7 +12,7 @@ permissions:
 
 env:
   APP_VERSION: 1.0.9
-  TARGET_SHA: 4f2d739f392e9acc1df5f0a937a9a59e3f6ad9c0
+  TARGET_SHA: c8b084aedd3843de3df02c388bb56f8ec1dc1bd7
 
 jobs:
   validate:
