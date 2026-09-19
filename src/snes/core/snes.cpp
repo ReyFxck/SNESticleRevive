@@ -1228,6 +1228,7 @@ SnesSystem::SnesSystem()
 	m_nLineIRQClock = 0;
 	m_bFrameInterlace = FALSE;
 	m_bFrameField = FALSE;
+	m_uMasterClockPhase = 2; /* 186 startup clocks mod 8, matching MesenCE */
 
 	// setup spc
 	SNSPCNew(&m_Spc);
@@ -1325,6 +1326,7 @@ void SnesSystem::Reset()
 	m_nLineIRQClock = 0;
 	m_bFrameInterlace = FALSE;
 	m_bFrameField = FALSE;
+	m_uMasterClockPhase = 2; /* reset + 186 master-clock startup delay */
 #if SNDBG_LOG
 	SnesDbgResetSession();
 	m_GSU.ClearDiagWindow();
