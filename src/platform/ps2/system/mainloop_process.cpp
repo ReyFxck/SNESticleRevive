@@ -49,14 +49,16 @@ static Uint32 _iframetex=0;
    one host tick. The phase accumulator keeps the long-term ratio exact. */
 static Emu::System *_CadenceSystem = NULL;
 static Uint32 _CadenceHostHz = 0;
-static Uint32 _CadenceEmuHz = 0;
-static Uint32 _CadencePhase = 0;
+static Uint32 _CadenceEmuNum = 0;
+static Uint32 _CadenceEmuDen = 0;
+static Uint64 _CadencePhase = 0;
 
 static void _MainLoopCadenceReset()
 {
 	_CadenceSystem = NULL;
 	_CadenceHostHz = 0;
-	_CadenceEmuHz = 0;
+	_CadenceEmuNum = 0;
+	_CadenceEmuDen = 0;
 	_CadencePhase = 0;
 }
 
@@ -66,26 +68,32 @@ static Uint32 _MainLoopCadenceFrames(Emu::System *pSystem,
 	if (!pSystem || !uHostTicks)
 		return 0;
 
-	Uint32 uEmuHz = pSystem->GetFrameRate();
+	Uint32 uEmuNum = pSystem->GetFrameRateNumerator();
+	Uint32 uEmuDen = pSystem->GetFrameRateDenominator();
 	if (!uHostHz) uHostHz = 60;
-	if (!uEmuHz) uEmuHz = uHostHz;
+	if (!uEmuNum) uEmuNum = uHostHz;
+	if (!uEmuDen) uEmuDen = 1;
+	Uint64 uCadenceDen = (Uint64)uHostHz * (Uint64)uEmuDen;
 
 	if (_CadenceSystem != pSystem ||
 	    _CadenceHostHz != uHostHz ||
-	    _CadenceEmuHz != uEmuHz)
+	    _CadenceEmuNum != uEmuNum ||
+	    _CadenceEmuDen != uEmuDen)
 	{
 		_CadenceSystem = pSystem;
 		_CadenceHostHz = uHostHz;
-		_CadenceEmuHz = uEmuHz;
+		_CadenceEmuNum = uEmuNum;
+		_CadenceEmuDen = uEmuDen;
 		/* Make the first host tick render immediately when emulation is
-		   slower than the display (50-on-60), then settle into 5/6 cadence. */
-		_CadencePhase = (uHostHz > uEmuHz) ? (uHostHz - uEmuHz) : 0;
+		   slower than the display, then preserve the exact rational phase. */
+		_CadencePhase = (uCadenceDen > uEmuNum)
+			? (uCadenceDen - uEmuNum) : 0;
 	}
 
-	Uint64 uAccum = (Uint64)_CadencePhase +
-		(Uint64)uEmuHz * (Uint64)uHostTicks;
-	Uint32 uFrames = (Uint32)(uAccum / uHostHz);
-	_CadencePhase = (Uint32)(uAccum % uHostHz);
+	Uint64 uAccum = _CadencePhase +
+		(Uint64)uEmuNum * (Uint64)uHostTicks;
+	Uint32 uFrames = (Uint32)(uAccum / uCadenceDen);
+	_CadencePhase = uAccum % uCadenceDen;
 	return uFrames;
 }
 
@@ -145,7 +153,9 @@ Bool MainLoopProcess()
         */
         pMixBuffer = _AudMix;
 		if (_AudMix)
-			_AudMix->SetFrameRate(_pSystem->GetFrameRate());
+			_AudMix->SetFrameRateRatio(
+				_pSystem->GetFrameRateNumerator(),
+				_pSystem->GetFrameRateDenominator());
 
 		// read inputs
 		for (iPad=0; iPad < 5; iPad++)
