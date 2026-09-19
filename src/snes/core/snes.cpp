@@ -1208,6 +1208,8 @@ SnesSystem::SnesSystem()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_bFrameInterlace = FALSE;
+	m_bFrameField = FALSE;
 
 	// setup spc
 	SNSPCNew(&m_Spc);
@@ -1303,6 +1305,8 @@ void SnesSystem::Reset()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_bFrameInterlace = FALSE;
+	m_bFrameField = FALSE;
 #if SNDBG_LOG
 	SnesDbgResetSession();
 	m_GSU.ClearDiagWindow();
@@ -1684,9 +1688,27 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
     nIRQCycles -= nCycles;
 }
 
+Uint32 SnesSystem::GetLineMasterCycles(Uint32 uLine) const
+{
+	/* Normal SNES scanlines are 1364 master clocks. Two field-specific
+	   exceptions matter to software which observes H/V timing:
+	     - NTSC non-interlace, field 1, line 240: 1360 clocks.
+	     - PAL interlace, field 1, line 311: 1368 clocks.
+	   The field/interlace bits are latched at field start because EndFrame()
+	   toggles STAT78's field bit before the VBlank scanlines are executed. */
+	if (!IsPAL() && !m_bFrameInterlace && m_bFrameField && uLine == 240)
+		return SNES_CYCLESPERLINE - 4;
+	if (IsPAL() && m_bFrameInterlace && m_bFrameField && uLine == 311)
+		return SNES_CYCLESPERLINE + 4;
+	return SNES_CYCLESPERLINE;
+}
+
 void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+	const Uint32 uLineCycles = GetLineMasterCycles(m_uLine);
+	const Int32 nHBlankCycles =
+		SNES_HBLANKCYCLES + (Int32)uLineCycles - SNES_CYCLESPERLINE;
 
     // don't trigger IRQ by default
     int nHIRQCycles = -1;
@@ -1768,7 +1790,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	_tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(SNES_HBLANKCYCLES, nHIRQCycles);
+    ExecuteWithIRQ(nHBlankCycles, nHIRQCycles);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
@@ -1795,7 +1817,7 @@ void SnesSystem::ExecuteLine()
 	m_bLineIRQReschedule = FALSE;
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
-	m_nLineIRQClock = SNES_CYCLESPERLINE;
+	m_nLineIRQClock = (Int32)uLineCycles;
 	PROF_LEAVE("ExecLine");
 }
 
