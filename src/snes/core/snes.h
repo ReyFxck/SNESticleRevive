@@ -26,6 +26,7 @@ extern "C" {
 #include "snrom.h"
 #include "snppurender.h"
 #include "sndebug.h"
+#include "sntiming.h"
 
 #include "sndsp1.h"
 #include "sndsp2.h"
@@ -71,6 +72,9 @@ public:
 
 	virtual const char *GetString(StringE eString);
     virtual Uint32 GetSampleRate() {return 32000;}
+    virtual Uint32 GetFrameRate() {return IsPAL() ? SNES_PAL_FRAME_RATE : SNES_NTSC_FRAME_RATE;}
+    Bool    IsPAL() const {return m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE;}
+    Uint32  GetTotalLines() const {return IsPAL() ? SNES_PAL_TOTAL_LINES : SNES_NTSC_TOTAL_LINES;}
 
     static const Char *GetRegName(Uint32 uAddr);
 
@@ -168,6 +172,7 @@ private:
 	Int32	CalculateLineIRQCycle();
 	void	RescheduleLineIRQ(Bool bAllowImmediate);
 	void	ExecuteLine();
+	Uint32	GetLineMasterCycles(Uint32 uLine) const;
     void    ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles);
     void    ExecuteCPU(Int32 nExecCycles);
 };
