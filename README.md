@@ -508,9 +508,12 @@ set the upstream-recommended default pan to 50 before loading; this keeps
 hard-left/right instruments audible through imperfect HDMI/TV mono downmix.
 This setting affects menu tracker music only, not SNES or NES game audio.
 
-Drop one or more tracks in any of these folders. Memory-card and mass-storage
-folders are indexed immediately; enabled MMCE/HDD sources are checked once
-through their own device probes. CD/DVD is checked a little later with
+Drop one or more tracks in any of these folders. A `bgm` folder beside
+the launched ELF is checked too. For OPL/MX4SIO boots, the same path is retried
+across `mass0:`, `mass1:` and the legacy `mass:` alias so an IOP reset or
+BDM unit-number change does not lose the soundtrack. Memory-card and
+mass-storage folders are indexed immediately; enabled MMCE/HDD sources are
+checked once through their own device probes. CD/DVD is checked a little later with
 non-blocking readiness polls so booting an ISO cannot stall while the drive is
 still detecting the disc. Subfolders are supported (up to four levels), and
 the resulting index is cached:
@@ -519,7 +522,8 @@ the resulting index is cached:
 - `mc0:/SNESticle/bgm`, `mc1:/SNESticle/bgm`
 - `mmce0:/SNESticle/bgm`, `mmce0:/bgm`
 - `mmce1:/SNESticle/bgm`, `mmce1:/bgm`
-- `mass:/SNESticle/bgm`, `mass:/bgm`
+- `mass0:/SNESticle/bgm`, `mass0:/bgm`, `mass1:/SNESticle/bgm`,
+  `mass1:/bgm` (USB or MX4SIO; the legacy `mass:` alias is also accepted)
 - the first enabled internal-HDD APA/PFS partition containing
   `SNESticle/bgm` or `bgm` (for example `hdd0:/+OPL/SNESticle/bgm`)
 - `cdfs:/BGM` (inside the ISO)
