@@ -358,6 +358,21 @@ static void SnesDbgResetSession(void)
 
 #define SNES_SYNCPPUEVERYLINE (CODE_DEBUG && 0)
 
+Int32 SnesSystem::CpuMasterToSpcTime(Int32 nMasterCycles) const
+{
+	if (nMasterCycles <= 0 || !IsPAL())
+		return nMasterCycles;
+
+	/* The S-SMP is clocked independently at 1.024 MHz. This core represents
+	   one SPC cycle as SNSPC_CYCLE (=21) timing units, which is a close NTSC
+	   approximation. On PAL, scale main-master time into that same SPC domain:
+	     1.024 MHz * 21 / 21.281370 MHz = 21,504,000 / 21,281,370.
+	   Round to nearest so repeated CPU/APU port synchronizations do not acquire
+	   a systematic one-unit bias. */
+	return (Int32)(((Uint64)(Uint32)nMasterCycles * 21504000ull +
+	                10640685ull) / 21281370ull);
+}
+
 void SnesSystem::SyncSPC(Int32 uExtra)
 {
 	Int32 nCycles;
@@ -373,7 +388,8 @@ void SnesSystem::SyncSPC(Int32 uExtra)
     }
 #endif */
 
-    Int32 CpuTime = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME);
+    Int32 CpuTime = CpuMasterToSpcTime(
+        SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME));
     Int32 SpcTime = SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME);
 
     // get cycle count
@@ -638,7 +654,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	{
 		#if SNSPCIO_WRITEQUEUE
 		if (!pSnes->m_SpcIO.EnqueueWrite(
-		        SNCPUGetCounter(pCpu, SNCPU_COUNTER_FRAME) + SNES_SPCWRITE_LATENCY,
+		        pSnes->CpuMasterToSpcTime(
+		            SNCPUGetCounter(pCpu, SNCPU_COUNTER_FRAME) +
+		            SNES_SPCWRITE_LATENCY),
 		        uAddr & 3, uData))
 		#endif
 		{
