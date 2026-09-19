@@ -171,6 +171,56 @@ _INLINE void SnesPPUBGRowReuseStore(SnesPPUBGRowReuseT *pReuse,
 	pReuse->uOpaque = uOpaque;
 }
 
+/*
+ * EE-friendly BG address cache.
+ *
+ * Unlike the rejected raw-content cache, this never hashes or compares CHR
+ * payload.  The key is only the physical row address plus H-flip, so a hit is
+ * a handful of 32-bit integer operations and avoids touching VRAM entirely.
+ * Eight direct-mapped slots stay tiny enough for the R5900 D-cache and are
+ * reset for each BG scanline fetch, so VRAM writes need no invalidation.
+ */
+#define SNPPU_BG_ADDR_CACHE_SLOTS 8u
+
+struct SnesPPUBGAddrCacheT
+{
+	Uint32 uKey[SNPPU_BG_ADDR_CACHE_SLOTS];
+	Uint64 uData[SNPPU_BG_ADDR_CACHE_SLOTS];
+	Uint8  uOpaque[SNPPU_BG_ADDR_CACHE_SLOTS];
+};
+
+_INLINE Uint32 SnesPPUBGAddrCacheIndex(Uint32 uKey)
+{
+	return ((uKey >> 3) ^ uKey) & (SNPPU_BG_ADDR_CACHE_SLOTS - 1u);
+}
+
+_INLINE void SnesPPUBGAddrCacheReset(SnesPPUBGAddrCacheT *pCache)
+{
+	Uint32 i;
+	for (i = 0; i < SNPPU_BG_ADDR_CACHE_SLOTS; i++)
+		pCache->uKey[i] = 0xFFFFFFFFu;
+}
+
+_INLINE Bool SnesPPUBGAddrCacheLookup(const SnesPPUBGAddrCacheT *pCache,
+	Uint32 uKey, Uint64 *pData, Uint32 *pOpaque)
+{
+	Uint32 i = SnesPPUBGAddrCacheIndex(uKey);
+	if (pCache->uKey[i] != uKey)
+		return FALSE;
+	*pData = pCache->uData[i];
+	*pOpaque = pCache->uOpaque[i];
+	return TRUE;
+}
+
+_INLINE void SnesPPUBGAddrCacheStore(SnesPPUBGAddrCacheT *pCache,
+	Uint32 uKey, Uint64 uData, Uint32 uOpaque)
+{
+	Uint32 i = SnesPPUBGAddrCacheIndex(uKey);
+	pCache->uData[i] = uData;
+	pCache->uOpaque[i] = (Uint8)uOpaque;
+	pCache->uKey[i] = uKey;
+}
+
 /* Implementado em snppurender8.cpp; chamado pelo caminho de escrita da PPU. */
 void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords);
 
