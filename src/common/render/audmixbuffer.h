@@ -20,9 +20,10 @@ class AudMixBuffer : public CMixBuffer
 
     Int32   m_iPrevSample[2];
     Uint32  m_uSampleRate;
-    Uint32  m_uFrameRate;
+    Uint32  m_uFrameRateNumerator;
+    Uint32  m_uFrameRateDenominator;
     Bool    m_bAsync;
-    Uint32  m_uFrameSamplePhase;
+    Uint64  m_uFrameSamplePhase;
 
 	Uint32	m_uLastOutput;
 
@@ -39,14 +40,26 @@ public:
     }
     void SetFrameRate(Uint32 uFrameRate)
     {
-        if (!uFrameRate) uFrameRate = 60;
-        if (m_uFrameRate != uFrameRate)
+        SetFrameRateRatio(uFrameRate ? uFrameRate : 60, 1);
+    }
+    void SetFrameRateRatio(Uint32 uNumerator, Uint32 uDenominator)
+    {
+        if (!uNumerator) uNumerator = 60;
+        if (!uDenominator) uDenominator = 1;
+        if (m_uFrameRateNumerator != uNumerator ||
+            m_uFrameRateDenominator != uDenominator)
         {
-            m_uFrameRate = uFrameRate;
+            m_uFrameRateNumerator = uNumerator;
+            m_uFrameRateDenominator = uDenominator;
             m_uFrameSamplePhase = 0;
         }
     }
-    Uint32 GetFrameRate() const {return m_uFrameRate;}
+    Uint32 GetFrameRate() const
+    {
+        return m_uFrameRateDenominator
+            ? m_uFrameRateNumerator / m_uFrameRateDenominator
+            : 0;
+    }
 	Uint32 GetLastOutput() {return m_uLastOutput;}
     void Reset();
 
