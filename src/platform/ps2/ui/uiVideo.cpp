@@ -283,9 +283,19 @@ static const char *_VideoMmceStatus()
 
 static const char *_VideoMx4sioStatus()
 {
-	if (!Mx4sioIsEnabled())       return "Off";
-	if (Mx4sioNeedsRestart())     return "Restart";
-	if (Mx4sioGetLastError() < 0) return "Driver Error";
+	static char errorText[24];
+	int error;
+
+	if (!Mx4sioIsEnabled())   return "Off";
+	if (Mx4sioNeedsRestart()) return "Restart";
+
+	error = Mx4sioGetLastError();
+	if (error < 0)
+	{
+		snprintf(errorText, sizeof(errorText), "Err %d", error);
+		return errorText;
+	}
+
 	return Mx4sioIsLoaded() ? "On" : "Enabled";
 }
 

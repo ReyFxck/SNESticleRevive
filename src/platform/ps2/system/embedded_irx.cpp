@@ -327,8 +327,43 @@ extern "C" int MemCardLoadEmbeddedIrx(void)
  * NAO usa dev9 (so' USB), entao nao tem o risco de travar boot do HD
  * interno.  Cada passo loga via ScrPrintf, visivel no splash de boot --
  * se der b.o., a ultima linha na tela mostra qual modulo falhou. */
-static int s_usb_bdm_loaded_result = 1; /* 1 = not yet attempted */
-static int s_dev9_loaded_result = 1;    /* shared by HDD and network */
+/* BDM + FatFs are shared by USB and MX4SIO.  Keep this core separate from
+ * the USB transport so MX4SIO can satisfy its bdm_connect_bd dependency
+ * without waking usbd/usbmass during boot.  This preserves the lazy-storage
+ * fix for OPL hardware boots while restoring the dependency order used by
+ * v1.0.3 before USB initialization was deferred. */
+static int s_bdm_core_loaded_result = 1; /* 1 = not yet attempted */
+static int s_usb_bdm_loaded_result = 1;  /* 1 = not yet attempted */
+static int s_dev9_loaded_result = 1;     /* shared by HDD and network */
+
+static int BdmCoreLoadEmbeddedIrx(void)
+{
+    int ret;
+
+    if (s_bdm_core_loaded_result != 1)
+        return s_bdm_core_loaded_result;
+
+    ret = EmbeddedIrxLoad(bdm_irx, sizeof(bdm_irx), 0, NULL);
+    BootImport("bdm", ret);
+    if (ret < 0)
+    {
+        printf("BdmCore: bdm.irx failed (%d)\n", ret);
+        s_bdm_core_loaded_result = -1;
+        return s_bdm_core_loaded_result;
+    }
+
+    ret = EmbeddedIrxLoad(bdmfs_fatfs_irx, sizeof(bdmfs_fatfs_irx), 0, NULL);
+    BootImport("bdmfs_fatfs", ret);
+    if (ret < 0)
+    {
+        printf("BdmCore: bdmfs_fatfs.irx failed (%d)\n", ret);
+        s_bdm_core_loaded_result = -2;
+        return s_bdm_core_loaded_result;
+    }
+
+    s_bdm_core_loaded_result = 0;
+    return 0;
+}
 
 static int Dev9LoadEmbeddedIrxOnce(void)
 {
@@ -355,21 +390,11 @@ extern "C" int UsbBdmLoadEmbeddedIrx(void)
     if (s_usb_bdm_loaded_result != 1)
         return s_usb_bdm_loaded_result;
 
-    ret = EmbeddedIrxLoad(bdm_irx, sizeof(bdm_irx), 0, NULL);
-    BootImport("bdm", ret);
+    ret = BdmCoreLoadEmbeddedIrx();
     if (ret < 0)
     {
-        printf("UsbBdm: bdm.irx failed (%d)\n", ret);
-        s_usb_bdm_loaded_result = -1;
-        return s_usb_bdm_loaded_result;
-    }
-
-    ret = EmbeddedIrxLoad(bdmfs_fatfs_irx, sizeof(bdmfs_fatfs_irx), 0, NULL);
-    BootImport("bdmfs_fatfs", ret);
-    if (ret < 0)
-    {
-        printf("UsbBdm: bdmfs_fatfs.irx failed (%d)\n", ret);
-        s_usb_bdm_loaded_result = -2;
+        printf("UsbBdm: BDM core failed (%d)\n", ret);
+        s_usb_bdm_loaded_result = ret; /* -1 bdm, -2 bdmfs_fatfs */
         return s_usb_bdm_loaded_result;
     }
 
@@ -738,6 +763,18 @@ extern "C" int Mx4sioLoadIfEnabled(void)
         return s_mx4sio_last_error;
     }
 
+    /* mx4sio_bd imports the BDM library and calls bdm_connect_bd() when its
+       delayed SD probe succeeds.  Since USB/BDM became lazy in v1.0.7, the
+       saved-on boot path could start mx4sio_bd before bdm.irx existed and
+       leave Video Config at "Driver Error" until an Off/On retry. */
+    ret = BdmCoreLoadEmbeddedIrx();
+    printf("Mx4sioLoad: BDM core = %d\n", ret);
+    if (ret < 0)
+    {
+        s_mx4sio_last_error = ret;
+        return ret;
+    }
+
     ret = EmbeddedIrxLoad(mx4sio_bd_irx, sizeof(mx4sio_bd_irx), 0, NULL);
     printf("Mx4sioLoad: mx4sio_bd = %d\n", ret);
     if (ret < 0)
@@ -958,6 +995,7 @@ extern "C" void EmbeddedIrxResetRuntimeState(void)
        talking to RPC services that no longer exist. */
     s_memcard_loaded = 0;
     s_cdfs_loaded_result = 1;
+    s_bdm_core_loaded_result = 1;
     s_usb_bdm_loaded_result = 1;
     s_dev9_loaded_result = 1;
     s_hdd_loaded = 0;
