@@ -47,7 +47,8 @@ extern "C" int AudMixGameGetVolume(void)
 AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
 {
     m_uSampleRate = uSampleRate;
-    m_uFrameRate  = 60;
+    m_uFrameRateNumerator = 60;
+    m_uFrameRateDenominator = 1;
     m_bAsync      = bAsync;
     Reset();
 }
@@ -91,9 +92,10 @@ Int32 AudMixBuffer::GetOutputSamples()
      * this schedule tied to emulated time prevents PAL music from running
      * 20 percent fast on a 60 Hz PS2 output.
      */
-    nSamples = AudFrameScheduleNext(&m_uFrameSamplePhase,
-                                    m_uSampleRate,
-                                    m_uFrameRate ? m_uFrameRate : 60, 4);
+    nSamples = AudFrameScheduleNextRatio(&m_uFrameSamplePhase,
+                                         m_uSampleRate,
+                                         m_uFrameRateNumerator,
+                                         m_uFrameRateDenominator, 4);
 
     m_uLastOutput  = nSamples;
     return nSamples;
