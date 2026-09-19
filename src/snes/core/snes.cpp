@@ -742,6 +742,12 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 
 	uAddr &= 0xFFFF;
 
+	/* Banks $00-$3F/$80-$BF:$4000-$41FF are the S-CPU's extra-slow
+	   12-master-clock area.  The coarse 8 KiB memory map charges 6 clocks
+	   for the surrounding $4000-$5FFF page, so add the missing 6 here. */
+	if (uAddr < 0x4200)
+		SNCPUConsumeCycles(pCpu, SNCPU_CYCLE_XSLOW - SNCPU_CYCLE_FAST);
+
 	if (uAddr >= 0x4300 && uAddr < 0x4380)
 	{
 		// read from DMA controller
@@ -759,10 +765,8 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 	{
     // 40XX
     case 0x4016:	// serial joystick port
-        SNCPUConsumeCycles(&pSnes->m_Cpu, 2);       //access from 4000>41FF is 1.78mhz
         return pIO->ReadSerial0();
     case 0x4017:
-        SNCPUConsumeCycles(&pSnes->m_Cpu, 2);       //access from 4000>41FF is 1.78mhz
         return pIO->ReadSerial1();
 
     // 42XX
@@ -871,6 +875,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	uAddr &= 0xFFFF;
 
+	if (uAddr < 0x4200)
+		SNCPUConsumeCycles(pCpu, SNCPU_CYCLE_XSLOW - SNCPU_CYCLE_FAST);
+
 	if (uAddr >= 0x4300 && uAddr < 0x4380)
 	{
 		// write to DMA controller
@@ -895,7 +902,6 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		switch (uAddr)
 		{
         case 0x4016:	// reset serial joystick port?
-            SNCPUConsumeCycles(&pSnes->m_Cpu, 2);       //access from 4000>41FF is 1.78mhz
             pIO->WriteSerial(uData);
             break;
 
