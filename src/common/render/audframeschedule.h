@@ -34,4 +34,27 @@ _INLINE Int32 AudFrameScheduleNext(Uint32 *pPhase, Uint32 uSampleRate,
 	return (Int32)uSamples;
 }
 
+/* Same scheduler with an exact rational video rate (numerator/denominator).
+   This avoids treating SNES NTSC/PAL as exactly 60/50 Hz and lets fractional
+   drift remain in the phase accumulator instead of becoming an audio glitch. */
+_INLINE Int32 AudFrameScheduleNextRatio(Uint64 *pPhase, Uint32 uSampleRate,
+	Uint32 uFrameRateNumerator, Uint32 uFrameRateDenominator,
+	Uint32 uQuantum)
+{
+	Uint64 uStep;
+	Uint64 uDenominator;
+	Uint64 uSamples;
+
+	if (!pPhase || !uSampleRate || !uFrameRateNumerator ||
+	    !uFrameRateDenominator || !uQuantum)
+		return 0;
+
+	uStep = (Uint64)uSampleRate * (Uint64)uFrameRateDenominator;
+	uDenominator = (Uint64)uFrameRateNumerator * (Uint64)uQuantum;
+	*pPhase += uStep;
+	uSamples = (*pPhase / uDenominator) * uQuantum;
+	*pPhase -= uSamples * (Uint64)uFrameRateNumerator;
+	return (Int32)uSamples;
+}
+
 #endif // _AUDFRAMESCHEDULE_H
