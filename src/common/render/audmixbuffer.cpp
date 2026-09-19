@@ -47,6 +47,7 @@ extern "C" int AudMixGameGetVolume(void)
 AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
 {
     m_uSampleRate = uSampleRate;
+    m_uFrameRate  = 60;
     m_bAsync      = bAsync;
     Reset();
 }
@@ -84,15 +85,15 @@ Int32 AudMixBuffer::GetOutputSamples()
      * extra tornava o quadro seguinte ainda mais lento (feedback positivo) e
      * tambem avancava o DSP por mais tempo do que um frame do SNES.
      *
-     * O core atual executa 262 linhas a 60 quadros. Distribua exatamente uma
-     * taxa de audio por esses quadros, em blocos multiplos de quatro exigidos
-     * pelo conversor 2:3. Em 32 kHz a sequencia e' 532, 532, 536; ao fim de
-     * 60 quadros a soma e' 32000. Se o EE realmente nao sustentar 60 fps, o
-     * audsrv pode ter underrun, mas nunca tentamos "pagar a divida" dobrando
-     * o custo do mixer no proximo quadro.
+     * Audio follows the emulated video cadence, not the physical GS cadence.
+     * NTSC uses 60 emulated frames (32 kHz -> 532, 532, 536 ...), while PAL
+     * uses 50 emulated frames (exactly 640 samples/frame at 32 kHz). Keeping
+     * this schedule tied to emulated time prevents PAL music from running
+     * 20 percent fast on a 60 Hz PS2 output.
      */
     nSamples = AudFrameScheduleNext(&m_uFrameSamplePhase,
-                                    m_uSampleRate, 60, 4);
+                                    m_uSampleRate,
+                                    m_uFrameRate ? m_uFrameRate : 60, 4);
 
     m_uLastOutput  = nSamples;
     return nSamples;
