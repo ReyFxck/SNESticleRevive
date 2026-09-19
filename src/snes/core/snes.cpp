@@ -801,14 +801,16 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
         }
     case 0x4212:	// HVBJOY
         {
-            /* Aero the Acro-Bat 2 polls VBlank around the frame wrap.
-               Line 0 is not part of VBlank even though the PPU does not draw
-               it.  Derive bit 7 from the live vertical counter so a stale
-               latched status (for example after restoring state) cannot keep
-               the game waiting forever. */
-            Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0x80;
-            if (SNES_LINE_IN_VBLANK(pSnes->m_uLine))
+            /* Derive H/V blank from the live beam rather than a stale latch.
+               This also keeps overscan ($2133.2) coherent: its VBlank begins
+               on line 240, not the normal line 225. */
+            Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0xC0;
+            const Int32 hClock =
+                SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_LINE);
+            if (pSnes->m_uLine >= pSnes->m_PPU.GetVBlankStartLine())
                 uData |= 0x80;
+            if (hClock < 4 || hClock > SNES_HBLANK_START_CYCLES)
+                uData |= 0x40;
             return uData;
         }
 
