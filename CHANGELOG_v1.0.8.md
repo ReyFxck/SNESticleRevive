@@ -19,7 +19,3 @@ Released: 2026-09-19
 ## MX4SIO diagnostics
 
 If MX4SIO initialization still fails, Video Config now shows the numeric driver error as `Err <code>`, making hardware reports easier to diagnose.
-
-## Notes
-
-This stable release does not include the in-progress DSP-4 replacement work from the separate development branch / draft PR.
