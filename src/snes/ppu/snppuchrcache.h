@@ -130,47 +130,6 @@ _INLINE Uint32 SnesPPUChrCacheInvalidateRange(SnesPPUChrCacheT *pCache,
 	return nValidTiles;
 }
 
-/*
- * Hot one-row BG reuse.
- *
- * The universal diagnostics show that many games feed the same physical CHR
- * row to adjacent screen tiles.  A full decoded-BG cache was tried before and
- * hurt the EE data cache because it was hundreds of KiB.  This tiny helper
- * lives only for one _FetchCHR* call (one BG scanline), so it needs no VRAM
- * invalidation and still removes the dominant adjacent-repeat decoder work.
- */
-struct SnesPPUBGRowReuseT
-{
-	Uint32 uKey;
-	Uint64 uData;
-	Uint32 uOpaque;
-};
-
-_INLINE void SnesPPUBGRowReuseReset(SnesPPUBGRowReuseT *pReuse)
-{
-	pReuse->uKey = 0xFFFFFFFFu;
-	pReuse->uData = 0;
-	pReuse->uOpaque = 0;
-}
-
-_INLINE Bool SnesPPUBGRowReuseLookup(const SnesPPUBGRowReuseT *pReuse,
-	Uint32 uKey, Uint64 *pData, Uint32 *pOpaque)
-{
-	if (pReuse->uKey != uKey)
-		return FALSE;
-	*pData = pReuse->uData;
-	*pOpaque = pReuse->uOpaque;
-	return TRUE;
-}
-
-_INLINE void SnesPPUBGRowReuseStore(SnesPPUBGRowReuseT *pReuse,
-	Uint32 uKey, Uint64 uData, Uint32 uOpaque)
-{
-	pReuse->uKey = uKey;
-	pReuse->uData = uData;
-	pReuse->uOpaque = uOpaque;
-}
-
 /* Implementado em snppurender8.cpp; chamado pelo caminho de escrita da PPU. */
 void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords);
 
