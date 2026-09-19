@@ -89,7 +89,8 @@ private:
 #if SNES_DSP1
 	SNDSP1		m_DSP1;
 	SNDSP2		m_DSP2;
-	// DSP-4 (Top Gear 3000): HLE self-contained, sem firmware.
+	// DSP-4: NEC uPD7725 interface plus the self-contained replacement
+	// command program. No external DSP firmware is required.
 	SNDSP4		m_DSP4;
 #endif
 

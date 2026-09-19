@@ -51,6 +51,9 @@ Third-party code keeps its own copyright and license terms. In particular:
 - libxmp-lite under src/third_party/libxmp-lite/: MIT license.
 - upng under src/third_party/upng/: zlib license.
 - PS2SDK/ps2dev-derived components retain the notices in their source files.
+- NEC DSP execution semantics in `src/snes/core/sndsp4.*` are adapted from
+  MesenCE (`Core/SNES/Coprocessors/DSP/NecDsp.*`), Copyright (C) 2014-2026
+  Sour and 2026 MesenCE contributors, under GNU GPL v3 or later.
 
 This NOTICE supplements LICENSE; it does not replace any per-file or
 third-party license notice.

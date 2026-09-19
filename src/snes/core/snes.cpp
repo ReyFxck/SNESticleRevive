@@ -19,6 +19,47 @@
 #include "sndebug.h"
 #include "sndbglog.h"
 
+
+#ifndef DSP4_TRACE
+#define DSP4_TRACE 0
+#endif
+
+#if DSP4_TRACE
+static Uint32 g_Tg4212TraceLines = 0;
+static Uint8  g_Tg4212LastVblank = 0xff;
+static Uint32 g_Tg2100TraceLines = 0;
+static Uint8  g_Tg2100LastValue = 0xff;
+static Uint32 g_TgCpuIoTraceLines = 0;
+static Uint32 g_TgIrqHandshakeLines = 0;
+static Uint32 g_TgDspBusReads = 0;
+static Uint32 g_TgDspBusWrites = 0;
+static Uint16 g_TgLastPad0 = 0xffff;
+
+static Bool _SnesTraceIsTopGear3000(SnesRom *pRom)
+{
+    if (!pRom)
+        return FALSE;
+
+    const char *pTitle = pRom->GetRomTitle();
+    return pTitle &&
+        (strstr(pTitle, "TOP GEAR 3000") || strstr(pTitle, "TG3000"))
+        ? TRUE : FALSE;
+}
+
+static void _SnesTraceResetTopGear()
+{
+    g_Tg4212TraceLines = 0;
+    g_Tg4212LastVblank = 0xff;
+    g_Tg2100TraceLines = 0;
+    g_Tg2100LastValue = 0xff;
+    g_TgCpuIoTraceLines = 0;
+    g_TgIrqHandshakeLines = 0;
+    g_TgDspBusReads = 0;
+    g_TgDspBusWrites = 0;
+    g_TgLastPad0 = 0xffff;
+}
+#endif
+
 // --- diagnostico de TIMING (ver sndbglog.h) ---
 #if SNDBG_LOG
 static Uint32 g_TmgFrameStart = 0;   // COP0 cycle no inicio do frame
@@ -610,6 +651,26 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	uAddr &= 0xFFFF;
 
+#if DSP4_TRACE
+	if (uAddr == 0x2100 && _SnesTraceIsTopGear3000(pSnes->m_pRom))
+	{
+		if (uData != g_Tg2100LastValue && g_Tg2100TraceLines < 512)
+		{
+			DLog("[tg3k-2100] f=%u line=%u pc=%06X inidisp=%02X prev=%02X p=%02X s=%04X sig=%02X",
+			     (unsigned)pSnes->m_uFrame,
+			     (unsigned)pSnes->m_uLine,
+			     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+			     (unsigned)uData,
+			     (unsigned)g_Tg2100LastValue,
+			     (unsigned)pCpu->Regs.rP,
+			     (unsigned)pCpu->Regs.rS.w,
+			     (unsigned)pCpu->uSignal);
+			g_Tg2100TraceLines++;
+		}
+		g_Tg2100LastValue = uData;
+	}
+#endif
+
 	// S-RTC: relogio em $2801 (escrita)
 	if (pSnes->m_bSRTC && uAddr == 0x2801)
 	{
@@ -773,6 +834,21 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
     case 0x4211:	// TIMEUP
         {
             Uint8 uData = pIO->m_Regs.timeup;
+#if DSP4_TRACE
+            if (_SnesTraceIsTopGear3000(pSnes->m_pRom) &&
+                g_TgIrqHandshakeLines < 2048)
+            {
+                DLog("[tg3k-4211] f=%u line=%u pc=%06X val=%02X p=%02X s=%04X sig=%02X",
+                     (unsigned)pSnes->m_uFrame,
+                     (unsigned)pSnes->m_uLine,
+                     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+                     (unsigned)uData,
+                     (unsigned)pCpu->Regs.rP,
+                     (unsigned)pCpu->Regs.rS.w,
+                     (unsigned)pCpu->uSignal);
+                g_TgIrqHandshakeLines++;
+            }
+#endif
             pIO->m_Regs.timeup &= ~0x80;
             SNCPUSignalIRQ(pCpu, 0);
             return uData;
@@ -787,6 +863,32 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
             Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0x80;
             if (SNES_LINE_IN_VBLANK(pSnes->m_uLine))
                 uData |= 0x80;
+
+#if DSP4_TRACE
+            if (_SnesTraceIsTopGear3000(pSnes->m_pRom))
+            {
+                Uint32 uPc = pCpu->Regs.rPC & 0xFFFFFFu;
+                Uint8 uVblank = uData & 0x80;
+                if (uPc >= 0x80BC80u && uPc <= 0x80BC86u &&
+                    uVblank != g_Tg4212LastVblank &&
+                    g_Tg4212TraceLines < 4096)
+                {
+                    DLog("[tg3k-4212] f=%u line=%u pc=%06X ret=%02X raw=%02X a=%04X p=%02X s=%04X sig=%02X irqpend=%u",
+                         (unsigned)pSnes->m_uFrame,
+                         (unsigned)pSnes->m_uLine,
+                         (unsigned)uPc,
+                         (unsigned)uData,
+                         (unsigned)pIO->m_Regs.hvbjoy,
+                         (unsigned)pCpu->Regs.rA.w,
+                         (unsigned)pCpu->Regs.rP,
+                         (unsigned)pCpu->Regs.rS.w,
+                         (unsigned)pCpu->uSignal,
+                         (unsigned)pCpu->uIrqPending);
+                    g_Tg4212TraceLines++;
+                }
+                g_Tg4212LastVblank = uVblank;
+            }
+#endif
             return uData;
         }
 
@@ -884,6 +986,21 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
         case 0x4200:	// nmitimen
         {
 			Uint8 uOldNmitimen = pIO->m_Regs.nmitimen;
+#if DSP4_TRACE
+			if (_SnesTraceIsTopGear3000(pSnes->m_pRom) &&
+			    g_TgCpuIoTraceLines < 1024 &&
+			    uOldNmitimen != uData)
+			{
+				DLog("[tg3k-io] f=%u line=%u pc=%06X reg=4200 old=%02X new=%02X vtime=%04X htime=%04X sig=%02X",
+				     (unsigned)pSnes->m_uFrame, (unsigned)pSnes->m_uLine,
+				     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+				     (unsigned)uOldNmitimen, (unsigned)uData,
+				     (unsigned)pIO->m_Regs.vtime.w,
+				     (unsigned)pIO->m_Regs.htime.w,
+				     (unsigned)pCpu->uSignal);
+				g_TgCpuIoTraceLines++;
+			}
+#endif
             pIO->m_Regs.nmitimen = uData;
 
             // unconfirmed:
@@ -964,10 +1081,37 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 			pSnes->RescheduleLineIRQ(FALSE);
             break;
         case 0x4209:	// vtmel (video vertical IRQ beam position)
+#if DSP4_TRACE
+            if (_SnesTraceIsTopGear3000(pSnes->m_pRom) &&
+                g_TgCpuIoTraceLines < 1024 &&
+                pIO->m_Regs.vtime.b.l != uData)
+            {
+                DLog("[tg3k-io] f=%u line=%u pc=%06X reg=4209 old=%02X new=%02X nmitimen=%02X",
+                     (unsigned)pSnes->m_uFrame, (unsigned)pSnes->m_uLine,
+                     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+                     (unsigned)pIO->m_Regs.vtime.b.l, (unsigned)uData,
+                     (unsigned)pIO->m_Regs.nmitimen);
+                g_TgCpuIoTraceLines++;
+            }
+#endif
             pIO->m_Regs.vtime.b.l = uData;
 			pSnes->RescheduleLineIRQ(FALSE);
             break;
         case 0x420A:	// vtmeh (video vertical IRQ beam position)
+#if DSP4_TRACE
+            if (_SnesTraceIsTopGear3000(pSnes->m_pRom) &&
+                g_TgCpuIoTraceLines < 1024 &&
+                pIO->m_Regs.vtime.b.h != (uData & 1))
+            {
+                DLog("[tg3k-io] f=%u line=%u pc=%06X reg=420A old=%02X new=%02X nmitimen=%02X",
+                     (unsigned)pSnes->m_uFrame, (unsigned)pSnes->m_uLine,
+                     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+                     (unsigned)pIO->m_Regs.vtime.b.h,
+                     (unsigned)(uData & 1),
+                     (unsigned)pIO->m_Regs.nmitimen);
+                g_TgCpuIoTraceLines++;
+            }
+#endif
             pIO->m_Regs.vtime.b.h = uData & 1;
 			pSnes->RescheduleLineIRQ(FALSE);
             break;
@@ -982,6 +1126,17 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 			break;
 
 		case 0x420C:	// hdmaen (HDMA enable register)
+#if DSP4_TRACE
+			if (_SnesTraceIsTopGear3000(pSnes->m_pRom) &&
+			    g_TgCpuIoTraceLines < 1024)
+			{
+				DLog("[tg3k-io] f=%u line=%u pc=%06X reg=420C hdma=%02X",
+				     (unsigned)pSnes->m_uFrame, (unsigned)pSnes->m_uLine,
+				     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+				     (unsigned)uData);
+				g_TgCpuIoTraceLines++;
+			}
+#endif
 			pSnes->m_DMAC.SetHDMAEnable(uData);
 			break;
 
@@ -1093,6 +1248,18 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	if (_SnesDsp1IsStatus(uAddr))
 	{
 		Uint8 s = pSnes->m_pDsp->ReadStatus(uAddr);
+#if DSP4_TRACE
+		if (_SnesTraceIsTopGear3000(pSnes->m_pRom))
+		{
+			g_TgDspBusReads++;
+			if (g_TgDspBusReads <= 32 || !(g_TgDspBusReads & 63))
+				DLog("[tg3k-dspbus] R#%u f=%u line=%u pc=%06X addr=%06X kind=SR val=%02X",
+				     (unsigned)g_TgDspBusReads,
+				     (unsigned)pSnes->m_uFrame, (unsigned)pSnes->m_uLine,
+				     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+				     (unsigned)(uAddr & 0xFFFFFFu), (unsigned)s);
+		}
+#endif
 #if SNDBG_LOG
 		g_TmgDspRd++;
 		g_DbgChipReads[SNDBG_CHIP_DSP]++;
@@ -1102,6 +1269,18 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadDSP1(SNCpuT *pCpu, Uint32 uAddr)
 	else
 	{
 		Uint8 d = pSnes->m_pDsp->ReadData(uAddr);
+#if DSP4_TRACE
+		if (_SnesTraceIsTopGear3000(pSnes->m_pRom))
+		{
+			g_TgDspBusReads++;
+			if (g_TgDspBusReads <= 32 || !(g_TgDspBusReads & 63))
+				DLog("[tg3k-dspbus] R#%u f=%u line=%u pc=%06X addr=%06X kind=DR val=%02X",
+				     (unsigned)g_TgDspBusReads,
+				     (unsigned)pSnes->m_uFrame, (unsigned)pSnes->m_uLine,
+				     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+				     (unsigned)(uAddr & 0xFFFFFFu), (unsigned)d);
+		}
+#endif
 #if SNDBG_LOG
 		g_TmgDspRd++;
 		g_DbgChipReads[SNDBG_CHIP_DSP]++;
@@ -1124,6 +1303,17 @@ void SNCPU_TRAPFUNC SnesSystem::WriteDSP1(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 #if SNDBG_LOG
 		g_TmgDspWr++;
 		g_DbgChipWrites[SNDBG_CHIP_DSP]++;
+#endif
+#if DSP4_TRACE
+		if (_SnesTraceIsTopGear3000(pSnes->m_pRom) && g_TgDspBusWrites < 256)
+		{
+			g_TgDspBusWrites++;
+			DLog("[tg3k-dspbus] W#%u f=%u line=%u pc=%06X addr=%06X data=%02X",
+			     (unsigned)g_TgDspBusWrites,
+			     (unsigned)pSnes->m_uFrame, (unsigned)pSnes->m_uLine,
+			     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+			     (unsigned)(uAddr & 0xFFFFFFu), (unsigned)uData);
+		}
 #endif
 		pSnes->m_pDsp->WriteData(uAddr, uData);
 	}
@@ -1356,6 +1546,13 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 			(m_pRom->m_Flags & SNROM_FLAG_DSP1_ORIGINAL_OP28)
 				? TRUE : FALSE);
 		#endif
+#if DSP4_TRACE
+		if (_SnesTraceIsTopGear3000(m_pRom))
+		{
+			_SnesTraceResetTopGear();
+			DLog("[tg3k] trace reset title='%s'", m_pRom->GetRomTitle());
+		}
+#endif
 		// setup memory mapping for this rom
 		MapMem(m_pRom->m_eMapping, m_pRom->m_Flags);
 	}
@@ -1516,6 +1713,20 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 					}
 				}
 
+#if DSP4_TRACE
+				if (_SnesTraceIsTopGear3000(m_pRom) &&
+				    (m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
+				    g_TgIrqHandshakeLines < 2048)
+				{
+					DLog("[tg3k-wake] f=%u line=%u source=NMI pc=%06X p=%02X s=%04X sig=%02X",
+					     (unsigned)m_uFrame, (unsigned)m_uLine,
+					     (unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+					     (unsigned)m_Cpu.Regs.rP,
+					     (unsigned)m_Cpu.Regs.rS.w,
+					     (unsigned)m_Cpu.uSignal);
+					g_TgIrqHandshakeLines++;
+				}
+#endif
                 SNCPUNMI(&m_Cpu);
                 // clear NMI edge signal
                 m_Cpu.uSignal&= ~SNCPU_SIGNAL_NMIEDGE;
@@ -1530,6 +1741,20 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
                 // attempt irq
                 // irqs will always be attempted until signal has been cleared
+#if DSP4_TRACE
+				if (_SnesTraceIsTopGear3000(m_pRom) &&
+				    (m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
+				    g_TgIrqHandshakeLines < 2048)
+				{
+					DLog("[tg3k-wake] f=%u line=%u source=IRQ pc=%06X p=%02X s=%04X sig=%02X",
+					     (unsigned)m_uFrame, (unsigned)m_uLine,
+					     (unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+					     (unsigned)m_Cpu.Regs.rP,
+					     (unsigned)m_Cpu.Regs.rS.w,
+					     (unsigned)m_Cpu.uSignal);
+					g_TgIrqHandshakeLines++;
+				}
+#endif
                 SNCPUIRQ(&m_Cpu);
             } else
             if (m_Cpu.uSignal & SNCPU_SIGNAL_RESET)
@@ -1545,6 +1770,22 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
         // run CPU!
         SNCPUExecute(&m_Cpu);
+#if DSP4_TRACE
+		if (_SnesTraceIsTopGear3000(m_pRom) &&
+		    (m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
+		    (m_Cpu.Regs.rPC & 0xFFFFFFu) >= 0x80BC00u &&
+		    (m_Cpu.Regs.rPC & 0xFFFFFFu) <  0x80BF00u &&
+		    g_TgIrqHandshakeLines < 2048)
+		{
+			DLog("[tg3k-wai] f=%u line=%u nextpc=%06X p=%02X s=%04X sig=%02X",
+			     (unsigned)m_uFrame, (unsigned)m_uLine,
+			     (unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+			     (unsigned)m_Cpu.Regs.rP,
+			     (unsigned)m_Cpu.Regs.rS.w,
+			     (unsigned)m_Cpu.uSignal);
+			g_TgIrqHandshakeLines++;
+		}
+#endif
 		if (m_bLineIRQActive && m_bLineIRQReschedule)
 			break;
     }
@@ -1880,6 +2121,21 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #endif
 
 	m_IO.LatchInput(pInput);
+
+#if DSP4_TRACE
+	if (_SnesTraceIsTopGear3000(m_pRom) && pInput)
+	{
+		Uint16 uPad0 = pInput->uPad[0];
+		if (uPad0 != g_TgLastPad0)
+		{
+			DLog("[tg3k-input] f=%u pad0=%04X prev=%04X",
+			     (unsigned)m_uFrame,
+			     (unsigned)uPad0,
+			     (unsigned)g_TgLastPad0);
+			g_TgLastPad0 = uPad0;
+		}
+	}
+#endif
 
 	// reset frame cycle counter
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_FRAME);

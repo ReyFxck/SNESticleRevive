@@ -974,7 +974,8 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 - **[iaddis/SNESticle](https://github.com/iaddis/SNESticle)** — Icer Addis, the original emulator.
 - **[nesdev-org/MesenCE](https://github.com/nesdev-org/MesenCE)** — current
   Mesen2-derived reference for 65816, interrupt and SNES DMA/HDMA behavior
-  used by the r19 audit.
+  used by the r19 audit; its GPLv3 NEC DSP execution core is also the basis
+  for the new DSP-4 low-level implementation.
 - **[SingleStepTests/65816](https://github.com/SingleStepTests/65816)** —
   complete per-opcode state, memory and bus-cycle vectors used by
   `tools/cputest`.

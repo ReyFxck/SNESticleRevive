@@ -513,6 +513,9 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 	m_bSDD1 = FALSE;
 	m_bSRTC = (uFlags & SNROM_FLAG_SRTC) ? TRUE : FALSE;
 	m_bSuperFX = (uFlags & SNROM_FLAG_SUPERFX) ? TRUE : FALSE;
+#if SNES_DSP1
+	m_pDsp = NULL;
+#endif
 
 	switch (eRomMapping)
 	{
@@ -535,11 +538,11 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 				MapMem(_SnesMemMap_LoRom_DSP1);
 				// m_pDsp permanece NULL (inerte)
 			}
-			// DSP-4 (Top Gear 3000): HLE self-contained -- NAO precisa de
-			// firmware.  O chip esta sempre disponivel, entao a regiao do
-			// DSP e' sempre mapeada e m_pDsp aponta para o HLE.
+			// DSP-4: self-contained replacement program running behind the
+			// NEC uPD7725 DR/SR interface. No external dsp4.rom is required.
 			if (uFlags & SNROM_FLAG_DSP4)
 			{
+				m_DSP4.UseReplacementProgram();
 				MapMem(_SnesMemMap_LoRom_DSP4);
 				m_pDsp = &m_DSP4;
 			}
