@@ -89,8 +89,8 @@ private:
 #if SNES_DSP1
 	SNDSP1		m_DSP1;
 	SNDSP2		m_DSP2;
-	// DSP-4: real NEC uPD7725 LLE. The proprietary microcode is loaded
-	// from dsp4.rom supplied by the user; it is never bundled in the ELF.
+	// DSP-4: NEC uPD7725 interface plus the self-contained replacement
+	// command program. No external DSP firmware is required.
 	SNDSP4		m_DSP4;
 #endif
 
