@@ -62,6 +62,14 @@ _INLINE Uint32 SnesDbgFrameBudget(Uint32 uTargetHz)
 	return SNDBG_EE_COUNT_HZ / (uTargetHz ? uTargetHz : 60u);
 }
 
+_INLINE Uint32 SnesDbgFrameBudgetRatio(Uint32 uNumerator, Uint32 uDenominator)
+{
+	if (!uNumerator) uNumerator = 60u;
+	if (!uDenominator) uDenominator = 1u;
+	return (Uint32)(((Uint64)SNDBG_EE_COUNT_HZ * uDenominator) /
+	                uNumerator);
+}
+
 _INLINE Bool SnesDbgFrameIsSlow(Uint32 uCycles, Uint32 uBudget)
 {
 	return ((Uint64)uCycles * 100u >
