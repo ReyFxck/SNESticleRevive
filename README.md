@@ -824,7 +824,7 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 
 
 The release notes for the current version are available in
-[`CHANGELOG_v1.0.7.md`](CHANGELOG_v1.0.7.md).
+[`CHANGELOG_v1.0.8.md`](CHANGELOG_v1.0.8.md).
 
 
 - **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
