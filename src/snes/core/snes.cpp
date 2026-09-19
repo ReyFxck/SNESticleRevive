@@ -30,6 +30,7 @@ static Uint8  g_Tg4212LastVblank = 0xff;
 static Uint32 g_Tg2100TraceLines = 0;
 static Uint8  g_Tg2100LastValue = 0xff;
 static Uint32 g_TgCpuIoTraceLines = 0;
+static Uint32 g_TgIrqHandshakeLines = 0;
 static Uint32 g_TgDspBusReads = 0;
 static Uint32 g_TgDspBusWrites = 0;
 static Uint16 g_TgLastPad0 = 0xffff;
@@ -52,6 +53,7 @@ static void _SnesTraceResetTopGear()
     g_Tg2100TraceLines = 0;
     g_Tg2100LastValue = 0xff;
     g_TgCpuIoTraceLines = 0;
+    g_TgIrqHandshakeLines = 0;
     g_TgDspBusReads = 0;
     g_TgDspBusWrites = 0;
     g_TgLastPad0 = 0xffff;
@@ -832,6 +834,21 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
     case 0x4211:	// TIMEUP
         {
             Uint8 uData = pIO->m_Regs.timeup;
+#if DSP4_TRACE
+            if (_SnesTraceIsTopGear3000(pSnes->m_pRom) &&
+                g_TgIrqHandshakeLines < 2048)
+            {
+                DLog("[tg3k-4211] f=%u line=%u pc=%06X val=%02X p=%02X s=%04X sig=%02X",
+                     (unsigned)pSnes->m_uFrame,
+                     (unsigned)pSnes->m_uLine,
+                     (unsigned)(pCpu->Regs.rPC & 0xFFFFFFu),
+                     (unsigned)uData,
+                     (unsigned)pCpu->Regs.rP,
+                     (unsigned)pCpu->Regs.rS.w,
+                     (unsigned)pCpu->uSignal);
+                g_TgIrqHandshakeLines++;
+            }
+#endif
             pIO->m_Regs.timeup &= ~0x80;
             SNCPUSignalIRQ(pCpu, 0);
             return uData;
@@ -1014,18 +1031,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
             // set new nmi signal
             SNCPUSignalNMI(pCpu, pIO->m_Regs.rdnmi & pIO->m_Regs.nmitimen & 0x80);
 			if ((uOldNmitimen ^ uData) & 0x30)
-			{
-				/* Changing between two enabled IRQ modes (for example TG3000
-				   B1 -> 91) recomputes the next timer edge but must not create
-				   another instantaneous IRQ on the already-passed compare.
-				   An immediate edge is only possible when the timer is being
-				   switched wholly on/off, matching the reference scheduler. */
-				const Uint8 uOldIrqMode = uOldNmitimen & 0x30;
-				const Uint8 uNewIrqMode = uData & 0x30;
-				const Bool bAllowImmediate =
-					(uOldIrqMode == 0 || uNewIrqMode == 0) ? TRUE : FALSE;
-				pSnes->RescheduleLineIRQ(bAllowImmediate);
-			}
+				pSnes->RescheduleLineIRQ(TRUE);
             break;
 		}
 
@@ -1529,14 +1535,8 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 
 	if (m_pRom)
 	{
-		/* Pilotwings and the DSP-4 Top Gear 3000 program both rewrite
-		   H/V IRQ control while the current scanline is already executing.
-		   The timer compare must be re-evaluated immediately; deferring the
-		   new $4200 mode until the next scanline makes TG3000's raster IRQ
-		   drift and eventually leaves the pre-race transition in forced blank. */
 		m_bDynamicHVIRQ =
-			((m_pRom->m_Flags & SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ) ||
-			 (m_pRom->m_Flags & SNROM_FLAG_DSP4))
+			(m_pRom->m_Flags & SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ)
 				? TRUE : FALSE;
 		#ifdef SNES_DSP1
 		m_DSP1.SetTargetYSubtract(
@@ -1713,6 +1713,20 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 					}
 				}
 
+#if DSP4_TRACE
+				if (_SnesTraceIsTopGear3000(m_pRom) &&
+				    (m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
+				    g_TgIrqHandshakeLines < 2048)
+				{
+					DLog("[tg3k-wake] f=%u line=%u source=NMI pc=%06X p=%02X s=%04X sig=%02X",
+					     (unsigned)m_uFrame, (unsigned)m_uLine,
+					     (unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+					     (unsigned)m_Cpu.Regs.rP,
+					     (unsigned)m_Cpu.Regs.rS.w,
+					     (unsigned)m_Cpu.uSignal);
+					g_TgIrqHandshakeLines++;
+				}
+#endif
                 SNCPUNMI(&m_Cpu);
                 // clear NMI edge signal
                 m_Cpu.uSignal&= ~SNCPU_SIGNAL_NMIEDGE;
@@ -1727,6 +1741,20 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
                 // attempt irq
                 // irqs will always be attempted until signal has been cleared
+#if DSP4_TRACE
+				if (_SnesTraceIsTopGear3000(m_pRom) &&
+				    (m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
+				    g_TgIrqHandshakeLines < 2048)
+				{
+					DLog("[tg3k-wake] f=%u line=%u source=IRQ pc=%06X p=%02X s=%04X sig=%02X",
+					     (unsigned)m_uFrame, (unsigned)m_uLine,
+					     (unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+					     (unsigned)m_Cpu.Regs.rP,
+					     (unsigned)m_Cpu.Regs.rS.w,
+					     (unsigned)m_Cpu.uSignal);
+					g_TgIrqHandshakeLines++;
+				}
+#endif
                 SNCPUIRQ(&m_Cpu);
             } else
             if (m_Cpu.uSignal & SNCPU_SIGNAL_RESET)
@@ -1742,6 +1770,22 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
         // run CPU!
         SNCPUExecute(&m_Cpu);
+#if DSP4_TRACE
+		if (_SnesTraceIsTopGear3000(m_pRom) &&
+		    (m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
+		    (m_Cpu.Regs.rPC & 0xFFFFFFu) >= 0x80BC00u &&
+		    (m_Cpu.Regs.rPC & 0xFFFFFFu) <  0x80BF00u &&
+		    g_TgIrqHandshakeLines < 2048)
+		{
+			DLog("[tg3k-wai] f=%u line=%u nextpc=%06X p=%02X s=%04X sig=%02X",
+			     (unsigned)m_uFrame, (unsigned)m_uLine,
+			     (unsigned)(m_Cpu.Regs.rPC & 0xFFFFFFu),
+			     (unsigned)m_Cpu.Regs.rP,
+			     (unsigned)m_Cpu.Regs.rS.w,
+			     (unsigned)m_Cpu.uSignal);
+			g_TgIrqHandshakeLines++;
+		}
+#endif
 		if (m_bLineIRQActive && m_bLineIRQReschedule)
 			break;
     }
