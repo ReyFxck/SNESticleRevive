@@ -575,7 +575,6 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		}
 
 #if SNDBG_LOG
-		g_DbgBGChrRows++;
 		if (!uMask) g_DbgBGChrBlankRows++;
 #endif
 
@@ -656,7 +655,6 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		}
 
 #if SNDBG_LOG
-		g_DbgBGChrRows++;
 		if (!uMask) g_DbgBGChrBlankRows++;
 #endif
 
