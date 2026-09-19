@@ -165,6 +165,7 @@ public:
 	SnesPPU();
 
 	void                    Reset();
+	void                    SetVideoRegion(Bool bPAL);
 	void                    BeginFrame();
 	void                    EndFrame();
 	void                    SetPPURender(ISnesPPURender *pPPURender)    {m_pRender=pPPURender;}
