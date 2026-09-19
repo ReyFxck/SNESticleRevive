@@ -73,6 +73,16 @@ public:
 	virtual const char *GetString(StringE eString);
     virtual Uint32 GetSampleRate() {return 32000;}
     virtual Uint32 GetFrameRate() {return IsPAL() ? SNES_PAL_FRAME_RATE : SNES_NTSC_FRAME_RATE;}
+    /* MesenCE uses the hardware master clocks rather than rounded 50/60 Hz:
+       NTSC ~= 60.09881186 Hz, PAL ~= 50.00697891 Hz. */
+    virtual Uint32 GetFrameRateNumerator()
+    {
+        return IsPAL() ? 21281370u : 21477272u;
+    }
+    virtual Uint32 GetFrameRateDenominator()
+    {
+        return IsPAL() ? 425568u : 357366u;
+    }
     Bool    IsPAL() const {return m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE;}
     Uint32  GetTotalLines() const {return IsPAL() ? SNES_PAL_TOTAL_LINES : SNES_NTSC_TOTAL_LINES;}
 
