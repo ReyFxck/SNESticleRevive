@@ -1843,6 +1843,24 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 {
     m_uLine = 0;
 
+	/* SETINI is sampled for the field structure. PAL and NTSC share the same
+	   visible area and VBlank start; PAL's additional 50 lines extend VBlank.
+	   Screen interlace alternates one 263/313-line field with the normal
+	   262/312-line field. */
+	const SnesPPURegsT *pFrameRegs = m_PPU.GetRegs();
+	m_bFrameInterlace = (pFrameRegs->setini & 0x01) ? TRUE : FALSE;
+	m_bFrameField = (pFrameRegs->stat78 & 0x80) ? TRUE : FALSE;
+	const Uint32 uVBlankStartLine =
+		(pFrameRegs->setini & 0x04)
+			? SNES_OVERSCAN_VBLANK_START_LINE
+			: SNES_VBLANK_START_LINE;
+	Uint32 uTotalLines = GetTotalLines();
+	/* SNESdev documents the extra interlace scanline on each even field.
+	   STAT78 bit 7 is clear for the even field in this core's 0/1 toggle. */
+	if (m_bFrameInterlace && !m_bFrameField)
+		uTotalLines++;
+	m_PPU.SetVBlankStartLine(uVBlankStartLine);
+
 	/* The hidden frame-wrap line is line 0, not a continuation of VBlank.
 	   Keep the internal HDMA gate in sync with the live $4212 value too. */
 	m_IO.m_Regs.hvbjoy &= ~0x80;
@@ -1938,7 +1956,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_PPURender.BeginRender(pTarget);
 	m_PPU.BeginFrame();
 
-	for (m_uLine=0; m_uLine < (224+1); m_uLine++)
+	for (m_uLine=0; m_uLine < uVBlankStartLine; m_uLine++)
 	{
 		#if SNES_SYNCPPUEVERYLINE
 		SyncPPU();
@@ -1975,11 +1993,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     m_IO.m_Regs.rdnmi |= 0x80;
     SNCPUSignalNMI(&m_Cpu, m_IO.m_Regs.rdnmi & m_IO.m_Regs.nmitimen & 0x80);
 
-    for ( ; m_uLine < 262; m_uLine++)
+    for ( ; m_uLine < uTotalLines; m_uLine++)
 	{
 		ExecuteLine();
 
-		if (m_uLine==225+2) // * 60 = 4410 cycles long (3.10 scanlines)
+		if (m_uLine == uVBlankStartLine + 2)
 		{
 			// done reading joypad
 			m_IO.m_Regs.hvbjoy&= ~0x01;
