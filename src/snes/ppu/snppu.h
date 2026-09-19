@@ -167,6 +167,7 @@ public:
 	void                    Reset();
 	void                    SetVideoRegion(Bool bPAL);
 	void                    SetVBlankStartLine(Uint32 uLine) {m_uVBlankStartLine = uLine;}
+	Uint32                  GetVBlankStartLine() const {return m_uVBlankStartLine;}
 	void                    BeginFrame();
 	void                    EndFrame();
 	void                    SetPPURender(ISnesPPURender *pPPURender)    {m_pRender=pPPURender;}
