@@ -54,36 +54,20 @@ int main()
 	Check("single write invalidated tiles", nInvalidated, 1);
 
 	{
-		SnesPPUBGRawDecodeCacheT cache;
-		Uint64 uDecoded = 0;
-		Uint32 uMask = 0;
-		Uint16 vram[0x8000];
-		std::memset(vram, 0, sizeof(vram));
-		SnesPPUBGRawDecodeCacheReset(&cache);
-
-		Check("BG raw cache cold", SnesPPUBGRawDecodeCacheLookup(&cache,
-			0x44332211ULL, 4, FALSE, &uDecoded, &uMask), FALSE);
-		SnesPPUBGRawDecodeCacheStore(&cache, 0x44332211ULL, 4, FALSE,
+		SnesPPUBGRowReuseT reuse;
+		Uint64 uReuseData = 0;
+		Uint32 uReuseMask = 0;
+		SnesPPUBGRowReuseReset(&reuse);
+		Check("BG row reuse cold", SnesPPUBGRowReuseLookup(&reuse,
+			0x8123u, &uReuseData, &uReuseMask), FALSE);
+		SnesPPUBGRowReuseStore(&reuse, 0x8123u,
 			0x0102030405060708ULL, 0xA5u);
-		Check("BG raw cache hit", SnesPPUBGRawDecodeCacheLookup(&cache,
-			0x44332211ULL, 4, FALSE, &uDecoded, &uMask), TRUE);
-		Check("BG raw cache data", uDecoded, 0x0102030405060708ULL);
-		Check("BG raw cache mask", uMask, 0xA5u);
-		Check("BG raw flip distinct", SnesPPUBGRawDecodeCacheLookup(&cache,
-			0x44332211ULL, 4, TRUE, &uDecoded, &uMask), FALSE);
-		Check("BG raw depth distinct", SnesPPUBGRawDecodeCacheLookup(&cache,
-			0x44332211ULL, 2, FALSE, &uDecoded, &uMask), FALSE);
-
-		vram[0x7FFF] = 0x2211;
-		vram[0x0007] = 0x4433;
-		vram[0x000F] = 0x6655;
-		vram[0x0017] = 0x8877;
-		Check("BG raw2 wrap", SnesPPUBGReadRaw2(vram, 0x7FFF),
-			0x2211ULL);
-		Check("BG raw4 wrap", SnesPPUBGReadRaw4(vram, 0x7FFF),
-			0x44332211ULL);
-		Check("BG raw8 wrap", SnesPPUBGReadRaw8(vram, 0x7FFF),
-			0x8877665544332211ULL);
+		Check("BG row reuse hit", SnesPPUBGRowReuseLookup(&reuse,
+			0x8123u, &uReuseData, &uReuseMask), TRUE);
+		Check("BG row reuse data", uReuseData, 0x0102030405060708ULL);
+		Check("BG row reuse mask", uReuseMask, 0xA5u);
+		Check("BG row reuse flip key distinct", SnesPPUBGRowReuseLookup(&reuse,
+			0x0123u, &uReuseData, &uReuseMask), FALSE);
 	}
 	Check("single write clears 4bpp", SnesPPUChrCacheLookup4(&g_Cache,
 		0x3451, FALSE, &uData, &uOpaque), FALSE);
