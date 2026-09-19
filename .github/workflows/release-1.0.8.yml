@@ -1,4 +1,4 @@
-name: Release 1.0.8 stable
+name: Finalize 1.0.8 release notes
 
 on:
   push:
@@ -11,91 +11,16 @@ on:
 permissions:
   contents: write
 
-env:
-  APP_VERSION: 1.0.8
-  RELEASE_TAG: 1.0.8
-  PRE_RELEASE_TAG: issue-63-mx4sio-bdm-test1
-  RELEASE_TARGET_SHA: 443519adcb96e18e2822f93c661f323b6faacb36
-
 jobs:
-  build-release:
+  finalize:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-
     steps:
-      - name: Checkout clean release commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TARGET_SHA }}
-
-      - name: Install host build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential git wget genisoimage zip
-
-      - name: Install/check PS2DEV toolchain
-        run: |
-          make check-env AUTO_INSTALL=yes COLOR=0
-
-      - name: Build official 1.0.8 package
-        run: |
-          set -euxo pipefail
-          rm -rf dist release-package
-          mkdir -p dist release-package
-
-          make iso \
-            APP_VERSION="$APP_VERSION" \
-            AUTO_INSTALL=yes \
-            COLOR=0 \
-            JOBS=2 \
-            PACK=1 \
-            out="$GITHUB_WORKSPACE/dist"
-
-          grep -a -q "SNESticle Revive PS2 v1.0.8" dist/SNESticle_Revive_v1.0.8.elf
-
-          cp -f dist/* release-package/
-          cp -f CHANGELOG_v1.0.8.md release-package/
-          cp -f README.md release-package/
-          (cd release-package && sha256sum *.elf *.iso > SHA256SUMS.txt)
-          (cd release-package && zip -9 -r "../SNESticleRevive.v1.0.8.zip" .)
-
-          sha256sum SNESticleRevive.v1.0.8.zip > SNESticleRevive.v1.0.8.zip.sha256
-          ls -lh dist release-package SNESticleRevive.v1.0.8.zip*
-
-      - name: Upload CI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SNESticleRevive-v1.0.8-official
-          path: |
-            SNESticleRevive.v1.0.8.zip
-            SNESticleRevive.v1.0.8.zip.sha256
-          if-no-files-found: error
-
-      - name: Replace test prerelease with official stable release
+      - uses: actions/checkout@v4
+      - name: Update stable release notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euxo pipefail
-
-          if gh release view "$PRE_RELEASE_TAG" >/dev/null 2>&1; then
-            gh release delete "$PRE_RELEASE_TAG" --cleanup-tag --yes
-          fi
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              SNESticleRevive.v1.0.8.zip \
-              SNESticleRevive.v1.0.8.zip.sha256 \
-              --clobber
-            gh release edit "$RELEASE_TAG" \
-              --title "SNESTICLE REVIVE 1.0.8 [STABLE]" \
-              --notes-file CHANGELOG_v1.0.8.md \
-              --latest
-          else
-            gh release create "$RELEASE_TAG" \
-              SNESticleRevive.v1.0.8.zip \
-              SNESticleRevive.v1.0.8.zip.sha256 \
-              --target "$RELEASE_TARGET_SHA" \
-              --title "SNESTICLE REVIVE 1.0.8 [STABLE]" \
-              --notes-file CHANGELOG_v1.0.8.md \
-              --latest
-          fi
+          gh release edit 1.0.8 \
+            --title "SNESTICLE REVIVE 1.0.8 [STABLE]" \
+            --notes-file CHANGELOG_v1.0.8.md \
+            --latest
