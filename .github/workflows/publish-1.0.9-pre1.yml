@@ -1,0 +1,110 @@
+name: Publish 1.0.9 pre1
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-1.0.9-pre1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APP_VERSION: 1.0.9
+  RELEASE_TAG: 1.0.9-pre1
+  RELEASE_TARGET_SHA: 197b4809d3edda170c9c9a17893b6bf7742a73d7
+
+jobs:
+  build-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout tested source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TARGET_SHA }}
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git wget genisoimage zip
+
+      - name: Install/check PS2DEV toolchain
+        run: |
+          make check-env AUTO_INSTALL=yes COLOR=0
+
+      - name: Build 1.0.9 prerelease
+        run: |
+          set -euxo pipefail
+          rm -rf dist release-package
+          mkdir -p dist release-package
+
+          make iso \
+            APP_VERSION="$APP_VERSION" \
+            AUTO_INSTALL=yes \
+            COLOR=0 \
+            JOBS=2 \
+            PACK=1 \
+            out="$GITHUB_WORKSPACE/dist"
+
+          test -n "$(find dist -maxdepth 1 -type f -name '*.elf' -print -quit)"
+          grep -a -l "SNESticle Revive PS2 v1.0.9" dist/*.elf
+
+          cp -f dist/* release-package/
+          cp -f README.md release-package/
+          (
+            cd release-package
+            find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS.txt
+          )
+          (cd release-package && zip -9 -r "../SNESticleRevive.v1.0.9-pre1.zip" .)
+          ls -lh dist release-package SNESticleRevive.v1.0.9-pre1.zip
+
+      - name: Upload CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticleRevive-v1.0.9-pre1
+          path: |
+            SNESticleRevive.v1.0.9-pre1.zip
+            dist/*.elf
+          if-no-files-found: error
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/release-notes.txt <<'EOF'
+          # SNESticle Revive v1.0.9 pre-release 1
+
+          Test build focused on the remaining menu-BGM report from #51.
+
+          ## MX4SIO BGM fix
+
+          - Fixed menu music discovery when SNESticle is launched from an MX4SIO/BDM mass device through OPL.
+          - OPL or an older launcher can report the ELF path through the legacy `mass:` alias, while after SNESticle resets the IOP the same SD card may be exposed as `mass0:` or `mass1:`.
+          - The BGM scanner now keeps the path relative to the launched ELF and retries it across `mass0:`, `mass1:` and legacy `mass:`.
+          - This also covers BDM unit renumbering after the IOP reset, without changing USB/MX4SIO boot behavior.
+          - The normal `SNESticle/bgm` and `bgm` mass-storage locations benefit from the same compatibility lookup.
+
+          Main fix: [`00ff51c`](https://github.com/ReyFxck/SNESticleRevive/commit/00ff51c07b0f5629db3fbf3ef29156aa56662df1)
+
+          ## Test requested for #51
+
+          Put the ELF and a `bgm` folder containing one or more `.mod`/`.xm` tracks in the same MX4SIO app folder and launch it through OPL as before. Video Config -> Menu Music should show a track count instead of **No Track**, and the menu music should start normally.
+
+          This is a prerelease intended for real-hardware validation before 1.0.9 stable.
+          EOF
+
+          mapfile -t ELF_ASSETS < <(find dist -maxdepth 1 -type f -name '*.elf' -print | sort)
+          gh release create "$RELEASE_TAG" \
+            SNESticleRevive.v1.0.9-pre1.zip \
+            "${ELF_ASSETS[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_TARGET_SHA" \
+            --title "SNESTICLE REVIVE 1.0.9 PRE-RELEASE 1" \
+            --notes-file /tmp/release-notes.txt \
+            --prerelease
