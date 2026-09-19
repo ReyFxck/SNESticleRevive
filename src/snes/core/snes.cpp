@@ -1254,6 +1254,8 @@ void SnesSystem::Reset()
 	SetSlowRom();
 
 	m_PPU.Reset();
+	m_PPU.SetVideoRegion(
+		m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE);
 	m_DMAC.Reset();
 	m_IO.Reset();
 	m_SpcIO.Reset();
