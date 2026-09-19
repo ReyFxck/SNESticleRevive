@@ -55,7 +55,8 @@
 #define SNCPU_BANK_NUM    (SNCPU_MEM_SIZE / SNCPU_BANK_SIZE)
 #define SNCPU_BANK_MASK   (SNCPU_BANK_SIZE - 1)
 
-#define SNCPU_CYCLE_SLOW (8)
-#define SNCPU_CYCLE_FAST (6)
+#define SNCPU_CYCLE_XSLOW (12)
+#define SNCPU_CYCLE_SLOW  (8)
+#define SNCPU_CYCLE_FAST  (6)
 
 #endif
