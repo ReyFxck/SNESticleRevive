@@ -531,10 +531,14 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		{
 #if SNDBG_LOG
 			g_DbgBGChrRepeatRows++;
+			g_DbgBGRawCacheHits++;
 #endif
 		}
 		else
 		{
+#if SNDBG_LOG
+			g_DbgBGRawCacheMisses++;
+#endif
 			Uint32 uPlane0 = (Uint32)(uRaw & 0xFFu);
 			Uint32 uPlane1 = (Uint32)((uRaw >> 8) & 0xFFu);
 			Uint32 uPlanes = uPlane0 | uPlane1;
@@ -596,10 +600,14 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		{
 #if SNDBG_LOG
 			g_DbgBGChrRepeatRows++;
+			g_DbgBGRawCacheHits++;
 #endif
 		}
 		else
 		{
+#if SNDBG_LOG
+			g_DbgBGRawCacheMisses++;
+#endif
 			Uint32 uPlane0 = (Uint32)(uRaw & 0xFFu);
 			Uint32 uPlane1 = (Uint32)((uRaw >> 8) & 0xFFu);
 			Uint32 uPlane2 = (Uint32)((uRaw >> 16) & 0xFFu);
@@ -665,10 +673,14 @@ static void _FetchCHR8_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		{
 #if SNDBG_LOG
 			g_DbgBGChrRepeatRows++;
+			g_DbgBGRawCacheHits++;
 #endif
 		}
 		else
 		{
+#if SNDBG_LOG
+			g_DbgBGRawCacheMisses++;
+#endif
 			Uint32 uPlane0 = (Uint32)(uRaw & 0xFFu);
 			Uint32 uPlane1 = (Uint32)((uRaw >> 8) & 0xFFu);
 			Uint32 uPlane2 = (Uint32)((uRaw >> 16) & 0xFFu);
