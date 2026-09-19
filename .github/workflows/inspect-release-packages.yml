@@ -32,3 +32,12 @@ jobs:
           unzip -Z1 old/SNESticleRevive.v1.0.7.zip | sort
           echo '===== 1.0.8 names ====='
           unzip -Z1 current/SNESticleRevive.v1.0.8.zip | sort
+          rm -rf old_extract
+          mkdir old_extract
+          unzip -q old/SNESticleRevive.v1.0.7.zip -d old_extract
+          echo '===== 1.0.7 title.cfg ====='
+          cat 'old_extract/APPS/title.cfg'
+          echo '===== 1.0.7 SYSTEM.CNF ====='
+          cat 'old_extract/SYSTEM.CNF'
+          echo '===== 1.0.7 README.txt ====='
+          cat 'old_extract/README.txt'
