@@ -2088,7 +2088,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	// --- timing: fecha o frame e resume a janela ---
 	{
 		Uint32 cyc = ProfCtrGetCycle() - g_TmgFrameStart;  // ciclos de emulacao deste frame
-		Uint32 uBudget = SnesDbgFrameBudget(g_DbgHostRefreshHz);
+		Uint32 uBudget = SnesDbgFrameBudgetRatio(
+			GetFrameRateNumerator(), GetFrameRateDenominator());
 		g_TmgWinSumCyc += cyc;
 		g_TmgWinSumM7  += g_TmgCycM7;
 		g_TmgWinSumObj += g_TmgCycObj;
@@ -2204,8 +2205,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			Uint32 avg   = (Uint32)(g_TmgWinSumCyc / g_TmgWinFrames);
 			Bool bPAL = (m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL)
 				? TRUE : FALSE;
-			Uint32 uTargetFPS = g_DbgHostRefreshHz ? g_DbgHostRefreshHz : 60u;
-			Uint32 uBudget = SnesDbgFrameBudget(uTargetFPS);
+			Uint32 uTargetFPS = GetFrameRate();
+			Uint32 uBudget = SnesDbgFrameBudgetRatio(
+				GetFrameRateNumerator(), GetFrameRateDenominator());
 			Uint32 uMinCyc = (g_TmgWinMinCyc == 0xFFFFFFFFu)
 				? 0u : g_TmgWinMinCyc;
 			Uint32 ratio = avg ? (Uint32)(((Uint64)g_TmgWinMaxCyc * 100u) / avg) : 0;
@@ -2250,9 +2252,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				SNDBG_SCHEMA, (unsigned)(SNDBG_DEEP ? 2 : 1),
 				(unsigned)g_DbgSessionId, (unsigned)g_TmgWinFrames,
 				(unsigned)SNPPU_OBJ_CACHE);
-			DLog("[snes-frame] f=%u rom-video=%s host-target=%u budget=%u cycles min/avg/max=%u/%u/%u slow=%u threshold=%u%% capacity=%u.%u fps",
+			DLog("[snes-frame] f=%u rom-video=%s emu-target=%u host-target=%u budget=%u cycles min/avg/max=%u/%u/%u slow=%u threshold=%u%% capacity=%u.%u fps",
 				(unsigned)g_TmgFrameNo, bPAL ? "pal" : "ntsc",
-				(unsigned)uTargetFPS, (unsigned)uBudget,
+				(unsigned)uTargetFPS, (unsigned)g_DbgHostRefreshHz,
+				(unsigned)uBudget,
 				(unsigned)uMinCyc, (unsigned)avg,
 				(unsigned)g_TmgWinMaxCyc, (unsigned)g_TmgWinSlowFrames,
 				(unsigned)SNDBG_SLOW_PERCENT,
