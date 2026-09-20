@@ -18,17 +18,13 @@ extern "C" {
 #include "audio.h"
 };
 
-/* Output gain for the emulated game audio (SNES/NES). The SPU2/audsrv
-   volume is already at 100%, so to match players like Snes9x/RetroArch we
-   raise the PCM amplitude here, with int16 saturation (loud games clip
-   rather than wrap around).
-
-   The user-facing "Game Volume" (Video Config) is 0..100, where 100 maps
-   to AUDMIXBUFFER_BASE_GAIN_PCT (the loudness this build shipped with) and
-   0 mutes:  gainPct = s_gameVolume * BASE / 100.  This single AudMixBuffer
-   instance (_AudMix) is shared by SNES and NES, so the control applies to
-   both. */
-#define AUDMIXBUFFER_BASE_GAIN_PCT 200
+/* Output gain for emulated game audio (SNES/NES).
+ *
+ * Audio-audit builds keep Game Volume 100 at unity. This deliberately
+ * removes the historical +6 dB software boost so a corrected S-DSP output
+ * cannot be clipped again after the shared 32->48 kHz resampler.
+ * Lower Game Volume settings only attenuate the PCM stream. */
+#define AUDMIXBUFFER_BASE_GAIN_PCT 100
 
 static int s_gameVolume = 100;   /* 0..100 (Video Config); 100 = base gain */
 
@@ -280,9 +276,8 @@ void AudMixBuffer::Flush()
             nOutSamples = AUDMIXBUFFER_MAXENQUEUE;
         }
 
-        /* Apply the Game Volume gain with saturation, just before enqueue,
-           so it covers every sample-rate path (32k resampled and 48k
-           passthrough).  gainPct==100 (Game Volume 50) is unity -> skip. */
+        /* Apply Game Volume just before enqueue so it covers every
+           sample-rate path. In this audit build Game Volume 100 is unity. */
         {
             Int32 gainPct = (s_gameVolume * AUDMIXBUFFER_BASE_GAIN_PCT) / 100;
             if (gainPct != 100)
