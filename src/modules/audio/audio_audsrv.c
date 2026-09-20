@@ -309,7 +309,7 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
 {
     int i;
     int bytes;
-    int sent;
+    int sentTotal = 0;
 
     if (!sjpcm_inited) return;
     if (size <= 0) return;
@@ -323,20 +323,50 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
 
     bytes = size * AUD_BYTES_PER_SAMPLE;
 
-    if (wait)
+    if (!wait)
     {
-        if (audsrv_wait_audio(bytes) < 0)
-            return;
+        /* Menu/BGM path remains best-effort and must never block. */
+        int sent = audsrv_play_audio((const char *)_interleave_buf, bytes);
+        if (sent > 0)
+        {
+            sentTotal = sent > bytes ? bytes : sent;
+            sjpcm_playing = 1;
+        }
+    }
+    else
+    {
+        /*
+         * audsrv_wait_audio() can return successfully and the following
+         * play_audio() can still accept a short block. Preserve the unsent
+         * tail and retry it instead of dropping samples. This path is shared
+         * by SNES and NES game audio.
+         */
+        while (sentTotal < bytes)
+        {
+            int remaining = bytes - sentTotal;
+            int sent;
+
+            if (audsrv_wait_audio(remaining) < 0)
+                break;
+
+            sent = audsrv_play_audio(
+                ((const char *)_interleave_buf) + sentTotal,
+                remaining);
+
+            if (sent <= 0)
+                break;
+            if (sent > remaining)
+                sent = remaining;
+
+            sentTotal += sent;
+            sjpcm_playing = 1;
+        }
     }
 
-    sent = audsrv_play_audio((const char *)_interleave_buf, bytes);
-    if (sent > 0)
-        sjpcm_playing = 1;
-
 #if SNDBG_LOG
-    if (sent >= 0 && sent != bytes)
+    if (sentTotal != bytes)
         DLog("[snes-audio-backend] short enqueue bytes=%d/%d wait=%d queued=%d avail=%d",
-             sent, bytes, wait, Aud_Buffered() * AUD_BYTES_PER_SAMPLE,
+             sentTotal, bytes, wait, Aud_Buffered() * AUD_BYTES_PER_SAMPLE,
              Aud_Available() * AUD_BYTES_PER_SAMPLE);
 #endif
 }
