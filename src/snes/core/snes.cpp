@@ -101,6 +101,17 @@ Uint32 g_DbgAudioMixCalls = 0;
 Uint32 g_DbgAudioZeroMixes = 0;
 Uint32 g_DbgAudioMinSamples = 0xFFFFFFFFu;
 Uint32 g_DbgAudioMaxSamples = 0;
+Uint32 g_DbgDspRailLeft = 0;
+Uint32 g_DbgDspRailRight = 0;
+Uint32 g_DbgDspPmonMask = 0;
+Uint32 g_DbgDspNoiseMask = 0;
+Uint32 g_DbgDspEchoMask = 0;
+Uint32 g_DbgDspBrrInvalidRange = 0;
+Uint8  g_DbgDspMVOLL = 0;
+Uint8  g_DbgDspMVOLR = 0;
+Uint8  g_DbgDspEVOLL = 0;
+Uint8  g_DbgDspEVOLR = 0;
+Uint8  g_DbgDspFLG = 0;
 Uint32 g_DbgObjOpaqueTiles = 0;
 Uint32 g_DbgObjCandidatePixels = 0;
 Uint32 g_DbgObjDrawnPixels = 0;
@@ -261,6 +272,17 @@ static void SnesDbgResetWindow(void)
 	g_DbgAudioZeroMixes = 0;
 	g_DbgAudioMinSamples = 0xFFFFFFFFu;
 	g_DbgAudioMaxSamples = 0;
+	g_DbgDspRailLeft = 0;
+	g_DbgDspRailRight = 0;
+	g_DbgDspPmonMask = 0;
+	g_DbgDspNoiseMask = 0;
+	g_DbgDspEchoMask = 0;
+	g_DbgDspBrrInvalidRange = 0;
+	g_DbgDspMVOLL = 0;
+	g_DbgDspMVOLR = 0;
+	g_DbgDspEVOLL = 0;
+	g_DbgDspEVOLR = 0;
+	g_DbgDspFLG = 0;
 	g_DbgObjOpaqueTiles = 0;
 	g_DbgObjCandidatePixels = 0;
 	g_DbgObjDrawnPixels = 0;
@@ -2368,6 +2390,18 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)(g_DbgAudioMinSamples == 0xFFFFFFFFu
 					? 0u : g_DbgAudioMinSamples),
 				(unsigned)g_DbgAudioMaxSamples);
+			DLog("[snes-dsp] rails L/R=%u/%u pmon/non/eon=%02X/%02X/%02X brr-invalid=%u mvol=%02X/%02X evol=%02X/%02X flg=%02X",
+				(unsigned)g_DbgDspRailLeft,
+				(unsigned)g_DbgDspRailRight,
+				(unsigned)g_DbgDspPmonMask,
+				(unsigned)g_DbgDspNoiseMask,
+				(unsigned)g_DbgDspEchoMask,
+				(unsigned)g_DbgDspBrrInvalidRange,
+				(unsigned)g_DbgDspMVOLL,
+				(unsigned)g_DbgDspMVOLR,
+				(unsigned)g_DbgDspEVOLL,
+				(unsigned)g_DbgDspEVOLR,
+				(unsigned)g_DbgDspFLG);
 			DLog("[snes-cgram] bytes/commits/unchanged=%u/%u/%u",
 				(unsigned)g_DbgCGRAMWrites,
 				(unsigned)g_DbgCGRAMCommits,
