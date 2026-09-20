@@ -173,6 +173,7 @@ extern Uint32 g_DbgBGMapReloads;
 extern Uint32 g_DbgBGChrRows;
 extern Uint32 g_DbgBGChrBlankRows;
 extern Uint32 g_DbgBGChrRepeatRows;
+extern Uint32 g_DbgBGChrWrapRows;
 extern Uint32 g_DbgBGChrRowsByDepth[3];
 
 // Cobertura universal de modos, camadas e recursos PPU por scanline.
