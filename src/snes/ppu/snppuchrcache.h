@@ -30,6 +30,20 @@
 #define SNPPU_CHR4_TILE_COUNT 2048u
 #define SNPPU_VRAM_WORD_MASK  0x7FFFu
 
+/*
+ * CHR plane-pair read with real SNES VRAM wrapping.
+ *
+ * BG's normal hot path still uses the old contiguous struct loads.  This
+ * helper is only for the rare tile row that crosses the 32K-word boundary,
+ * where pointer arithmetic would otherwise read beyond VRAM instead of
+ * wrapping $7FFF->$0000.
+ */
+_INLINE Uint16 SnesPPUChrReadPairWrapped(const Uint16 *pVram,
+	Uint32 uWordAddress)
+{
+	return pVram[uWordAddress & SNPPU_VRAM_WORD_MASK];
+}
+
 struct SnesPPUChrCacheT
 {
 	Uint64 uData4[SNPPU_CHR4_TILE_COUNT][8];
