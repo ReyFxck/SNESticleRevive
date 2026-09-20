@@ -512,9 +512,9 @@ static void _FetchCHR(Uint8 *pLine, SnesPPU *pPPU, SnesBGInfoT *pBGInfo, struct 
 static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles, Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask, Uint64 *pPalLookup)
 {
 	const SNPPUBg8FlipT *pFlip;
-	#if SNDBG_LOG
+#if SNDBG_LOG
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
-	#endif
+#endif
 
 	PROF_ENTER("_FetchCHR2_64");
 	while (nTiles > 0)
@@ -522,175 +522,147 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		Uint32 uTileAddr, uRowAddr;
 		Uint64 uTile0;
 		Uint32 uMask;
+		Uint16 uPair01;
 
 		pFlip = &_FlipTable8[pTiles->uFlip];
-
-		// calculate tile address
 		uTileAddr = (uBaseAddr + pTiles->uTile * 8) & 0x7FFF;
-
-		// get pointer to tile data (y flipped)
 		uRowAddr = uTileAddr +
 			((uScrollY + pTiles->uOffsetY) ^ pFlip->uFlipXOR);
 
-		#if SNDBG_LOG
+#if SNDBG_LOG
 		{
 			Uint32 uRowKey = uRowAddr | ((pTiles->uFlip & 1u) << 15);
 			if (uRowKey == uPreviousRowKey) g_DbgBGChrRepeatRows++;
 			uPreviousRowKey = uRowKey;
 		}
-		#endif
+#endif
 
+		if (uRowAddr <= SNPPU_VRAM_WORD_MASK)
+		{
+			uPair01 = pVram[uRowAddr];
+		}
+		else
+		{
+			uPair01 = SnesPPUChrReadPairWrapped(pVram, uRowAddr);
+#if SNDBG_LOG
+			g_DbgBGChrWrapRows++;
+#endif
+		}
+
+		if (uPair01)
 		{
 			const SnesChrLookup64T *pLookup =
 				(const SnesChrLookup64T *)pFlip->pLookup;
 			Uint8 *pHFlip = pFlip->pFlipLookup;
-			Uint32 uPlane0, uPlane1;
-			Uint32 uPlanes;
+			Uint32 uPlane0 = uPair01 & 0xFFu;
+			Uint32 uPlane1 = uPair01 >> 8;
+			Uint32 uPlanes = uPlane0 | uPlane1;
 
-			if (uRowAddr <= SNPPU_VRAM_WORD_MASK)
-			{
-				const SnesPPUTile2T *pTile2 =
-					(const SnesPPUTile2T *)(pVram + uRowAddr);
-				uPlane0 = pTile2->uPlane01[0][0];
-				uPlane1 = pTile2->uPlane01[0][1];
-			}
-			else
-			{
-				Uint16 uPair = SnesPPUChrReadPairWrapped(pVram, uRowAddr);
-				uPlane0 = uPair & 0xFFu;
-				uPlane1 = uPair >> 8;
-#if SNDBG_LOG
-				g_DbgBGChrWrapRows++;
-#endif
-			}
-
-			uPlanes = uPlane0 | uPlane1;
 			uMask = pHFlip[uPlanes];
-			if (uPlanes)
-			{
-				uTile0  = (*pLookup)[uPlane0] << 0;
-				uTile0 |= (*pLookup)[uPlane1] << 1;
-			}
-			else
-			{
-				uTile0 = 0;
-			}
+			uTile0  = (*pLookup)[uPlane0] << 0;
+			uTile0 |= (*pLookup)[uPlane1] << 1;
+		}
+		else
+		{
+			uMask = 0;
+			uTile0 = 0;
 		}
 
-		#if SNDBG_LOG
+#if SNDBG_LOG
 		if (!uMask) g_DbgBGChrBlankRows++;
-		#endif
+#endif
 
-		// A paleta fica fora do cache: a mesma arte serve a qualquer CGRAM.
 		uTile0 |= pPalLookup[pTiles->uPal];
-
-		pMask[ 0] = uMask;
+		pMask[0] = uMask;
 		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8) ? uMask : 0;
 		pMask++;
-
-		// store tile data
 		((Uint64 *)pDest)[0] = uTile0;
 
-		pDest+=8;
+		pDest += 8;
 		pTiles++;
 		nTiles--;
 	}
 	PROF_LEAVE("_FetchCHR2_64");
-
 }
 
 static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles, Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask)
 {
 	const SNPPUBg8FlipT *pFlip;
-	#if SNDBG_LOG
+#if SNDBG_LOG
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
-	#endif
+#endif
 
 	PROF_ENTER("_FetchCHR4_64");
-
 	while (nTiles > 0)
 	{
 		Uint32 uTileAddr, uRowAddr;
 		Uint64 uTile0;
 		Uint32 uMask;
+		Uint16 uPair01, uPair23;
+		Uint32 uAny;
 
 		pFlip = &_FlipTable8[pTiles->uFlip];
-
-		// calculate tile address
 		uTileAddr = (uBaseAddr + pTiles->uTile * 16) & 0x7FFF;
-
-		// get pointer to tile data (y flipped)
 		uRowAddr = uTileAddr +
 			((uScrollY + pTiles->uOffsetY) ^ pFlip->uFlipXOR);
 
-		#if SNDBG_LOG
+#if SNDBG_LOG
 		{
 			Uint32 uRowKey = uRowAddr | ((pTiles->uFlip & 1u) << 15);
 			if (uRowKey == uPreviousRowKey) g_DbgBGChrRepeatRows++;
 			uPreviousRowKey = uRowKey;
 		}
-		#endif
+#endif
 
+		if (uRowAddr <= (SNPPU_VRAM_WORD_MASK - 8u))
+		{
+			uPair01 = pVram[uRowAddr];
+			uPair23 = pVram[uRowAddr + 8u];
+		}
+		else
+		{
+			uPair01 = SnesPPUChrReadPairWrapped(pVram, uRowAddr);
+			uPair23 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 8u);
+#if SNDBG_LOG
+			g_DbgBGChrWrapRows++;
+#endif
+		}
+
+		uAny = (Uint32)uPair01 | (Uint32)uPair23;
+		if (uAny)
 		{
 			const SnesChrLookup64T *pLookup =
 				(const SnesChrLookup64T *)pFlip->pLookup;
 			Uint8 *pHFlip = pFlip->pFlipLookup;
-			Uint32 uPlane0, uPlane1, uPlane2, uPlane3;
-			Uint32 uPlanes;
+			Uint32 uPlane0 = uPair01 & 0xFFu;
+			Uint32 uPlane1 = uPair01 >> 8;
+			Uint32 uPlane2 = uPair23 & 0xFFu;
+			Uint32 uPlane3 = uPair23 >> 8;
+			Uint32 uPlanes = (uAny | (uAny >> 8)) & 0xFFu;
 
-			if (uRowAddr <= (SNPPU_VRAM_WORD_MASK - 8u))
-			{
-				const SnesPPUTile4T *pTile4 =
-					(const SnesPPUTile4T *)(pVram + uRowAddr);
-				uPlane0 = pTile4->uPlane01[0][0];
-				uPlane1 = pTile4->uPlane01[0][1];
-				uPlane2 = pTile4->uPlane23[0][0];
-				uPlane3 = pTile4->uPlane23[0][1];
-			}
-			else
-			{
-				Uint16 uPair01 = SnesPPUChrReadPairWrapped(pVram, uRowAddr);
-				Uint16 uPair23 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 8u);
-				uPlane0 = uPair01 & 0xFFu;
-				uPlane1 = uPair01 >> 8;
-				uPlane2 = uPair23 & 0xFFu;
-				uPlane3 = uPair23 >> 8;
-#if SNDBG_LOG
-				g_DbgBGChrWrapRows++;
-#endif
-			}
-
-			uPlanes = uPlane0 | uPlane1 | uPlane2 | uPlane3;
 			uMask = pHFlip[uPlanes];
-			if (uPlanes)
-			{
-				uTile0  = (*pLookup)[uPlane0] << 0;
-				uTile0 |= (*pLookup)[uPlane1] << 1;
-				uTile0 |= (*pLookup)[uPlane2] << 2;
-				uTile0 |= (*pLookup)[uPlane3] << 3;
-			}
-			else
-			{
-				uTile0 = 0;
-			}
+			uTile0  = (*pLookup)[uPlane0] << 0;
+			uTile0 |= (*pLookup)[uPlane1] << 1;
+			uTile0 |= (*pLookup)[uPlane2] << 2;
+			uTile0 |= (*pLookup)[uPlane3] << 3;
+		}
+		else
+		{
+			uMask = 0;
+			uTile0 = 0;
 		}
 
-		#if SNDBG_LOG
+#if SNDBG_LOG
 		if (!uMask) g_DbgBGChrBlankRows++;
-		#endif
+#endif
 
-		// Paleta fora da entrada para maximizar o reaproveitamento seguro.
 		uTile0 |= _SnesPPU_Tile4PalLookup64[pTiles->uPal];
-
-		// store mask
-		pMask[ 0] = uMask;
+		pMask[0] = uMask;
 		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8) ? uMask : 0;
 		pMask++;
-
-		// store tile data
 		((Uint64 *)pDest)[0] = uTile0;
 
-		pDest+=8;
+		pDest += 8;
 		pTiles++;
 		nTiles--;
 	}
@@ -702,70 +674,55 @@ static void _FetchCHR8_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 	SNPPUBg8FlipT *pFlip;
 
 	PROF_ENTER("_FetchCHR8_64");
-
 	while (nTiles > 0)
 	{
 		Uint32 uTileAddr, uRowAddr;
-		Uint32 uPlane0, uPlane1, uPlane2, uPlane3;
-		Uint32 uPlane4, uPlane5, uPlane6, uPlane7;
+		Uint16 uPair01, uPair23, uPair45, uPair67;
+		Uint32 uAny;
 		Uint64 uTile0;
-		Uint32 uMask, uPlanes;
-		SnesChrLookup64T *pLookup;
-		Uint8 *pHFlip;
+		Uint32 uMask;
 
 		pFlip = &_FlipTable8[pTiles->uFlip];
-
-		// calculate tile address
 		uTileAddr = (uBaseAddr + pTiles->uTile * 32) & 0x7FFF;
-
-		// select row (y flipped). Keep the hot path contiguous and only use
-		// wrapped pair reads when the 8bpp row would cross 32K-word VRAM.
 		uRowAddr = uTileAddr +
 			((uScrollY + pTiles->uOffsetY) ^ pFlip->uFlipXOR);
 
 		if (uRowAddr <= (SNPPU_VRAM_WORD_MASK - 24u))
 		{
-			const SnesPPUTile8T *pTile8 =
-				(const SnesPPUTile8T *)(pVram + uRowAddr);
-			uPlane0 = pTile8->uPlane01[0][0];
-			uPlane1 = pTile8->uPlane01[0][1];
-			uPlane2 = pTile8->uPlane23[0][0];
-			uPlane3 = pTile8->uPlane23[0][1];
-			uPlane4 = pTile8->uPlane45[0][0];
-			uPlane5 = pTile8->uPlane45[0][1];
-			uPlane6 = pTile8->uPlane67[0][0];
-			uPlane7 = pTile8->uPlane67[0][1];
+			uPair01 = pVram[uRowAddr];
+			uPair23 = pVram[uRowAddr + 8u];
+			uPair45 = pVram[uRowAddr + 16u];
+			uPair67 = pVram[uRowAddr + 24u];
 		}
 		else
 		{
-			Uint16 uPair01 = SnesPPUChrReadPairWrapped(pVram, uRowAddr);
-			Uint16 uPair23 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 8u);
-			Uint16 uPair45 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 16u);
-			Uint16 uPair67 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 24u);
-			uPlane0 = uPair01 & 0xFFu;
-			uPlane1 = uPair01 >> 8;
-			uPlane2 = uPair23 & 0xFFu;
-			uPlane3 = uPair23 >> 8;
-			uPlane4 = uPair45 & 0xFFu;
-			uPlane5 = uPair45 >> 8;
-			uPlane6 = uPair67 & 0xFFu;
-			uPlane7 = uPair67 >> 8;
+			uPair01 = SnesPPUChrReadPairWrapped(pVram, uRowAddr);
+			uPair23 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 8u);
+			uPair45 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 16u);
+			uPair67 = SnesPPUChrReadPairWrapped(pVram, uRowAddr + 24u);
 #if SNDBG_LOG
 			g_DbgBGChrWrapRows++;
 #endif
 		}
 
-		pLookup = (SnesChrLookup64T *)pFlip->pLookup;
-		pHFlip  = pFlip->pFlipLookup;
-
-		uPlanes = uPlane0 | uPlane1 | uPlane2 | uPlane3 |
-			uPlane4 | uPlane5 | uPlane6 | uPlane7;
-		uMask = pHFlip[uPlanes];
-
-		// Transparent CHR rows decode to zero. Avoid eight scratchpad
-		// lookups without reusing any state from another tile or scanline.
-		if (uPlanes)
+		uAny = (Uint32)uPair01 | (Uint32)uPair23 |
+			(Uint32)uPair45 | (Uint32)uPair67;
+		if (uAny)
 		{
+			SnesChrLookup64T *pLookup =
+				(SnesChrLookup64T *)pFlip->pLookup;
+			Uint8 *pHFlip = pFlip->pFlipLookup;
+			Uint32 uPlane0 = uPair01 & 0xFFu;
+			Uint32 uPlane1 = uPair01 >> 8;
+			Uint32 uPlane2 = uPair23 & 0xFFu;
+			Uint32 uPlane3 = uPair23 >> 8;
+			Uint32 uPlane4 = uPair45 & 0xFFu;
+			Uint32 uPlane5 = uPair45 >> 8;
+			Uint32 uPlane6 = uPair67 & 0xFFu;
+			Uint32 uPlane7 = uPair67 >> 8;
+			Uint32 uPlanes = (uAny | (uAny >> 8)) & 0xFFu;
+
+			uMask = pHFlip[uPlanes];
 			uTile0  = (*pLookup)[uPlane0] << 0;
 			uTile0 |= (*pLookup)[uPlane1] << 1;
 			uTile0 |= (*pLookup)[uPlane2] << 2;
@@ -777,6 +734,7 @@ static void _FetchCHR8_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		}
 		else
 		{
+			uMask = 0;
 			uTile0 = 0;
 		}
 
