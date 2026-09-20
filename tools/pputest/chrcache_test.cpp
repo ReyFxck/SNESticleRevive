@@ -32,6 +32,20 @@ int main()
 	Uint32 nInvalidated;
 
 	std::memset(&g_Cache, 0, sizeof(g_Cache));
+	{
+		Uint16 vram[0x8000];
+		std::memset(vram, 0, sizeof(vram));
+		vram[0x7FFF] = 0x2211;
+		vram[0x0000] = 0x4433;
+		vram[0x0007] = 0x6655;
+		Check("CHR pair high", SnesPPUChrReadPairWrapped(vram, 0x7FFF),
+			0x2211);
+		Check("CHR pair wraps next", SnesPPUChrReadPairWrapped(vram, 0x8000),
+			0x4433);
+		Check("CHR pair wraps offset", SnesPPUChrReadPairWrapped(vram, 0x8007),
+			0x6655);
+	}
+
 	Check("OBJ CHR cache bytes", sizeof(g_Cache), 149504);
 	Check("4bpp cold miss", SnesPPUChrCacheLookup4(&g_Cache,
 		0x2345, FALSE, &uData, &uOpaque), FALSE);
