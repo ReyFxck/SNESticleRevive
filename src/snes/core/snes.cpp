@@ -138,6 +138,7 @@ Uint32 g_DbgBGMapReloads = 0;
 Uint32 g_DbgBGChrRows = 0;
 Uint32 g_DbgBGChrBlankRows = 0;
 Uint32 g_DbgBGChrRepeatRows = 0;
+Uint32 g_DbgBGChrWrapRows = 0;
 Uint32 g_DbgBGChrRowsByDepth[3] = {0,0,0};
 Uint32 g_DbgPPUModeLines[8] = {0,0,0,0,0,0,0,0};
 Uint32 g_DbgPPUModeChanges = 0;
@@ -293,6 +294,7 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrRows = 0;
 	g_DbgBGChrBlankRows = 0;
 	g_DbgBGChrRepeatRows = 0;
+	g_DbgBGChrWrapRows = 0;
 	memset(g_DbgBGChrRowsByDepth, 0, sizeof(g_DbgBGChrRowsByDepth));
 	memset(g_DbgPPUModeLines, 0, sizeof(g_DbgPPUModeLines));
 	g_DbgPPUModeChanges = 0;
@@ -2339,10 +2341,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgPPUOverscanLines,
 				(unsigned)g_DbgPPUHiresLines,
 				(unsigned)g_DbgPPUExtBGLines);
-			DLog("[snes-bg-rows] total/blank/repeat=%u/%u/%u",
+			DLog("[snes-bg-rows] total/blank/repeat/wrap=%u/%u/%u/%u",
 				(unsigned)g_DbgBGChrRows,
 				(unsigned)g_DbgBGChrBlankRows,
-				(unsigned)g_DbgBGChrRepeatRows);
+				(unsigned)g_DbgBGChrRepeatRows,
+				(unsigned)g_DbgBGChrWrapRows);
 			DLog("[snes-bg-depth] chrrows 2bpp/4bpp/8bpp=%u/%u/%u",
 				(unsigned)g_DbgBGChrRowsByDepth[0],
 				(unsigned)g_DbgBGChrRowsByDepth[1],
