@@ -132,6 +132,20 @@ extern Uint32 g_DbgAudioMixCalls;
 extern Uint32 g_DbgAudioZeroMixes;
 extern Uint32 g_DbgAudioMinSamples;
 extern Uint32 g_DbgAudioMaxSamples;
+
+/* S-DSP audio-path audit counters. These are diagnostic-only and never
+   participate in emulation decisions. */
+extern Uint32 g_DbgDspRailLeft;
+extern Uint32 g_DbgDspRailRight;
+extern Uint32 g_DbgDspPmonMask;
+extern Uint32 g_DbgDspNoiseMask;
+extern Uint32 g_DbgDspEchoMask;
+extern Uint32 g_DbgDspBrrInvalidRange;
+extern Uint8  g_DbgDspMVOLL;
+extern Uint8  g_DbgDspMVOLR;
+extern Uint8  g_DbgDspEVOLL;
+extern Uint8  g_DbgDspEVOLR;
+extern Uint8  g_DbgDspFLG;
 extern Uint32 g_DbgObjOpaqueTiles;
 extern Uint32 g_DbgObjCandidatePixels;
 extern Uint32 g_DbgObjDrawnPixels;
