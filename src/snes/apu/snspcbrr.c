@@ -9,6 +9,7 @@
 #include "types.h"
 #include "snspcbrr.h"
 #include "prof.h"
+#include "sndbglog.h"
 
 #define SNSPCBRR_CLAMP FALSE
 
@@ -85,6 +86,10 @@ Uint8 SNSpcBRRDecode(Uint8 *pBRRBlock, Int16 *pOut, Int32 iPrev0, Int32 iPrev1)
 
 	uHeader = *pBRRBlock++;
 	uRange = uHeader >> 4;
+#if SNDBG_LOG
+	if (uRange >= 13)
+		g_DbgDspBrrInvalidRange++;
+#endif
 
 	// adjust range if invalid
 	if (uRange > 12)
