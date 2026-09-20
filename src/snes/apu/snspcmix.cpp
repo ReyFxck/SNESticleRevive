@@ -958,8 +958,8 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 
 		"pmflo		 $8				\n"  // 8 = 5 4 1 0
 		"pmfhi		 $9				\n"  // 9 = 7 6 3 2
-		"psraw		 $8,$8,6		 \n"
-		"psraw		 $9,$9,6		 \n"
+		"psraw		 $8,$8,7		 \n"
+		"psraw		 $9,$9,7		 \n"
 		"pminw       $8,$8,$14       \n"
 		"pminw       $9,$9,$14       \n"
 		"pmaxw       $8,$8,$15       \n"
@@ -1029,11 +1029,11 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, SNSpcEchoSampleT *pEcho, Int32 nSamples
 		// mix main + echo
 		iSample0  = pMain[0] * iMainVol;           // (1.15.14)
 		iSample0 += pEcho[0] * iEchoVol;        // (1.15.14)
-		iSample0 >>= 14 - 1;
+		iSample0 >>= 14;
 
 		iSample1  = pMain[1] * iMainVol;           // (1.15.14)
 		iSample1 += pEcho[1] * iEchoVol;        // (1.15.14)
-		iSample1 >>= 14 - 1;
+		iSample1 >>= 14;
 
 		if (iSample0 >  iMax) iSample0 = iMax;
 		if (iSample0 <  iMin) iSample0 = iMin;
@@ -1295,6 +1295,17 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		nSamples = nTotalSamples;
 		if (nSamples > nSamplesPerUpdate) nSamples = nSamplesPerUpdate;
 
+#if SNDBG_LOG
+		g_DbgDspPmonMask |= m_pDsp->GetReg(SNSPCDSP_REG_PMON);
+		g_DbgDspNoiseMask |= m_pDsp->GetReg(SNSPCDSP_REG_NOV);
+		g_DbgDspEchoMask |= m_pDsp->GetReg(SNSPCDSP_REG_EON);
+		g_DbgDspMVOLL = m_pDsp->GetReg(SNSPCDSP_REG_MVOLL);
+		g_DbgDspMVOLR = m_pDsp->GetReg(SNSPCDSP_REG_MVOLR);
+		g_DbgDspEVOLL = m_pDsp->GetReg(SNSPCDSP_REG_EVOLL);
+		g_DbgDspEVOLR = m_pDsp->GetReg(SNSPCDSP_REG_EVOLR);
+		g_DbgDspFLG = m_pDsp->GetReg(SNSPCDSP_REG_FLG);
+#endif
+
 		// clear main and echo buffers
 		_SNSpcDspMemset64((Uint64 *)pData->Main[0], (sizeof(Int32) * nSamples+7) / 8);
 		_SNSpcDspMemset64((Uint64 *)pData->Main[1], (sizeof(Int32) * nSamples+7) / 8);
@@ -1395,6 +1406,16 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		_MixEcho(OutRightData, pData->Main[1], pData->Echo[1], nSamples,
 			(Int8)m_pDsp->GetReg(SNSPCDSP_REG_MVOLR), (Int8)m_pDsp->GetReg(SNSPCDSP_REG_EVOLR));
 		PROF_LEAVE("SNSpcDspMixEcho");
+
+#if SNDBG_LOG
+		for (Int32 iAudit = 0; iAudit < nSamples; ++iAudit)
+		{
+			if (OutLeftData[iAudit] == 32767 || OutLeftData[iAudit] == -32768)
+				g_DbgDspRailLeft++;
+			if (OutRightData[iAudit] == 32767 || OutRightData[iAudit] == -32768)
+				g_DbgDspRailRight++;
+		}
+#endif
 
 		// output buffer to sound hardware
 		if (nSampleChannels == 2)
