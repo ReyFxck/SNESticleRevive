@@ -1898,7 +1898,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_PPURender.BeginRender(pTarget);
 	m_PPU.BeginFrame();
 
-	for (m_uLine=0; m_uLine < (224+1); m_uLine++)
+	/* SETINI overscan is latched by BeginFrame(). Keep CPU/HDMA visible
+	   scanlines and the renderer on the same 224/239-line boundary. */
+	const Uint32 uVisibleLines = m_PPU.GetFrameVisibleLines();
+	for (m_uLine=0; m_uLine < (uVisibleLines + 1); m_uLine++)
 	{
 		#if SNES_SYNCPPUEVERYLINE
 		SyncPPU();
@@ -1939,7 +1942,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	{
 		ExecuteLine();
 
-		if (m_uLine==225+2) // * 60 = 4410 cycles long (3.10 scanlines)
+		if (m_uLine==uVisibleLines+3) // auto-joy read completes ~3 scanlines into VBlank
 		{
 			// done reading joypad
 			m_IO.m_Regs.hvbjoy&= ~0x01;
