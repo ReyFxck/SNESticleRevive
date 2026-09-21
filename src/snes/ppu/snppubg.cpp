@@ -891,9 +891,15 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 		pBGInfo[1].Priority  =  4;
 		break;
 
-	case 6: // hi-res
-		pBGInfo[0].uBitDepth= 8;
+	case 6: // hi-res + offset-per-tile
+		/* Mode 6 uses a single 4bpp BG1 in forced hi-res.  The old
+		   8bpp setting over-fetched CHR planes and disagreed with the
+		   SNES PPU layout used by MesenCE/Aurora. */
+		pBGInfo[0].uBitDepth= 4;
 		pBGInfo[1].uBitDepth= 0;
+		pBGInfo[2].uBitDepth= 0;
+		pBGInfo[3].uBitDepth= 0;
+		pBGInfo[0].uPalBase = 0x00;
 		pBGInfo[0].Priority  =  5;
 		pBGInfo[1].Priority  =  4;
 		break;
