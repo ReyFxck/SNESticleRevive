@@ -649,96 +649,34 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 }
 
 
-/* Revive 1.1.1 hi-res phase decoder.
-   Cross-checked against MesenCE's native 512-dot PPU path and the
-   PS2-oriented SNESticle Aurora implementation. Modes 5/6 contain two
-   physical horizontal dots for every pixel in our 256-wide carrier.
-   Main uses the odd phase (even under mosaic); sub uses the even phase.
-   Horizontal flip swaps phases and reverses the complete character pair. */
-static _INLINE Uint32 _SnesPPUHiresPack4(Uint64 uData, Bool bOdd)
+/* Revive 1.1.1 Mode 5/6 phase decoder.
+   Hardware behavior follows the public SNES PPU model used by MesenCE:
+   a 256-coordinate output pixel corresponds to two physical hi-res dots.
+   The sub screen receives the even dot and the main screen the odd dot.
+   Mosaic repeats the even sample for both phases.  This implementation is
+   intentionally local to Revive's 256-wide PS2 carrier. */
+static _INLINE Uint8 _SnesPPUDecode2bppPixel(
+	const SnesPPUTile2T *pTile, Uint32 uRow, Uint32 uX)
 {
-	Uint32 uOut;
-	if (bOdd) uData >>= 8;
-	uOut  = (Uint32)((uData >>  0) & 0xFF) <<  0;
-	uOut |= (Uint32)((uData >> 16) & 0xFF) <<  8;
-	uOut |= (Uint32)((uData >> 32) & 0xFF) << 16;
-	uOut |= (Uint32)((uData >> 48) & 0xFF) << 24;
-	return uOut;
+	Uint32 uBit = 7u - (uX & 7u);
+	Uint8 p0 = pTile->uPlane01[uRow & 7u][0];
+	Uint8 p1 = pTile->uPlane01[uRow & 7u][1];
+	return (Uint8)(((p0 >> uBit) & 1u) | (((p1 >> uBit) & 1u) << 1));
 }
 
-static _INLINE Uint8 _SnesPPUHiresPackMask4(Uint32 uMask, Bool bOdd)
+static _INLINE Uint8 _SnesPPUDecode4bppPixel(
+	const SnesPPUTile4T *pTile, Uint32 uRow, Uint32 uX)
 {
-	if (bOdd) uMask >>= 1;
+	Uint32 uBit = 7u - (uX & 7u);
+	Uint8 p0 = pTile->uPlane01[uRow & 7u][0];
+	Uint8 p1 = pTile->uPlane01[uRow & 7u][1];
+	Uint8 p2 = pTile->uPlane23[uRow & 7u][0];
+	Uint8 p3 = pTile->uPlane23[uRow & 7u][1];
 	return (Uint8)(
-		  ((uMask >> 0) & 1)
-		| ((uMask >> 1) & 2)
-		| ((uMask >> 2) & 4)
-		| ((uMask >> 3) & 8));
-}
-
-static _INLINE Uint64 _SnesPPUReverseBytes64(Uint64 u)
-{
-	Uint64 r = 0;
-	Int32 i;
-	for (i = 0; i < 8; ++i)
-		r |= ((u >> (i * 8)) & 0xFFULL) << ((7 - i) * 8);
-	return r;
-}
-
-static _INLINE Uint8 _SnesPPUReverseMask8(Uint8 u)
-{
-	u = (Uint8)(((u & 0x55u) << 1) | ((u >> 1) & 0x55u));
-	u = (Uint8)(((u & 0x33u) << 2) | ((u >> 2) & 0x33u));
-	return (Uint8)((u << 4) | (u >> 4));
-}
-
-static _INLINE Uint64 _SnesPPUHiresPackPair(
-	Uint64 uRow0, Uint64 uRow1, Bool bHFlip, Bool bMosaic, Bool bSubscreen)
-{
-	Bool bOdd = (Bool)((!bSubscreen && !bMosaic) ^ bHFlip);
-	Uint64 uOut =
-		(Uint64)_SnesPPUHiresPack4(uRow0, bOdd) |
-		((Uint64)_SnesPPUHiresPack4(uRow1, bOdd) << 32);
-	return bHFlip ? _SnesPPUReverseBytes64(uOut) : uOut;
-}
-
-static _INLINE Uint8 _SnesPPUHiresPackPairMask(
-	Uint32 uMask0, Uint32 uMask1, Bool bHFlip, Bool bMosaic, Bool bSubscreen)
-{
-	Bool bOdd = (Bool)((!bSubscreen && !bMosaic) ^ bHFlip);
-	Uint8 uOut = (Uint8)(
-		_SnesPPUHiresPackMask4(uMask0, bOdd) |
-		(_SnesPPUHiresPackMask4(uMask1, bOdd) << 4));
-	return bHFlip ? _SnesPPUReverseMask8(uOut) : uOut;
-}
-
-static _INLINE void _SnesPPUGetCHR2Row64(
-	const Uint16 *pVram, Uint32 uRowAddr, Uint64 *pData, Uint32 *pOpaque)
-{
-	const SnesPPUTile2T *pTile2 =
-		(const SnesPPUTile2T *)(pVram + uRowAddr);
-	const SnesChrLookup64T *pLookup =
-		(const SnesChrLookup64T *)&SNPPU_BG_PLANE_LOOKUP[0];
-	Uint32 p0 = pTile2->uPlane01[0][0];
-	Uint32 p1 = pTile2->uPlane01[0][1];
-	*pOpaque = SNPPU_BG_HFLIP_LOOKUP[1][p0 | p1];
-	*pData = ((*pLookup)[p0] << 0) | ((*pLookup)[p1] << 1);
-}
-
-static _INLINE void _SnesPPUGetCHR4Row64(
-	const Uint16 *pVram, Uint32 uRowAddr, Uint64 *pData, Uint32 *pOpaque)
-{
-	const SnesPPUTile4T *pTile4 =
-		(const SnesPPUTile4T *)(pVram + uRowAddr);
-	const SnesChrLookup64T *pLookup =
-		(const SnesChrLookup64T *)&SNPPU_BG_PLANE_LOOKUP[0];
-	Uint32 p0 = pTile4->uPlane01[0][0];
-	Uint32 p1 = pTile4->uPlane01[0][1];
-	Uint32 p2 = pTile4->uPlane23[0][0];
-	Uint32 p3 = pTile4->uPlane23[0][1];
-	*pOpaque = SNPPU_BG_HFLIP_LOOKUP[1][p0 | p1 | p2 | p3];
-	*pData = ((*pLookup)[p0] << 0) | ((*pLookup)[p1] << 1) |
-		((*pLookup)[p2] << 2) | ((*pLookup)[p3] << 3);
+		((p0 >> uBit) & 1u) |
+		(((p1 >> uBit) & 1u) << 1) |
+		(((p2 >> uBit) & 1u) << 2) |
+		(((p3 >> uBit) & 1u) << 3));
 }
 
 static void _FetchCHR2Hires_64(
@@ -748,24 +686,33 @@ static void _FetchCHR2Hires_64(
 {
 	while (nTiles-- > 0)
 	{
-		Uint32 t0 = pTiles->uTile & 0x03FF;
-		Uint32 t1 = (t0 + 1) & 0x03FF;
-		Uint32 row = (uScrollY + pTiles->uOffsetY) & 7;
-		Uint64 r0, r1, out;
-		Uint32 m0, m1;
-		Uint8 mask;
-		Bool hflip = (pTiles->uFlip & 1) != 0;
-		if (pTiles->uFlip & 2) row ^= 7;
-		_SnesPPUGetCHR2Row64(pVram,
-			((uBaseAddr + t0 * 8) & 0x7FFF) + row, &r0, &m0);
-		_SnesPPUGetCHR2Row64(pVram,
-			((uBaseAddr + t1 * 8) & 0x7FFF) + row, &r1, &m1);
-		out = _SnesPPUHiresPackPair(r0, r1, hflip, bMosaic, bSubscreen);
-		mask = _SnesPPUHiresPackPairMask(m0, m1, hflip, bMosaic, bSubscreen);
-		out |= pPalLookup[pTiles->uPal];
-		pMask[0] = mask;
-		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8) ? mask : 0;
-		((Uint64 *)pDest)[0] = out;
+		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
+		Uint32 uRow = (uScrollY + pTiles->uOffsetY) & 7u;
+		Uint8 uOpaque = 0;
+		Uint8 uPalByte = (Uint8)pPalLookup[pTiles->uPal];
+		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
+		Int32 x;
+
+		if (pTiles->uFlip & 2u)
+			uRow ^= 7u;
+
+		for (x = 0; x < 8; ++x)
+		{
+			Uint32 uPhase = (!bSubscreen && !bMosaic) ? 1u : 0u;
+			Uint32 uPhysical = ((Uint32)x << 1) | uPhase;
+			Uint32 uSource = bHFlip ? (15u - uPhysical) : uPhysical;
+			Uint32 uTileNo = (uBaseTile + (uSource >> 3)) & 0x03FFu;
+			const SnesPPUTile2T *pTile =
+				(const SnesPPUTile2T *)(pVram +
+				((uBaseAddr + uTileNo * 8u) & 0x7FFFu));
+			Uint8 uColor = _SnesPPUDecode2bppPixel(pTile, uRow, uSource & 7u);
+			pDest[x] = (Uint8)(uPalByte | uColor);
+			if (uColor)
+				uOpaque |= (Uint8)(1u << x);
+		}
+
+		pMask[0] = uOpaque;
+		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8u) ? uOpaque : 0;
 		pDest += 8;
 		pMask++;
 		pTiles++;
@@ -779,24 +726,33 @@ static void _FetchCHR4Hires_64(
 {
 	while (nTiles-- > 0)
 	{
-		Uint32 t0 = pTiles->uTile & 0x03FF;
-		Uint32 t1 = (t0 + 1) & 0x03FF;
-		Uint32 row = (uScrollY + pTiles->uOffsetY) & 7;
-		Uint64 r0, r1, out;
-		Uint32 m0, m1;
-		Uint8 mask;
-		Bool hflip = (pTiles->uFlip & 1) != 0;
-		if (pTiles->uFlip & 2) row ^= 7;
-		_SnesPPUGetCHR4Row64(pVram,
-			((uBaseAddr + t0 * 16) & 0x7FFF) + row, &r0, &m0);
-		_SnesPPUGetCHR4Row64(pVram,
-			((uBaseAddr + t1 * 16) & 0x7FFF) + row, &r1, &m1);
-		out = _SnesPPUHiresPackPair(r0, r1, hflip, bMosaic, bSubscreen);
-		mask = _SnesPPUHiresPackPairMask(m0, m1, hflip, bMosaic, bSubscreen);
-		out |= _SnesPPU_Tile4PalLookup64[pTiles->uPal];
-		pMask[0] = mask;
-		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8) ? mask : 0;
-		((Uint64 *)pDest)[0] = out;
+		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
+		Uint32 uRow = (uScrollY + pTiles->uOffsetY) & 7u;
+		Uint8 uOpaque = 0;
+		Uint8 uPalByte = (Uint8)_SnesPPU_Tile4PalLookup64[pTiles->uPal];
+		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
+		Int32 x;
+
+		if (pTiles->uFlip & 2u)
+			uRow ^= 7u;
+
+		for (x = 0; x < 8; ++x)
+		{
+			Uint32 uPhase = (!bSubscreen && !bMosaic) ? 1u : 0u;
+			Uint32 uPhysical = ((Uint32)x << 1) | uPhase;
+			Uint32 uSource = bHFlip ? (15u - uPhysical) : uPhysical;
+			Uint32 uTileNo = (uBaseTile + (uSource >> 3)) & 0x03FFu;
+			const SnesPPUTile4T *pTile =
+				(const SnesPPUTile4T *)(pVram +
+				((uBaseAddr + uTileNo * 16u) & 0x7FFFu));
+			Uint8 uColor = _SnesPPUDecode4bppPixel(pTile, uRow, uSource & 7u);
+			pDest[x] = (Uint8)(uPalByte | uColor);
+			if (uColor)
+				uOpaque |= (Uint8)(1u << x);
+		}
+
+		pMask[0] = uOpaque;
+		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8u) ? uOpaque : 0;
 		pDest += 8;
 		pMask++;
 		pTiles++;
