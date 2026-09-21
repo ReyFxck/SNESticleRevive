@@ -402,6 +402,54 @@ Uint32 SnesPPURender::FetchBG(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTil
 		uResult |= SNPPU_BGFLAGS_FETCHCHR;
 	}
 
+	/* Revive 1.1.1 PPU accuracy (cross-checked against MesenCE and
+	   SNESticle Aurora): Modes 5/6 are horizontally hi-res. A large BG
+	   map cell is 16 physical dots wide but only 8 pixels wide in this
+	   256-pixel carrier, while remaining 16 pixels tall. */
+	{
+		const Uint8 uBGMode = (Uint8)(m_pPPU->GetRegs()->bgmode & 7);
+		if ((uBGMode == 5 || uBGMode == 6) && pBGInfo->uChrSize)
+		{
+			Uint32 uVHalf = (uScrollY >> 3) & 1;
+			Int32 iTile;
+
+			uTileX = (uScrollX >> 3) & 63;
+			uTileY = (uScrollY >> 4) & 63;
+
+			uVramAddr  = (uTileX & 0x1F);
+			uVramAddr |= (uTileY & 0x1F) << 5;
+			uVramAddr |= (uTileX >> 5) << 10;
+			uVramAddr |= (uTileY >> 5) << 11;
+			/* Keep the vertical half in the cache key. */
+			uVramAddr |= uVHalf << 13;
+
+			if (uVramAddr != (uOldVramAddr & 0xFFFF))
+			{
+#if SNDBG_LOG
+				g_DbgBGMapReloads++;
+#endif
+				_GetScreenPtrs(pScreen, m_pPPU, pBGInfo->uScrAddr,
+					pBGInfo->uScrSize);
+				_FetchBG8x8(uVramAddr & 0x0FFF, pTiles, nTiles, pScreen);
+
+				for (iTile = 0; iTile < nTiles; iTile++)
+				{
+					/* Lower half of a 16px-tall hires tile is character +16;
+					   vertical flip swaps the halves. */
+					if (uVHalf ^ ((pTiles[iTile].uFlip >> 1) & 1))
+						pTiles[iTile].uTile =
+							(Uint16)((pTiles[iTile].uTile + 16) & 0x03FF);
+				}
+				uResult |= SNPPU_BGFLAGS_FETCHCHR | SNPPU_BGFLAGS_FETCHPAL;
+			}
+
+			uVramAddr |= (uScrollX & 7) << 16;
+			uVramAddr |= (uScrollY & 7) << 24;
+			uOldVramAddr = uVramAddr;
+			return uResult;
+		}
+	}
+
 	// perform BG line caching
 	switch(pBGInfo->uChrSize)
 	{
@@ -559,6 +607,57 @@ static void _FetchBG16x16Offset(
 	PROF_LEAVE("_FetchBG16x16Offset");
 }
 
+/* Mode 6 uses a 16-dot-wide/16px-tall large BG cell. In the
+   256-pixel carrier that is 8x16, unlike the normal 16x16 path. */
+static void _FetchBGMode6LargeOffset(
+	Uint32 uScrollX,
+	Uint32 uScrollY,
+	Int32 iLine,
+	SnesRenderTileT *pTile,
+	Int32 nTiles,
+	SnesPPUScreenT **ppScreen,
+	Uint16 *pOffset,
+	Uint32 uOffsetMask)
+{
+	Uint32 uX = 0;
+	const Uint32 uFineX = uScrollX & 7;
+
+	while (nTiles > 0)
+	{
+		Uint32 sx = uScrollX;
+		Uint32 sy = uScrollY;
+		Uint32 tx, ty, addr;
+		Uint16 scr;
+		Uint16 ox = pOffset[0];
+		Uint16 oy = pOffset[1];
+
+		if (ox & uOffsetMask)
+			sx = uFineX | (ox & 0x3F8);
+		if (oy & uOffsetMask)
+			sy = oy & 0x3FF;
+
+		sx += uX;
+		sy += iLine;
+		tx = (sx >> 3) & 63;
+		ty = (sy >> 4) & 63;
+		addr = (tx & 0x1F) | ((ty & 0x1F) << 5) |
+			((tx >> 5) << 10) | ((ty >> 5) << 11);
+		scr = ((Uint16 *)ppScreen[(addr >> 10) & 3])[addr & 0x03FF];
+
+		pTile->uFlip = (Uint8)((scr >> 14) & 3);
+		pTile->uPal = (Uint8)((scr >> 10) & 0x0F);
+		pTile->uTile = (Uint16)(scr & 0x03FF);
+		if (((sy >> 3) & 1) ^ ((pTile->uFlip >> 1) & 1))
+			pTile->uTile = (Uint16)((pTile->uTile + 16) & 0x03FF);
+		pTile->uOffsetY = (Uint8)(sy & 7);
+
+		pTile++;
+		pOffset += 2;
+		uX += 8;
+		nTiles--;
+	}
+}
+
 Uint32 SnesPPURender::FetchBGOffset(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTiles, Int32 nTiles, Int32 iLine, Uint16 *pOffset, Uint32 uOffsetMask, Bool bVOffset)
 {
 	SnesPPUScreenT *pScreen[4];
@@ -591,9 +690,17 @@ Uint32 SnesPPURender::FetchBGOffset(SnesBGInfoT *pBGInfo, struct SnesRenderTileT
 	case 1:
 		_GetScreenPtrs(pScreen, m_pPPU, pBGInfo->uScrAddr,
 			pBGInfo->uScrSize);
-		_FetchBG16x16Offset(pBGInfo->uScrollX, pBGInfo->uScrollY,
-			iLine, pTiles, nTiles, pScreen, pOffset, uOffsetMask,
-			bVOffset);
+		if ((m_pPPU->GetRegs()->bgmode & 7) == 6)
+		{
+			_FetchBGMode6LargeOffset(pBGInfo->uScrollX, pBGInfo->uScrollY,
+				iLine, pTiles, nTiles, pScreen, pOffset, uOffsetMask);
+		}
+		else
+		{
+			_FetchBG16x16Offset(pBGInfo->uScrollX, pBGInfo->uScrollY,
+				iLine, pTiles, nTiles, pScreen, pOffset, uOffsetMask,
+				bVOffset);
+		}
 		break;
 
 	default:
@@ -659,6 +766,36 @@ static Uint32 _FetchOffset16x16Map(
 	return uOffsetOR;
 }
 
+static Uint16 _SNPPUReadOffsetMode6LargeCell(
+	Uint32 uPixelX, Uint32 uPixelY, SnesPPUScreenT **ppScreen)
+{
+	Uint32 tx = (uPixelX >> 3) & 63;
+	Uint32 ty = (uPixelY >> 4) & 63;
+	Uint32 addr = (tx & 0x1F) | ((ty & 0x1F) << 5) |
+		((tx >> 5) << 10) | ((ty >> 5) << 11);
+	return ((Uint16 *)ppScreen[(addr >> 10) & 3])[addr & 0x03FF];
+}
+
+static Uint32 _FetchOffsetMode6LargeMap(
+	Uint32 uScrollX, Uint32 uScrollY, Uint16 *pOffset,
+	SnesPPUScreenT **ppScreen)
+{
+	Uint32 uOffsetOR = 0;
+	Int32 i;
+	pOffset[0] = 0;
+	pOffset[1] = 0;
+	for (i = 1; i < 33; i++)
+	{
+		Uint32 x = (uScrollX & ~7U) + ((Uint32)(i - 1) << 3);
+		Uint16 h = _SNPPUReadOffsetMode6LargeCell(x, uScrollY, ppScreen);
+		Uint16 v = _SNPPUReadOffsetMode6LargeCell(x, uScrollY + 8, ppScreen);
+		pOffset[i * 2] = h;
+		pOffset[i * 2 + 1] = v;
+		uOffsetOR |= h | v;
+	}
+	return uOffsetOR;
+}
+
 Uint32 SnesPPURender::FetchOffset(SnesBGInfoT *pBGInfo, Uint16 *pOffset,
 	Int32 iLine, Uint32 &uOldVramAddr, Bool bVOffset)
 {
@@ -680,7 +817,8 @@ Uint32 SnesPPURender::FetchOffset(SnesBGInfoT *pBGInfo, Uint16 *pOffset,
 		(((pBGInfo->uScrAddr >> 10) & 0x1F) << 14) |
 		((pBGInfo->uScrSize & 3) << 19) |
 		((pBGInfo->uChrSize & 1) << 21) |
-		((bVOffset ? 1U : 0U) << 22);
+		((bVOffset ? 1U : 0U) << 22) |
+		(((m_pPPU->GetRegs()->bgmode & 7) & 7U) << 23);
 
 	if (uCacheKey != uOldVramAddr)
 	{
@@ -712,8 +850,12 @@ Uint32 SnesPPURender::FetchOffset(SnesBGInfoT *pBGInfo, Uint16 *pOffset,
 		}
 		else
 		{
-			uOffsetOR = _FetchOffset16x16Map(uScrollX, uScrollY,
-				pOffset, pScreen, bVOffset);
+			if ((m_pPPU->GetRegs()->bgmode & 7) == 6)
+				uOffsetOR = _FetchOffsetMode6LargeMap(uScrollX, uScrollY,
+					pOffset, pScreen);
+			else
+				uOffsetOR = _FetchOffset16x16Map(uScrollX, uScrollY,
+					pOffset, pScreen, bVOffset);
 		}
 
 		uOldVramAddr = uCacheKey;
@@ -878,6 +1020,8 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 		pBGInfo[1].uBitDepth= 2;
 		pBGInfo[2].uBitDepth= 0;
 		pBGInfo[3].uBitDepth= 0;
+		pBGInfo[0].uPalBase = 0x00;
+		pBGInfo[1].uPalBase = 0x00;
 		pBGInfo[0].Priority  =  5;
 		pBGInfo[1].Priority  =  4;
 		break;
@@ -887,7 +1031,9 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 		pBGInfo[1].uBitDepth= 2;
 		pBGInfo[2].uBitDepth= 0;
 		pBGInfo[3].uBitDepth= 0;
-		pBGInfo[0].Priority  =  5;
+		pBGInfo[0].uPalBase = 0x00;
+		pBGInfo[1].uPalBase = 0x00;
+		pBGInfo[0].Priority  =  5
 		pBGInfo[1].Priority  =  4;
 		break;
 
