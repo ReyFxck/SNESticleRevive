@@ -195,14 +195,14 @@ void SnesPPURender::UpdateCGRAM(Uint32 uAddr, Uint16 uData)
 /* $2133.3 pseudo-hires alternates sub/main physical dots at 512-dot
    resolution. Revive's PS2 carrier is 256 wide, so collapse each pair in
    native SNES BGR555. This preserves the intended CRT transparency while
-   avoiding a second full-width framebuffer. Behavior was cross-checked
-   against MesenCE and SNESticle Aurora. */
+   avoiding a second full-width framebuffer. The alternating-dot behavior follows the public SNES PPU model;
+   the 256-wide collapse is Revive's PS2 presentation choice. */
 static _INLINE Uint16 _SnesPPUAveragePseudoHires15(Uint16 uMain, Uint16 uSub)
 {
-	return (Uint16)(
-		((uMain & 0x7BDEu) >> 1) +
-		((uSub  & 0x7BDEu) >> 1) +
-		(uMain & uSub & 0x0421u));
+	Uint32 r = ((uMain & 0x001Fu) + (uSub & 0x001Fu)) >> 1;
+	Uint32 g = (((uMain >> 5) & 0x001Fu) + ((uSub >> 5) & 0x001Fu)) >> 1;
+	Uint32 b = (((uMain >> 10) & 0x001Fu) + ((uSub >> 10) & 0x001Fu)) >> 1;
+	return (Uint16)(r | (g << 5) | (b << 10));
 }
 
 static void _SnesPPUBuildPseudoHiresLine(
