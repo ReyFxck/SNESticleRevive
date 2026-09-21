@@ -936,7 +936,7 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 	pBGInfo[0].uScrollY = pRegs->bg1vofs.w & 0x3FF;
 	pBGInfo[0].uScrAddr = (pRegs->bg1sc >> 2) << 10;
 	pBGInfo[0].uScrSize =  pRegs->bg1sc & 3;
-	pBGInfo[0].uChrAddr =  ((pRegs->bg12nba >> 0) & 0x7) << 12;
+	pBGInfo[0].uChrAddr =  ((pRegs->bg12nba >> 0) & 0xF) << 12;
 	pBGInfo[0].uChrSize =  (pRegs->bgmode >> 4) & 1;
 	pBGInfo[0].uMosaic  = (pRegs->mosaic&1) ? (pRegs->mosaic>>4) : 0;
 
@@ -944,7 +944,7 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 	pBGInfo[1].uScrollY = pRegs->bg2vofs.w & 0x3FF;
 	pBGInfo[1].uScrAddr = (pRegs->bg2sc >> 2) << 10;
 	pBGInfo[1].uScrSize =  pRegs->bg2sc & 3;
-	pBGInfo[1].uChrAddr =  ((pRegs->bg12nba >> 4) & 0x7) << 12;
+	pBGInfo[1].uChrAddr =  ((pRegs->bg12nba >> 4) & 0xF) << 12;
 	pBGInfo[1].uChrSize =  (pRegs->bgmode >> 5) & 1;
 	pBGInfo[1].uMosaic  = (pRegs->mosaic&2) ? (pRegs->mosaic>>4) : 0;
 
@@ -952,7 +952,7 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 	pBGInfo[2].uScrollY = pRegs->bg3vofs.w & 0x3FF;
 	pBGInfo[2].uScrAddr = (pRegs->bg3sc >> 2) << 10;
 	pBGInfo[2].uScrSize =  pRegs->bg3sc & 3;
-	pBGInfo[2].uChrAddr =  ((pRegs->bg34nba >> 0) & 0x7) << 12;
+	pBGInfo[2].uChrAddr =  ((pRegs->bg34nba >> 0) & 0xF) << 12;
 	pBGInfo[2].uChrSize =  (pRegs->bgmode >> 6) & 1;
 	pBGInfo[2].uMosaic  = (pRegs->mosaic&4) ? (pRegs->mosaic>>4) : 0;
 
@@ -960,7 +960,7 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 	pBGInfo[3].uScrollY = pRegs->bg4vofs.w & 0x3FF;
 	pBGInfo[3].uScrAddr = (pRegs->bg4sc >> 2) << 10;
 	pBGInfo[3].uScrSize =  pRegs->bg4sc & 3;
-	pBGInfo[3].uChrAddr =  ((pRegs->bg34nba >> 4) & 0x7) << 12;
+	pBGInfo[3].uChrAddr =  ((pRegs->bg34nba >> 4) & 0xF) << 12;
 	pBGInfo[3].uChrSize =  (pRegs->bgmode >> 7) & 1;
 	pBGInfo[3].uMosaic  = (pRegs->mosaic&8) ? (pRegs->mosaic>>4) : 0;
 
@@ -1033,7 +1033,7 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 		pBGInfo[3].uBitDepth= 0;
 		pBGInfo[0].uPalBase = 0x00;
 		pBGInfo[1].uPalBase = 0x00;
-		pBGInfo[0].Priority  =  5
+		pBGInfo[0].Priority  =  5;
 		pBGInfo[1].Priority  =  4;
 		break;
 
