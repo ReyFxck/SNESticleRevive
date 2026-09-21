@@ -438,8 +438,10 @@ static Bool bPrint = TRUE;
 			m_pBlend->Exec(
 				pBlendInfo, iLine, 0, NULL, FALSE,
 				m_pPPU->GetIntensity());
-			m_pBlend->UpdatePalette(
-				pBlendInfo, m_pPPU->GetCGData(), m_pPPU->GetIntensity());
+			/* Do not upload the real CGRAM again on every pseudo-hires line.
+			   Mark it dirty instead; the normal path restores it only when a
+			   subsequent non-pseudo line actually needs it. */
+			m_UpdateFlags |= SNESPPURENDER_UPDATE_PAL;
 		}
 		else
 		{
