@@ -906,10 +906,9 @@ void SnesPPU::BeginFrame()
 
 void SnesPPU::EndFrame()
 {
+    /* This is the VBlank edge. STAT78.field changes later, when the
+       physical V counter wraps at the end of the field. */
     m_bVBlank = TRUE;
-
-	// toggle field
-	m_Regs.stat78^=0x80;
 
     // forced blanking?
     if (!(m_Regs.inidisp & 0x80))
@@ -920,6 +919,13 @@ void SnesPPU::EndFrame()
 		m_OAMLatch = 0;
 		UpdateOAMPriority();
     }
+}
+
+void SnesPPU::AdvanceField()
+{
+	/* $213F.7 is the current field and toggles at vertical counter wrap,
+	   not when VBlank begins. */
+	m_Regs.stat78 ^= 0x80;
 }
 
 void SnesPPU::Sync(Uint32 uLine)
