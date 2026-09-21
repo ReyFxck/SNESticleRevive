@@ -975,8 +975,14 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 
 - **[iaddis/SNESticle](https://github.com/iaddis/SNESticle)** — Icer Addis, the original emulator.
 - **[nesdev-org/MesenCE](https://github.com/nesdev-org/MesenCE)** — current
-  Mesen2-derived reference for 65816, interrupt and SNES DMA/HDMA behavior
-  used by the r19 audit.
+  Mesen2-derived accuracy reference for 65816, interrupts, DMA/HDMA and the
+  SNES PPU. Its documented Mode 4/5/6, SETINI, hi-res, interlace and
+  offset-per-tile behavior was used to cross-check the Revive v1.1.1 work.
+- **[itsveenee/SNESticleAurora](https://github.com/itsveenee/SNESticleAurora)** —
+  **Vinícius Nunes (@itsveenee)**; PS2-oriented SNESticle fork used as an
+  additional behavioral and implementation-comparison reference for Mode 4/5/6,
+  pseudo-hires and SETINI work. Revive keeps its own branding and its v1.1.1
+  implementation is maintained independently.
 - **[SingleStepTests/65816](https://github.com/SingleStepTests/65816)** —
   complete per-opcode state, memory and bus-cycle vectors used by
   `tools/cputest`.
