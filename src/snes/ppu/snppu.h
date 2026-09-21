@@ -179,6 +179,7 @@ public:
 	void                    SetVideoRegion(Bool bPAL);
 	void                    BeginFrame();
 	void                    EndFrame();
+	void                    AdvanceField();
 	void                    SetPPURender(ISnesPPURender *pPPURender)    {m_pRender=pPPURender;}
 
 	const SnesPPURegsT *    GetRegs() const                             {return &m_Regs;}
@@ -189,6 +190,7 @@ public:
 	Uint32                  GetIntensity()  const                       {return m_Regs.inidisp & 0xF;}
 	Uint32                  GetFrameVisibleLines() const                {return m_uFrameVisibleLines;}
 	Bool                    IsFrameInterlace() const                    {return m_bFrameInterlace;}
+	Bool                    GetField() const                             {return (m_Regs.stat78 & 0x80) != 0;}
 	Bool                    IsPseudoHires() const                       {return (m_Regs.setini & SNESPPU_SETINI_PSEUDOHIR) != 0;}
 	Bool                    IsObjInterlace() const                       {return (m_Regs.setini & SNESPPU_SETINI_OBJ_INTERLACE) != 0;}
 
