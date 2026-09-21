@@ -1901,6 +1901,13 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	/* SETINI overscan is latched by BeginFrame(). Keep CPU/HDMA visible
 	   scanlines and the renderer on the same 224/239-line boundary. */
 	const Uint32 uVisibleLines = m_PPU.GetFrameVisibleLines();
+	const Bool bPALFrame =
+		(m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL) ? TRUE : FALSE;
+	/* NTSC fields contain 262 scanlines, PAL fields 312. In interlace,
+	   field 0 carries one extra line before the field bit toggles. */
+	const Uint32 uFrameLines =
+		(bPALFrame ? 312u : 262u) +
+		((m_PPU.IsFrameInterlace() && !m_PPU.GetField()) ? 1u : 0u);
 	for (m_uLine=0; m_uLine < (uVisibleLines + 1); m_uLine++)
 	{
 		#if SNES_SYNCPPUEVERYLINE
@@ -1938,7 +1945,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     m_IO.m_Regs.rdnmi |= 0x80;
     SNCPUSignalNMI(&m_Cpu, m_IO.m_Regs.rdnmi & m_IO.m_Regs.nmitimen & 0x80);
 
-    for ( ; m_uLine < 262; m_uLine++)
+    for ( ; m_uLine < uFrameLines; m_uLine++)
 	{
 		ExecuteLine();
 
@@ -1956,6 +1963,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	// clear vbl flag at end of vblank
 	m_IO.m_Regs.hvbjoy&= ~0x80;
 	PROF_LEAVE("ExecVBLANK");
+
+	/* The field flag changes at the physical V-counter wrap. */
+	m_PPU.AdvanceField();
 
 	SyncPPU();
 	SyncSPC();
