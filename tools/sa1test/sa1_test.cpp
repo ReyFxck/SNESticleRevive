@@ -52,6 +52,9 @@ static void TestIRAMAndBWRAM(void)
 
 	SNSA1 sa1;
 	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2226, 0x80);
+	sa1.WriteRegister(0x2227, 0x80);
+	sa1.WriteRegister(0x2228, 0x00);
 	sa1.WriteIRAM(0x0123, 0xA5);
 	CHECK(sa1.ReadIRAM(0x0123) == 0xA5, "I-RAM round trip");
 	sa1.WriteIRAM(0x0923, 0x5A);
@@ -68,6 +71,192 @@ static void TestIRAMAndBWRAM(void)
 
 	sa1.WriteBWRAMDirect(0x430010, 0x77);
 	CHECK(bwram[0x0010] == 0x77, "direct BW-RAM mirroring");
+}
+
+
+static void TestWriteProtection(void)
+{
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	SNSA1 sa1;
+	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2226, 0x80);
+	sa1.WriteRegister(0x2227, 0x80);
+	sa1.WriteRegister(0x2228, 0x00); // first 256 bytes protected
+
+	sa1.WriteBWRAMDirect(0x400080, 0x11);
+	CHECK(bwram[0x0080] == 0x00, "BWPA must protect first 256 bytes");
+	sa1.WriteBWRAMDirect(0x400100, 0x22);
+	CHECK(bwram[0x0100] == 0x22, "S-CPU BW-RAM write enable above BWPA");
+
+	sa1.WriteRegister(0x2226, 0x00);
+	sa1.WriteBWRAMDirect(0x400100, 0x33);
+	CHECK(bwram[0x0100] == 0x22, "SBWE clear must block S-CPU BW-RAM writes");
+
+	sa1.WriteRegister(0x2229, 0x02);
+	sa1.WriteIRAM(0x0100, 0x44);
+	CHECK(sa1.ReadIRAM(0x0100) == 0x00, "SIWP must protect selected S-CPU I-RAM page");
+	sa1.WriteIRAM(0x0200, 0x55);
+	CHECK(sa1.ReadIRAM(0x0200) == 0x55, "SIWP must leave other pages writable");
+
+	sa1.WriteRegister(0x222A, 0x04);
+	SNCPUWrite8(sa1.GetCpu(), 0x000200, 0x66);
+	CHECK(sa1.ReadIRAM(0x0200) == 0x55, "CIWP must protect selected SA-1 I-RAM page");
+	SNCPUWrite8(sa1.GetCpu(), 0x000300, 0x77);
+	CHECK(sa1.ReadIRAM(0x0300) == 0x77, "CIWP must leave other SA-1 pages writable");
+}
+
+static void TestBitmapModes(void)
+{
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	SNSA1 sa1;
+	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2227, 0x80);
+	sa1.WriteRegister(0x2228, 0x00);
+	sa1.WriteRegister(0x2225, 0x80);
+
+	// 4bpp: two virtual pixels share one BW-RAM byte.
+	sa1.WriteRegister(0x223F, 0x00);
+	SNCPUWrite8(sa1.GetCpu(), 0x006200, 0x0A);
+	SNCPUWrite8(sa1.GetCpu(), 0x006201, 0x05);
+	CHECK(bwram[0x0100] == 0x5A, "4bpp bitmap must pack two pixels per byte");
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x006200) == 0x0A, "4bpp bitmap pixel 0 read");
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x006201) == 0x05, "4bpp bitmap pixel 1 read");
+
+	// 2bpp: four virtual pixels share one BW-RAM byte.
+	memset(bwram, 0, sizeof(bwram));
+	sa1.WriteRegister(0x223F, 0x80);
+	SNCPUWrite8(sa1.GetCpu(), 0x006400, 1);
+	SNCPUWrite8(sa1.GetCpu(), 0x006401, 2);
+	SNCPUWrite8(sa1.GetCpu(), 0x006402, 3);
+	SNCPUWrite8(sa1.GetCpu(), 0x006403, 0);
+	CHECK(bwram[0x0100] == 0x39, "2bpp bitmap must pack four pixels per byte");
+}
+
+static void TestArithmetic(void)
+{
+	SNSA1 sa1;
+
+	// signed -3 * 5 = -15, exposed as a 40-bit result.
+	sa1.WriteRegister(0x2250, 0x00);
+	sa1.WriteRegister(0x2251, 0xFD);
+	sa1.WriteRegister(0x2252, 0xFF);
+	sa1.WriteRegister(0x2253, 0x05);
+	sa1.WriteRegister(0x2254, 0x00);
+	CHECK(sa1.ReadRegister(0x2306) == 0xF1 &&
+	      sa1.ReadRegister(0x2307) == 0xFF &&
+	      sa1.ReadRegister(0x230A) == 0xFF,
+	      "signed multiplication must produce 40-bit two's-complement result");
+
+	// signed dividend / unsigned divisor: -10 / 3 = -3 remainder 1.
+	sa1.WriteRegister(0x2250, 0x01);
+	sa1.WriteRegister(0x2251, 0xF6);
+	sa1.WriteRegister(0x2252, 0xFF);
+	sa1.WriteRegister(0x2253, 0x03);
+	sa1.WriteRegister(0x2254, 0x00);
+	CHECK(sa1.ReadRegister(0x2306) == 0xFD &&
+	      sa1.ReadRegister(0x2307) == 0xFF &&
+	      sa1.ReadRegister(0x2308) == 0x01 &&
+	      sa1.ReadRegister(0x2309) == 0x00,
+	      "division must expose signed quotient and unsigned remainder");
+
+	// cumulative mode: 2*3 + 4*5 = 26.
+	sa1.WriteRegister(0x2250, 0x02);
+	sa1.WriteRegister(0x2251, 2); sa1.WriteRegister(0x2252, 0);
+	sa1.WriteRegister(0x2253, 3); sa1.WriteRegister(0x2254, 0);
+	sa1.WriteRegister(0x2251, 4); sa1.WriteRegister(0x2252, 0);
+	sa1.WriteRegister(0x2253, 5); sa1.WriteRegister(0x2254, 0);
+	CHECK(sa1.ReadRegister(0x2306) == 26 && sa1.ReadRegister(0x2307) == 0,
+	      "cumulative arithmetic must retain the 40-bit sum");
+}
+
+static void TestVariableLengthBit(void)
+{
+	std::vector<Uint8> rom(0x200000, 0x00);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+	rom[0x0000] = 0x34;
+	rom[0x0001] = 0x12;
+	rom[0x0002] = 0x78;
+	rom[0x0003] = 0x56;
+
+	SNSA1 sa1;
+	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2259, 0x00);
+	sa1.WriteRegister(0x225A, 0x80);
+	sa1.WriteRegister(0x225B, 0x00);
+	CHECK(sa1.ReadRegister(0x230C) == 0x34 && sa1.ReadRegister(0x230D) == 0x12,
+	      "VBR address writes must preload an unshifted word");
+
+	sa1.WriteRegister(0x2258, 0x84); // auto mode, 4-bit fields
+	CHECK(sa1.ReadRegister(0x230C) == 0x23, "VBR 4-bit shift low byte");
+	CHECK(sa1.ReadRegister(0x230D) == 0x81, "VBR 4-bit shift high byte");
+	CHECK(sa1.ReadRegister(0x230C) == 0x12 && sa1.ReadRegister(0x230D) == 0x78,
+	      "VBR auto mode must advance after reading the high port");
+}
+
+static void TestNMI(void)
+{
+	std::vector<Uint8> rom(0x200000, 0xEA);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	// Reset: WAI ; STP. NMI handler at $8200 writes $88 to I-RAM $12.
+	rom[0x0000] = 0xCB;
+	rom[0x0001] = 0xDB;
+	rom[0x0200] = 0xA9;
+	rom[0x0201] = 0x88;
+	rom[0x0202] = 0x85;
+	rom[0x0203] = 0x12;
+	rom[0x0204] = 0xDB;
+
+	SNSA1 sa1;
+	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2203, 0x00); sa1.WriteRegister(0x2204, 0x80);
+	sa1.WriteRegister(0x2205, 0x00); sa1.WriteRegister(0x2206, 0x82);
+	sa1.WriteRegister(0x2200, 0x00);
+	sa1.StepMasterCycles(64);
+	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0, "NMI fixture must enter WAI");
+	sa1.WriteRegister(0x220A, 0x10);
+	sa1.WriteRegister(0x2200, 0x10);
+	sa1.StepMasterCycles(128);
+	CHECK(sa1.ReadIRAM(0x0012) == 0x88, "SA-1 NMI must use $2205/$2206 vector");
+}
+
+static void TestTimerIRQ(void)
+{
+	std::vector<Uint8> rom(0x200000, 0xEA);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	// Reset: CLI ; WAI ; STP. Timer handler at $8100 writes $99 to I-RAM $13.
+	rom[0x0000] = 0x58;
+	rom[0x0001] = 0xCB;
+	rom[0x0002] = 0xDB;
+	rom[0x0100] = 0xA9;
+	rom[0x0101] = 0x99;
+	rom[0x0102] = 0x85;
+	rom[0x0103] = 0x13;
+	rom[0x0104] = 0xDB;
+
+	SNSA1 sa1;
+	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2203, 0x00); sa1.WriteRegister(0x2204, 0x80);
+	sa1.WriteRegister(0x2207, 0x00); sa1.WriteRegister(0x2208, 0x81);
+	sa1.WriteRegister(0x2200, 0x00);
+	sa1.StepMasterCycles(64);
+	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0, "timer fixture must enter WAI");
+
+	sa1.WriteRegister(0x220A, 0x40);
+	sa1.WriteRegister(0x2212, 20); // H=20 dots -> 80 master clocks
+	sa1.WriteRegister(0x2213, 0);
+	sa1.WriteRegister(0x2210, 0x01);
+	sa1.StepMasterCycles(128);
+	CHECK((sa1.ReadRegister(0x2301) & 0x40) != 0, "H timer must latch timer IRQ status");
+	CHECK(sa1.ReadIRAM(0x0013) == 0x99, "timer IRQ must enter the SA-1 IRQ vector");
 }
 
 static void TestMMCMapping(void)
@@ -179,9 +368,15 @@ int main(void)
 	TestResetDefaults();
 	TestResetReleaseAndScheduler();
 	TestIRAMAndBWRAM();
+	TestWriteProtection();
+	TestBitmapModes();
+	TestArithmetic();
+	TestVariableLengthBit();
 	TestMMCMapping();
 	TestInstructionExecution();
 	TestIRQVector();
+	TestNMI();
+	TestTimerIRQ();
 
 	if (g_Failures)
 	{

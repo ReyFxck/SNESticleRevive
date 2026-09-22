@@ -32,7 +32,17 @@ struct SA1State
 	Uint32 ExecutionSlices;
 	Uint32 ResetEpoch;
 	Uint16 LastResetVector;
+	Uint32 HCounter;
+	Uint16 VCounter;
+	Uint16 ArithmeticOp1;
+	Uint16 ArithmeticOp2;
+	Uint64 ArithmeticResult;
+	Uint16 VariableData;
+	Uint8  VariableBitPos;
 	Uint8  MasterRemainder;
+	Bool   ArithmeticOverflow;
+	Bool   TimerMatch;
+	Bool   NMIPending;
 	Bool   Running;
 };
 
@@ -46,10 +56,11 @@ public:
 	               Uint8 *pBWRAM, Uint32 uBWRAMBytes);
 	void Reset(Bool bHardReset);
 
-	Uint8 ReadRegister(Uint16 uAddr) const;
+	Uint8 ReadRegister(Uint16 uAddr);
 	void  WriteRegister(Uint16 uAddr, Uint8 uData);
 
 	Uint8 ReadIRAM(Uint16 uAddr) const;
+	// Public write path is the S-CPU side ($3000-$37FF).
 	void  WriteIRAM(Uint16 uAddr, Uint8 uData);
 
 	// S-CPU window selected by $2224.
@@ -81,12 +92,22 @@ private:
 	void MapCpuMemory();
 	void MapRomGroup(Uint32 uWhich, Uint8 uMap);
 	void RunScheduled(Uint32 uSA1Cycles);
+	Bool ServiceNMI();
 	Bool ServiceIRQ();
+	void UpdateTimer(Uint32 uMasterCycles);
+	void ExecuteArithmetic();
+	void UpdateVariableData(Bool bIncrement, Bool bNoShift);
 
-	Uint8 ReadCpuBus(Uint32 uAddr) const;
+	Uint8 ReadCpuBus(Uint32 uAddr);
 	void  WriteCpuBus(Uint32 uAddr, Uint8 uData);
 	Uint8 ReadSA1BWRAMWindow(Uint16 uAddr) const;
 	void  WriteSA1BWRAMWindow(Uint16 uAddr, Uint8 uData);
+	Uint8 ReadBitmap(Uint32 uVirtualAddr) const;
+	void  WriteBitmap(Uint32 uVirtualAddr, Uint8 uData);
+	void  WriteIRAMSA1(Uint16 uAddr, Uint8 uData);
+	void  WriteBWRAMDirectSA1(Uint32 uAddr, Uint8 uData);
+	Bool  CanWriteIRAM(Uint16 uAddr, Bool bSA1Side) const;
+	Bool  CanWriteBWRAM(Uint32 uOffset, Bool bSA1Side) const;
 	void  UpdateIRQLine();
 
 	SA1State m_State;
