@@ -546,7 +546,7 @@ static _INLINE void _FetchPhysicalCHR4Row(
 	const Uint16 *pVram, Uint32 uRowAddr, Bool bHFlip,
 	Uint64 *pData, Uint32 *pOpaque)
 {
-#if SNPPU_BG_CACHE || SNPPU_OBJ_CACHE
+#if SNPPU_BG_CACHE
 	if (SnesPPUChrCacheLookup4(&_SnesPPU_ChrCache, uRowAddr,
 		bHFlip, pData, pOpaque))
 		return;
@@ -568,7 +568,7 @@ static _INLINE void _FetchPhysicalCHR4Row(
 		Uint32 uOpaque =
 			SNPPU_BG_HFLIP_LOOKUP[1][p0 | p1 | p2 | p3];
 
-#if SNPPU_BG_CACHE || SNPPU_OBJ_CACHE
+#if SNPPU_BG_CACHE
 		SnesPPUChrCacheStore4(&_SnesPPU_ChrCache, uRowAddr,
 			uData, uOpaque);
 #endif
