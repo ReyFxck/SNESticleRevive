@@ -932,6 +932,18 @@ static void TestIdlePollingFastForward(void)
 	      "idle fast-forward must advance the full SA-1 clock slice");
 	CHECK(sa1.GetIdleFastForwardTicks() == 100,
 	      "stable polling loop should fast-forward all scheduled ticks");
+	CHECK(sa1.IsIdlePollSleeping(),
+	      "stable polling loop should latch persistent idle sleep");
+
+	Int32 nSleepStart = SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME);
+	sa1.StepMasterCycles(200);
+	CHECK(sa1.GetIdleFastForwardTicks() == 200,
+	      "persistent idle sleep must fast-forward the next full slice");
+	CHECK(sa1.GetIdleSleepSlices() == 1,
+	      "second stable slice should use persistent sleep fast path");
+	CHECK(SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME) - nSleepStart ==
+	      100 * SNCPU_CYCLE_FAST,
+	      "persistent sleep must advance SA-1 counter without interpreter work");
 
 	// The no-diagnostic R5900 backend can end a slice on the BEQ itself.
 	// That phase must be recognized too, otherwise deep tracing accidentally
@@ -955,8 +967,10 @@ static void TestIdlePollingFastForward(void)
 	sa1.WriteRegister(0x2229, 0xFF);
 	sa1.WriteIRAM(0x0000, 0x01);
 	sa1.StepMasterCycles(128);
-	CHECK(sa1.GetIdleFastForwardTicks() == 100,
-	      "changed I-RAM polling value must disable fast-forward");
+	CHECK(sa1.GetIdleFastForwardTicks() == 200,
+	      "changed I-RAM polling value must disable further fast-forward");
+	CHECK(!sa1.IsIdlePollSleeping(),
+	      "changed watched I-RAM byte must wake persistent idle sleep");
 	CHECK((sa1.GetCpu()->Regs.rPC & 0xFFFF) != 0x8000,
 	      "changed polling value must allow SA-1 to leave the idle loop");
 }

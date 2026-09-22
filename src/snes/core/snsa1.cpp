@@ -33,6 +33,11 @@ SNSA1::SNSA1()
 	m_pBWRAM = NULL;
 	m_uBWRAMBytes = 0;
 	m_uIdleFastForwardTicks = 0;
+	m_uIdleSleepSlices = 0;
+	m_bIdlePollSleeping = FALSE;
+	m_uIdlePollIRAM = 0;
+	m_uIdlePollValue = 0;
+	m_uIdlePollLoopPC = 0;
 	SNCPUNew(&m_Cpu);
 	m_Cpu.pUserData = this;
 	Reset(TRUE);
@@ -93,6 +98,10 @@ void SNSA1::RestoreState(const SA1SaveState *pState)
 	m_Cpu.uIrqPending = pState->CpuIrqPending;
 	m_Cpu.pUserData = this;
 
+	// The idle latch is a derived optimization, not architectural state.
+	// Reconstruct it naturally after restore instead of serializing it.
+	ClearIdlePollSleep();
+
 	// Bank pointers and trap callbacks are process-local and are never
 	// serialized. Rebuild them from the restored MMC/register state.
 	MapCpuMemory();
@@ -150,6 +159,8 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.CC1Active = FALSE;
 	m_State.Running = FALSE;
 	m_uIdleFastForwardTicks = 0;
+	m_uIdleSleepSlices = 0;
+	ClearIdlePollSleep();
 
 	ResetCPUContext();
 	MapCpuMemory();
@@ -183,6 +194,8 @@ void SNSA1::ReleaseCPUReset()
 {
 	Uint32 uElapsedTicks;
 	Int32 nElapsedUnits;
+
+	ClearIdlePollSleep();
 
 	// Releasing CCNT.RESET resets the SA-1-side I-RAM write-enable mask.
 	// Software must reprogram CIWP ($222A) after the CPU leaves reset.
@@ -1237,6 +1250,7 @@ void SNSA1::MapRomGroup(Uint32 uWhich, Uint8 uMap)
 
 void SNSA1::MapCpuMemory()
 {
+	ClearIdlePollSleep();
 	Uint32 i, uBank;
 
 	SNCPUSetTrap(&m_Cpu, 0, SNCPU_MEM_SIZE, CpuReadTrap, CpuWriteTrap);
@@ -1467,6 +1481,53 @@ Bool SNSA1::PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const
 	return TRUE;
 }
 
+void SNSA1::ClearIdlePollSleep()
+{
+	m_bIdlePollSleeping = FALSE;
+	m_uIdlePollIRAM = 0;
+	m_uIdlePollValue = 0;
+	m_uIdlePollLoopPC = 0;
+}
+
+Bool SNSA1::FastForwardSleepingIdle(Uint32 uSA1Cycles)
+{
+	Int32 nIdleUnits;
+	Int32 i;
+
+	if (!m_bIdlePollSleeping)
+		return FALSE;
+
+	/* Anything that can change architectural execution wakes the CPU. */
+	if (m_State.DMARunning || m_State.ArithmeticPending ||
+	    m_State.NMIPending || m_State.TimerMatch ||
+	    (m_Cpu.uSignal & (SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_NMI |
+	                      SNCPU_SIGNAL_NMIEDGE | SNCPU_SIGNAL_WAI |
+	                      SNCPU_SIGNAL_STP)))
+	{
+		ClearIdlePollSleep();
+		return FALSE;
+	}
+
+	/* Shared I-RAM is the wake event.  Resume at the LDA rather than at a
+	   cached BEQ/BNE phase so the new byte is observed immediately. */
+	if (m_IRAM[m_uIdlePollIRAM] != m_uIdlePollValue)
+	{
+		m_Cpu.Regs.rPC = m_uIdlePollLoopPC;
+		ClearIdlePollSleep();
+		return FALSE;
+	}
+
+	/* Once latched, do not decode the polling loop on every S-CPU sync.
+	   Advance the free-running SA-1 timebase directly. */
+	nIdleUnits = (Int32)(uSA1Cycles * SNCPU_CYCLE_FAST);
+	for (i = 0; i < SNCPU_COUNTER_NUM; i++)
+		m_Cpu.Counter[i] += nIdleUnits;
+	m_Cpu.Cycles = 0;
+	m_uIdleFastForwardTicks += uSA1Cycles;
+	m_uIdleSleepSlices++;
+	return TRUE;
+}
+
 Bool SNSA1::TryFastForwardIdleLoop()
 {
 	Uint32 uPC;
@@ -1563,6 +1624,10 @@ Bool SNSA1::TryFastForwardIdleLoop()
 		return FALSE;
 
 	uSkippedUnits = (m_Cpu.Cycles > 0) ? (Uint32)m_Cpu.Cycles : 0;
+	m_bIdlePollSleeping = TRUE;
+	m_uIdlePollIRAM = uIRAM;
+	m_uIdlePollValue = uValue;
+	m_uIdlePollLoopPC = uLoopPC;
 	m_uIdleFastForwardTicks += uSkippedUnits / SNCPU_CYCLE_FAST;
 	m_Cpu.Cycles = 0;
 	return TRUE;
@@ -1583,12 +1648,22 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 	if (!uSA1Cycles || !m_State.Running)
 		return;
 
-	// Normal DMA owns the SA-1 bus and stalls instruction execution.  If the
-	// transfer finishes inside this slice, the remaining ticks go to the CPU.
+	// Normal DMA owns the SA-1 bus and stalls instruction execution.  DMA can
+	// touch shared memory, so it always invalidates a latched polling sleep.
 	if (m_State.DMARunning)
+	{
+		ClearIdlePollSleep();
 		uCpuCycles = RunDMA(uCpuCycles);
+	}
 
 	if (!uCpuCycles || (m_Cpu.uSignal & SNCPU_SIGNAL_STP))
+	{
+		m_State.ExecutionSlices++;
+		m_State.ExecutedCycles += uSA1Cycles;
+		return;
+	}
+
+	if (FastForwardSleepingIdle(uCpuCycles))
 	{
 		m_State.ExecutionSlices++;
 		m_State.ExecutedCycles += uSA1Cycles;
