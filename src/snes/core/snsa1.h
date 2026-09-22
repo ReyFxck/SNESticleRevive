@@ -131,9 +131,7 @@ public:
 	Uint32 GetLastSliceCycles() const { return m_State.LastSliceCycles; }
 	Uint64 GetIdleFastForwardTicks() const { return m_uIdleFastForwardTicks; }
 	Uint64 GetIdleSleepSlices() const { return m_uIdleSleepSlices; }
-	Uint64 GetSCPUReadSyncSkips() const { return m_uSCPUReadSyncSkips; }
 	Bool   IsIdlePollSleeping() const { return m_bIdlePollSleeping; }
-	Bool   TrySkipSCPUReadSync();
 	const SA1State *GetState() const { return &m_State; }
 	SNCpuT *GetCpu() { return &m_Cpu; }
 	const SNCpuT *GetCpu() const { return &m_Cpu; }
@@ -156,8 +154,6 @@ private:
 	Bool FastForwardSleepingIdle(Uint32 uSA1Cycles);
 	void ClearIdlePollSleep();
 	void UpdateFastMemorySidecars();
-	void UpdateHostFastReadSidecar();
-	Bool IsHostFastReadSafe() const;
 	Bool PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const;
 	Bool ServiceNMI();
 	Bool ServiceIRQ();
@@ -197,7 +193,6 @@ private:
 	Uint32       m_uBWRAMBytes;
 	Uint64       m_uIdleFastForwardTicks;
 	Uint64       m_uIdleSleepSlices;
-	Uint64       m_uSCPUReadSyncSkips;
 	Bool         m_bIdlePollSleeping;
 	Uint16       m_uIdlePollIRAM;
 	Uint8        m_uIdlePollValue;

@@ -34,7 +34,6 @@ SNSA1::SNSA1()
 	m_uBWRAMBytes = 0;
 	m_uIdleFastForwardTicks = 0;
 	m_uIdleSleepSlices = 0;
-	m_uSCPUReadSyncSkips = 0;
 	m_bIdlePollSleeping = FALSE;
 	m_uIdlePollIRAM = 0;
 	m_uIdlePollValue = 0;
@@ -69,8 +68,7 @@ void SNSA1::UpdateFastMemorySidecars()
 
 	SNCPUSA1FastMemConfig(m_IRAM, m_State.Registers[0x02A],
 	                     m_pBWRAM, m_uBWRAMBytes,
-	                     bWriteEnabled, uProtected,
-	                     m_State.Registers[0x024]);
+	                     bWriteEnabled, uProtected);
 }
 
 void SNSA1::SetVideoRegion(Bool bPAL)
@@ -176,7 +174,6 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.Running = FALSE;
 	m_uIdleFastForwardTicks = 0;
 	m_uIdleSleepSlices = 0;
-	m_uSCPUReadSyncSkips = 0;
 	ClearIdlePollSleep();
 
 	ResetCPUContext();
@@ -500,10 +497,7 @@ void SNSA1::WriteSCPURegister(Uint16 uAddr, Uint8 uData)
 		(uAddr >= 0x2231 && uAddr <= 0x2237);
 
 	if (bAllowed)
-	{
-		ClearIdlePollSleep();
 		WriteRegister(uAddr, uData);
-	}
 }
 
 void SNSA1::WriteSA1Register(Uint16 uAddr, Uint8 uData)
@@ -536,17 +530,8 @@ Bool SNSA1::CanWriteIRAM(Uint16 uAddr, Bool bSA1Side) const
 
 void SNSA1::WriteIRAM(Uint16 uAddr, Uint8 uData)
 {
-	Uint16 uOffset = uAddr & (SNSA1_IRAM_SIZE - 1);
-	if (!CanWriteIRAM(uOffset, FALSE))
-		return;
-
-	if (m_bIdlePollSleeping && uOffset == m_uIdlePollIRAM &&
-	    m_IRAM[uOffset] != uData)
-	{
-		m_Cpu.Regs.rPC = m_uIdlePollLoopPC;
-		ClearIdlePollSleep();
-	}
-	m_IRAM[uOffset] = uData;
+	if (CanWriteIRAM(uAddr, FALSE))
+		m_IRAM[uAddr & (SNSA1_IRAM_SIZE - 1)] = uData;
 }
 
 void SNSA1::WriteIRAMSA1(Uint16 uAddr, Uint8 uData)
@@ -1490,8 +1475,7 @@ Bool SNSA1::ExecuteCpuFast()
 	SNCPUSA1BusSetExecCpu(&m_Cpu);
 	SNCPUExecute_ASM(&m_Cpu);
 	SNCPUSA1BusSetExecCpu(NULL);
-	/* Keep the I-RAM sidecar published for the host R5900 fast-read path.
-	   Access is still gated by g_SNCPU_SA1HostFastReadEnabled. */
+	SNCPUSA1BusSetIRAM(NULL);
 	m_Cpu.bRunning = FALSE;
 	if (m_Cpu.nAbortCycles != 0)
 	{
@@ -1516,38 +1500,8 @@ Bool SNSA1::PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const
 	return TRUE;
 }
 
-Bool SNSA1::IsHostFastReadSafe() const
-{
-	if (!m_bIdlePollSleeping || !m_State.Running)
-		return FALSE;
-	if (m_State.DMARunning || m_State.ArithmeticPending ||
-	    m_State.NMIPending || m_State.TimerMatch || m_State.CC1Active)
-		return FALSE;
-	if (m_State.Registers[0x010] & 0x03)
-		return FALSE;
-	if (m_Cpu.uSignal & (SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_NMI |
-	                    SNCPU_SIGNAL_NMIEDGE | SNCPU_SIGNAL_WAI |
-	                    SNCPU_SIGNAL_STP))
-		return FALSE;
-	return TRUE;
-}
-
-void SNSA1::UpdateHostFastReadSidecar()
-{
-	SNCPUSA1HostFastReadEnable(IsHostFastReadSafe());
-}
-
-Bool SNSA1::TrySkipSCPUReadSync()
-{
-	if (!IsHostFastReadSafe())
-		return FALSE;
-	m_uSCPUReadSyncSkips++;
-	return TRUE;
-}
-
 void SNSA1::ClearIdlePollSleep()
 {
-	SNCPUSA1HostFastReadEnable(FALSE);
 	m_bIdlePollSleeping = FALSE;
 	m_uIdlePollIRAM = 0;
 	m_uIdlePollValue = 0;
@@ -1590,7 +1544,6 @@ Bool SNSA1::FastForwardSleepingIdle(Uint32 uSA1Cycles)
 	m_Cpu.Cycles = 0;
 	m_uIdleFastForwardTicks += uSA1Cycles;
 	m_uIdleSleepSlices++;
-	UpdateHostFastReadSidecar();
 	return TRUE;
 }
 
@@ -1694,7 +1647,6 @@ Bool SNSA1::TryFastForwardIdleLoop()
 	m_uIdlePollIRAM = uIRAM;
 	m_uIdlePollValue = uValue;
 	m_uIdlePollLoopPC = uLoopPC;
-	UpdateHostFastReadSidecar();
 	m_uIdleFastForwardTicks += uSkippedUnits / SNCPU_CYCLE_FAST;
 	m_Cpu.Cycles = 0;
 	return TRUE;

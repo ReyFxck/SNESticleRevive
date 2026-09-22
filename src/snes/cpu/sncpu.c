@@ -25,9 +25,6 @@ Uint8 *g_SNCPU_SA1BWRAM = NULL;
 Uint32 g_SNCPU_SA1BWRAMMask = 0xFFFFFFFFu;
 Uint32 g_SNCPU_SA1BWRAMWriteEnabled = 0;
 Uint32 g_SNCPU_SA1BWRAMProtectedBytes = 0xFFFFFFFFu;
-volatile Uint32 g_SNCPU_SA1HostFastReadEnabled = 0;
-volatile Uint32 g_SNCPU_SA1HostFastReadCount = 0;
-Uint32 g_SNCPU_SA1HostBWRAMBase = 0;
 Uint8 g_SNCPU_SA1BusPenaltyUnits[4][SNCPU_SA1_BUS_UNIT_MAX];
 static Uint32 g_SNCPU_SA1BusFinalized = 0;
 static Uint32 g_SNCPU_SA1BusBits[4][SNCPU_SA1_BUS_TICK_MAX / 32];
@@ -81,8 +78,6 @@ void SNCPUSA1BusSetHost(SNCpuT *pCpu)
 	g_SNCPU_SA1BusTrackEnabled=pCpu?1u:0u;
 	g_SNCPU_SA1BusConflictTicks=0;
 	g_SNCPU_SA1BusDroppedEvents=0;
-	g_SNCPU_SA1HostFastReadCount=0;
-	g_SNCPU_SA1HostFastReadEnabled=0;
 	SNCPUSA1BusBeginLine();
 }
 void SNCPUSA1BusSetExecCpu(SNCpuT *pCpu)
@@ -97,8 +92,7 @@ void SNCPUSA1BusSetIRAM(Uint8 *pIRAM)
 
 void SNCPUSA1FastMemConfig(Uint8 *pIRAM, Uint8 uCIWP,
                            Uint8 *pBWRAM, Uint32 uBWRAMBytes,
-                           Bool bBWRAMWriteEnabled, Uint32 uProtectedBytes,
-                           Uint8 uSCPUBWRAMMap)
+                           Bool bBWRAMWriteEnabled, Uint32 uProtectedBytes)
 {
 	g_SNCPU_SA1IRAM = pIRAM;
 	g_SNCPU_SA1CIWP = uCIWP;
@@ -112,16 +106,6 @@ void SNCPUSA1FastMemConfig(Uint8 *pIRAM, Uint8 uCIWP,
 		g_SNCPU_SA1BWRAMMask = uBWRAMBytes - 1u;
 	else
 		g_SNCPU_SA1BWRAMMask = 0xFFFFFFFFu;
-}
-
-void SNCPUSA1HostFastReadEnable(Bool bEnable)
-{
-	g_SNCPU_SA1HostFastReadEnabled = bEnable ? 1u : 0u;
-}
-
-Uint32 SNCPUSA1HostFastReadGetCount(void)
-{
-	return g_SNCPU_SA1HostFastReadCount;
 }
 
 void SNCPUSA1BusTagCpu(SNCpuT *pCpu)
