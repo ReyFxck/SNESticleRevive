@@ -209,6 +209,14 @@ Bool MainLoopProcess()
                upload to the EE texture from here. */
             if (_pSystem == _pNes)
             {
+                /* The shared VRAM block is 256 KiB either way:
+                   NES = 256x256 RGBA32, SNES = 512x256 RGBA5551.
+                   Re-describe it instead of reserving a second texture. */
+                if (_OutTex.uWidth != 256 || _OutTex.eFormat != GS_PSMCT32)
+                {
+                    TextureNew(&_OutTex, 256, 256, GS_PSMCT32);
+                    TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
+                }
                 PROF_ENTER("NesExecuteFrame");
                 _pNes->ExecuteFrame(&Input, pSurface, pMixBuffer, eMode);
                 PROF_LEAVE("NesExecuteFrame");
@@ -218,6 +226,13 @@ Bool MainLoopProcess()
             }
             else
             {
+                /* SNES native hires carrier. PSMCT16 keeps 512x256 at the
+                   same 256 KiB VRAM cost as the old 256x256 PSMCT32 texture. */
+                if (_OutTex.uWidth != 512 || _OutTex.eFormat != GS_PSMCT16)
+                {
+                    TextureNew(&_OutTex, 512, 256, GS_PSMCT16);
+                    TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
+                }
 #if SNDBG_LOG
 				g_DbgHostRefreshHz = (Uint32)GSK_GetRefreshHz();
 #endif
