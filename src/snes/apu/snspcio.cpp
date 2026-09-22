@@ -158,6 +158,15 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 	{
 	case 0xF1:	// control
 		{
+#if SNSPCIO_WRITEQUEUE
+			/* Clear commands act on the CPU->SPC latch at this SPC time.
+			   First consume writes that really happened before the clear;
+			   otherwise an old queued value can reappear after the clear and
+			   leave a driver handshake permanently non-zero. */
+			if (uData & 0x30)
+				pIO->SyncQueue((Uint32)SNSPCGetCounter(
+					pSpc, SNSPC_COUNTER_FRAME));
+#endif
 			if (uData&0x10)
 			{
 				pSpc->Mem[0xf4] = pIO->m_Regs.apu_w[0] = 0x00;
