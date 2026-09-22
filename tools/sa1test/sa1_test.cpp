@@ -233,11 +233,19 @@ static void TestNormalDMA(void)
 	Uint8 bwram[0x8000];
 	memset(bwram, 0, sizeof(bwram));
 	rom[0] = 0x11; rom[1] = 0x22; rom[2] = 0x33; rom[3] = 0x44;
+	rom[0x0100] = 0xDB; // reset fixture at $8100: STP
 
 	SNSA1 sa1;
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2229, 0xFF);
+	sa1.WriteRegister(0x222A, 0xFF);
+	sa1.WriteRegister(0x2203, 0x00);
+	sa1.WriteRegister(0x2204, 0x81);
+	sa1.WriteRegister(0x2200, 0x00);
+	sa1.StepMasterCycles(16);
 
-	// ROM -> I-RAM, trigger on DDAH ($2236).
+	// ROM -> I-RAM, trigger on DDAH ($2236). DMA starts asynchronously and
+	// consumes one SA-1 tick per byte for this device pair.
 	sa1.WriteRegister(0x2230, 0x80);
 	sa1.WriteRegister(0x2232, 0x00);
 	sa1.WriteRegister(0x2233, 0x00);
@@ -246,11 +254,30 @@ static void TestNormalDMA(void)
 	sa1.WriteRegister(0x2239, 0);
 	sa1.WriteRegister(0x2235, 0x00);
 	sa1.WriteRegister(0x2236, 0x04);
-	CHECK(sa1.ReadIRAM(0x0400) == 0x11 &&
-	      sa1.ReadIRAM(0x0403) == 0x44,
-	      "normal DMA must copy ROM to I-RAM");
+	CHECK(sa1.IsDMARunning(), "normal DMA must arm instead of completing inside the register write");
+	CHECK(sa1.ReadIRAM(0x0400) == 0x00, "normal DMA must not be instantaneous");
 
-	// BW-RAM -> I-RAM.
+	sa1.StepMasterCycles(4); // 2 SA-1 ticks -> 2 bytes
+	CHECK(sa1.ReadIRAM(0x0400) == 0x11 &&
+	      sa1.ReadIRAM(0x0401) == 0x22 &&
+	      sa1.ReadIRAM(0x0402) == 0x00,
+	      "ROM->I-RAM DMA must advance according to scheduled ticks");
+	CHECK(sa1.ReadRegister(0x2238) == 2,
+	      "normal DMA terminal counter must update while transfer is active");
+
+	sa1.StepMasterCycles(4);
+	CHECK(sa1.ReadIRAM(0x0403) == 0x44 && !sa1.IsDMARunning(),
+	      "ROM->I-RAM DMA must finish after the required ticks");
+	CHECK((sa1.ReadRegister(0x2301) & 0x20) != 0,
+	      "normal DMA completion must latch SA-1 DMA IRQ status");
+	CHECK(sa1.ReadRegister(0x2232) == 0x04 &&
+	      sa1.ReadRegister(0x2235) == 0x04,
+	      "DMA source/destination registers must expose post-transfer addresses");
+
+	// Clear DMA IRQ before the next transfer.
+	sa1.WriteRegister(0x220B, 0x20);
+
+	// BW-RAM -> I-RAM costs two SA-1 ticks per byte.
 	bwram[0x0100] = 0xA1; bwram[0x0101] = 0xB2;
 	sa1.WriteRegister(0x2230, 0x81);
 	sa1.WriteRegister(0x2232, 0x00);
@@ -260,11 +287,15 @@ static void TestNormalDMA(void)
 	sa1.WriteRegister(0x2239, 0);
 	sa1.WriteRegister(0x2235, 0x20);
 	sa1.WriteRegister(0x2236, 0x04);
+	sa1.StepMasterCycles(4); // 2 ticks -> one byte
 	CHECK(sa1.ReadIRAM(0x0420) == 0xA1 &&
-	      sa1.ReadIRAM(0x0421) == 0xB2,
-	      "normal DMA must copy BW-RAM to I-RAM");
+	      sa1.ReadIRAM(0x0421) == 0x00,
+	      "BW-RAM->I-RAM DMA must use the slower BW-RAM timing");
+	sa1.StepMasterCycles(4);
+	CHECK(sa1.ReadIRAM(0x0421) == 0xB2 && !sa1.IsDMARunning(),
+	      "BW-RAM->I-RAM DMA must complete incrementally");
 
-	// I-RAM -> BW-RAM, trigger on DDAB ($2237).
+	// I-RAM -> BW-RAM also costs two ticks per byte.
 	sa1.WriteIRAM(0x0500, 0x5A);
 	sa1.WriteIRAM(0x0501, 0xC3);
 	sa1.WriteRegister(0x2230, 0x86);
@@ -276,12 +307,10 @@ static void TestNormalDMA(void)
 	sa1.WriteRegister(0x2235, 0x00);
 	sa1.WriteRegister(0x2236, 0x03);
 	sa1.WriteRegister(0x2237, 0x00);
+	sa1.StepMasterCycles(8);
 	CHECK(bwram[0x0300] == 0x5A && bwram[0x0301] == 0xC3,
-	      "normal DMA must copy I-RAM to BW-RAM");
-	CHECK((sa1.ReadRegister(0x2301) & 0x20) != 0,
-	      "normal DMA completion must latch SA-1 DMA IRQ status");
+	      "normal DMA must copy I-RAM to BW-RAM on scheduled time");
 }
-
 static void TestArithmetic(void)
 {
 	SNSA1 sa1;

@@ -37,18 +37,23 @@ struct SA1State
 	Uint16 HCounterLatch;
 	Uint16 VCounterLatch;
 	Uint16 TimerScanlines;
+	Uint16 DMARemaining;
 	Uint16 ArithmeticOp1;
 	Uint16 ArithmeticOp2;
 	Uint64 ArithmeticResult;
 	Uint16 VariableData;
+	Uint32 DMASource;
+	Uint32 DMADest;
 	Uint8  VariableBitPos;
 	Uint8  MasterRemainder;
 	Uint8  TimerRemainder;
+	Uint8  DMAWaitTicks;
 	Uint8  CharConvLine;
 	Bool   ArithmeticOverflow;
 	Bool   TimerMatch;
 	Bool   NMIPending;
 	Bool   CC1Active;
+	Bool   DMARunning;
 	Bool   Running;
 };
 
@@ -108,6 +113,7 @@ public:
 	void StepMasterCycles(Int32 nMasterCycles);
 
 	Bool   IsRunning() const { return m_State.Running; }
+	Bool   IsDMARunning() const { return m_State.DMARunning; }
 	Uint16 GetResetVector() const;
 	Uint32 GetLastSliceCycles() const { return m_State.LastSliceCycles; }
 	const SA1State *GetState() const { return &m_State; }
@@ -134,7 +140,10 @@ private:
 	Uint8 ReadVariableBus(Uint32 uAddr);
 	void LoadVariableData();
 	void IncrementVariablePosition();
-	void ExecuteDMA();
+	void StartDMA();
+	Uint32 RunDMA(Uint32 uSA1Ticks);
+	Uint8 ReadDMASource(Uint8 uSource, Uint32 uAddr);
+	void CompleteDMA();
 	void StartCC1();
 	void ExecuteCC2();
 	void ConvertCC1Tile(Uint32 uAddr);

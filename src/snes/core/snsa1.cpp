@@ -122,6 +122,11 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.VCounterLatch = 0;
 	m_State.TimerScanlines = 262;
 	m_State.TimerRemainder = 0;
+	m_State.DMASource = 0;
+	m_State.DMADest = 0;
+	m_State.DMARemaining = 0;
+	m_State.DMAWaitTicks = 0;
+	m_State.DMARunning = FALSE;
 	m_State.ArithmeticResult = 0;
 	m_State.ArithmeticOverflow = FALSE;
 	m_State.VariableData = 0;
@@ -306,7 +311,11 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 
 	case 0x2230:
 		if (!(uData & 0x80))
+		{
 			m_State.CharConvLine = 0;
+			m_State.DMARunning = FALSE;
+			m_State.DMAWaitTicks = 0;
+		}
 		break;
 
 	case 0x2231:
@@ -324,14 +333,14 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 
 	case 0x2236:
 		if ((m_State.Registers[0x030] & 0xA4) == 0x80)
-			ExecuteDMA();
+			StartDMA();
 		else if ((m_State.Registers[0x030] & 0xB0) == 0xB0)
 			StartCC1();
 		break;
 
 	case 0x2237:
 		if ((m_State.Registers[0x030] & 0xA4) == 0x84)
-			ExecuteDMA();
+			StartDMA();
 		break;
 
 	case 0x2247:
@@ -702,55 +711,104 @@ void SNSA1::ExecuteCC2()
 	m_State.CharConvLine = (Uint8)((m_State.CharConvLine + 1) & 15);
 }
 
-void SNSA1::ExecuteDMA()
+void SNSA1::StartDMA()
 {
-	Uint32 uSrc = (Uint32)m_State.Registers[0x032] |
-	              ((Uint32)m_State.Registers[0x033] << 8) |
-	              ((Uint32)m_State.Registers[0x034] << 16);
-	Uint32 uDst = (Uint32)m_State.Registers[0x035] |
-	              ((Uint32)m_State.Registers[0x036] << 8) |
-	              ((Uint32)m_State.Registers[0x037] << 16);
-	Uint32 uLen = (Uint32)m_State.Registers[0x038] |
-	              ((Uint32)m_State.Registers[0x039] << 8);
-	Uint8 uSource = m_State.Registers[0x030] & 0x03;
-	Bool bDestBWRAM = (m_State.Registers[0x030] & 0x04) ? TRUE : FALSE;
-	Uint32 i;
-
 	if (!(m_State.Registers[0x030] & 0x80) ||
 	    (m_State.Registers[0x030] & 0x20))
 		return;
 
-	for (i = 0; i < uLen; i++)
+	m_State.DMASource = (Uint32)m_State.Registers[0x032] |
+	                    ((Uint32)m_State.Registers[0x033] << 8) |
+	                    ((Uint32)m_State.Registers[0x034] << 16);
+	m_State.DMADest = (Uint32)m_State.Registers[0x035] |
+	                  ((Uint32)m_State.Registers[0x036] << 8) |
+	                  ((Uint32)m_State.Registers[0x037] << 16);
+	m_State.DMARemaining = (Uint16)(m_State.Registers[0x038] |
+	                                ((Uint16)m_State.Registers[0x039] << 8));
+	m_State.DMAWaitTicks = 0;
+	m_State.DMARunning = m_State.DMARemaining ? TRUE : FALSE;
+
+	if (!m_State.DMARunning)
+		CompleteDMA();
+}
+
+Uint8 SNSA1::ReadDMASource(Uint8 uSource, Uint32 uAddr)
+{
+	switch (uSource)
+	{
+	default:
+	case 0:
+		// Program-ROM DMA must not charge the SA-1 CPU's instruction budget.
+		return SNCPUPeek8(&m_Cpu, uAddr & 0xFFFFFF);
+	case 1:
+		return (!m_pBWRAM || !m_uBWRAMBytes) ? 0xFF :
+		       m_pBWRAM[MirrorBWRAM(uAddr)];
+	case 2:
+		return m_IRAM[uAddr & (SNSA1_IRAM_SIZE - 1)];
+	}
+}
+
+void SNSA1::CompleteDMA()
+{
+	m_State.DMARunning = FALSE;
+	m_State.DMAWaitTicks = 0;
+	m_State.DMARemaining = 0;
+	m_State.Registers[0x038] = 0;
+	m_State.Registers[0x039] = 0;
+	m_State.Registers[0x101] |= 0x20;
+	UpdateIRQLine();
+}
+
+Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
+{
+	Uint8 uSource = m_State.Registers[0x030] & 0x03;
+	Bool bDestBWRAM = (m_State.Registers[0x030] & 0x04) ? TRUE : FALSE;
+	Uint8 uCost = (uSource == 0 && !bDestBWRAM) ? 1 : 2;
+
+	while (m_State.DMARunning && uSA1Ticks)
 	{
 		Uint8 uData;
-		switch (uSource)
+
+		if (!m_State.DMAWaitTicks)
+			m_State.DMAWaitTicks = uCost;
+		if (uSA1Ticks < m_State.DMAWaitTicks)
 		{
-		default:
-		case 0:
-			uData = SNCPURead8(&m_Cpu, (uSrc + i) & 0xFFFFFF);
-			break;
-		case 1:
-			uData = (!m_pBWRAM || !m_uBWRAMBytes) ? 0xFF :
-			        m_pBWRAM[MirrorBWRAM(uSrc + i)];
-			break;
-		case 2:
-			uData = m_IRAM[(uSrc + i) & (SNSA1_IRAM_SIZE - 1)];
-			break;
+			m_State.DMAWaitTicks = (Uint8)(m_State.DMAWaitTicks - uSA1Ticks);
+			return 0;
 		}
 
+		uSA1Ticks -= m_State.DMAWaitTicks;
+		m_State.DMAWaitTicks = 0;
+
+		uData = ReadDMASource(uSource, m_State.DMASource);
 		if (bDestBWRAM)
 		{
 			if (m_pBWRAM && m_uBWRAMBytes)
-				m_pBWRAM[MirrorBWRAM(uDst + i)] = uData;
+				m_pBWRAM[MirrorBWRAM(m_State.DMADest)] = uData;
 		}
 		else
 		{
-			m_IRAM[(uDst + i) & (SNSA1_IRAM_SIZE - 1)] = uData;
+			m_IRAM[m_State.DMADest & (SNSA1_IRAM_SIZE - 1)] = uData;
 		}
+
+		m_State.DMASource = (m_State.DMASource + 1) & 0xFFFFFF;
+		m_State.DMADest = (m_State.DMADest + 1) & 0xFFFFFF;
+		m_State.DMARemaining--;
+
+		m_State.Registers[0x032] = (Uint8)m_State.DMASource;
+		m_State.Registers[0x033] = (Uint8)(m_State.DMASource >> 8);
+		m_State.Registers[0x034] = (Uint8)(m_State.DMASource >> 16);
+		m_State.Registers[0x035] = (Uint8)m_State.DMADest;
+		m_State.Registers[0x036] = (Uint8)(m_State.DMADest >> 8);
+		m_State.Registers[0x037] = (Uint8)(m_State.DMADest >> 16);
+		m_State.Registers[0x038] = (Uint8)m_State.DMARemaining;
+		m_State.Registers[0x039] = (Uint8)(m_State.DMARemaining >> 8);
+
+		if (!m_State.DMARemaining)
+			CompleteDMA();
 	}
 
-	m_State.Registers[0x101] |= 0x20;
-	UpdateIRQLine();
+	return uSA1Ticks;
 }
 
 void SNSA1::ExecuteArithmetic()
@@ -1185,14 +1243,24 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 {
 	Int32 nExecUnits;
 	Int32 nGuard;
+	Uint32 uCpuCycles = uSA1Cycles;
 
 	if (!uSA1Cycles || !m_State.Running)
 		return;
 
-	if (m_Cpu.uSignal & SNCPU_SIGNAL_STP)
-		return;
+	// Normal DMA owns the SA-1 bus and stalls instruction execution.  If the
+	// transfer finishes inside this slice, the remaining ticks go to the CPU.
+	if (m_State.DMARunning)
+		uCpuCycles = RunDMA(uCpuCycles);
 
-	nExecUnits = (Int32)(uSA1Cycles * SNCPU_CYCLE_FAST);
+	if (!uCpuCycles || (m_Cpu.uSignal & SNCPU_SIGNAL_STP))
+	{
+		m_State.ExecutionSlices++;
+		m_State.ExecutedCycles += uSA1Cycles;
+		return;
+	}
+
+	nExecUnits = (Int32)(uCpuCycles * SNCPU_CYCLE_FAST);
 	SNCPUAddCycles(&m_Cpu, nExecUnits);
 
 	for (nGuard = 0; nGuard < 4 && m_Cpu.Cycles > 0; nGuard++)
