@@ -393,7 +393,9 @@ void SnesSystem::SyncSPC(Int32 uExtra)
         PROF_LEAVE("SNSpcExecute");
 
 #if SNSPCIO_WRITEQUEUE
-        m_SpcIO.SyncQueueAll();
+        /* Do not publish future CPU->SPC writes just because one SPC slice
+           finished.  Only latch events whose timestamp the SPC consumed. */
+        m_SpcIO.SyncQueue((Uint32)SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME));
 #endif
     }
 
