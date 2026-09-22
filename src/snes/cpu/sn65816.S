@@ -795,6 +795,11 @@ _SNCPU_Write8:
 		lw		t1,SP_SA1Exec
 		beq		t1,zr,_SNCPU_Write8HostStart
 		nop
+		/* Direct-page, stack, STZ/STX/STA hot paths in SA-1 games are usually
+		   bank-0 I-RAM. Fast-dispatch those before any bank-map work. */
+		sltiu		t0,R_Addr,0x0800
+		bne		t0,zr,_SNCPU_Write8SA1IRAM
+		andi		t0,R_Addr,0x07FF
 
 		/* $40-$5F are raw SA-1 BW-RAM banks. */
 		srl		t0,R_Addr,16
@@ -1103,6 +1108,11 @@ _SNCPU_Read8:
 		lw		t1,SP_SA1Exec
 		beq		t1,zr,_SNCPU_Read8HostStart
 		nop
+		/* Direct-page and stack overwhelmingly hit bank-0 I-RAM. Bypass the
+		   generic bank-tag classifier for the common $0000-$07FF case. */
+		sltiu		t0,R_Addr,0x0800
+		bne		t0,zr,_SNCPU_Read8SA1IRAM
+		andi		t0,R_Addr,0x07FF
 
 		/* $40-$5F are raw SA-1 BW-RAM banks. */
 		srl		t0,R_Addr,16
