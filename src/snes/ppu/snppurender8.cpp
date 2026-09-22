@@ -1551,7 +1551,12 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	const Bool bPseudoHires =
 		((pRegs->setini & SNESPPU_SETINI_PSEUDOHIR) != 0) &&
 		(uBGMode != 5 && uBGMode != 6);
-	if (!bPseudoHires && (!(pRegs->cgwsel & 0x02) || cgadsub == 0))
+	const Bool bNativeHires = (uBGMode == 5 || uBGMode == 6);
+	/* In modes 5/6 the sub screen is the even physical dot, not merely a
+	   color-math operand. Dropping TS here throws away half of the 512-dot
+	   picture and is exactly why hires text loses vertical strokes. */
+	if (!bPseudoHires && !bNativeHires &&
+	    (!(pRegs->cgwsel & 0x02) || cgadsub == 0))
 		ts = 0;
 	uFetchLayers = tm | ts;
 
@@ -1846,7 +1851,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if CODE_PLATFORM == CODE_PS2
 	/* O caminho direto do GS, escolhido logo depois por RenderLine(), usa
 	   apenas a tela principal. Evite montar uma subtela que sera descartada. */
-	if (!bPseudoHires && cgadsub == 0 && (pRegs->cgwsel & 0xC0) == 0 &&
+	if (!bPseudoHires && !bNativeHires &&
+	    cgadsub == 0 && (pRegs->cgwsel & 0xC0) == 0 &&
 	    m_pPPU->GetIntensity() == 15)
 	{
 		PROF_LEAVE("RenderBG");
