@@ -1,0 +1,45 @@
+name: SA-1 experimental PS2 build
+
+on:
+  push:
+    branches:
+      - experimental/sa1-mips
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ps2-diagnostic-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache PS2DEV
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/ps2dev
+            ~/.cache/ps2dev
+          key: ps2dev-${{ runner.os }}-${{ runner.arch }}-sa1-v1
+
+      - name: Ensure PS2DEV
+        run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
+
+      - name: Build diagnostic PS2 ELF
+        run: make AUTO_INSTALL=yes COLOR=0 JOBS=2 PACK=0 SNES_DIAGNOSTICS=1 fast
+
+      - name: Verify PS2 ELF
+        run: |
+          test -s build/SNESticle.elf
+          file build/SNESticle.elf
+          ls -lh build/SNESticle.elf
+
+      - name: Upload experimental ELF
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticle-SA1-experimental-${{ github.sha }}
+          path: build/SNESticle.elf
+          if-no-files-found: error
