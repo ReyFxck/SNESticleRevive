@@ -45,8 +45,8 @@ static void TestResetReleaseAndScheduler(void)
 	sa1.WriteRegister(0x2204, 0x12);
 	sa1.StepMasterCycles(1364);
 	CHECK(sa1.GetLastSliceCycles() == 0, "reset blocks scheduler credits");
-	sa1.WriteRegister(0x2200, 0x00);
 	sa1.WriteRegister(0x222A, 0xFF);
+	sa1.WriteRegister(0x2200, 0x00);
 	CHECK(sa1.ReadRegister(0x222A) == 0x00,
 	      "reset release must clear SA-1 CIWP");
 	CHECK(sa1.IsRunning(), "reset release starts scheduler");
