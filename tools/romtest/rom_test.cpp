@@ -149,6 +149,39 @@ static void TestVideoRegionHeaderCodes(void)
 	}
 }
 
+static void TestSA1HeaderDetection(void)
+{
+	for (int battery = 0; battery < 2; battery++)
+	{
+		std::vector<Uint8> rom(0x200000, 0xFF);
+		PutHeader(rom, 0x7FC0, battery ? "SA1 TYPE35" : "SA1 TYPE34",
+		          0x23, 0x4567, 0x8000, 0x0000);
+		SNRomInfoT *info = (SNRomInfoT *)&rom[0x7FC0];
+		info->RomType = battery ? 0x35 : 0x34;
+		info->SRAMSize = 0x05;
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		      "SA-1 fixture must load");
+		CHECK(snesRom.m_eMapping == SNROM_MAPPING_SA1,
+		      "23h/34h-35h header must select SA-1 mapping");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_SA1) != 0,
+		      "SA-1 cartridge flag must be set");
+		CHECK(snesRom.GetSRAMBytes() == 32768,
+		      "SA-1 SRAM size code 5 must expose 32 KiB");
+		CHECK(snesRom.GetMapperName() && !strcmp(snesRom.GetMapperName(), "SA-1"),
+		      "mapper diagnostic must identify SA-1");
+		if (battery)
+			CHECK((snesRom.m_Flags & SNROM_FLAG_SAVERAM) != 0,
+			      "type 35h must use battery-backed BW-RAM");
+		else
+			CHECK((snesRom.m_Flags & SNROM_FLAG_RAM) != 0,
+			      "type 34h must use volatile BW-RAM");
+	}
+}
+
 static void TestPinocchioFalseType1Regression(void)
 {
 	std::vector<Uint8> rom(0x300000, 0xFF);
@@ -204,6 +237,7 @@ int main(void)
 	TestCleanLoRom();
 	TestCleanHiRom();
 	TestVideoRegionHeaderCodes();
+	TestSA1HeaderDetection();
 	TestPinocchioFalseType1Regression();
 	TestRealType1StillWorks();
 

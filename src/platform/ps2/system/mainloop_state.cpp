@@ -1201,6 +1201,7 @@ static void _MainLoopStateDeleteSettings()
 
 static const Char *_MainLoopStateGetUnsupportedChip(Uint32 uFlags)
 {
+    if (uFlags & SNROM_FLAG_SA1)     return "SA-1";
     if (uFlags & SNROM_FLAG_SUPERFX) return "SuperFX";
     if (uFlags & SNROM_FLAG_GAMEBOY) return "Super Game Boy";
     if (uFlags & SNROM_FLAG_DSP1)    return "DSP-1";

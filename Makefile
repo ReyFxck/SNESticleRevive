@@ -403,6 +403,7 @@ SRCS := \
 	src/snes/core/sndsp2.cpp \
 	src/snes/core/sndsp4.cpp \
 	src/snes/core/sngsu.cpp \
+	src/snes/core/snsa1.cpp \
 	src/snes/core/snobc1.cpp \
 	src/snes/core/sncx4.cpp \
 	src/snes/core/snsdd1.cpp \

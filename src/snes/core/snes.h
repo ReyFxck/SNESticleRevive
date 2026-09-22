@@ -33,6 +33,7 @@ extern "C" {
 #include "snobc1.h"
 #include "sncx4.h"
 #include "sngsu.h"
+#include "snsa1.h"
 #include "snsdd1.h"
 #include "snsrtc.h"
 
@@ -100,6 +101,10 @@ private:
 	// SuperFX / GSU (Star Fox, Yoshi's Island, etc.) -- core experimental
 	SNGSU		m_GSU;
 
+	// SA-1: independent state/memory/timing; CPU execution lands in phase 2.
+	SNSA1		m_SA1;
+	Bool		m_bSA1;
+
 	SNSDD1		m_SDD1;
 	Bool		m_bSDD1;
 
@@ -145,6 +150,8 @@ private:
 	static void SNCPU_TRAPFUNC  WriteCX4(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
 	static Uint8 SNCPU_TRAPFUNC ReadGSU(SNCpuT *pCpu, Uint32 uAddr);
 	static void SNCPU_TRAPFUNC  WriteGSU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
+	static Uint8 SNCPU_TRAPFUNC ReadSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr);
+	static void SNCPU_TRAPFUNC  WriteSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
 	static Uint8 CX4ReadMem(void *pCtx, Uint32 uAddr);
 
     static Uint8 SNCPU_TRAPFUNC Read2000Debug(SNCpuT *pCpu, Uint32 uAddr);

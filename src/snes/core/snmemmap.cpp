@@ -54,6 +54,23 @@ static SnesMemMapT	_SnesMemMap_LoRom[]=
 	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
 };
 
+/* SA-1 S-CPU view (map mode 23h). I-RAM and MMIO are routed through
+   the existing PPU0 trap page; BW-RAM overlays are installed below. */
+static SnesMemMapT _SnesMemMap_SA1[]=
+{
+	{0x00, 0x3F, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
+	{0x80, 0xBF, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
+	{0xC0, 0xFF, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
+	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
+	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x00, 0x3F, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0x80, 0xBF, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x80, 0xBF, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x80, 0xBF, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
+};
+
 static SnesMemMapT	_SnesMemMap_HiRom[]=
 {
 	// map slow rom
@@ -513,6 +530,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 	m_bSDD1 = FALSE;
 	m_bSRTC = (uFlags & SNROM_FLAG_SRTC) ? TRUE : FALSE;
 	m_bSuperFX = (uFlags & SNROM_FLAG_SUPERFX) ? TRUE : FALSE;
+	m_bSA1 = (uFlags & SNROM_FLAG_SA1) ? TRUE : FALSE;
 
 	switch (eRomMapping)
 	{
@@ -618,6 +636,28 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 		case SNROM_MAPPING_EXLOROM:
 			MapMemExLoRom();
 			break;
+
+		case SNROM_MAPPING_SA1:
+		{
+			Uint32 uBank;
+			MapMem(_SnesMemMap_SA1);
+			m_SA1.SetMemory(m_pRom->GetData(), m_pRom->GetBytes(),
+			                m_SRam, m_uSramSize);
+
+			for (uBank = 0x00; uBank <= 0x3F; uBank++)
+			{
+				Uint32 uAddr = (uBank << 16) | 0x6000;
+				SNCPUSetMemSpeed(&m_Cpu, uAddr, 0x2000, SNCPU_CYCLE_SLOW);
+				SNCPUSetTrap(&m_Cpu, uAddr, 0x2000, ReadSA1BWRAM, WriteSA1BWRAM);
+				uAddr |= 0x800000;
+				SNCPUSetMemSpeed(&m_Cpu, uAddr, 0x2000, SNCPU_CYCLE_SLOW);
+				SNCPUSetTrap(&m_Cpu, uAddr, 0x2000, ReadSA1BWRAM, WriteSA1BWRAM);
+			}
+			SNCPUSetMemSpeed(&m_Cpu, 0x400000, 0x100000, SNCPU_CYCLE_SLOW);
+			SNCPUSetTrap(&m_Cpu, 0x400000, 0x100000,
+			             ReadSA1BWRAM, WriteSA1BWRAM);
+			break;
+		}
 	}
 
 	/* Indexed/16-bit accesses can transiently carry past $FFFFFF.  Publish

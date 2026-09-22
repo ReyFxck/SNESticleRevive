@@ -34,6 +34,7 @@ enum SNRomMappingE
 	SNROM_MAPPING_LOROM,
 	SNROM_MAPPING_HIROM,
 	SNROM_MAPPING_EXLOROM,	// LoROM > 4MB (Jumbo / ExLoROM, ate 8MB)
+	SNROM_MAPPING_SA1,		// SA-1 mode 23h cartridge map
 
 	SNROM_MAPPING_NUM
 };
@@ -54,6 +55,7 @@ enum SNRomMappingE
 #define SNROM_FLAG_DSP1_TARGET_Y_SUBTRACT 0x2000
 #define SNROM_FLAG_DSP1_ORIGINAL_OP28      0x4000
 #define SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ 0x8000
+#define SNROM_FLAG_SA1                       0x10000
 
 struct SNRomInfoT
 {

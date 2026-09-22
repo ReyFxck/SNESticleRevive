@@ -1,0 +1,21 @@
+name: SA-1 experimental host tests
+
+on:
+  push:
+    branches:
+      - experimental/sa1-mips
+  workflow_dispatch:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SA-1 tests
+        run: ./tools/sa1test/build.sh
+      - name: Run SA-1 tests
+        run: ./tools/sa1test/sa1_test
+      - name: Build ROM loader tests
+        run: ./tools/romtest/build.sh
+      - name: Run ROM loader tests
+        run: ./tools/romtest/rom_test
