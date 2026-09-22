@@ -130,6 +130,8 @@ private:
 	Bool		m_bLineIRQInstant;
 	Int32		m_nLineIRQCycle;
 	Int32		m_nLineIRQClock;
+	/* S-CPU master-clock position already delivered to the SA-1 this line. */
+	Int32		m_nSA1LineClock;
 	Uint8		m_Ram[SNES_RAMSIZE] _ALIGN(16);
 	Uint8		m_SRam[SNES_SRAMSIZE] _ALIGN(16);
 
@@ -173,6 +175,8 @@ private:
 
 	void	SyncSPC(Int32 uExtra = 0);
 	void	SyncPPU();
+	void	SyncSA1();
+	void	SyncSA1To(Int32 nClock);
 	void	RefreshSCPUIRQ();
 	Int32	CalculateLineIRQCycle();
 	void	RescheduleLineIRQ(Bool bAllowImmediate);

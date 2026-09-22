@@ -10,6 +10,10 @@
 #include "snsa1.h"
 #include "sntiming.h"
 
+extern "C" {
+#include "sncpu_c.h"
+}
+
 static const Uint8 _SA1LoBankBase[4] = { 0x00, 0x20, 0x80, 0xA0 };
 
 SNSA1::SNSA1()
@@ -1161,6 +1165,22 @@ Bool SNSA1::ServiceIRQ()
 	return TRUE;
 }
 
+Bool SNSA1::ExecuteCpuC()
+{
+	m_Cpu.nAbortCycles = 0;
+	m_Cpu.bRunning = TRUE;
+	SNCPUExecute_C(&m_Cpu);
+	m_Cpu.bRunning = FALSE;
+
+	if (m_Cpu.nAbortCycles != 0)
+	{
+		m_Cpu.Cycles = m_Cpu.nAbortCycles;
+		m_Cpu.nAbortCycles = 0;
+		return FALSE;
+	}
+	return TRUE;
+}
+
 void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 {
 	Int32 nExecUnits;
@@ -1188,7 +1208,11 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 			break;
 		}
 
-		if (SNCPUExecute(&m_Cpu))
+		// SA-1 intentionally stays on the portable C interpreter until real
+		// game profiling proves which paths deserve R5900 assembly.  Do not use
+		// SNCPUExecute() here: its backend selector is global and follows the
+		// S-CPU (MIPS assembly on PS2).
+		if (ExecuteCpuC())
 			break;
 	}
 

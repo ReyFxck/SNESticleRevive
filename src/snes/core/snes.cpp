@@ -439,6 +439,28 @@ void SnesSystem::SyncSPC(Int32 uExtra)
     */
 }
 
+void SnesSystem::SyncSA1To(Int32 nClock)
+{
+	if (!m_bSA1)
+		return;
+
+	if (nClock < 0)
+		nClock = 0;
+	if (nClock > SNES_CYCLESPERLINE)
+		nClock = SNES_CYCLESPERLINE;
+	if (nClock <= m_nSA1LineClock)
+		return;
+
+	m_SA1.StepMasterCycles(nClock - m_nSA1LineClock);
+	m_nSA1LineClock = nClock;
+	RefreshSCPUIRQ();
+}
+
+void SnesSystem::SyncSA1()
+{
+	SyncSA1To(SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_LINE));
+}
+
 void SnesSystem::RefreshSCPUIRQ()
 {
 	Bool bPending = (m_IO.m_Regs.timeup & 0x80) ? TRUE : FALSE;
@@ -483,9 +505,15 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	if (pSnes->m_bSA1)
 	{
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
+		{
+			pSnes->SyncSA1();
 			return pSnes->m_SA1.ReadRegister((Uint16)uAddr);
+		}
 		if (uAddr >= 0x3000 && uAddr <= 0x37FF)
+		{
+			pSnes->SyncSA1();
 			return pSnes->m_SA1.ReadIRAM((Uint16)(uAddr - 0x3000));
+		}
 	}
 
 	// S-RTC: relogio em $2800 (leitura)
@@ -633,6 +661,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	{
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
 		{
+			pSnes->SyncSA1();
 			pSnes->m_SA1.WriteRegister((Uint16)uAddr, uData);
 			if (uAddr >= 0x2220 && uAddr <= 0x2223)
 				pSnes->RemapSA1ROM((Uint32)(uAddr - 0x2220), uData);
@@ -641,6 +670,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x37FF)
 		{
+			pSnes->SyncSA1();
 			pSnes->m_SA1.WriteIRAM((Uint16)(uAddr - 0x3000), uData);
 			return;
 		}
@@ -1232,6 +1262,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 	Uint8 uBank = (Uint8)(uAddr >> 16);
+	pSnes->SyncSA1();
 	if (uBank >= 0x40 && uBank <= 0x4F)
 		return pSnes->m_SA1.ReadBWRAMDirect(uAddr);
 	return pSnes->m_SA1.ReadBWRAMWindow((Uint16)uAddr);
@@ -1241,6 +1272,7 @@ void SNCPU_TRAPFUNC SnesSystem::WriteSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr, Uint8 
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 	Uint8 uBank = (Uint8)(uAddr >> 16);
+	pSnes->SyncSA1();
 	if (uBank >= 0x40 && uBank <= 0x4F)
 		pSnes->m_SA1.WriteBWRAMDirect(uAddr, uData);
 	else
@@ -1263,6 +1295,7 @@ SnesSystem::SnesSystem()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_nSA1LineClock = 0;
 
 	// setup spc
 	SNSPCNew(&m_Spc);
@@ -1363,6 +1396,7 @@ void SnesSystem::Reset()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_nSA1LineClock = 0;
 #if SNDBG_LOG
 	SnesDbgResetSession();
 	m_GSU.ClearDiagWindow();
@@ -1766,6 +1800,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+	m_nSA1LineClock = 0;
 
     // don't trigger IRQ by default
     int nHIRQCycles = -1;
@@ -1852,13 +1887,10 @@ void SnesSystem::ExecuteLine()
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
 
-	// Phase 1 schedules SA-1 in deterministic scanline slices. The second
-	// 65C816 core will consume these credits in the next phase.
+	// Bring the SA-1 to the exact end of the scanline. Shared register,
+	// I-RAM and BW-RAM accesses may have synchronized it earlier in the line.
 	if (m_bSA1)
-	{
-		m_SA1.StepMasterCycles(SNES_CYCLESPERLINE);
-		RefreshSCPUIRQ();
-	}
+		SyncSA1To(SNES_CYCLESPERLINE);
 
 	// O hardware GSU roda em paralelo com o 65816. Este emulador sincroniza
 	// os dois uma vez por scanline, como uma aproximacao de baixo custo para

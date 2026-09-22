@@ -165,6 +165,10 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 		SetSlowRom();
 	}
 
+	/* Per-scanline SA-1 synchronization is transient scheduler state.  A
+	   restored frame begins a fresh line slice. */
+	m_nSA1LineClock = 0;
+
 	return TRUE;
 }
 

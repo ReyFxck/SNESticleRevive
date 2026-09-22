@@ -126,6 +126,7 @@ private:
 	void MapCpuMemory();
 	void MapRomGroup(Uint32 uWhich, Uint8 uMap);
 	void RunScheduled(Uint32 uSA1Cycles);
+	Bool ExecuteCpuC();
 	Bool ServiceNMI();
 	Bool ServiceIRQ();
 	void UpdateTimer(Uint32 uMasterCycles);
