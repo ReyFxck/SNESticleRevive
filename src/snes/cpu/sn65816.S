@@ -2398,6 +2398,113 @@ _SNCPUExecute_DoneNoRewind:
         SNCPU_FETCH8(R_t0)		// dest bank
         SNCPU_FETCH8(R_t1)		// src bank
 
+		/* SA-1 games use MVN $00,$00 as an I-RAM memcpy primitive.  The
+		   architectural instruction remains interruptible at byte boundaries,
+		   but re-fetching 54/00/00 and redispatching for every byte is pure
+		   emulator overhead. Batch only while both 16-bit addresses are in
+		   the two real I-RAM windows; all other cases keep the generic path. */
+		lw		t0,SP_SA1Exec
+		beq		t0,zr,_SNCPU_MVN_X0_Normal
+		or		t0,R_t0,R_t1
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
+
+		/* source X: $0000-$07FF or $3000-$37FF */
+		sltiu		t0,R_X,0x0800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_CheckY
+		nop
+		sltiu		t0,R_X,0x3000
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
+		sltiu		t0,R_X,0x3800
+		beq		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
+
+_SNCPU_SA1_MVN00_X0_CheckY:
+		/* destination Y: $0000-$07FF or $3000-$37FF */
+		sltiu		t0,R_Y,0x0800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_Transfer
+		move	R_DB,zr
+		sltiu		t0,R_Y,0x3000
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
+		sltiu		t0,R_Y,0x3800
+		beq		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
+		move	R_DB,zr
+
+_SNCPU_SA1_MVN00_X0_Transfer:
+		/* PC/PCCount are currently after the two bank operands. */
+		move	R_Addr,R_X
+		jal		_SNCPU_Read8
+		nop
+		move	R_Addr,R_Y
+		jal		_SNCPU_Write8
+		nop
+
+		addiu	R_X,R_X,1
+		addiu	R_Y,R_Y,1
+		andi	R_X,R_X,0xFFFF
+		andi	R_Y,R_Y,0xFFFF
+
+		/* Two internal clocks complete the normal 7-clock MVN byte:
+		   opcode + two operands + read + write + two internal. */
+		addiu	R_Cycles,R_Cycles,-(2 * SNCPU_CYCLE_FAST)
+		move	t0,R_A
+		addiu	R_A,R_A,-1
+		andi	R_A,R_A,0xFFFF
+		beq		t0,zr,_SNCPU_SA1_MVN00_X0_Final
+		nop
+
+		/* Non-final MVN bytes architecturally rewind to the opcode. */
+		addiu	R_PC,R_PC,-3
+		addiu	R_PCCount,R_PCCount,3
+		blez	R_Cycles,_SNCPUExecute_DoneNoRewind
+		nop
+
+		/* Stop batching before either pointer leaves I-RAM. The next byte then
+		   runs through the ordinary instruction path with identical state. */
+		sltiu		t0,R_X,0x0800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_NextY
+		nop
+		sltiu		t0,R_X,0x3000
+		bne		t0,zr,_SNCPUExecute_Loop
+		nop
+		sltiu		t0,R_X,0x3800
+		beq		t0,zr,_SNCPUExecute_Loop
+		nop
+
+_SNCPU_SA1_MVN00_X0_NextY:
+		sltiu		t0,R_Y,0x0800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_VirtualFetch
+		nop
+		sltiu		t0,R_Y,0x3000
+		bne		t0,zr,_SNCPUExecute_Loop
+		nop
+		sltiu		t0,R_Y,0x3800
+		beq		t0,zr,_SNCPUExecute_Loop
+		nop
+
+_SNCPU_SA1_MVN00_X0_VirtualFetch:
+		/* Reproduce the three ROM bus phases without physically re-reading the
+		   immutable opcode/operands. This keeps SA-1/S-CPU contention timing. */
+		addiu	R_PC,R_PC,3
+		addiu	R_PCCount,R_PCCount,-3
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		b		_SNCPU_SA1_MVN00_X0_Transfer
+		nop
+
+_SNCPU_SA1_MVN00_X0_Final:
+		/* Final byte does not rewind; execution continues after the operands. */
+		j		_SNCPUExecute_Loop
+		nop
+
+_SNCPU_MVN_X0_Normal:
         SNCPU_SHLI(R_t0,16)
         SNCPU_SHLI(R_t1,16)
 
