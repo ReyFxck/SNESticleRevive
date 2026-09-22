@@ -1,0 +1,21 @@
+name: Temporary diagnostic branch cleanup
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Delete obsolete diagnostic branches
+        run: |
+          set -euxo pipefail
+          git push origin --delete ci/diag-auto ci/diag-verified
