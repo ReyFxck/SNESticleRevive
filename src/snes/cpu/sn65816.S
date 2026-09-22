@@ -151,7 +151,7 @@
 		or		t2,t2,t1				;\
 		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
 		lw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
-		sltiu		t0,t1,SNCPU_SA1_BUS_EVENT_MAX		;\
+		sltiu		t0,t1,256		;\
 		beq		t0,zr,99f				;\
 		nop						;\
 		sll		t1,t1,2					;\
