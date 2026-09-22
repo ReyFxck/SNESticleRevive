@@ -67,6 +67,8 @@
 #define SP_Save3   	0x6C(sp)
 #define SP_Save4   	0x70(sp)
 
+#define SP_SA1Track 0x74(sp)
+
 #define SP_Data0   	0x78(sp)
 #define SP_Data1   	0x79(sp)
 #define SP_Data2   	0x7A(sp)
@@ -136,10 +138,8 @@
 /* SA-1 S-CPU bus recorder. Non-SA-1 games take only the initial load/branch.
    bits 0-15=end master clock, bit16=fast access, bits17-18=byte count. */
 #define SNCPU_SA1_TRACK(_addr,_cycles,_bytes) \
-		lui		t0,%hi(g_SNCPU_SA1BusTrackEnabled)	;\
-		lw		t0,%lo(g_SNCPU_SA1BusTrackEnabled)(t0)	;\
+		lw		t0,SP_SA1Track				;\
 		beq		t0,zr,99f				;\
-		nop						;\
 		sltiu		t1,_cycles,SNCPU_CYCLE_SLOW		;\
 		lw		t2,SNCPU_Counter2			;\
 		subu		t2,t2,R_Cycles				;\
@@ -1640,6 +1640,9 @@ SNCPUExecute_ASM:
         sd		fp,0x48(sp)
 
 		move	R_pCpu, a0
+		lui		t0,%hi(g_SNCPU_SA1BusTrackEnabled)
+		lw		t0,%lo(g_SNCPU_SA1BusTrackEnabled)(t0)
+		sw		t0,SP_SA1Track
 
 //
 //
@@ -1666,17 +1669,19 @@ _SNCPUExecute_Loop:
 		bltz	R_PCCount,_SNCPU_ExecuteFetchUpdate
 		addiu	R_PCCount,R_PCCount,-1
 
+		lwu		t1,SP_PCBank
+		subu	R_Addr,R_PC,t1
 		lbu		R_Data,0(R_PC)
 
 		blez	R_Cycles, _SNCPUExecute_Done
         addiu	R_PC,R_PC,1
 
-		sll		t0, R_Data, 2							// R_Data = opcode * 4
-
-        addu	t0, t0, R_pOpTable  					// t0 = OpTable + opcode * 4
-
-        lw		t0, 0x00(t0)							// t0 -> opcode function
         subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
+
+		sll		t0, R_Data, 2							// R_Data = opcode * 4
+        addu	t0, t0, R_pOpTable  					// t0 = OpTable + opcode * 4
+        lw		t0, 0x00(t0)							// t0 -> opcode function
 
         jr		t0
         nop

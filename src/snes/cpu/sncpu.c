@@ -56,7 +56,11 @@ static void SNCPUSA1BusMark(Uint8 uType, Uint32 uFirst, Uint32 uLast, Bool bFast
 
 void SNCPUSA1BusSetHost(SNCpuT *pCpu)
 {
-	g_SNCPU_SA1BusHostCpu=pCpu; g_SNCPU_SA1BusTrackEnabled=pCpu?1u:0u; SNCPUSA1BusBeginLine();
+	g_SNCPU_SA1BusHostCpu=pCpu;
+	g_SNCPU_SA1BusTrackEnabled=pCpu?1u:0u;
+	g_SNCPU_SA1BusConflictTicks=0;
+	g_SNCPU_SA1BusDroppedEvents=0;
+	SNCPUSA1BusBeginLine();
 }
 void SNCPUSA1BusBeginLine(void)
 {
