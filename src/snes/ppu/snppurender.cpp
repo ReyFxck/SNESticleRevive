@@ -13,6 +13,7 @@
 #include "console.h"
 #include "snppu.h"
 #include "snppurender.h"
+#include "snppucolor.h"
 #include "snppuchrcache.h"
 #include "rendersurface.h"
 #include "snmask.h"
