@@ -153,6 +153,7 @@ private:
 	Bool TryFastForwardIdleLoop();
 	Bool FastForwardSleepingIdle(Uint32 uSA1Cycles);
 	void ClearIdlePollSleep();
+	void UpdateFastMemorySidecars();
 	Bool PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const;
 	Bool ServiceNMI();
 	Bool ServiceIRQ();

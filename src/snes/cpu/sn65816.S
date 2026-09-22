@@ -792,29 +792,132 @@
 */
 
 _SNCPU_Write8:
-		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank
 		lw		t1,SP_SA1Exec
-		bne		t1,zr,1f
+		beq		t1,zr,_SNCPU_Write8HostStart
 		nop
+
+		/* $40-$5F are raw SA-1 BW-RAM banks. */
+		srl		t0,R_Addr,16
+		sltiu		t1,t0,0x40
+		bne		t1,zr,_SNCPU_Write8SA1CheckIRAM
+		nop
+		sltiu		t1,t0,0x60
+		bne		t1,zr,_SNCPU_Write8SA1BWRAM
+		nop
+
+_SNCPU_Write8SA1CheckIRAM:
+		/* System-bank I-RAM lives at $0000-$07FF and $3000-$37FF. */
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
+		sll		t1,t0,4
+		addu		t1,t1,R_pCpu
+		lbu		t1,SNCPU_uSA1Bus(t1)
+		addiu		t2,zr,SNCPU_SA1_BUS_MIX_LOW
+		beq		t1,t2,_SNCPU_Write8SA1IRAMLow
+		andi		t0,R_Addr,SNCPU_BANK_MASK
+		addiu		t2,zr,SNCPU_SA1_BUS_MIX_HIGH
+		bne		t1,t2,_SNCPU_Write8SA1Generic
+		nop
+		sltiu		t1,t0,0x1000
+		bne		t1,zr,_SNCPU_Write8SA1Generic
+		nop
+		sltiu		t1,t0,0x1800
+		beq		t1,zr,_SNCPU_Write8SA1Generic
+		nop
+		b		_SNCPU_Write8SA1IRAM
+		andi		t0,R_Addr,0x07FF
+
+_SNCPU_Write8SA1IRAMLow:
+		sltiu		t1,t0,0x0800
+		beq		t1,zr,_SNCPU_Write8SA1Generic
+		nop
+		b		_SNCPU_Write8SA1IRAM
+		andi		t0,R_Addr,0x07FF
+
+_SNCPU_Write8SA1IRAM:
+		/* CIWP: one write-enable bit per 256-byte I-RAM page. Protected writes
+		   are ignored but still consume their bus timing. */
+		srl		t1,t0,8
+		addiu		t2,zr,1
+		sllv		t2,t2,t1
+		lui		t1,%hi(g_SNCPU_SA1CIWP)
+		lbu		t1,%lo(g_SNCPU_SA1CIWP)(t1)
+		and		t1,t1,t2
+		beq		t1,zr,_SNCPU_Write8SA1IRAMTimed
+		nop
+		lui		t1,%hi(g_SNCPU_SA1IRAM)
+		lw		t1,%lo(g_SNCPU_SA1IRAM)(t1)
+		beq		t1,zr,_SNCPU_Write8SA1Generic
+		nop
+		addu		t1,t1,t0
+		sb		R_Data,0(t1)
+
+_SNCPU_Write8SA1IRAMTimed:
+		addiu		t2,zr,SNCPU_CYCLE_FAST
+		subu		R_Cycles,R_Cycles,t2
+		SNCPU_SA1_IRAM_PENALTY()
+		jr		ra
+		nop
+
+_SNCPU_Write8SA1BWRAM:
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
+		beq		t1,zr,_SNCPU_Write8SA1Generic
+		nop
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
+		bltz		t2,_SNCPU_Write8SA1Generic
+		nop
+		/* Logical direct BW-RAM address is always low 18 bits. */
+		sll		t0,R_Addr,14
+		srl		t0,t0,14
+
+		/* Either BW-RAM write-enable bit bypasses BWPA protection. */
+		lui		t2,%hi(g_SNCPU_SA1BWRAMWriteEnabled)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMWriteEnabled)(t2)
+		bne		t2,zr,_SNCPU_Write8SA1BWRAMStore
+		nop
+		lui		t2,%hi(g_SNCPU_SA1BWRAMProtectedBytes)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMProtectedBytes)(t2)
+		sltu		t2,t0,t2
+		bne		t2,zr,_SNCPU_Write8SA1BWRAMTimed
+		nop
+
+_SNCPU_Write8SA1BWRAMStore:
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
+		and		t0,t0,t2
+		addu		t1,t1,t0
+		sb		R_Data,0(t1)
+
+_SNCPU_Write8SA1BWRAMTimed:
+		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
+		subu		R_Cycles,R_Cycles,t2
+		SNCPU_SA1_PENALTY(R_Addr,t2)
+		jr		ra
+		nop
+
+_SNCPU_Write8SA1Generic:
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
+		b		_SNCPU_Write8Generic
+		nop
+
+_SNCPU_Write8HostStart:
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		beq		t0,zr,_SNCPU_Write8ZeroBank
-        nop
-1:
-        sll		t0,t0,4									// t0 = (bank << 4)
+		nop
 
-        addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
-
-        lh		t2,SNCPU_uBankCycle(t0)					// t2 = bank cycle count | (bRAM << 8)
-        lw		t1,SNCPU_pMem(t0)						// t1 = bank addr
-
-        bgez	t2,_SNCPU_Write8Trap					// if !RAM goto write trap
-        andi	t2,t2,0xFF								// t2 = nCycles
-
-        addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
-		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
+_SNCPU_Write8Generic:
+        sll		t0,t0,4
+        addu	t0,t0,R_pCpu
+        lh		t2,SNCPU_uBankCycle(t0)
+        lw		t1,SNCPU_pMem(t0)
+        bgez	t2,_SNCPU_Write8Trap
+        andi	t2,t2,0xFF
+        addu	t0,t1,R_Addr
+		subu	R_Cycles, R_Cycles, t2
         sb		R_Data, 0(t0)
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
-
 		jr		ra
         nop
 
@@ -997,11 +1100,21 @@ _SNCPU_Write16Wrap16:
 */
 
 _SNCPU_Read8:
-		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank
 		lw		t1,SP_SA1Exec
-		beq		t1,zr,3f
+		beq		t1,zr,_SNCPU_Read8HostStart
 		nop
-		// Only the two mixed system chunks can contain I-RAM.
+
+		/* $40-$5F are raw SA-1 BW-RAM banks. */
+		srl		t0,R_Addr,16
+		sltiu		t1,t0,0x40
+		bne		t1,zr,_SNCPU_Read8SA1CheckIRAM
+		nop
+		sltiu		t1,t0,0x60
+		bne		t1,zr,_SNCPU_Read8SA1BWRAM
+		nop
+
+_SNCPU_Read8SA1CheckIRAM:
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		sll		t1,t0,4
 		addu		t1,t1,R_pCpu
 		lbu		t1,SNCPU_uSA1Bus(t1)
@@ -1009,30 +1122,53 @@ _SNCPU_Read8:
 		beq		t1,t2,1f
 		andi		t0,R_Addr,SNCPU_BANK_MASK
 		addiu		t2,zr,SNCPU_SA1_BUS_MIX_HIGH
-		bne		t1,t2,2f
+		bne		t1,t2,_SNCPU_Read8SA1Generic
 		nop
 		sltiu		t1,t0,0x1000
-		bne		t1,zr,2f
+		bne		t1,zr,_SNCPU_Read8SA1Generic
 		nop
 		sltiu		t1,t0,0x1800
-		beq		t1,zr,2f
+		beq		t1,zr,_SNCPU_Read8SA1Generic
 		nop
 		b		_SNCPU_Read8SA1IRAM
 		andi		t0,R_Addr,0x07FF
 1:
 		sltiu		t1,t0,0x0800
-		beq		t1,zr,2f
+		beq		t1,zr,_SNCPU_Read8SA1Generic
 		nop
 		b		_SNCPU_Read8SA1IRAM
 		andi		t0,R_Addr,0x07FF
-2:
-		// SA-1 non-I-RAM addresses use the normal bank/trap machinery.
+
+_SNCPU_Read8SA1BWRAM:
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
+		beq		t1,zr,_SNCPU_Read8SA1Generic
+		nop
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
+		bltz		t2,_SNCPU_Read8SA1Generic
+		nop
+		sll		t0,R_Addr,14
+		srl		t0,t0,14
+		and		t0,t0,t2
+		addu		t1,t1,t0
+		lbu		R_Data,0(t1)
+		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
+		subu		R_Cycles,R_Cycles,t2
+		SNCPU_SA1_PENALTY(R_Addr,t2)
+		jr		ra
+		nop
+
+_SNCPU_Read8SA1Generic:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		b		4f
 		nop
-3:
-        beq		t0,zr,_SNCPU_Read8ZeroBank
-        nop
+
+_SNCPU_Read8HostStart:
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
+		beq		t0,zr,_SNCPU_Read8ZeroBank
+		nop
+
 4:
         sll		t0,t0,4									// t0 = (bank << 4) & bank mask
 

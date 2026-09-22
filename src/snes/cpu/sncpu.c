@@ -20,6 +20,11 @@ Uint32 g_SNCPU_SA1BusEventInfo[SNCPU_SA1_BUS_EVENT_MAX];
 SNCpuT *g_SNCPU_SA1BusHostCpu = NULL;
 SNCpuT *g_SNCPU_SA1ExecCpu = NULL;
 Uint8 *g_SNCPU_SA1IRAM = NULL;
+Uint8 g_SNCPU_SA1CIWP = 0;
+Uint8 *g_SNCPU_SA1BWRAM = NULL;
+Uint32 g_SNCPU_SA1BWRAMMask = 0xFFFFFFFFu;
+Uint32 g_SNCPU_SA1BWRAMWriteEnabled = 0;
+Uint32 g_SNCPU_SA1BWRAMProtectedBytes = 0xFFFFFFFFu;
 Uint8 g_SNCPU_SA1BusPenaltyUnits[4][SNCPU_SA1_BUS_UNIT_MAX];
 static Uint32 g_SNCPU_SA1BusFinalized = 0;
 static Uint32 g_SNCPU_SA1BusBits[4][SNCPU_SA1_BUS_TICK_MAX / 32];
@@ -83,6 +88,24 @@ void SNCPUSA1BusSetExecCpu(SNCpuT *pCpu)
 void SNCPUSA1BusSetIRAM(Uint8 *pIRAM)
 {
 	g_SNCPU_SA1IRAM=pIRAM;
+}
+
+void SNCPUSA1FastMemConfig(Uint8 *pIRAM, Uint8 uCIWP,
+                           Uint8 *pBWRAM, Uint32 uBWRAMBytes,
+                           Bool bBWRAMWriteEnabled, Uint32 uProtectedBytes)
+{
+	g_SNCPU_SA1IRAM = pIRAM;
+	g_SNCPU_SA1CIWP = uCIWP;
+	g_SNCPU_SA1BWRAM = pBWRAM;
+	g_SNCPU_SA1BWRAMWriteEnabled = bBWRAMWriteEnabled ? 1u : 0u;
+	g_SNCPU_SA1BWRAMProtectedBytes = uProtectedBytes;
+
+	/* Common SA-1 BW-RAM sizes are powers of two. Keep the R5900 hot path
+	   branchless after address masking; unusual sizes fall back to C. */
+	if (pBWRAM && uBWRAMBytes && !(uBWRAMBytes & (uBWRAMBytes - 1u)))
+		g_SNCPU_SA1BWRAMMask = uBWRAMBytes - 1u;
+	else
+		g_SNCPU_SA1BWRAMMask = 0xFFFFFFFFu;
 }
 
 void SNCPUSA1BusTagCpu(SNCpuT *pCpu)

@@ -56,6 +56,19 @@ void SNSA1::SetMemory(const Uint8 *pRom, Uint32 uRomBytes,
 	m_pBWRAM = pBWRAM;
 	m_uBWRAMBytes = uBWRAMBytes;
 	MapCpuMemory();
+	UpdateFastMemorySidecars();
+}
+
+void SNSA1::UpdateFastMemorySidecars()
+{
+	Uint32 uProtected = 0x100u << (m_State.Registers[0x028] & 0x0F);
+	Bool bWriteEnabled =
+		((m_State.Registers[0x026] | m_State.Registers[0x027]) & 0x80) ?
+		TRUE : FALSE;
+
+	SNCPUSA1FastMemConfig(m_IRAM, m_State.Registers[0x02A],
+	                     m_pBWRAM, m_uBWRAMBytes,
+	                     bWriteEnabled, uProtected);
 }
 
 void SNSA1::SetVideoRegion(Bool bPAL)
@@ -105,6 +118,7 @@ void SNSA1::RestoreState(const SA1SaveState *pState)
 	// Bank pointers and trap callbacks are process-local and are never
 	// serialized. Rebuild them from the restored MMC/register state.
 	MapCpuMemory();
+	UpdateFastMemorySidecars();
 	UpdateIRQLine();
 }
 
@@ -164,6 +178,7 @@ void SNSA1::Reset(Bool bHardReset)
 
 	ResetCPUContext();
 	MapCpuMemory();
+	UpdateFastMemorySidecars();
 }
 
 Uint16 SNSA1::GetResetVector() const
@@ -467,6 +482,10 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 	default:
 		break;
 	}
+
+	/* Register writes can change CIWP/BWPA/write enable while the R5900
+	   interpreter is still active, so refresh the direct-memory sidecar now. */
+	UpdateFastMemorySidecars();
 }
 
 void SNSA1::WriteSCPURegister(Uint16 uAddr, Uint8 uData)
@@ -1452,7 +1471,7 @@ Bool SNSA1::ExecuteCpuFast()
 #if defined(__mips__)
 	m_Cpu.nAbortCycles = 0;
 	m_Cpu.bRunning = TRUE;
-	SNCPUSA1BusSetIRAM(m_IRAM);
+	UpdateFastMemorySidecars();
 	SNCPUSA1BusSetExecCpu(&m_Cpu);
 	SNCPUExecute_ASM(&m_Cpu);
 	SNCPUSA1BusSetExecCpu(NULL);
