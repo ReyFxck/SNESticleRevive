@@ -498,8 +498,9 @@ static void TestArithmetic(void)
 	AdvanceSA1CpuClock(sa1, 1);
 	CHECK(sa1.ReadRegister(0x2306) == 0xF1 &&
 	      sa1.ReadRegister(0x2307) == 0xFF &&
-	      sa1.ReadRegister(0x230A) == 0xFF,
-	      "signed multiplication must commit after five clocks");
+	      sa1.ReadRegister(0x2309) == 0xFF &&
+	      sa1.ReadRegister(0x230A) == 0x00,
+	      "signed multiplication must expose a 32-bit result in 40-bit MR");
 
 	// signed dividend / unsigned divisor uses a non-negative remainder:
 	// -10 = (-4 * 3) + 2.

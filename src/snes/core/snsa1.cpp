@@ -999,8 +999,11 @@ void SNSA1::ExecuteArithmetic()
 		return;
 	}
 
+	// Normal multiplication is a signed 16x16 -> 32-bit result.  MR is
+	// physically 40 bits wide, but the upper byte is cleared rather than
+	// sign-extended; cumulative mode is the only path that uses all 40 bits.
 	m_State.ArithmeticResult =
-		((Uint64)((Int64)nA * (Int64)nB)) & uMask40;
+		(Uint32)((Int32)nA * (Int32)nB);
 	m_State.ArithmeticOverflow = FALSE;
 	m_State.ArithmeticOp2 = 0;
 	m_State.Registers[0x053] = 0;
