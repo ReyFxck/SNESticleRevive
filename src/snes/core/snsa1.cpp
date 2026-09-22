@@ -194,7 +194,8 @@ void SNSA1::ReleaseCPUReset()
 
 	m_State.LastResetVector = GetResetVector();
 	m_State.ResetEpoch++;
-	m_State.MasterRemainder = 0;
+	// Preserve MasterRemainder: reset/wait gate instruction execution but do
+	// not reset the phase of the free-running 10.74 MHz SA-1 clock.
 	m_Cpu.Regs.rPC = m_State.LastResetVector;
 }
 
@@ -307,8 +308,6 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		}
 
 		m_State.Running = ((uData & 0x60) == 0) ? TRUE : FALSE;
-		if (!m_State.Running)
-			m_State.MasterRemainder = 0;
 		UpdateIRQLine();
 		break;
 

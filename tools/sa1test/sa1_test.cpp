@@ -61,6 +61,19 @@ static void TestResetReleaseAndScheduler(void)
 	CHECK(sa1.GetCpu()->Regs.rPC == 0x1234, "SA-1 PC must start at $2203/$2204");
 	CHECK(sa1.GetState()->LastResetVector == 0x1234, "latched reset vector");
 	CHECK(sa1.GetState()->ResetEpoch == 1, "reset epoch");
+
+	// Odd master-clock fragments must survive the reset boundary. A one-clock
+	// fragment before release plus one after release equals one SA-1 tick.
+	SNSA1 phase;
+	phase.WriteRegister(0x2203, 0x00);
+	phase.WriteRegister(0x2204, 0x80);
+	phase.StepMasterCycles(1);
+	CHECK(SNCPUGetCounter(phase.GetCpu(), SNCPU_COUNTER_FRAME) == 0,
+	      "half SA-1 tick must remain pending while reset is asserted");
+	phase.WriteRegister(0x2200, 0x00);
+	phase.StepMasterCycles(1);
+	CHECK(SNCPUGetCounter(phase.GetCpu(), SNCPU_COUNTER_FRAME) >= SNCPU_CYCLE_FAST,
+	      "reset release must preserve odd master-clock phase");
 }
 
 static void TestSA1ControlFlowTiming(void)
