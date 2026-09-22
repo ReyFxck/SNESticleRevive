@@ -1436,9 +1436,11 @@ Bool SNSA1::ExecuteCpuFast()
 #if defined(__mips__)
 	m_Cpu.nAbortCycles = 0;
 	m_Cpu.bRunning = TRUE;
+	SNCPUSA1BusSetIRAM(m_IRAM);
 	SNCPUSA1BusSetExecCpu(&m_Cpu);
 	SNCPUExecute_ASM(&m_Cpu);
 	SNCPUSA1BusSetExecCpu(NULL);
+	SNCPUSA1BusSetIRAM(NULL);
 	m_Cpu.bRunning = FALSE;
 	if (m_Cpu.nAbortCycles != 0)
 	{

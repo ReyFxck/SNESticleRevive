@@ -19,6 +19,7 @@ Uint32 g_SNCPU_SA1BusEventAddr[SNCPU_SA1_BUS_EVENT_MAX];
 Uint32 g_SNCPU_SA1BusEventInfo[SNCPU_SA1_BUS_EVENT_MAX];
 SNCpuT *g_SNCPU_SA1BusHostCpu = NULL;
 SNCpuT *g_SNCPU_SA1ExecCpu = NULL;
+Uint8 *g_SNCPU_SA1IRAM = NULL;
 Uint8 g_SNCPU_SA1BusPenaltyUnits[4][SNCPU_SA1_BUS_UNIT_MAX];
 static Uint32 g_SNCPU_SA1BusFinalized = 0;
 static Uint32 g_SNCPU_SA1BusBits[4][SNCPU_SA1_BUS_TICK_MAX / 32];
@@ -77,6 +78,11 @@ void SNCPUSA1BusSetHost(SNCpuT *pCpu)
 void SNCPUSA1BusSetExecCpu(SNCpuT *pCpu)
 {
 	g_SNCPU_SA1ExecCpu=pCpu;
+}
+
+void SNCPUSA1BusSetIRAM(Uint8 *pIRAM)
+{
+	g_SNCPU_SA1IRAM=pIRAM;
 }
 
 void SNCPUSA1BusTagCpu(SNCpuT *pCpu)

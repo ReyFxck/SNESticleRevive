@@ -230,6 +230,32 @@
 
 /* SA-1 control-flow timing: odd PRG-ROM branch targets and PRG-ROM
    jump/return destinations consume one additional SA-1 tick. */
+/* Fast form for the hottest SA-1 path: direct I-RAM reads such as the
+   Super Mario RPG A5 $00 polling loop.  No bus classification is needed. */
+#define SNCPU_SA1_IRAM_PENALTY() \
+		lw		t0,SNCPU_Counter2			;\
+		subu		t0,t0,R_Cycles				;\
+		addiu		t0,t0,-SNCPU_CYCLE_FAST		;\
+		sltiu		t1,t0,SNCPU_SA1_BUS_UNIT_MAX		;\
+		beq		t1,zr,86f				;\
+		nop						;\
+		lui		t1,%hi(g_SNCPU_SA1BusPenaltyUnits)	;\
+		addiu		t1,t1,%lo(g_SNCPU_SA1BusPenaltyUnits)	;\
+		addiu		t1,t1,(SNCPU_SA1_BUS_IRAM*SNCPU_SA1_BUS_UNIT_MAX) ;\
+		addu		t1,t1,t0				;\
+		lbu		t0,0(t1)				;\
+		beq		t0,zr,86f				;\
+		nop						;\
+		subu		R_Cycles,R_Cycles,t0			;\
+		sltiu		t1,t0,(SNCPU_CYCLE_FAST*2)		;\
+		addiu		t2,zr,2					;\
+		subu		t1,t2,t1				;\
+		lui		t2,%hi(g_SNCPU_SA1BusConflictTicks)	;\
+		lw		t0,%lo(g_SNCPU_SA1BusConflictTicks)(t2)	;\
+		addu		t0,t0,t1				;\
+		sw		t0,%lo(g_SNCPU_SA1BusConflictTicks)(t2)	;\
+86:
+
 #define SNCPU_SA1_JUMP_PENALTY() \
 		lw		t0,SP_SA1Exec				;\
 		beq		t0,zr,88f				;\
@@ -973,11 +999,41 @@ _SNCPU_Write16Wrap16:
 _SNCPU_Read8:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank
 		lw		t1,SP_SA1Exec
-		bne		t1,zr,1f
+		beq		t1,zr,3f
 		nop
+		// Only the two mixed system chunks can contain I-RAM.
+		sll		t1,t0,4
+		addu		t1,t1,R_pCpu
+		lbu		t1,SNCPU_uSA1Bus(t1)
+		addiu		t2,zr,SNCPU_SA1_BUS_MIX_LOW
+		beq		t1,t2,1f
+		andi		t0,R_Addr,SNCPU_BANK_MASK
+		addiu		t2,zr,SNCPU_SA1_BUS_MIX_HIGH
+		bne		t1,t2,2f
+		nop
+		sltiu		t1,t0,0x1000
+		bne		t1,zr,2f
+		nop
+		sltiu		t1,t0,0x1800
+		beq		t1,zr,2f
+		nop
+		b		_SNCPU_Read8SA1IRAM
+		andi		t0,R_Addr,0x07FF
+1:
+		sltiu		t1,t0,0x0800
+		beq		t1,zr,2f
+		nop
+		b		_SNCPU_Read8SA1IRAM
+		andi		t0,R_Addr,0x07FF
+2:
+		// SA-1 non-I-RAM addresses use the normal bank/trap machinery.
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
+		b		4f
+		nop
+3:
         beq		t0,zr,_SNCPU_Read8ZeroBank
         nop
-1:
+4:
         sll		t0,t0,4									// t0 = (bank << 4) & bank mask
 
         addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
@@ -995,6 +1051,26 @@ _SNCPU_Read8:
 
 		jr		ra
         nop
+
+_SNCPU_Read8SA1IRAM:
+		lui		t1,%hi(g_SNCPU_SA1IRAM)
+		lw		t1,%lo(g_SNCPU_SA1IRAM)(t1)
+		beq		t1,zr,2f
+		nop
+		addu		t1,t1,t0
+		lbu		R_Data,0(t1)
+		addiu		t2,zr,SNCPU_CYCLE_FAST
+		subu		R_Cycles,R_Cycles,t2
+		SNCPU_SA1_IRAM_PENALTY()
+		jr		ra
+		nop
+2:
+		// Defensive fallback if the sidecar pointer was not installed.
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
+		sll		t0,t0,4
+		addu		t0,t0,R_pCpu
+		b		_SNCPU_Read8Trap
+		subu		R_Cycles,R_Cycles,SNCPU_CYCLE_FAST
 
 _SNCPU_Read8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
