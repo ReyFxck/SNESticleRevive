@@ -581,6 +581,64 @@ void SNCPUIRQ(SNCpuT *pCpu)
 	}
 }
 
+
+void SNCPUNMIToVector(SNCpuT *pCpu, Uint16 uVector)
+{
+	if (pCpu->uSignal & SNCPU_SIGNAL_WAI)
+		pCpu->uSignal &= ~SNCPU_SIGNAL_WAI;
+
+	if (pCpu->Regs.rE)
+	{
+		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 8));
+		SNCPUPush8(pCpu, (Uint8)pCpu->Regs.rPC);
+		SNCPUPush8(pCpu, pCpu->Regs.rP & (~SNCPU_FLAG_B));
+	}
+	else
+	{
+		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 16));
+		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 8));
+		SNCPUPush8(pCpu, (Uint8)pCpu->Regs.rPC);
+		SNCPUPush8(pCpu, pCpu->Regs.rP);
+	}
+
+	pCpu->Regs.rPC = uVector;
+	pCpu->Regs.rP &= ~(SNCPU_FLAG_D);
+	pCpu->Regs.rP |= SNCPU_FLAG_I;
+	SNCPUConsumeCycles(pCpu,
+		SNCPU_CYCLE_SLOW * (pCpu->Regs.rE ? 5 : 6) +
+		SNCPU_CYCLE_FAST * 2);
+}
+
+void SNCPUIRQToVector(SNCpuT *pCpu, Uint16 uVector)
+{
+	if (pCpu->uSignal & SNCPU_SIGNAL_WAI)
+		pCpu->uSignal &= ~SNCPU_SIGNAL_WAI;
+
+	if (pCpu->Regs.rP & SNCPU_FLAG_I)
+		return;
+
+	if (pCpu->Regs.rE)
+	{
+		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 8));
+		SNCPUPush8(pCpu, (Uint8)pCpu->Regs.rPC);
+		SNCPUPush8(pCpu, pCpu->Regs.rP & (~SNCPU_FLAG_B));
+	}
+	else
+	{
+		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 16));
+		SNCPUPush8(pCpu, (Uint8)(pCpu->Regs.rPC >> 8));
+		SNCPUPush8(pCpu, (Uint8)pCpu->Regs.rPC);
+		SNCPUPush8(pCpu, pCpu->Regs.rP);
+	}
+
+	pCpu->Regs.rPC = uVector;
+	pCpu->Regs.rP &= ~(SNCPU_FLAG_D);
+	pCpu->Regs.rP |= SNCPU_FLAG_I;
+	SNCPUConsumeCycles(pCpu,
+		SNCPU_CYCLE_SLOW * (pCpu->Regs.rE ? 5 : 6) +
+		SNCPU_CYCLE_FAST * 2);
+}
+
 Int32 SNCPUDisassemble(SNCpuT *pCpu, Uint32 Addr, char *pStr, Uint8 *pFlags)
 {
 	Uint8 Opcode[4];

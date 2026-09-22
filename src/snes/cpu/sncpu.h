@@ -103,6 +103,11 @@ void SNCPUResetCounters(SNCpuT *pCpu);
 void SNCPUReset(SNCpuT *pCpu, Bool bHardReset);
 void SNCPUNMI(SNCpuT *pCpu);
 void SNCPUIRQ(SNCpuT *pCpu);
+/* Coprocessors such as SA-1 can replace the host CPU's IRQ/NMI vector.
+   These entry points preserve normal stack/flag/cycle semantics without
+   performing a phantom read from the cartridge's ordinary vector table. */
+void SNCPUNMIToVector(SNCpuT *pCpu, Uint16 uVector);
+void SNCPUIRQToVector(SNCpuT *pCpu, Uint16 uVector);
 
 void SNCPUAbort(SNCpuT *pCpu);
 void SNCPUSignalIRQ(SNCpuT *pCpu, Uint32 bEnable);

@@ -106,6 +106,39 @@ static bool CheckInterruptSemantics(SNCpuT *cpu, Uint8 *memory)
 	ok &= (cpu->Regs.rP & (SNCPU_FLAG_I | SNCPU_FLAG_D)) == SNCPU_FLAG_I;
 	ok &= cpu->Cycles == 1000 - (6 * SNCPU_CYCLE_SLOW + 2 * SNCPU_CYCLE_FAST);
 
+	/* SA-1 may replace the S-CPU vectors. The explicit-vector entry must
+	   preserve interrupt semantics without consulting the normal ROM vector. */
+	memory[SNCPU_VECTORE_NMI] = 0x11;
+	memory[SNCPU_VECTORE_NMI + 1] = 0x22;
+	cpu->Regs.rPC = 0x34CDEF;
+	cpu->Regs.rS.w = 0x01FF;
+	cpu->Regs.rP = SNCPU_FLAG_M | SNCPU_FLAG_X | SNCPU_FLAG_D | SNCPU_FLAG_C;
+	cpu->Regs.rE = 1;
+	cpu->uSignal = 0;
+	cpu->Cycles = 1000;
+	SNCPUNMIToVector(cpu, 0xBEEF);
+	ok &= cpu->Regs.rPC == 0x00BEEF;
+	ok &= cpu->Regs.rS.w == 0x01FC;
+	ok &= memory[0x01FF] == 0xCD && memory[0x01FE] == 0xEF;
+	ok &= (cpu->Regs.rP & (SNCPU_FLAG_I | SNCPU_FLAG_D)) == SNCPU_FLAG_I;
+	ok &= cpu->Cycles == 1000 - (5 * SNCPU_CYCLE_SLOW + 2 * SNCPU_CYCLE_FAST);
+
+	memory[SNCPU_VECTOR_IRQ] = 0x33;
+	memory[SNCPU_VECTOR_IRQ + 1] = 0x44;
+	cpu->Regs.rPC = 0x56ABCD;
+	cpu->Regs.rS.w = 0x0200;
+	cpu->Regs.rP = SNCPU_FLAG_D | SNCPU_FLAG_C;
+	cpu->Regs.rE = 0;
+	cpu->uSignal = SNCPU_SIGNAL_IRQ;
+	cpu->Cycles = 1000;
+	SNCPUIRQToVector(cpu, 0xCAFE);
+	ok &= cpu->Regs.rPC == 0x00CAFE;
+	ok &= cpu->Regs.rS.w == 0x01FC;
+	ok &= memory[0x0200] == 0x56 && memory[0x01FF] == 0xAB;
+	ok &= memory[0x01FE] == 0xCD;
+	ok &= (cpu->Regs.rP & (SNCPU_FLAG_I | SNCPU_FLAG_D)) == SNCPU_FLAG_I;
+	ok &= cpu->Cycles == 1000 - (6 * SNCPU_CYCLE_SLOW + 2 * SNCPU_CYCLE_FAST);
+
 	/* An asserted but masked IRQ still releases WAI without taking a vector. */
 	/* The architectural PC has already advanced past WAI while halted. */
 	cpu->Regs.rPC = 0x008001;

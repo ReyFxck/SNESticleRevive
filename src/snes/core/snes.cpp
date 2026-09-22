@@ -1653,11 +1653,10 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 					}
 				}
 
-                SNCPUNMI(&m_Cpu);
 				if (m_bSA1 && m_SA1.SCPUUseNMIVector())
-				{
-					m_Cpu.Regs.rPC = m_SA1.GetSCPUNMIVector();
-				}
+					SNCPUNMIToVector(&m_Cpu, m_SA1.GetSCPUNMIVector());
+				else
+					SNCPUNMI(&m_Cpu);
                 // clear NMI edge signal
                 m_Cpu.uSignal&= ~SNCPU_SIGNAL_NMIEDGE;
             } else
@@ -1671,11 +1670,10 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
                 // attempt irq
                 // irqs will always be attempted until signal has been cleared
-                SNCPUIRQ(&m_Cpu);
 				if (m_bSA1 && m_SA1.SCPUUseIRQVector())
-				{
-					m_Cpu.Regs.rPC = m_SA1.GetSCPUIRQVector();
-				}
+					SNCPUIRQToVector(&m_Cpu, m_SA1.GetSCPUIRQVector());
+				else
+					SNCPUIRQ(&m_Cpu);
             } else
             if (m_Cpu.uSignal & SNCPU_SIGNAL_RESET)
             {
