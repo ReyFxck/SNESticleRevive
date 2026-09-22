@@ -835,6 +835,26 @@ _SNCPU_Write8:
 		nop
 
 _SNCPU_Write8SA1CheckIRAM:
+		/* System-bank $6000-$7FFF is the CBW-selected linear BW-RAM window.
+		   Bitmap mode deliberately stays on the C path. */
+		srl		t0,R_Addr,16
+		sltiu		t1,t0,0x40
+		bne		t1,zr,_SNCPU_Write8SA1SystemCheck
+		nop
+		addiu		t1,t0,-0x80
+		sltiu		t1,t1,0x40
+		beq		t1,zr,_SNCPU_Write8SA1Generic
+		nop
+_SNCPU_Write8SA1SystemCheck:
+		andi		t0,R_Addr,0xFFFF
+		sltiu		t1,t0,0x6000
+		bne		t1,zr,_SNCPU_Write8SA1IRAMClassify
+		nop
+		sltiu		t1,t0,0x8000
+		bne		t1,zr,_SNCPU_Write8SA1BWRAMWindow
+		nop
+
+_SNCPU_Write8SA1IRAMClassify:
 		/* System-bank I-RAM lives at $0000-$07FF and $3000-$37FF. */
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		sll		t1,t0,4
@@ -884,6 +904,49 @@ _SNCPU_Write8SA1IRAMTimed:
 		addiu		t2,zr,SNCPU_CYCLE_FAST
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_IRAM_PENALTY()
+		jr		ra
+		nop
+
+_SNCPU_Write8SA1BWRAMWindow:
+		lui		t1,%hi(g_SNCPU_SA1BWRAMMap)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMMap)(t1)
+		andi		t0,t1,0x80
+		bne		t0,zr,_SNCPU_Write8SA1Generic
+		nop
+		andi		t0,t1,0x1F
+		sll		t0,t0,13
+		andi		t1,R_Addr,0x1FFF
+		or		t0,t0,t1
+
+		/* Window writes obey the same global BWPA/write-enable rule as the
+		   precise C implementation. */
+		lui		t1,%hi(g_SNCPU_SA1BWRAMWriteEnabled)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMWriteEnabled)(t1)
+		bne		t1,zr,_SNCPU_Write8SA1BWRAMWindowStore
+		nop
+		lui		t1,%hi(g_SNCPU_SA1BWRAMProtectedBytes)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMProtectedBytes)(t1)
+		sltu		t1,t0,t1
+		bne		t1,zr,_SNCPU_Write8SA1BWRAMWindowTimed
+		nop
+
+_SNCPU_Write8SA1BWRAMWindowStore:
+		lui		t1,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMMask)(t1)
+		bltz		t1,_SNCPU_Write8SA1Generic
+		nop
+		and		t0,t0,t1
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
+		beq		t1,zr,_SNCPU_Write8SA1Generic
+		nop
+		addu		t1,t1,t0
+		sb		R_Data,0(t1)
+
+_SNCPU_Write8SA1BWRAMWindowTimed:
+		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
+		subu		R_Cycles,R_Cycles,t2
+		SNCPU_SA1_PENALTY(R_Addr,t2)
 		jr		ra
 		nop
 
@@ -1148,6 +1211,27 @@ _SNCPU_Read8:
 		nop
 
 _SNCPU_Read8SA1CheckIRAM:
+		/* System-bank $6000-$7FFF is the SA-1 CBW-selected BW-RAM window.
+		   Keep bitmap mode on the precise C path, but make the normal linear
+		   window a native R5900 load. */
+		srl		t0,R_Addr,16
+		sltiu		t1,t0,0x40
+		bne		t1,zr,_SNCPU_Read8SA1SystemCheck
+		nop
+		addiu		t1,t0,-0x80
+		sltiu		t1,t1,0x40
+		beq		t1,zr,_SNCPU_Read8SA1Generic
+		nop
+_SNCPU_Read8SA1SystemCheck:
+		andi		t0,R_Addr,0xFFFF
+		sltiu		t1,t0,0x6000
+		bne		t1,zr,_SNCPU_Read8SA1IRAMClassify
+		nop
+		sltiu		t1,t0,0x8000
+		bne		t1,zr,_SNCPU_Read8SA1BWRAMWindow
+		nop
+
+_SNCPU_Read8SA1IRAMClassify:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		sll		t1,t0,4
 		addu		t1,t1,R_pCpu
@@ -1172,6 +1256,33 @@ _SNCPU_Read8SA1CheckIRAM:
 		nop
 		b		_SNCPU_Read8SA1IRAM
 		andi		t0,R_Addr,0x07FF
+
+_SNCPU_Read8SA1BWRAMWindow:
+		lui		t1,%hi(g_SNCPU_SA1BWRAMMap)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMMap)(t1)
+		andi		t0,t1,0x80
+		bne		t0,zr,_SNCPU_Read8SA1Generic
+		nop
+		andi		t0,t1,0x1F
+		sll		t0,t0,13
+		andi		t1,R_Addr,0x1FFF
+		or		t0,t0,t1
+		lui		t1,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMMask)(t1)
+		bltz		t1,_SNCPU_Read8SA1Generic
+		nop
+		and		t0,t0,t1
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
+		beq		t1,zr,_SNCPU_Read8SA1Generic
+		nop
+		addu		t1,t1,t0
+		lbu		R_Data,0(t1)
+		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
+		subu		R_Cycles,R_Cycles,t2
+		SNCPU_SA1_PENALTY(R_Addr,t2)
+		jr		ra
+		nop
 
 _SNCPU_Read8SA1BWRAM:
 		lui		t1,%hi(g_SNCPU_SA1BWRAM)
@@ -2408,8 +2519,13 @@ _SNCPUExecute_DoneNoRewind:
 		or		t0,R_t0,R_t1
 		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
+		lui		t0,%hi(g_SNCPU_SA1BWRAMMap)
+		lw		t0,%lo(g_SNCPU_SA1BWRAMMap)(t0)
+		andi		t0,t0,0x80
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
 
-		/* source X: $0000-$07FF or $3000-$37FF */
+		/* source X: I-RAM or the linear $6000-$7FFF BW-RAM window */
 		sltiu		t0,R_X,0x0800
 		bne		t0,zr,_SNCPU_SA1_MVN00_X0_CheckY
 		nop
@@ -2417,6 +2533,12 @@ _SNCPUExecute_DoneNoRewind:
 		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
 		sltiu		t0,R_X,0x3800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_CheckY
+		nop
+		sltiu		t0,R_X,0x6000
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
+		sltiu		t0,R_X,0x8000
 		beq		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
 
@@ -2429,8 +2551,15 @@ _SNCPU_SA1_MVN00_X0_CheckY:
 		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
 		sltiu		t0,R_Y,0x3800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_SetDB
+		nop
+		sltiu		t0,R_Y,0x6000
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
+		nop
+		sltiu		t0,R_Y,0x8000
 		beq		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
+_SNCPU_SA1_MVN00_X0_SetDB:
 		move	R_DB,zr
 
 _SNCPU_SA1_MVN00_X0_Transfer:
@@ -2471,6 +2600,12 @@ _SNCPU_SA1_MVN00_X0_Transfer:
 		bne		t0,zr,_SNCPUExecute_Loop
 		nop
 		sltiu		t0,R_X,0x3800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_NextY
+		nop
+		sltiu		t0,R_X,0x6000
+		bne		t0,zr,_SNCPUExecute_Loop
+		nop
+		sltiu		t0,R_X,0x8000
 		beq		t0,zr,_SNCPUExecute_Loop
 		nop
 
@@ -2482,6 +2617,12 @@ _SNCPU_SA1_MVN00_X0_NextY:
 		bne		t0,zr,_SNCPUExecute_Loop
 		nop
 		sltiu		t0,R_Y,0x3800
+		bne		t0,zr,_SNCPU_SA1_MVN00_X0_VirtualFetch
+		nop
+		sltiu		t0,R_Y,0x6000
+		bne		t0,zr,_SNCPUExecute_Loop
+		nop
+		sltiu		t0,R_Y,0x8000
 		beq		t0,zr,_SNCPUExecute_Loop
 		nop
 

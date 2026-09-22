@@ -139,13 +139,15 @@ extern Uint8 *g_SNCPU_SA1BWRAM;
 extern Uint32 g_SNCPU_SA1BWRAMMask;
 extern Uint32 g_SNCPU_SA1BWRAMWriteEnabled;
 extern Uint32 g_SNCPU_SA1BWRAMProtectedBytes;
+extern Uint32 g_SNCPU_SA1BWRAMMap;
 extern Uint8 g_SNCPU_SA1BusPenaltyUnits[4][SNCPU_SA1_BUS_UNIT_MAX];
 void SNCPUSA1BusSetHost(SNCpuT *pCpu);
 void SNCPUSA1BusSetExecCpu(SNCpuT *pCpu);
 void SNCPUSA1BusSetIRAM(Uint8 *pIRAM);
 void SNCPUSA1FastMemConfig(Uint8 *pIRAM, Uint8 uCIWP,
                            Uint8 *pBWRAM, Uint32 uBWRAMBytes,
-                           Bool bBWRAMWriteEnabled, Uint32 uProtectedBytes);
+                           Bool bBWRAMWriteEnabled, Uint32 uProtectedBytes,
+                           Uint8 uBWRAMMap);
 void SNCPUSA1BusTagCpu(SNCpuT *pCpu);
 void SNCPUSA1BusBeginLine(void);
 void SNCPUSA1BusRecord(SNCpuT *pCpu, Uint32 uAddr, Uint32 uCyclesPerByte, Uint32 nBytes);

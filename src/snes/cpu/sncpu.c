@@ -25,6 +25,7 @@ Uint8 *g_SNCPU_SA1BWRAM = NULL;
 Uint32 g_SNCPU_SA1BWRAMMask = 0xFFFFFFFFu;
 Uint32 g_SNCPU_SA1BWRAMWriteEnabled = 0;
 Uint32 g_SNCPU_SA1BWRAMProtectedBytes = 0xFFFFFFFFu;
+Uint32 g_SNCPU_SA1BWRAMMap = 0;
 Uint8 g_SNCPU_SA1BusPenaltyUnits[4][SNCPU_SA1_BUS_UNIT_MAX];
 static Uint32 g_SNCPU_SA1BusFinalized = 0;
 static Uint32 g_SNCPU_SA1BusBits[4][SNCPU_SA1_BUS_TICK_MAX / 32];
@@ -92,13 +93,15 @@ void SNCPUSA1BusSetIRAM(Uint8 *pIRAM)
 
 void SNCPUSA1FastMemConfig(Uint8 *pIRAM, Uint8 uCIWP,
                            Uint8 *pBWRAM, Uint32 uBWRAMBytes,
-                           Bool bBWRAMWriteEnabled, Uint32 uProtectedBytes)
+                           Bool bBWRAMWriteEnabled, Uint32 uProtectedBytes,
+                           Uint8 uBWRAMMap)
 {
 	g_SNCPU_SA1IRAM = pIRAM;
 	g_SNCPU_SA1CIWP = uCIWP;
 	g_SNCPU_SA1BWRAM = pBWRAM;
 	g_SNCPU_SA1BWRAMWriteEnabled = bBWRAMWriteEnabled ? 1u : 0u;
 	g_SNCPU_SA1BWRAMProtectedBytes = uProtectedBytes;
+	g_SNCPU_SA1BWRAMMap = uBWRAMMap;
 
 	/* Common SA-1 BW-RAM sizes are powers of two. Keep the R5900 hot path
 	   branchless after address masking; unusual sizes fall back to C. */

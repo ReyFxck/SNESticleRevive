@@ -68,7 +68,8 @@ void SNSA1::UpdateFastMemorySidecars()
 
 	SNCPUSA1FastMemConfig(m_IRAM, m_State.Registers[0x02A],
 	                     m_pBWRAM, m_uBWRAMBytes,
-	                     bWriteEnabled, uProtected);
+	                     bWriteEnabled, uProtected,
+	                     m_State.Registers[0x025]);
 }
 
 void SNSA1::SetVideoRegion(Bool bPAL)
