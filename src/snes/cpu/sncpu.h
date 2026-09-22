@@ -122,6 +122,23 @@ void SNCPUSetMemSpeed(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint32 uCycles);
 void SNCPUSetRomSpeed(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint32 uCycles);
 void SNCPUMirror24BitBus(SNCpuT *pCpu);
 
+/* SA-1 shared-bus sidecar. Kept outside SNCpuT so sn65816.S offsets stay
+   ABI-stable on PS2. */
+#define SNCPU_SA1_BUS_EVENT_MAX 256
+#define SNCPU_SA1_BUS_TICK_MAX  1024
+
+extern volatile Uint32 g_SNCPU_SA1BusTrackEnabled;
+extern volatile Uint32 g_SNCPU_SA1BusEventCount;
+extern Uint32 g_SNCPU_SA1BusEventAddr[SNCPU_SA1_BUS_EVENT_MAX];
+extern Uint32 g_SNCPU_SA1BusEventInfo[SNCPU_SA1_BUS_EVENT_MAX];
+void SNCPUSA1BusSetHost(SNCpuT *pCpu);
+void SNCPUSA1BusBeginLine(void);
+void SNCPUSA1BusRecord(SNCpuT *pCpu, Uint32 uAddr, Uint32 uCyclesPerByte, Uint32 nBytes);
+void SNCPUSA1BusFinalize(Uint32 uMasterClock);
+Uint32 SNCPUSA1BusPenalty(SNCpuT *pSA1Cpu, Uint32 uAddr, Uint32 uCyclesPerByte);
+Uint32 SNCPUSA1BusGetConflictTicks(void);
+Uint32 SNCPUSA1BusGetDroppedEvents(void);
+
 Uint8  SNCPUPeek8(SNCpuT *pCpu, Uint32 Addr);
 void   SNCPUPeekMem(SNCpuT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes);
 

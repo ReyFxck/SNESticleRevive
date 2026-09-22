@@ -147,7 +147,10 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 	} while (0);
 #define SNCPU_SUBMEMCYCLES(_Addr, _nBytes) \
 	do { \
-		pCpu->Cycles -= pCpu->Bank[(_Addr) >> SNCPU_BANK_SHIFT].uBankCycle * (_nBytes); \
+		Uint32 _uMemCycles=pCpu->Bank[(_Addr)>>SNCPU_BANK_SHIFT].uBankCycle; \
+		Uint32 _uPenalty=(pCpu==_SNCPU_pSA1TimingCpu)?SNCPUSA1BusPenalty(pCpu,(_Addr),_uMemCycles):0; \
+		pCpu->Cycles-=_uMemCycles*(_nBytes)+_uPenalty; \
+		SNCPUSA1BusRecord(pCpu,(_Addr),_uMemCycles,(_nBytes)); \
 		SNCPU_TESTCYCLES(_nBytes) \
 	} while (0);
 
@@ -557,9 +560,10 @@ static Uint8 _SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 static Uint16 _SNCPURead16(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 uData;
-	SNCPU_SUBMEMCYCLES(Addr,2);
-	uData =  __SNCPURead8(pCpu, Addr);
-	uData|= (__SNCPURead8(pCpu, Addr+1)<<8);
+	SNCPU_SUBMEMCYCLES(Addr,1);
+	uData = __SNCPURead8(pCpu, Addr);
+	SNCPU_SUBMEMCYCLES(Addr+1,1);
+	uData |= (__SNCPURead8(pCpu, Addr+1)<<8);
 	return  uData;
 }
 
@@ -681,8 +685,9 @@ static void  _SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 
 static void  _SNCPUWrite16(SNCpuT *pCpu, Uint32 Addr, Uint16 Data)
 {
-	SNCPU_SUBMEMCYCLES(Addr,2);
+	SNCPU_SUBMEMCYCLES(Addr,1);
 	__SNCPUWrite8(pCpu, Addr + 0, Data >> 0);
+	SNCPU_SUBMEMCYCLES(Addr+1,1);
 	__SNCPUWrite8(pCpu, Addr + 1, Data >> 8);
 }
 
@@ -697,7 +702,8 @@ static void _SNCPUWrite16Wrap16(SNCpuT *pCpu, Uint32 Addr, Uint16 Data)
 
 static void _SNCPUPush8(SNCpuT *pCpu, Uint8 Data)
 {
-	SNCPU_SUBCYCLESSLOW(1);
+	if (pCpu==_SNCPU_pSA1TimingCpu) SNCPU_SUBMEMCYCLES(pCpu->Regs.rS.w,1)
+	else SNCPU_SUBCYCLESSLOW(1);
 	__SNCPUWrite8(pCpu, pCpu->Regs.rS.w, Data);
 	if (pCpu->Regs.rE)
 	{
@@ -734,7 +740,8 @@ static Uint8 _SNCPUPop8(SNCpuT *pCpu)
 		// inc 16-bit S
 		pCpu->Regs.rS.w++;
 	}
-	SNCPU_SUBCYCLESSLOW(1);
+	if (pCpu==_SNCPU_pSA1TimingCpu) SNCPU_SUBMEMCYCLES(pCpu->Regs.rS.w,1)
+	else SNCPU_SUBCYCLESSLOW(1);
 	return __SNCPURead8(pCpu, pCpu->Regs.rS.w);
 }
 

@@ -464,6 +464,7 @@ void SnesSystem::SyncSA1To(Int32 nClock)
 #if SNDBG_LOG
 	Uint32 uSA1Start = ProfCtrGetCycle();
 #endif
+	SNCPUSA1BusFinalize((Uint32)nClock);
 	m_SA1.StepMasterCycles(nClock - m_nSA1LineClock);
 #if SNDBG_LOG
 	g_TmgCycSA1 += ProfCtrGetCycle() - uSA1Start;
@@ -1482,6 +1483,7 @@ void SnesSystem::SetSnesRom(SnesRom *pRom)
 	// set rom
 	m_pRom = pRom;
 	m_bSA1 = FALSE;
+	SNCPUSA1BusSetHost(NULL);
 	if (!m_pRom)
 		m_SA1.SetMemory(NULL, 0, NULL, 0);
 
@@ -1834,6 +1836,10 @@ void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
 	m_nSA1LineClock = 0;
+	if (m_bSA1) {
+		SNCPUSA1BusBeginLine();
+		SNCPUResetCounter(m_SA1.GetCpu(), SNCPU_COUNTER_LINE);
+	}
 
     // don't trigger IRQ by default
     int nHIRQCycles = -1;
@@ -2586,6 +2592,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)pSA1->ExecutionSlices, (unsigned)pSA1->DMARunning,
 					(unsigned)pSA1->DMARemaining, (unsigned)pSA1->DMATransferredBytes,
 					(unsigned)pSA1->DMAStallTicks);
+				DLog("[snes-sa1-bus] conflict-ticks=%u dropped-events=%u",(unsigned)SNCPUSA1BusGetConflictTicks(),(unsigned)SNCPUSA1BusGetDroppedEvents());
 				DLog("[snes-sa1] irq sfr/cfr/cie/sie=%02X/%02X/%02X/%02X timer h/v=%u/%u bw map-s/map-c/ctrl=%02X/%02X/%02X mmc=%02X/%02X/%02X/%02X",
 					(unsigned)((pSA1->Registers[0x009] & 0x5F) | (pSA1->Registers[0x100] & 0xA0)),
 					(unsigned)((pSA1->Registers[0x000] & 0x0F) | (pSA1->Registers[0x101] & 0xF0)),

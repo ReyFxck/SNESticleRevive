@@ -637,6 +637,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 	m_bSRTC = (uFlags & SNROM_FLAG_SRTC) ? TRUE : FALSE;
 	m_bSuperFX = (uFlags & SNROM_FLAG_SUPERFX) ? TRUE : FALSE;
 	m_bSA1 = (uFlags & SNROM_FLAG_SA1) ? TRUE : FALSE;
+	SNCPUSA1BusSetHost(m_bSA1 ? &m_Cpu : NULL);
 
 	switch (eRomMapping)
 	{

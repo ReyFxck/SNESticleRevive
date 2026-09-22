@@ -12,6 +12,102 @@
 #include "types.h"
 #include "sndisasm.h"
 #include "sncpu.h"
+
+volatile Uint32 g_SNCPU_SA1BusTrackEnabled = 0;
+volatile Uint32 g_SNCPU_SA1BusEventCount = 0;
+Uint32 g_SNCPU_SA1BusEventAddr[SNCPU_SA1_BUS_EVENT_MAX];
+Uint32 g_SNCPU_SA1BusEventInfo[SNCPU_SA1_BUS_EVENT_MAX];
+static SNCpuT *g_SNCPU_SA1BusHostCpu = NULL;
+static Uint32 g_SNCPU_SA1BusFinalized = 0;
+static Uint32 g_SNCPU_SA1BusBits[4][SNCPU_SA1_BUS_TICK_MAX / 32];
+static Uint32 g_SNCPU_SA1BusFastIRAM[SNCPU_SA1_BUS_TICK_MAX / 32];
+static Uint32 g_SNCPU_SA1BusConflictTicks = 0;
+static Uint32 g_SNCPU_SA1BusDroppedEvents = 0;
+
+enum { SNCPU_SA1_BUS_NONE=0, SNCPU_SA1_BUS_ROM=1, SNCPU_SA1_BUS_BWRAM=2, SNCPU_SA1_BUS_IRAM=3 };
+
+static Uint8 SNCPUSA1BusType(Uint32 uAddr, Bool bSA1Side)
+{
+	Uint8 uBank=(Uint8)((uAddr>>16)&0xFF); Uint16 uLow=(Uint16)uAddr;
+	Bool bSystem=(uBank<=0x3F || (uBank>=0x80 && uBank<=0xBF));
+	if (bSystem) {
+		if (bSA1Side && (uLow<0x0800 || (uLow>=0x3000 && uLow<0x3800))) return SNCPU_SA1_BUS_IRAM;
+		if (!bSA1Side && uLow>=0x3000 && uLow<0x3800) return SNCPU_SA1_BUS_IRAM;
+		if (uLow>=0x6000 && uLow<=0x7FFF) return SNCPU_SA1_BUS_BWRAM;
+		if (uLow>=0x8000) return SNCPU_SA1_BUS_ROM;
+	}
+	if (bSA1Side) { if (uBank>=0x40 && uBank<=0x6F) return SNCPU_SA1_BUS_BWRAM; }
+	else if (uBank>=0x40 && uBank<=0x4F) return SNCPU_SA1_BUS_BWRAM;
+	if (uBank>=0xC0) return SNCPU_SA1_BUS_ROM;
+	return SNCPU_SA1_BUS_NONE;
+}
+
+static void SNCPUSA1BusMark(Uint8 uType, Uint32 uFirst, Uint32 uLast, Bool bFast)
+{
+	Uint32 uTick;
+	if (!uType || uFirst>=SNCPU_SA1_BUS_TICK_MAX) return;
+	if (uLast>=SNCPU_SA1_BUS_TICK_MAX) uLast=SNCPU_SA1_BUS_TICK_MAX-1;
+	for (uTick=uFirst; uTick<=uLast; uTick++) {
+		Uint32 uMask=1u<<(uTick&31);
+		g_SNCPU_SA1BusBits[uType][uTick>>5]|=uMask;
+		if (uType==SNCPU_SA1_BUS_IRAM && bFast) g_SNCPU_SA1BusFastIRAM[uTick>>5]|=uMask;
+	}
+}
+
+void SNCPUSA1BusSetHost(SNCpuT *pCpu)
+{
+	g_SNCPU_SA1BusHostCpu=pCpu; g_SNCPU_SA1BusTrackEnabled=pCpu?1u:0u; SNCPUSA1BusBeginLine();
+}
+void SNCPUSA1BusBeginLine(void)
+{
+	g_SNCPU_SA1BusEventCount=0; g_SNCPU_SA1BusFinalized=0;
+	memset(g_SNCPU_SA1BusBits,0,sizeof(g_SNCPU_SA1BusBits));
+	memset(g_SNCPU_SA1BusFastIRAM,0,sizeof(g_SNCPU_SA1BusFastIRAM));
+}
+void SNCPUSA1BusRecord(SNCpuT *pCpu, Uint32 uAddr, Uint32 uCyclesPerByte, Uint32 nBytes)
+{
+	Uint32 uIndex,uEnd,uInfo;
+	if (!g_SNCPU_SA1BusTrackEnabled || pCpu!=g_SNCPU_SA1BusHostCpu || !nBytes) return;
+	uIndex=g_SNCPU_SA1BusEventCount;
+	if (uIndex>=SNCPU_SA1_BUS_EVENT_MAX) { g_SNCPU_SA1BusDroppedEvents++; return; }
+	uEnd=(Uint32)SNCPUGetCounter(pCpu,SNCPU_COUNTER_LINE)&0xFFFFu;
+	uInfo=uEnd | ((uCyclesPerByte<SNCPU_CYCLE_SLOW)?(1u<<16):0) | ((nBytes&3u)<<17);
+	g_SNCPU_SA1BusEventAddr[uIndex]=uAddr&0xFFFFFFu;
+	g_SNCPU_SA1BusEventInfo[uIndex]=uInfo;
+	g_SNCPU_SA1BusEventCount=uIndex+1;
+}
+void SNCPUSA1BusFinalize(Uint32 uMasterClock)
+{
+	Uint32 uCount=g_SNCPU_SA1BusEventCount;
+	while (g_SNCPU_SA1BusFinalized<uCount) {
+		Uint32 i=g_SNCPU_SA1BusFinalized, uAddr=g_SNCPU_SA1BusEventAddr[i], uInfo=g_SNCPU_SA1BusEventInfo[i];
+		Uint32 uEnd=uInfo&0xFFFFu, nBytes=(uInfo>>17)&3u;
+		Bool bFast=(uInfo&(1u<<16))?TRUE:FALSE;
+		Uint32 uSpeed=bFast?SNCPU_CYCLE_FAST:SNCPU_CYCLE_SLOW, uDuration, uStart;
+		Uint8 uType;
+		if (!nBytes) nBytes=1;
+		if (uEnd>uMasterClock) break;
+		uDuration=uSpeed*nBytes; uStart=(uEnd>=uDuration)?uEnd-uDuration:0;
+		uType=SNCPUSA1BusType(uAddr,FALSE);
+		if (uType && uEnd>uStart) SNCPUSA1BusMark(uType,uStart>>1,(uEnd-1)>>1,bFast);
+		g_SNCPU_SA1BusFinalized++;
+	}
+}
+Uint32 SNCPUSA1BusPenalty(SNCpuT *pSA1Cpu, Uint32 uAddr, Uint32 uCyclesPerByte)
+{
+	Uint8 uType=SNCPUSA1BusType(uAddr,TRUE); Uint32 uLine,uFirst,nTicks,i,uPenaltyTicks; Bool bConflict=FALSE,bFastIRAM=FALSE;
+	if (!g_SNCPU_SA1BusTrackEnabled || !uType || !pSA1Cpu) return 0;
+	uLine=(Uint32)SNCPUGetCounter(pSA1Cpu,SNCPU_COUNTER_LINE); uFirst=uLine/SNCPU_CYCLE_FAST;
+	nTicks=uCyclesPerByte/SNCPU_CYCLE_FAST; if (!nTicks) nTicks=1;
+	for (i=0;i<nTicks;i++) { Uint32 uTick=uFirst+i,uMask; if (uTick>=SNCPU_SA1_BUS_TICK_MAX) break; uMask=1u<<(uTick&31);
+		if (g_SNCPU_SA1BusBits[uType][uTick>>5]&uMask) { bConflict=TRUE; if (uType==SNCPU_SA1_BUS_IRAM && (g_SNCPU_SA1BusFastIRAM[uTick>>5]&uMask)) bFastIRAM=TRUE; } }
+	if (!bConflict) return 0;
+	uPenaltyTicks=(uType==SNCPU_SA1_BUS_BWRAM)?2u:1u; if (uType==SNCPU_SA1_BUS_IRAM && bFastIRAM) uPenaltyTicks++;
+	g_SNCPU_SA1BusConflictTicks+=uPenaltyTicks; return uPenaltyTicks*SNCPU_CYCLE_FAST;
+}
+Uint32 SNCPUSA1BusGetConflictTicks(void){return g_SNCPU_SA1BusConflictTicks;}
+Uint32 SNCPUSA1BusGetDroppedEvents(void){return g_SNCPU_SA1BusDroppedEvents;}
+
 #include "console.h"
 #include "sndebug.h"
 #include <stddef.h>
