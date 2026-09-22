@@ -245,16 +245,20 @@ Uint8 SNSA1::ReadRegister(Uint16 uAddr)
 			IncrementVariablePosition();
 		return uValue;
 	}
+	// $230E is often documented as a version register, but real SA-1
+	// hardware does not implement it.  MesenCE and bsnes both leave it as
+	// open bus.  This core currently approximates unmapped/open bus as $FF.
 	if (uAddr == 0x230E)
-		return SNSA1_VERSION_CODE;
+		return 0xFF;
 
 	return m_State.Registers[uAddr - SNSA1_REGISTER_BASE];
 }
 
 Uint8 SNSA1::ReadSCPURegister(Uint16 uAddr)
 {
-	// The host CPU can read only SFR and the SA-1 version register.
-	if (uAddr == 0x2300 || uAddr == 0x230E)
+	// The host CPU can read SFR. $230E is not implemented on real SA-1
+	// hardware and falls through to the core's open-bus approximation.
+	if (uAddr == 0x2300)
 		return ReadRegister(uAddr);
 	return 0xFF;
 }

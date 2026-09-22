@@ -33,7 +33,8 @@ static void TestResetDefaults(void)
 	CHECK(sa1.ReadRegister(0x2222) == 0x02, "$2222 bank E default");
 	CHECK(sa1.ReadRegister(0x2223) == 0x03, "$2223 bank F default");
 	CHECK(sa1.ReadRegister(0x2228) == 0x0F, "$2228 protection default");
-	CHECK(sa1.ReadRegister(0x230E) == 0x23, "$230E version code");
+	CHECK(sa1.ReadRegister(0x230E) == 0xFF,
+	      "$230E must be open bus; SA-1 has no real version register");
 	CHECK(!sa1.IsRunning(), "SA-1 held in reset");
 	CHECK(sa1.GetCpu()->Regs.rS.w == 0x01FF, "independent CPU reset stack");
 }
@@ -255,8 +256,8 @@ static void TestRegisterPortIsolation(void)
 {
 	SNSA1 sa1;
 
-	CHECK(sa1.ReadSCPURegister(0x230E) == SNSA1_VERSION_CODE,
-	      "S-CPU must read the SA-1 version register");
+	CHECK(sa1.ReadSCPURegister(0x230E) == 0xFF,
+	      "S-CPU $230E must use the open-bus approximation");
 	CHECK(sa1.ReadSCPURegister(0x2301) == 0xFF,
 	      "S-CPU must not read SA-1-only CFR/math status");
 	CHECK(sa1.ReadSA1Register(0x230E) == 0xFF,
