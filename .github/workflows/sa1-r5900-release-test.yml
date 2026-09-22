@@ -1,0 +1,45 @@
+name: SA-1 R5900 release test ELF
+
+on:
+  push:
+    branches:
+      - perf/sa1-r5900
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-elf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache PS2DEV
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/ps2dev
+            ~/.cache/ps2dev
+          key: ps2dev-${{ runner.os }}-${{ runner.arch }}-sa1-v1
+
+      - name: Ensure PS2DEV
+        run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
+
+      - name: Build stripped no-diagnostic ELF
+        run: make AUTO_INSTALL=yes COLOR=0 JOBS=2 PACK=0 SNES_DIAGNOSTICS=0 strip
+
+      - name: Verify ELF
+        run: |
+          test -s build/SNESticle.stripped.elf
+          file build/SNESticle.stripped.elf
+          ls -lh build/SNESticle.stripped.elf
+
+      - name: Upload release test ELF
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticle-SA1-R5900-no-diag-${{ github.sha }}
+          path: build/SNESticle.stripped.elf
+          if-no-files-found: error
