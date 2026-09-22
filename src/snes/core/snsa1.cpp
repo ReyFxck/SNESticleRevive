@@ -13,6 +13,9 @@
 
 extern "C" {
 #include "sncpu_c.h"
+#if defined(__mips__)
+Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
+#endif
 }
 
 static const Uint8 _SA1LoBankBase[4] = { 0x00, 0x20, 0x80, 0xA0 };
@@ -1428,6 +1431,27 @@ Bool SNSA1::ExecuteCpuC()
 	return TRUE;
 }
 
+Bool SNSA1::ExecuteCpuFast()
+{
+#if defined(__mips__)
+	m_Cpu.nAbortCycles = 0;
+	m_Cpu.bRunning = TRUE;
+	SNCPUSA1BusSetExecCpu(&m_Cpu);
+	SNCPUExecute_ASM(&m_Cpu);
+	SNCPUSA1BusSetExecCpu(NULL);
+	m_Cpu.bRunning = FALSE;
+	if (m_Cpu.nAbortCycles != 0)
+	{
+		m_Cpu.Cycles = m_Cpu.nAbortCycles;
+		m_Cpu.nAbortCycles = 0;
+		return FALSE;
+	}
+	return TRUE;
+#else
+	return ExecuteCpuC();
+#endif
+}
+
 void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 {
 	Int32 nExecUnits;
@@ -1513,11 +1537,9 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 		}
 #endif
 
-		// SA-1 intentionally stays on the portable C interpreter until real
-		// game profiling proves which paths deserve R5900 assembly.  Do not use
-		// SNCPUExecute() here: its backend selector is global and follows the
-		// S-CPU (MIPS assembly on PS2).
-		if (ExecuteCpuC())
+		// PS2 executes this independent SA-1 context on the hand-written R5900
+		// 65C816 backend; host tests stay on the portable reference core.
+		if (ExecuteCpuFast())
 			break;
 	}
 

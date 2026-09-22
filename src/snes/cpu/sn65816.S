@@ -51,6 +51,7 @@
 #define SNCPU_WriteTrap		(SNCPU_MemIO+8)
 #define SNCPU_uBankCycle	(SNCPU_MemIO+12)
 #define SNCPU_bRAM			(SNCPU_MemIO+13)
+#define SNCPU_uSA1Bus		(SNCPU_MemIO+14)
 
 //
 // temporary storage on stack
@@ -68,6 +69,8 @@
 #define SP_Save4   	0x70(sp)
 
 #define SP_SA1Track 0x74(sp)
+#define SP_SA1Exec  0x7C(sp)
+#define SP_SA1Tmp   0x80(sp)
 
 #define SP_Data0   	0x78(sp)
 #define SP_Data1   	0x79(sp)
@@ -168,6 +171,62 @@
 		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
 		sw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
 99:
+
+/* SA-1 arbitration: pre-expanded penalty bytes keep the R5900 hot path
+   independent from C callbacks. */
+#define SNCPU_SA1_PENALTY(_addr,_cycles) \
+		lw		t0,SP_SA1Exec				;\
+		beq		t0,zr,90f				;\
+		nop						;\
+		srl		t0,_addr,SNCPU_BANK_SHIFT		;\
+		sll		t0,t0,4					;\
+		addu		t0,t0,R_pCpu				;\
+		lbu		t0,SNCPU_uSA1Bus(t0)			;\
+		beq		t0,zr,90f				;\
+		nop						;\
+		sltiu		t1,t0,SNCPU_SA1_BUS_MIX_LOW		;\
+		bne		t1,zr,94f				;\
+		nop						;\
+		addiu		t1,zr,SNCPU_SA1_BUS_MIX_LOW		;\
+		bne		t0,t1,92f				;\
+		andi		t1,_addr,SNCPU_BANK_MASK		;\
+		sltiu		t2,t1,0x0800				;\
+		beq		t2,zr,90f				;\
+		addiu		t0,zr,SNCPU_SA1_BUS_IRAM		;\
+		b		94f					;\
+		nop						;\
+92:		sltiu		t2,t1,0x1000				;\
+		bne		t2,zr,90f				;\
+		nop						;\
+		sltiu		t2,t1,0x1800				;\
+		beq		t2,zr,90f				;\
+		addiu		t0,zr,SNCPU_SA1_BUS_IRAM		;\
+94:		lw		t1,SNCPU_Counter2			;\
+		subu		t1,t1,R_Cycles				;\
+		subu		t1,t1,_cycles				;\
+		sltiu		t2,t1,SNCPU_SA1_BUS_UNIT_MAX		;\
+		beq		t2,zr,90f				;\
+		sw		t1,SP_SA1Tmp				;\
+		sll		t1,t0,12				;\
+		sll		t2,t0,11				;\
+		addu		t0,t1,t2				;\
+		lui		t2,%hi(g_SNCPU_SA1BusPenaltyUnits)	;\
+		addiu		t2,t2,%lo(g_SNCPU_SA1BusPenaltyUnits)	;\
+		addu		t2,t2,t0				;\
+		lw		t1,SP_SA1Tmp				;\
+		addu		t2,t2,t1				;\
+		lbu		t0,0(t2)				;\
+		beq		t0,zr,90f				;\
+		nop						;\
+		subu		R_Cycles,R_Cycles,t0			;\
+		sltiu		t1,t0,(SNCPU_CYCLE_FAST*2)		;\
+		addiu		t2,zr,2					;\
+		subu		t1,t2,t1				;\
+		lui		t2,%hi(g_SNCPU_SA1BusConflictTicks)	;\
+		lw		t0,%lo(g_SNCPU_SA1BusConflictTicks)(t2)	;\
+		addu		t0,t0,t1				;\
+		sw		t0,%lo(g_SNCPU_SA1BusConflictTicks)(t2)	;\
+90:
 
 #define SNCPU_ENDOP(_nCycles)		\
 		j		_SNCPUExecute_Loop	;	\
@@ -672,8 +731,12 @@
 
 _SNCPU_Write8:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank
-
+		lw		t1,SP_SA1Exec
+		bne		t1,zr,1f
+		nop
 		beq		t0,zr,_SNCPU_Write8ZeroBank
+        nop
+1:
         sll		t0,t0,4									// t0 = (bank << 4)
 
         addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
@@ -687,6 +750,7 @@ _SNCPU_Write8:
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
         sb		R_Data, 0(t0)
+		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
 
 		jr		ra
@@ -702,6 +766,7 @@ _SNCPU_Write8ZeroBank:
 _SNCPU_Write8Trap:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 		sw		t0,SP_SaveTrap
+		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
 		lw		t0,SP_SaveTrap
         lw		t1,SNCPU_WriteTrap(t0)					// t1 -> trap handler
@@ -760,6 +825,9 @@ _SNCPU_Write16_Slow:
 _SNCPU_Write16:
 
 _SNCPU_Write16_Fast:
+		lw		t0,SP_SA1Exec
+		bne		t0,zr,_SNCPU_Write16_Slow
+		nop
         addiu	t1,R_Addr,1								// t1 = addr + 1
 		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank
 
@@ -868,8 +936,12 @@ _SNCPU_Write16Wrap16:
 
 _SNCPU_Read8:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT				// t0 = bank
-
+		lw		t1,SP_SA1Exec
+		bne		t1,zr,1f
+		nop
         beq		t0,zr,_SNCPU_Read8ZeroBank
+        nop
+1:
         sll		t0,t0,4									// t0 = (bank << 4) & bank mask
 
         addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
@@ -882,6 +954,7 @@ _SNCPU_Read8:
 
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
         lbu		R_Data, 0(t0)							// load byte unsigned
+		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
 
 		jr		ra
@@ -896,6 +969,7 @@ _SNCPU_Read8ZeroBank:
 
 _SNCPU_Read8Trap:
 		sw		t0,SP_SaveTrap
+		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
 		lw		t0,SP_SaveTrap
         lw		t1,SNCPU_ReadTrap(t0)					// t1 -> trap handler
@@ -953,6 +1027,9 @@ _SNCPU_Read16_Slow:
 
 _SNCPU_Read16:
 _SNCPU_Read16_Fast:
+		lw		t0,SP_SA1Exec
+		bne		t0,zr,_SNCPU_Read16_Slow
+		nop
         addiu	t1,R_Addr,1								// t1 = addr + 1
 		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank
 
@@ -1169,6 +1246,7 @@ _SNCPU_Fetch8Fast:
 		lbu		R_Data,0(R_PC)
         addiu	R_PC,R_PC,1
         subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_PENALTY(R_Addr,R_PCCycles)
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
 
 		jr		ra
@@ -1232,8 +1310,12 @@ _SNCPU_Fetch8Slow:
 _SNCPU_Fetch16:
 
 _SNCPU_Fetch16Fast:
-		blez	R_PCCount,_SNCPU_Fetch16Trap
 		addiu	R_PCCount,R_PCCount,-2
+		lw		t0,SP_SA1Exec
+		bne		t0,zr,_SNCPU_Fetch16Trap
+		nop
+		blez	R_PCCount,_SNCPU_Fetch16Trap
+		nop
 
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
@@ -1291,10 +1373,12 @@ _SNCPU_Fetch16Slow:
 
 _SNCPU_Fetch24:
 _SNCPU_Fetch24Fast:
-		addiu	R_PCCount,R_PCCount,-1
-
+		addiu	R_PCCount,R_PCCount,-3
+		lw		t0,SP_SA1Exec
+		bne		t0,zr,_SNCPU_Fetch24Trap
+		nop
 		blez	R_PCCount,_SNCPU_Fetch24Trap
-		addiu	R_PCCount,R_PCCount,-2
+		nop
 
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
@@ -1627,7 +1711,7 @@ _SNCPU_SBC16_DECIMAL:
 */
 
 SNCPUExecute_ASM:
-		addiu	sp,sp,-0x80
+		addiu	sp,sp,-0x90
         sd		s0,0x00(sp)
         sd		s1,0x08(sp)
         sd		s2,0x10(sp)
@@ -1640,9 +1724,19 @@ SNCPUExecute_ASM:
         sd		fp,0x48(sp)
 
 		move	R_pCpu, a0
+		lui		t0,%hi(g_SNCPU_SA1BusHostCpu)
+		lw		t0,%lo(g_SNCPU_SA1BusHostCpu)(t0)
+		xor		t1,t0,R_pCpu
+		sltiu		t1,t1,1
 		lui		t0,%hi(g_SNCPU_SA1BusTrackEnabled)
 		lw		t0,%lo(g_SNCPU_SA1BusTrackEnabled)(t0)
-		sw		t0,SP_SA1Track
+		and		t1,t1,t0
+		sw		t1,SP_SA1Track
+		lui		t0,%hi(g_SNCPU_SA1ExecCpu)
+		lw		t0,%lo(g_SNCPU_SA1ExecCpu)(t0)
+		xor		t0,t0,R_pCpu
+		sltiu		t0,t0,1
+		sw		t0,SP_SA1Exec
 
 //
 //
@@ -1677,6 +1771,7 @@ _SNCPUExecute_Loop:
         addiu	R_PC,R_PC,1
 
         subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_PENALTY(R_Addr,R_PCCycles)
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
 
 		sll		t0, R_Data, 2							// R_Data = opcode * 4
@@ -1752,7 +1847,7 @@ _SNCPUExecute_DoneNoRewind:
         ld		s1,0x08(sp)
         ld		s0,0x00(sp)
 		jr		ra
-		addiu	sp,sp,0x80
+		addiu	sp,sp,0x90
 
 		// addr_imm8_SEP_
 	SNCPU_OP_E0(e2);
