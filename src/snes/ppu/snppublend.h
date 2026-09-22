@@ -43,6 +43,13 @@ protected:
 public:
     virtual void Begin(class CRenderSurface *pTarget)=0;
     virtual void Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub, Uint32 uIntensity)=0;
+    /* PS2 native-hires fast path. The default keeps non-PS2 backends ABI
+       compatible; only the GS backend consumes the 512-pixel BGR555 line. */
+    virtual void ExecHires512(const Uint16 *pLine512, Int32 iLine)
+    {
+        (void)pLine512;
+        (void)iLine;
+    }
     virtual void Clear(SNPPUBlendInfoT *pInfo, Int32 iLine)=0;
     virtual void End()=0;
     virtual void UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 uIntensity)=0;

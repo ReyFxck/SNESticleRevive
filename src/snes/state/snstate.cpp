@@ -190,6 +190,9 @@ void SNSpcIO::SaveState(struct SNStateSPCIOT *pState)
 void SNSpcIO::RestoreState(struct SNStateSPCIOT *pState)
 {
 	m_Regs = pState->Regs;
+	/* The legacy state format never serialized sub-cycle APUIO work. */
+	ResetCpuPortPending();
+	m_Queue.Reset();
 }
 
 void SnesDMAC::SaveState(struct SNStateDMACT *pState)

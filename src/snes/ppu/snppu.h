@@ -21,6 +21,17 @@
 #define SNESPPU_CGRAM_NUM			256
 #define	SNESPPU_OBJ_NUM			128
 
+/* $2133 SETINI screen-mode bits.  Names mirror the hardware behavior and
+   are shared by the renderer and frame scheduler. */
+#define SNESPPU_SETINI_INTERLACE       0x01u
+#define SNESPPU_SETINI_OBJ_INTERLACE   0x02u
+#define SNESPPU_SETINI_OVERSCAN        0x04u
+#define SNESPPU_SETINI_PSEUDOHIR       0x08u
+#define SNESPPU_SETINI_EXTBG           0x40u
+
+#define SNESPPU_VISIBLE_LINES_NORMAL   224u
+#define SNESPPU_VISIBLE_LINES_OVERSCAN 239u
+
 enum SnesPPULayerE
 {
 	SNESPPU_LAYER_BG1 = 0,
@@ -168,6 +179,7 @@ public:
 	void                    SetVideoRegion(Bool bPAL);
 	void                    BeginFrame();
 	void                    EndFrame();
+	void                    AdvanceField();
 	void                    SetPPURender(ISnesPPURender *pPPURender)    {m_pRender=pPPURender;}
 
 	const SnesPPURegsT *    GetRegs() const                             {return &m_Regs;}
@@ -176,6 +188,11 @@ public:
 	Bool                    IsForceBlank() const                        {return !(m_Regs.inidisp & 0x80);}
 	Bool                    InVBlank() const                            {return m_bVBlank;}
 	Uint32                  GetIntensity()  const                       {return m_Regs.inidisp & 0xF;}
+	Uint32                  GetFrameVisibleLines() const                {return m_uFrameVisibleLines;}
+	Bool                    IsFrameInterlace() const                    {return m_bFrameInterlace;}
+	Bool                    GetField() const                             {return (m_Regs.stat78 & 0x80) != 0;}
+	Bool                    IsPseudoHires() const                       {return (m_Regs.setini & SNESPPU_SETINI_PSEUDOHIR) != 0;}
+	Bool                    IsObjInterlace() const                       {return (m_Regs.setini & SNESPPU_SETINI_OBJ_INTERLACE) != 0;}
 
 	#if SNPPU_WRITEQUEUE
 	_INLINE Bool            EnqueueWrite(Uint32 uLine, Uint32 uAddr, Uint8 uData,
@@ -225,6 +242,8 @@ private:
 
     Uint32			        m_uLine;
     Bool                    m_bVBlank;
+    Uint32                  m_uFrameVisibleLines;
+    Bool                    m_bFrameInterlace;
 
     SnesPPURegsT	        m_Regs;
     SnesColor16T	        m_CGRAM[SNESPPU_CGRAM_NUM] _ALIGN(16);			// 16-bit palette
