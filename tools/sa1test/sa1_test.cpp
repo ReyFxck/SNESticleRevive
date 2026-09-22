@@ -121,6 +121,62 @@ static void TestSA1ControlFlowTiming(void)
 	      "SA-1 odd PRG-ROM branch must include extra internal cycle");
 }
 
+static void TestSharedBusContention(void)
+{
+	SNCpuT host;
+	SNCpuT sa1cpu;
+	SNCPUNew(&host);
+	SNCPUNew(&sa1cpu);
+
+	SNCPUSA1BusSetHost(&host);
+
+	// Slow S-CPU ROM access overlapping SA-1 PRG-ROM costs one SA-1 tick.
+	SNCPUSA1BusBeginLine();
+	host.Counter[SNCPU_COUNTER_LINE] = 8;
+	host.Cycles = 0;
+	SNCPUSA1BusRecord(&host, 0xC00000, SNCPU_CYCLE_SLOW, 1);
+	SNCPUSA1BusFinalize(8);
+	sa1cpu.Counter[SNCPU_COUNTER_LINE] = 0;
+	sa1cpu.Cycles = 0;
+	CHECK(SNCPUSA1BusPenalty(&sa1cpu, 0xC00000, SNCPU_CYCLE_FAST) ==
+	      SNCPU_CYCLE_FAST,
+	      "SA-1 ROM contention must add one internal tick");
+
+	// BW-RAM conflict adds two SA-1 ticks, matching MesenCE arbitration.
+	SNCPUSA1BusBeginLine();
+	host.Counter[SNCPU_COUNTER_LINE] = 8;
+	host.Cycles = 0;
+	SNCPUSA1BusRecord(&host, 0x400000, SNCPU_CYCLE_SLOW, 1);
+	SNCPUSA1BusFinalize(8);
+	sa1cpu.Counter[SNCPU_COUNTER_LINE] = 0;
+	sa1cpu.Cycles = 0;
+	CHECK(SNCPUSA1BusPenalty(&sa1cpu, 0x400000, SNCPU_CYCLE_FAST * 2) ==
+	      SNCPU_CYCLE_FAST * 2,
+	      "SA-1 BW-RAM contention must add two internal ticks");
+
+	// I-RAM overlapping a fast S-CPU access receives the second wait tick.
+	SNCPUSA1BusBeginLine();
+	host.Counter[SNCPU_COUNTER_LINE] = 6;
+	host.Cycles = 0;
+	SNCPUSA1BusRecord(&host, 0x003000, SNCPU_CYCLE_FAST, 1);
+	SNCPUSA1BusFinalize(6);
+	sa1cpu.Counter[SNCPU_COUNTER_LINE] = 0;
+	sa1cpu.Cycles = 0;
+	CHECK(SNCPUSA1BusPenalty(&sa1cpu, 0x003000, SNCPU_CYCLE_FAST) ==
+	      SNCPU_CYCLE_FAST * 2,
+	      "fast S-CPU I-RAM contention must add two internal ticks");
+
+	// No overlap means no penalty.
+	sa1cpu.Counter[SNCPU_COUNTER_LINE] = 24;
+	sa1cpu.Cycles = 0;
+	CHECK(SNCPUSA1BusPenalty(&sa1cpu, 0x003000, SNCPU_CYCLE_FAST) == 0,
+	      "non-overlapping SA-1 access must not stall");
+
+	SNCPUSA1BusSetHost(NULL);
+	SNCPUDelete(&sa1cpu);
+	SNCPUDelete(&host);
+}
+
 static void TestIRAMAndBWRAM(void)
 {
 	Uint8 bwram[0x8000];
@@ -971,6 +1027,7 @@ int main(void)
 	TestResetDefaults();
 	TestResetReleaseAndScheduler();
 	TestSA1ControlFlowTiming();
+	TestSharedBusContention();
 	TestIRAMAndBWRAM();
 	TestSA1BusDecode();
 	TestVariableBusMappings();
