@@ -2137,6 +2137,16 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)m_Spc.Regs.rY, (unsigned)m_Spc.Regs.rSP,
 				(unsigned)m_Spc.Regs.rPSW, (int)m_Spc.Cycles,
 				(unsigned)m_Spc.bRomEnable);
+			DLog("[snes-apu-ports] f=%u cpu-to-spc=%02X/%02X/%02X/%02X spc-to-cpu=%02X/%02X/%02X/%02X",
+				(unsigned)g_TmgFrameNo,
+				(unsigned)m_SpcIO.m_Regs.apu_w[0],
+				(unsigned)m_SpcIO.m_Regs.apu_w[1],
+				(unsigned)m_SpcIO.m_Regs.apu_w[2],
+				(unsigned)m_SpcIO.m_Regs.apu_w[3],
+				(unsigned)m_SpcIO.m_Regs.apu_r[0],
+				(unsigned)m_SpcIO.m_Regs.apu_r[1],
+				(unsigned)m_SpcIO.m_Regs.apu_r[2],
+				(unsigned)m_SpcIO.m_Regs.apu_r[3]);
 			DLog("[snes-capture] end f=%u reasons=%02X",
 				(unsigned)g_TmgFrameNo, (unsigned)g_DbgCaptureReasons);
 		}
