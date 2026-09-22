@@ -32,7 +32,7 @@ int main()
 	Uint32 nInvalidated;
 
 	std::memset(&g_Cache, 0, sizeof(g_Cache));
-	Check("OBJ CHR cache bytes", sizeof(g_Cache), 149504);
+	Check("shared CHR cache bytes", sizeof(g_Cache), 448512);
 	Check("4bpp cold miss", SnesPPUChrCacheLookup4(&g_Cache,
 		0x2345, FALSE, &uData, &uOpaque), FALSE);
 
@@ -67,9 +67,14 @@ int main()
 	Check("wrap clears low 4bpp", SnesPPUChrCacheLookup4(&g_Cache,
 		0x0000, FALSE, &uData, &uOpaque), FALSE);
 
+	/* Full VRAM invalidation now covers the shared 2bpp + 4bpp cache. */
+	SnesPPUChrCacheStore2(&g_Cache, 0x1111, 0x88, 8);
 	SnesPPUChrCacheStore4(&g_Cache, 0x2222, 0x99, 9);
 	nInvalidated = SnesPPUChrCacheInvalidateRange(&g_Cache, 0, 0x8000);
-	Check("full clear slot coverage", nInvalidated, SNPPU_CHR4_TILE_COUNT);
+	Check("full clear slot coverage", nInvalidated,
+		SNPPU_CHR2_TILE_COUNT + SNPPU_CHR4_TILE_COUNT);
+	Check("full clear 2bpp", SnesPPUChrCacheLookup2(&g_Cache,
+		0x1111, FALSE, &uData, &uOpaque), FALSE);
 	Check("full clear 4bpp", SnesPPUChrCacheLookup4(&g_Cache,
 		0x2222, FALSE, &uData, &uOpaque), FALSE);
 
