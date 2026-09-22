@@ -1625,7 +1625,6 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 				if (m_bSA1 && m_SA1.SCPUUseNMIVector())
 				{
 					m_Cpu.Regs.rPC = m_SA1.GetSCPUNMIVector();
-					SNCPUConsumeCycles(&m_Cpu, SNCPU_CYCLE_FAST * 2);
 				}
                 // clear NMI edge signal
                 m_Cpu.uSignal&= ~SNCPU_SIGNAL_NMIEDGE;
@@ -1644,7 +1643,6 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 				if (m_bSA1 && m_SA1.SCPUUseIRQVector())
 				{
 					m_Cpu.Regs.rPC = m_SA1.GetSCPUIRQVector();
-					SNCPUConsumeCycles(&m_Cpu, SNCPU_CYCLE_FAST * 2);
 				}
             } else
             if (m_Cpu.uSignal & SNCPU_SIGNAL_RESET)

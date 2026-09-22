@@ -820,15 +820,13 @@ void SNSA1::ExecuteArithmetic()
 
 	if (uMode & 0x02)
 	{
-		Int64 nOld = (Int64)(m_State.ArithmeticResult & uMask40);
-		Int64 nSum;
-		if (nOld & ((Int64)1 << 39))
-			nOld |= ~((Int64)uMask40);
-		nSum = nOld + (Int64)nA * (Int64)nB;
-		m_State.ArithmeticOverflow =
-			(nSum < -((Int64)1 << 39) || nSum > (((Int64)1 << 39) - 1)) ?
-			TRUE : FALSE;
-		m_State.ArithmeticResult = ((Uint64)nSum) & uMask40;
+		Uint64 uRaw = m_State.ArithmeticResult +
+		              (Uint64)((Int64)nA * (Int64)nB);
+		m_State.ArithmeticOverflow = (uRaw >> 40) ? TRUE : FALSE;
+		m_State.ArithmeticResult = uRaw & uMask40;
+		m_State.ArithmeticOp2 = 0;
+		m_State.Registers[0x053] = 0;
+		m_State.Registers[0x054] = 0;
 		return;
 	}
 
@@ -836,31 +834,36 @@ void SNSA1::ExecuteArithmetic()
 	{
 		Uint16 uDivisor = m_State.ArithmeticOp2;
 		Int32 nDividend = (Int16)m_State.ArithmeticOp1;
-		Uint16 uQuotient;
-		Uint16 uRemainder;
+		Uint16 uQuotient = 0;
+		Uint16 uRemainder = 0;
 
-		if (!uDivisor)
+		if (uDivisor)
 		{
-			uQuotient = (nDividend < 0) ? 0x0001 : 0xFFFF;
-			uRemainder = (Uint16)(nDividend < 0 ? -nDividend : nDividend);
-		}
-		else
-		{
-			Int32 nQ = nDividend / (Int32)uDivisor;
-			Int32 nAbs = nDividend < 0 ? -nDividend : nDividend;
-			uQuotient = (Uint16)nQ;
-			uRemainder = (Uint16)(nAbs % uDivisor);
+			Int32 nRem = nDividend % (Int32)uDivisor;
+			if (nRem < 0)
+				nRem += uDivisor;
+			uRemainder = (Uint16)nRem;
+			uQuotient = (Uint16)((nDividend - nRem) / (Int32)uDivisor);
 		}
 		m_State.ArithmeticResult = (Uint64)uQuotient |
 		                           ((Uint64)uRemainder << 16);
 		m_State.ArithmeticOverflow = FALSE;
+		m_State.ArithmeticOp1 = 0;
+		m_State.ArithmeticOp2 = 0;
+		m_State.Registers[0x051] = 0;
+		m_State.Registers[0x052] = 0;
+		m_State.Registers[0x053] = 0;
+		m_State.Registers[0x054] = 0;
 		return;
 	}
 
-	m_State.ArithmeticResult = ((Uint64)((Int64)nA * (Int64)nB)) & uMask40;
+	m_State.ArithmeticResult =
+		((Uint64)((Int64)nA * (Int64)nB)) & uMask40;
 	m_State.ArithmeticOverflow = FALSE;
+	m_State.ArithmeticOp2 = 0;
+	m_State.Registers[0x053] = 0;
+	m_State.Registers[0x054] = 0;
 }
-
 Uint8 SNSA1::ReadVariableBus(Uint32 uAddr)
 {
 	uAddr &= 0xFFFFFF;

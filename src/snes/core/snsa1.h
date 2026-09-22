@@ -1,9 +1,9 @@
 /*
  * Experimental SA-1 support for SNESticle Revive.
  *
- * The SA-1 owns a completely separate 65C816 context.  On PS2 that context
- * is executed by the same hand-written MIPS backend selected for the S-CPU;
- * on host tests the C backend is selected explicitly.
+ * The SA-1 owns a completely separate 65C816 context.  Correctness builds
+ * intentionally execute that context with the portable C interpreter even
+ * when the S-CPU selects the hand-written R5900 backend on PlayStation 2.
  */
 
 #ifndef _SNSA1_H

@@ -338,10 +338,32 @@ static void TestArithmetic(void)
 	      sa1.ReadRegister(0x2309) == 0x00,
 	      "division must expose signed quotient and unsigned remainder");
 
+	// Negative division uses a non-negative remainder: -11 = (-4 * 3) + 1.
+	sa1.WriteRegister(0x2250, 0x01);
+	sa1.WriteRegister(0x2251, 0xF5);
+	sa1.WriteRegister(0x2252, 0xFF);
+	sa1.WriteRegister(0x2253, 0x03);
+	sa1.WriteRegister(0x2254, 0x00);
+	CHECK(sa1.ReadRegister(0x2306) == 0xFC &&
+	      sa1.ReadRegister(0x2307) == 0xFF &&
+	      sa1.ReadRegister(0x2308) == 0x01 &&
+	      sa1.ReadRegister(0x2309) == 0x00,
+	      "division must use a positive remainder for negative dividends");
+	CHECK(sa1.ReadRegister(0x2251) == 0 && sa1.ReadRegister(0x2253) == 0,
+	      "division must destroy MA and MB");
+
+	// Division by zero produces a zero result and still destroys operands.
+	sa1.WriteRegister(0x2251, 0x34); sa1.WriteRegister(0x2252, 0x12);
+	sa1.WriteRegister(0x2253, 0x00); sa1.WriteRegister(0x2254, 0x00);
+	CHECK(sa1.ReadRegister(0x2306) == 0 && sa1.ReadRegister(0x2309) == 0,
+	      "division by zero must return zero");
+
 	// cumulative mode: 2*3 + 4*5 = 26.
 	sa1.WriteRegister(0x2250, 0x02);
 	sa1.WriteRegister(0x2251, 2); sa1.WriteRegister(0x2252, 0);
 	sa1.WriteRegister(0x2253, 3); sa1.WriteRegister(0x2254, 0);
+	CHECK(sa1.ReadRegister(0x2253) == 0,
+	      "cumulative multiply must destroy MB");
 	sa1.WriteRegister(0x2251, 4); sa1.WriteRegister(0x2252, 0);
 	sa1.WriteRegister(0x2253, 5); sa1.WriteRegister(0x2254, 0);
 	CHECK(sa1.ReadRegister(0x2306) == 26 && sa1.ReadRegister(0x2307) == 0,
@@ -627,6 +649,43 @@ static void TestSA1BusMirrorsAndTimerLatch(void)
 	      "PAL SA-1 timer must not wrap at NTSC 262-line boundary");
 }
 
+static int g_PoisonExecutorCalls = 0;
+static Int32 PoisonGlobalExecutor(SNCpuT *pCpu)
+{
+	g_PoisonExecutorCalls++;
+	pCpu->Cycles = 0;
+	return 0;
+}
+
+static void TestIndependentCBackend(void)
+{
+	std::vector<Uint8> rom(0x200000, 0xEA);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+	rom[0x0000] = 0xA9; // LDA #$7B
+	rom[0x0001] = 0x7B;
+	rom[0x0002] = 0x85; // STA $20
+	rom[0x0003] = 0x20;
+	rom[0x0004] = 0xDB; // STP
+
+	SNSA1 sa1;
+	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	sa1.WriteRegister(0x222A, 0xFF);
+	sa1.WriteRegister(0x2203, 0x00);
+	sa1.WriteRegister(0x2204, 0x80);
+
+	g_PoisonExecutorCalls = 0;
+	SNCPUSetExecuteFunc(PoisonGlobalExecutor);
+	sa1.WriteRegister(0x2200, 0x00);
+	sa1.StepMasterCycles(128);
+	SNCPUSetExecuteFunc(SNCPUExecute_C);
+
+	CHECK(g_PoisonExecutorCalls == 0,
+	      "SA-1 execution must not use the S-CPU global backend selector");
+	CHECK(sa1.ReadIRAM(0x0020) == 0x7B,
+	      "SA-1 portable C backend must execute independently");
+}
+
 int main(void)
 {
 	SNCPUSetExecuteFunc(SNCPUExecute_C);
@@ -645,6 +704,7 @@ int main(void)
 	TestSaveStateRoundTrip();
 	TestMMCMapping();
 	TestInstructionExecution();
+	TestIndependentCBackend();
 	TestIRQVector();
 	TestNMI();
 	TestTimerIRQ();
