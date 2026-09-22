@@ -630,15 +630,22 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		if (!uMask) g_DbgBGChrBlankRows++;
 		#endif
 
-		// A paleta fica fora do cache: a mesma arte serve a qualquer CGRAM.
-		uTile0 |= pPalLookup[pTiles->uPal];
-
-		pMask[ 0] = uMask;
-		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8) ? uMask : 0;
+		pMask[0] = (Uint8)uMask;
+		if (uMask)
+		{
+			/* Color zero is transparent for this BG row. Only materialize the
+			   eight palette-index bytes when at least one pixel can survive the
+			   mask; render/composition never reads masked-out bytes. */
+			uTile0 |= pPalLookup[pTiles->uPal];
+			pMask[SNPPU_BGPLANE_SIZE] =
+				(pTiles->uPal & 8) ? (Uint8)uMask : 0;
+			((Uint64 *)pDest)[0] = uTile0;
+		}
+		else
+		{
+			pMask[SNPPU_BGPLANE_SIZE] = 0;
+		}
 		pMask++;
-
-		// store tile data
-		((Uint64 *)pDest)[0] = uTile0;
 
 		pDest+=8;
 		pTiles++;
@@ -695,16 +702,20 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		if (!uMask) g_DbgBGChrBlankRows++;
 		#endif
 
-		// Paleta fora da entrada para maximizar o reaproveitamento seguro.
-		uTile0 |= _SnesPPU_Tile4PalLookup64[pTiles->uPal];
-
-		// store mask
-		pMask[ 0] = uMask;
-		pMask[SNPPU_BGPLANE_SIZE] = (pTiles->uPal & 8) ? uMask : 0;
+		pMask[0] = (Uint8)uMask;
+		if (uMask)
+		{
+			// Palette bytes are irrelevant for a fully transparent CHR row.
+			uTile0 |= _SnesPPU_Tile4PalLookup64[pTiles->uPal];
+			pMask[SNPPU_BGPLANE_SIZE] =
+				(pTiles->uPal & 8) ? (Uint8)uMask : 0;
+			((Uint64 *)pDest)[0] = uTile0;
+		}
+		else
+		{
+			pMask[SNPPU_BGPLANE_SIZE] = 0;
+		}
 		pMask++;
-
-		// store tile data
-		((Uint64 *)pDest)[0] = uTile0;
 
 		pDest+=8;
 		pTiles++;
