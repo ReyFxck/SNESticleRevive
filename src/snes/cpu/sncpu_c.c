@@ -31,6 +31,59 @@
 #define SNCPU_TRACE (CODE_DEBUG && FALSE)
 #define SNCPU_TRACE_NUM 256
 
+/* Only the correctness-first SA-1 C interpreter opts into these timing
+   quirks. Keep this pointer outside SNCpuT: sn65816.S relies on the exact
+   structure offsets used by the main S-CPU on PS2. */
+static SNCpuT *_SNCPU_pSA1TimingCpu = NULL;
+
+void SNCPUSetSA1TimingCPU(SNCpuT *pCpu)
+{
+	_SNCPU_pSA1TimingCpu = pCpu;
+}
+
+static Bool _SNCPUIsSA1ProgramRom(SNCpuT *pCpu, Uint32 uAddr)
+{
+	SNCpuBankT *pBank;
+	if (pCpu != _SNCPU_pSA1TimingCpu)
+		return FALSE;
+	pBank = &pCpu->Bank[(uAddr & 0xFFFFFF) >> SNCPU_BANK_SHIFT];
+	return (pBank->pMem && !pBank->bRAM) ? TRUE : FALSE;
+}
+
+static void _SNCPUSA1EndJump(SNCpuT *pCpu, Uint32 uOpcode, Uint32 uPC)
+{
+	if (pCpu != _SNCPU_pSA1TimingCpu)
+		return;
+
+	switch (uOpcode & 0xFF)
+	{
+	case 0x20: /* JSR abs */
+	case 0x22: /* JSL */
+	case 0x40: /* RTI */
+	case 0x4C: /* JMP abs */
+	case 0x5C: /* JML */
+	case 0x60: /* RTS */
+	case 0x6B: /* RTL */
+	case 0x6C: /* JMP (abs) */
+	case 0x7C: /* JMP (abs,X) */
+	case 0xDC: /* JML [abs] */
+	case 0xFC: /* JSR (abs,X) */
+		if (_SNCPUIsSA1ProgramRom(pCpu, uPC))
+			pCpu->Cycles -= SNCPU_CYCLE_FAST;
+		break;
+	default:
+		break;
+	}
+}
+
+static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
+{
+	/* MesenCE models one extra internal cycle only when a taken branch lands
+	   on an odd PRG-ROM address. */
+	if ((uPC & 1) && _SNCPUIsSA1ProgramRom(pCpu, uPC))
+		pCpu->Cycles -= SNCPU_CYCLE_FAST;
+}
+
 // opcode begin/end
 
 #define SNCPU_OPTABLE_BEGIN()
@@ -43,6 +96,7 @@
 
 #define SNCPU_ENDOP(_Cycles) \
 	SNCPU_SUBCYCLES(_Cycles); \
+	_SNCPUSA1EndJump(pCpu, uOpcode, rPC); \
 	break;
 
 #define SNCPU_OP(_Opcode) \
@@ -374,6 +428,7 @@
 			SNCPU_SUBCYCLES(1);		\
 			if (fE && ((uOldPC ^ rPC) & 0xFF00)) \
 				SNCPU_SUBCYCLES(1);	\
+			_SNCPUSA1TakenBranch(pCpu, rPC); \
 			}							\
 		}
 
@@ -959,6 +1014,7 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 #if 1
 			iRel+= rPC;
 			rPC = (rPC & 0xFF0000) + (iRel & 0xFFFF);
+			_SNCPUSA1TakenBranch(pCpu, rPC);
 #else
 			rPC+=iRel;
 #endif

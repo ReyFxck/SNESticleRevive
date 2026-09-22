@@ -1407,7 +1407,9 @@ Bool SNSA1::ExecuteCpuC()
 {
 	m_Cpu.nAbortCycles = 0;
 	m_Cpu.bRunning = TRUE;
+	SNCPUSetSA1TimingCPU(&m_Cpu);
 	SNCPUExecute_C(&m_Cpu);
+	SNCPUSetSA1TimingCPU(NULL);
 	m_Cpu.bRunning = FALSE;
 
 	if (m_Cpu.nAbortCycles != 0)

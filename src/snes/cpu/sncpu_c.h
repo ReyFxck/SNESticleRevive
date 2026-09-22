@@ -13,6 +13,11 @@
 
 Int32 SNCPUExecute_C(SNCpuT *pCpu);
 
+/* Enable SA-1-only 65C816 timing quirks for one independent C-interpreter
+   context. This deliberately lives outside SNCpuT so the PS2 R5900 assembly
+   layout and the main S-CPU backend remain unchanged. */
+void SNCPUSetSA1TimingCPU(SNCpuT *pCpu);
+
 /* Shared with the PS2 interpreter so decimal mode has exactly the same
    behavior for valid and invalid BCD digits in both execution cores. */
 Uint32 _SNCpuDecimalADC8(Uint32 uCarry, Uint32 uTarget, Uint32 uSrc);

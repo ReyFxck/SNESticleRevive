@@ -63,6 +63,51 @@ static void TestResetReleaseAndScheduler(void)
 	CHECK(sa1.GetState()->ResetEpoch == 1, "reset epoch");
 }
 
+static void TestSA1ControlFlowTiming(void)
+{
+	std::vector<Uint8> rom(0x200000, 0xEA);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	// JMP $8003 from PRG ROM: SA-1 adds one internal cycle after ordinary
+	// 65C816 jump timing when the destination is also PRG ROM.
+	rom[0x0000] = 0x4C;
+	rom[0x0001] = 0x03;
+	rom[0x0002] = 0x80;
+	rom[0x0003] = 0xDB;
+	SNSA1 jump;
+	jump.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	jump.WriteRegister(0x2203, 0x00);
+	jump.WriteRegister(0x2204, 0x80);
+	jump.WriteRegister(0x2200, 0x00);
+	Int32 jumpStart = SNCPUGetCounter(jump.GetCpu(), SNCPU_COUNTER_FRAME);
+	jump.StepMasterCycles(2);
+	CHECK((jump.GetCpu()->Regs.rPC & 0xFFFF) == 0x8003,
+	      "SA-1 JMP must reach PRG-ROM target");
+	CHECK(SNCPUGetCounter(jump.GetCpu(), SNCPU_COUNTER_FRAME) - jumpStart ==
+	      4 * SNCPU_CYCLE_FAST,
+	      "SA-1 jump to PRG ROM must include extra internal cycle");
+
+	// BRA +1 lands at odd $8003. MesenCE charges an extra internal cycle for
+	// a taken branch to an odd PRG-ROM address.
+	std::fill(rom.begin(), rom.end(), 0xEA);
+	rom[0x0000] = 0x80;
+	rom[0x0001] = 0x01;
+	rom[0x0003] = 0xDB;
+	SNSA1 branch;
+	branch.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	branch.WriteRegister(0x2203, 0x00);
+	branch.WriteRegister(0x2204, 0x80);
+	branch.WriteRegister(0x2200, 0x00);
+	Int32 branchStart = SNCPUGetCounter(branch.GetCpu(), SNCPU_COUNTER_FRAME);
+	branch.StepMasterCycles(2);
+	CHECK((branch.GetCpu()->Regs.rPC & 0xFFFF) == 0x8003,
+	      "SA-1 BRA fixture must land on odd PRG-ROM address");
+	CHECK(SNCPUGetCounter(branch.GetCpu(), SNCPU_COUNTER_FRAME) - branchStart ==
+	      4 * SNCPU_CYCLE_FAST,
+	      "SA-1 odd PRG-ROM branch must include extra internal cycle");
+}
+
 static void TestIRAMAndBWRAM(void)
 {
 	Uint8 bwram[0x8000];
@@ -912,6 +957,7 @@ int main(void)
 
 	TestResetDefaults();
 	TestResetReleaseAndScheduler();
+	TestSA1ControlFlowTiming();
 	TestIRAMAndBWRAM();
 	TestSA1BusDecode();
 	TestVariableBusMappings();
