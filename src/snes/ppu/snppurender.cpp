@@ -13,6 +13,7 @@
 #include "console.h"
 #include "snppu.h"
 #include "snppurender.h"
+#include "snppucolor.h"
 #include "snppuchrcache.h"
 #include "rendersurface.h"
 #include "snmask.h"
@@ -192,11 +193,96 @@ void SnesPPURender::UpdateCGRAM(Uint32 uAddr, Uint16 uData)
 	}
 }
 
+/* $2133.3 pseudo-hires alternates sub/main physical dots at 512-dot
+   resolution. Revive's PS2 carrier is 256 wide, so collapse each pair in
+   native SNES BGR555. This preserves the intended CRT transparency while
+   avoiding a second full-width framebuffer. The alternating-dot behavior follows the public SNES PPU model;
+   the 256-wide collapse is Revive's PS2 presentation choice. */
+static _INLINE Uint16 _SnesPPUAveragePseudoHires15(Uint16 uMain, Uint16 uSub)
+{
+	Uint32 r = ((uMain & 0x001Fu) + (uSub & 0x001Fu)) >> 1;
+	Uint32 g = (((uMain >> 5) & 0x001Fu) + ((uSub >> 5) & 0x001Fu)) >> 1;
+	Uint32 b = (((uMain >> 10) & 0x001Fu) + ((uSub >> 10) & 0x001Fu)) >> 1;
+	return (Uint16)(r | (g << 5) | (b << 10));
+}
+
+static void _SnesPPUBuildPseudoHiresLine(
+	Uint16 *pOut, const SNPPUBlendInfoT *pInfo, const Uint16 *pCGRAM)
+{
+	Int32 i;
+	for (i = 0; i < 256; ++i)
+	{
+		Uint16 uMain = (Uint16)(pCGRAM[pInfo->uMain8[i]] & 0x7FFFu);
+		Uint16 uSub  = (Uint16)(pCGRAM[pInfo->uSub8[i]] & 0x7FFFu);
+		pOut[i] = _SnesPPUAveragePseudoHires15(uMain, uSub);
+	}
+}
+
+#if CODE_PLATFORM == CODE_PS2
+static _INLINE Uint16 _SnesPPUColor15ToGS16(Uint16 uColor15,
+	Uint32 uIntensity)
+{
+	Uint32 c = uColor15 & 0x7FFFu;
+
+	/* SNES CGRAM and GS PSMCT16 both store R5/G5/B5 in bits 0..14.
+	   Do not round-trip through 32-bit RGB for every hires dot. */
+	if (uIntensity >= 15u)
+		return (Uint16)(c | 0x8000u);
+	if (uIntensity == 0u)
+		return 0x8000u;
+
+	{
+		Uint32 r = (c & 0x1Fu) * uIntensity / 15u;
+		Uint32 g = ((c >> 5) & 0x1Fu) * uIntensity / 15u;
+		Uint32 b = ((c >> 10) & 0x1Fu) * uIntensity / 15u;
+		return (Uint16)(r | (g << 5) | (b << 10) | 0x8000u);
+	}
+}
+
+static void _SnesPPUBuildNativeHires512(
+	Uint16 *pOut, const SNPPUBlendInfoT *pInfo, const Uint16 *pCGRAM,
+	Uint32 uIntensity)
+{
+	Int32 x;
+
+	if (uIntensity >= 15u)
+	{
+		for (x = 0; x < 256; ++x)
+		{
+			pOut[(x << 1) + 0] =
+				(Uint16)((pCGRAM[pInfo->uSub8[x]] & 0x7FFFu) | 0x8000u);
+			pOut[(x << 1) + 1] =
+				(Uint16)((pCGRAM[pInfo->uMain8[x]] & 0x7FFFu) | 0x8000u);
+		}
+	}
+	else
+	{
+		for (x = 0; x < 256; ++x)
+		{
+			pOut[(x << 1) + 0] = _SnesPPUColor15ToGS16(
+				pCGRAM[pInfo->uSub8[x]], uIntensity);
+			pOut[(x << 1) + 1] = _SnesPPUColor15ToGS16(
+				pCGRAM[pInfo->uMain8[x]], uIntensity);
+		}
+	}
+}
+#endif
+
 void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 {
 	SnesRender8pInfoT *pRenderInfo;
 	SNPPUBlendInfoT *pBlendInfo;
 	const SnesPPURegsT *pRegs  = m_pPPU->GetRegs();
+	const Uint8 uBGMode = (Uint8)pRegs->bgmode & 7u;
+	const Bool bPseudoHiresSimple =
+		((pRegs->setini & SNESPPU_SETINI_PSEUDOHIR) != 0) &&
+		(uBGMode != 5u && uBGMode != 6u) &&
+		((pRegs->cgadsub & 0x3Fu) == 0) &&
+		((pRegs->cgwsel & 0xC0u) == 0);
+	const Bool bMode56HiresSimple =
+		(uBGMode == 5u || uBGMode == 6u) &&
+		((pRegs->cgadsub & 0x3Fu) == 0) &&
+		((pRegs->cgwsel & 0xC0u) == 0);
 
 #if SNDBG_LOG
 	{
@@ -318,7 +404,8 @@ static Bool bPrint = TRUE;
 		   all add/sub masks are mathematically unable to change the result.
 		   With main clipping disabled and brightness at 15, the GS can expand
 		   the indexed main line directly into the output texture. */
-		bDirectMain = (pRegs->cgadsub & 0x3F) == 0 &&
+		bDirectMain = !bPseudoHiresSimple && !bMode56HiresSimple &&
+		              (pRegs->cgadsub & 0x3F) == 0 &&
 		              (pRegs->cgwsel & 0xC0) == 0 &&
 		              m_pPPU->GetIntensity() == 15;
 #endif
@@ -389,14 +476,53 @@ static Bool bPrint = TRUE;
 		g_TmgCycColorMath += ProfCtrGetCycle() - _tColorMath;
 		Uint32 _tBlend = ProfCtrGetCycle();
 #endif
-        m_pBlend->Exec(
-            pBlendInfo,
-            iLine,
-            pRegs->coldata,
-			bDirectMain ? NULL : ColorMask,
-            (pRegs->cgadsub & 0x80),
-            m_pPPU->GetIntensity()
-            );
+		if (bMode56HiresSimple)
+		{
+#if CODE_PLATFORM == CODE_PS2
+			Uint16 HiresLine[512] _ALIGN(64);
+			_SnesPPUBuildNativeHires512(
+				HiresLine, pBlendInfo, m_pPPU->GetCGData(),
+				m_pPPU->GetIntensity());
+			m_pBlend->ExecHires512(HiresLine, iLine);
+#else
+			m_pBlend->Exec(
+				pBlendInfo, iLine, pRegs->coldata, ColorMask,
+				(pRegs->cgadsub & 0x80), m_pPPU->GetIntensity());
+#endif
+		}
+		else if (bPseudoHiresSimple)
+		{
+			Uint16 PseudoCGRAM[256] _ALIGN(16);
+			Int32 i;
+			_SnesPPUBuildPseudoHiresLine(
+				PseudoCGRAM, pBlendInfo, m_pPPU->GetCGData());
+			for (i = 0; i < 256; ++i)
+				pBlendInfo->uMain8[i] = (Uint8)i;
+
+			/* Upload the collapsed line as a transient 256-entry CLUT. Exec
+			   snapshots it into the DMA staging area, so restoring the real
+			   CGRAM immediately afterward is safe for the next scanline. */
+			m_pBlend->UpdatePalette(
+				pBlendInfo, PseudoCGRAM, m_pPPU->GetIntensity());
+			m_pBlend->Exec(
+				pBlendInfo, iLine, 0, NULL, FALSE,
+				m_pPPU->GetIntensity());
+			/* Do not upload the real CGRAM again on every pseudo-hires line.
+			   Mark it dirty instead; the normal path restores it only when a
+			   subsequent non-pseudo line actually needs it. */
+			m_UpdateFlags |= SNESPPURENDER_UPDATE_PAL;
+		}
+		else
+		{
+			m_pBlend->Exec(
+				pBlendInfo,
+				iLine,
+				pRegs->coldata,
+				bDirectMain ? NULL : ColorMask,
+				(pRegs->cgadsub & 0x80),
+				m_pPPU->GetIntensity()
+				);
+		}
 #if SNDBG_LOG
 		g_TmgCycBlend += ProfCtrGetCycle() - _tBlend;
 #endif

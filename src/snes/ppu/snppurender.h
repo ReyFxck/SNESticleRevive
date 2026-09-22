@@ -54,8 +54,8 @@ enum
     SNPPU_BGWINDOW_NUM
 };
 
-// maximum number of lines (224 + first dummy line)
-#define SNPPU_MAXLINE   225
+// maximum visible scanlines including overscan plus the dummy line 0
+#define SNPPU_MAXLINE   240
 
 // maximum number of obj's per line
 #define SNPPU_MAXOBJ    32

@@ -392,9 +392,16 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 #endif
         PROF_LEAVE("SNSpcExecute");
 
-#if SNSPCIO_WRITEQUEUE
-        m_SpcIO.SyncQueueAll();
-#endif
+        /* A pending CPU input latch can become visible while this SPC
+           slice runs. Reads from $F4-$F7 also call this at the exact access,
+           so instruction-level execution cannot skip the transition. */
+        m_SpcIO.SyncCpuPorts((Uint32)SNSPCGetCounter(
+            &m_Spc, SNSPC_COUNTER_TOTAL));
+    }
+    else
+    {
+        m_SpcIO.SyncCpuPorts((Uint32)SNSPCGetCounter(
+            &m_Spc, SNSPC_COUNTER_TOTAL));
     }
 
 //#if SNES_DEBUG
@@ -632,19 +639,17 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		return;
 	}
 
-	// APUIO0-3 are mirrored every four bytes through $217F.  Route every
-	// mirror through the same SPC write queue and timing path as $2140-43.
+	// APUIO0-3 are mirrored every four bytes through $217F.
 	if (uAddr >= 0x2140 && uAddr <= 0x217F)
 	{
-		#if SNSPCIO_WRITEQUEUE
-		if (!pSnes->m_SpcIO.EnqueueWrite(
-		        SNCPUGetCounter(pCpu, SNCPU_COUNTER_FRAME) + SNES_SPCWRITE_LATENCY,
-		        uAddr & 3, uData))
-		#endif
-		{
-			pSnes->SyncSPC(SNES_SPCWRITE_LATENCY);
-			pSnes->m_SpcIO.m_Regs.apu_w[uAddr & 3] = uData;
-		}
+		/* Catch SPC up first, then let the input latch decide whether this
+		   write lands in the current SPC half-cycle or at the next boundary.
+		   Absolute counters avoid the old frame-wrap FIFO bug. */
+		pSnes->SyncSPC();
+		pSnes->m_SpcIO.WriteCpuPort(
+			(Uint32)SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_TOTAL),
+			(Uint32)SNSPCGetCounter(&pSnes->m_Spc, SNSPC_COUNTER_TOTAL),
+			uAddr & 3u, uData);
 		return;
 	}
 
@@ -1898,7 +1903,17 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_PPURender.BeginRender(pTarget);
 	m_PPU.BeginFrame();
 
-	for (m_uLine=0; m_uLine < (224+1); m_uLine++)
+	/* SETINI overscan is latched by BeginFrame(). Keep CPU/HDMA visible
+	   scanlines and the renderer on the same 224/239-line boundary. */
+	const Uint32 uVisibleLines = m_PPU.GetFrameVisibleLines();
+	const Bool bPALFrame =
+		(m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL) ? TRUE : FALSE;
+	/* NTSC fields contain 262 scanlines, PAL fields 312. In interlace,
+	   field 0 carries one extra line before the field bit toggles. */
+	const Uint32 uFrameLines =
+		(bPALFrame ? 312u : 262u) +
+		((m_PPU.IsFrameInterlace() && !m_PPU.GetField()) ? 1u : 0u);
+	for (m_uLine=0; m_uLine < (uVisibleLines + 1); m_uLine++)
 	{
 		#if SNES_SYNCPPUEVERYLINE
 		SyncPPU();
@@ -1935,11 +1950,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     m_IO.m_Regs.rdnmi |= 0x80;
     SNCPUSignalNMI(&m_Cpu, m_IO.m_Regs.rdnmi & m_IO.m_Regs.nmitimen & 0x80);
 
-    for ( ; m_uLine < 262; m_uLine++)
+    for ( ; m_uLine < uFrameLines; m_uLine++)
 	{
 		ExecuteLine();
 
-		if (m_uLine==225+2) // * 60 = 4410 cycles long (3.10 scanlines)
+		if (m_uLine==uVisibleLines+3) // auto-joy read completes ~3 scanlines into VBlank
 		{
 			// done reading joypad
 			m_IO.m_Regs.hvbjoy&= ~0x01;
@@ -1953,6 +1968,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	// clear vbl flag at end of vblank
 	m_IO.m_Regs.hvbjoy&= ~0x80;
 	PROF_LEAVE("ExecVBLANK");
+
+	/* The field flag changes at the physical V-counter wrap. */
+	m_PPU.AdvanceField();
 
 	SyncPPU();
 	SyncSPC();
@@ -2112,6 +2130,16 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)m_Spc.Regs.rY, (unsigned)m_Spc.Regs.rSP,
 				(unsigned)m_Spc.Regs.rPSW, (int)m_Spc.Cycles,
 				(unsigned)m_Spc.bRomEnable);
+			DLog("[snes-apu-ports] f=%u cpu-to-spc=%02X/%02X/%02X/%02X spc-to-cpu=%02X/%02X/%02X/%02X",
+				(unsigned)g_TmgFrameNo,
+				(unsigned)m_SpcIO.m_Regs.apu_w[0],
+				(unsigned)m_SpcIO.m_Regs.apu_w[1],
+				(unsigned)m_SpcIO.m_Regs.apu_w[2],
+				(unsigned)m_SpcIO.m_Regs.apu_w[3],
+				(unsigned)m_SpcIO.m_Regs.apu_r[0],
+				(unsigned)m_SpcIO.m_Regs.apu_r[1],
+				(unsigned)m_SpcIO.m_Regs.apu_r[2],
+				(unsigned)m_SpcIO.m_Regs.apu_r[3]);
 			DLog("[snes-capture] end f=%u reasons=%02X",
 				(unsigned)g_TmgFrameNo, (unsigned)g_DbgCaptureReasons);
 		}
@@ -2164,10 +2192,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
 			// diretamente qual rotina esta consumindo o tempo da EE.
-			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=0 obj-cache=%u",
+			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=%u obj-cache=%u",
 				SNDBG_SCHEMA, (unsigned)(SNDBG_DEEP ? 2 : 1),
 				(unsigned)g_DbgSessionId, (unsigned)g_TmgWinFrames,
-				(unsigned)SNPPU_OBJ_CACHE);
+				(unsigned)SNPPU_BG_CACHE, (unsigned)SNPPU_OBJ_CACHE);
 			DLog("[snes-frame] f=%u rom-video=%s host-target=%u budget=%u cycles min/avg/max=%u/%u/%u slow=%u threshold=%u%% capacity=%u.%u fps",
 				(unsigned)g_TmgFrameNo, bPAL ? "pal" : "ntsc",
 				(unsigned)uTargetFPS, (unsigned)uBudget,

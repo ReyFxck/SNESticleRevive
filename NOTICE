@@ -52,5 +52,21 @@ Third-party code keeps its own copyright and license terms. In particular:
 - upng under src/third_party/upng/: zlib license.
 - PS2SDK/ps2dev-derived components retain the notices in their source files.
 
+
+Development references
+----------------------
+
+The following projects are credited as development/reference material. They
+are not presented here as bundled third-party components merely by being
+listed in this section:
+
+- MesenCE (nesdev-org/MesenCE), GNU GPL v3: accuracy reference for SNES PPU
+  behavior, including Mode 4/5/6, offset-per-tile, SETINI, hi-res and
+  interlace behavior.
+- SNESticle Aurora (itsveenee/SNESticleAurora), by Vinícius Nunes
+  (@itsveenee), GNU GPL v2: PS2-oriented behavioral/comparison reference for
+  the same PPU work. SNESticle Revive uses its own name/branding and keeps the
+  v1.1.1 implementation independently maintained.
+
 This NOTICE supplements LICENSE; it does not replace any per-file or
 third-party license notice.

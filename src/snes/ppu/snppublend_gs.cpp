@@ -37,9 +37,19 @@ extern "C" {
 #define SNPPU_DMA_BLENDINFO_ADDR \
 	(PS2MEM_SCRATCHPAD + SNPPU_DMA_BLENDINFO_OFFSET)
 
+/* Native 512-dot lines are finalized by the EE and staged in scratchpad.
+   The GS only transfers/presents them; no VIF/VU synchronization is needed
+   for this branch-heavy indexed-pixel workload. */
+#define SNPPU_DMA_HIRES_OFFSET (8 * 1024)
+#define SNPPU_DMA_HIRES_ADDR \
+	(PS2MEM_SCRATCHPAD + SNPPU_DMA_HIRES_OFFSET)
+#define SNPPU_DMA_HIRES_BYTES (512 * sizeof(Uint16))
+
 typedef char SNPPUScratchLayoutCheck[
 	(sizeof(SnesRender8pInfoT) <= SNPPU_DMA_BLENDINFO_OFFSET &&
 	 SNPPU_DMA_BLENDINFO_OFFSET + sizeof(SNPPUBlendInfoT) <=
+		SNPPU_DMA_HIRES_OFFSET &&
+	 SNPPU_DMA_HIRES_OFFSET + SNPPU_DMA_HIRES_BYTES <=
 		PS2MEM_SNES_LOOKUP_OFFSET &&
 	 PS2MEM_SNES_LOOKUP_OFFSET + PS2MEM_SNES_LOOKUP_SIZE <= 16 * 1024)
 		? 1 : -1];
@@ -375,18 +385,19 @@ static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfm
     GSDmaCntOpen();
 }
 
-static void _SNPPURenderTexLine(Int32 iDestLine, Int32 iSrcLine, Uint32 RGBA, int abe)
+static void _SNPPURenderTexLineWH(Int32 iDestLine, Int32 iSrcLine,
+	Uint32 RGBA, int abe, Int32 iDestWidth, Int32 iSrcWidth)
 {
     int x1,x2,y1,y2;
     int u1,u2,v1,v2;
 
-    x1  =   0 << 4;
-    x2  = 256 << 4;
+    x1  = 0;
+    x2  = iDestWidth << 4;
     y1  = (iDestLine + 0) << 4;
     y2  = (iDestLine + 1) << 4;
 
-    u1  =   0 << 4;
-    u2  = 256 << 4;
+    u1  = 0;
+    u2  = iSrcWidth << 4;
     v1  = (iSrcLine + 0) << 4;
     v2  = (iSrcLine + 1) << 4;
 
@@ -405,15 +416,20 @@ static void _SNPPURenderTexLine(Int32 iDestLine, Int32 iSrcLine, Uint32 RGBA, in
 	GSGifReg(GS_SET_XYZ(x2,y2,0));
 
     GSGifTagClose();
-
 }
 
-static void _SNPPURenderLine(Int32 iDestLine, int abe)
+static void _SNPPURenderTexLine(Int32 iDestLine, Int32 iSrcLine,
+	Uint32 RGBA, int abe)
+{
+	_SNPPURenderTexLineWH(iDestLine, iSrcLine, RGBA, abe, 256, 256);
+}
+
+static void _SNPPURenderLineW(Int32 iDestLine, int abe, Int32 iWidth)
 {
     int x1,x2,y1,y2;
 
-    x1  =   0 << 4;
-    x2  = 256 << 4;
+    x1  = 0;
+    x2  = iWidth << 4;
     y1  = (iDestLine + 0) << 4;
     y2  = (iDestLine + 1) << 4;
 
@@ -430,6 +446,11 @@ static void _SNPPURenderLine(Int32 iDestLine, int abe)
 	GSGifReg(0);
 
     GSGifTagClose();
+}
+
+static void _SNPPURenderLine(Int32 iDestLine, int abe)
+{
+	_SNPPURenderLineW(iDestLine, abe, 256);
 }
 
 void SNPPUBlendGS::Begin(CRenderSurface *pTarget)
@@ -647,7 +668,7 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 		GSGifTagOpenAD();
 		GSGifRegAD(GS_REG_TEXFLUSH, 0);
 		GSGifRegAD(GS_REG_FRAME_1,
-			GS_SET_FRAME((uOutAddr/0x20), 256/64, GS_PSMCT32, 0));
+			GS_SET_FRAME((uOutAddr/0x20), 512/64, GS_PSMCT16, 0));
 #if SNPPUBLEND_PAL32
 		GSGifRegAD(GS_REG_TEX0_1,
 			GS_SET_TEX0(pList->uInputAddr, 256/64, GS_PSMT8, 8, 3,
@@ -661,7 +682,7 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 		GSGifRegAD(GS_REG_XYOFFSET_1, 0);
 		GSGifTagCloseAD();
 
-		_SNPPURenderTexLine(0, 0, 0x80808080, 0);
+		_SNPPURenderTexLineWH(0, 0, 0x80808080, 0, 512, 256);
 
 		GSDmaCntClose();
 		GSDmaEnd();
@@ -757,7 +778,7 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
     GSGifRegAD(GS_REG_TEXFLUSH,0);
 
     // setup frame register to point to our output texture
-	GSGifRegAD(GS_REG_FRAME_1, GS_SET_FRAME((uOutAddr/0x20),256/64,GS_PSMCT32,0 ));
+	GSGifRegAD(GS_REG_FRAME_1, GS_SET_FRAME((uOutAddr/0x20),512/64,GS_PSMCT16,0 ));
 
 	// tex0_1
 	GSGifRegAD(GS_REG_TEX0_1,GS_SET_TEX0(pList->uTempAddr, 256/64, GS_PSMCT32, 8, 3,    1, 0, 0, 0, 0, 0, 0));
@@ -773,10 +794,10 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
     GSGifTagCloseAD();
 
     // render out32 = main32 * attrib
-    _SNPPURenderTexLine(0, 0, 0x80808080, 0);
+    _SNPPURenderTexLineWH(0, 0, 0x80808080, 0, 512, 256);
 
-    // render out32 += sub32 * attrib
-    _SNPPURenderTexLine(0, 1, 0x80808080, 1);
+    // render out16 += sub32 * attrib, duplicated horizontally
+    _SNPPURenderTexLineWH(0, 1, 0x80808080, 1, 512, 256);
 
     /* Preserve the GS state left by the legacy chain even when brightness is
        full.  Only the mathematically redundant drawing primitive is omitted. */
@@ -789,7 +810,7 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
     if (bApplyIntensity)
     {
         // render out32 *= intensity
-        _SNPPURenderLine(0, 1);
+        _SNPPURenderLineW(0, 1, 512);
     }
 
     // close current dma cnt
@@ -1022,6 +1043,55 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
     DmaExecGIFChain(pExecList->Data);
 #endif
 
+}
+
+void SNPPUBlendGS::ExecHires512(const Uint16 *pLine512, Int32 iLine)
+{
+	Uint16 *pStage = (Uint16 *)SNPPU_DMA_HIRES_ADDR;
+
+	if (!m_pTarget || !pLine512)
+		return;
+
+	/* One GIF transfer per rendered scanline, just like the normal blender.
+	   The EE owns SNES semantics and writes final BGR555 pixels; the GS owns
+	   only transport/storage. Reusing scratchpad avoids D-cache writeback and
+	   lets the next scanline's MIPS work overlap the previous GIF transfer. */
+#if SNDBG_LOG
+	{
+		Uint32 uStart = ProfCtrGetCycle();
+		DmaSyncGIF();
+		_SNPPUGSDiag.SyncCycles += ProfCtrGetCycle() - uStart;
+		_SNPPUGSDiag.SyncCalls++;
+	}
+#else
+	DmaSyncGIF();
+#endif
+
+	memcpy(pStage, pLine512, SNPPU_DMA_HIRES_BYTES);
+
+	GSListBegin(m_HiresDmaList,
+		sizeof(m_HiresDmaList) / sizeof(m_HiresDmaList[0]), NULL);
+	GSDmaCntOpen();
+	_GPFifoUploadTexture(
+		m_DmaList.uOutAddr * 0x100,
+		512, 0, iLine, GS_PSMCT16,
+		(void *)(((Uint32)pStage) | 0x80000000),
+		512, 1);
+	GSDmaCntClose();
+	GSDmaEnd();
+	GSListEnd();
+
+#if SNDBG_LOG
+	{
+		Uint32 uStart = ProfCtrGetCycle();
+		DmaExecGIFChain(m_HiresDmaList);
+		_SNPPUGSDiag.KickCycles += ProfCtrGetCycle() - uStart;
+		_SNPPUGSDiag.Lines++;
+		_SNPPUGSDiag.CopyBytes += SNPPU_DMA_HIRES_BYTES;
+	}
+#else
+	DmaExecGIFChain(m_HiresDmaList);
+#endif
 }
 
 void SNPPUBlendGS::Clear(SNPPUBlendInfoT *pInfo, Int32 iLine)

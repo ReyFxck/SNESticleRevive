@@ -825,6 +825,11 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		break;
 
 	case 0x2133:	// SETINI (screen mode)
+		/* Pseudo-hires/EXTBG are live renderer state. Overscan and screen
+		   interlace are latched at BeginFrame(), matching the frame boundary.
+		   OBJ interlace changes invalidate derived sprite data immediately. */
+		if (((Uint8)m_Regs.setini ^ uData) & SNESPPU_SETINI_OBJ_INTERLACE)
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);
 		m_Regs.setini = uData;
 		break;
 
@@ -887,14 +892,23 @@ void SnesPPU::BeginFrame()
 {
 	m_uLine   = 0;
     m_bVBlank = FALSE;
+
+	/* $2133.2 selects 224/239 visible lines. $2133.0 selects interlace.
+	   Latch both once per frame so mid-frame register writes cannot move
+	   the current frame's VBlank boundary. */
+	m_uFrameVisibleLines =
+		(m_Regs.setini & SNESPPU_SETINI_OVERSCAN)
+		? SNESPPU_VISIBLE_LINES_OVERSCAN
+		: SNESPPU_VISIBLE_LINES_NORMAL;
+	m_bFrameInterlace =
+		(m_Regs.setini & SNESPPU_SETINI_INTERLACE) != 0;
 }
 
 void SnesPPU::EndFrame()
 {
+    /* This is the VBlank edge. STAT78.field changes later, when the
+       physical V counter wraps at the end of the field. */
     m_bVBlank = TRUE;
-
-	// toggle field
-	m_Regs.stat78^=0x80;
 
     // forced blanking?
     if (!(m_Regs.inidisp & 0x80))
@@ -905,6 +919,13 @@ void SnesPPU::EndFrame()
 		m_OAMLatch = 0;
 		UpdateOAMPriority();
     }
+}
+
+void SnesPPU::AdvanceField()
+{
+	/* $213F.7 is the current field and toggles at vertical counter wrap,
+	   not when VBlank begins. */
+	m_Regs.stat78 ^= 0x80;
 }
 
 void SnesPPU::Sync(Uint32 uLine)
@@ -930,7 +951,7 @@ void SnesPPU::Sync(Uint32 uLine)
 			}
 
             // are we within a frame?
-            if (m_uLine > 0 && m_uLine < (224 + 1))
+            if (m_uLine > 0 && m_uLine <= m_uFrameVisibleLines)
             {
                 // render a line
 				PROF_ENTER("PPURender");
@@ -979,6 +1000,8 @@ void SnesPPU::Reset()
 	m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_ALL);
 	m_Queue.Reset();
 	m_uLine = 0;
+	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
+	m_bFrameInterlace = FALSE;
 
 	memset(&m_Regs, 0, sizeof(m_Regs));
 	memset(&m_CGRAM, 0, sizeof(m_CGRAM));
@@ -998,6 +1021,10 @@ SnesPPU::SnesPPU()
 	m_pRender = NULL;
 	m_OAMLatch = 0;
 	m_CGRAMLatch = 0;
+	m_uLine = 0;
+	m_bVBlank = FALSE;
+	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
+	m_bFrameInterlace = FALSE;
 }
 
 #ifdef SNES_DEBUG
