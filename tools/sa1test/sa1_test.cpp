@@ -8,6 +8,7 @@
 
 #include "types.h"
 #include "snsa1.h"
+#include "sntiming.h"
 
 extern "C" {
 #include "sncpu_c.h"
