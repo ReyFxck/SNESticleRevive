@@ -582,14 +582,14 @@ static _INLINE void _FetchPhysicalCHR4Row(
 static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles, Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask, Uint64 *pPalLookup)
 {
 	const SNPPUBg8FlipT *pFlip;
-	#if SNDBG_LOG
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
-	#endif
+	Uint64 uPreviousRowData = 0;
+	Uint32 uPreviousRowMask = 0;
 
 	PROF_ENTER("_FetchCHR2_64");
 	while (nTiles > 0)
 	{
-		Uint32 uTileAddr, uRowAddr;
+		Uint32 uTileAddr, uRowAddr, uRowKey;
 		Uint64 uTile0;
 		Uint32 uMask;
 
@@ -601,17 +601,30 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		// get pointer to tile data (y flipped)
 		uRowAddr = uTileAddr +
 			((uScrollY + pTiles->uOffsetY) ^ pFlip->uFlipXOR);
+		uRowKey = (uRowAddr & 0x7FFFu) |
+			((pTiles->uFlip & 1u) << 15);
 
-		#if SNDBG_LOG
+		/* Adjacent tilemap entries very often reference the exact same
+		   physical CHR row. VRAM cannot change while this scanline is being
+		   rendered, so reuse the already decoded row instead of performing
+		   another physical-cache lookup. Palette/priority remain outside this
+		   reuse and are applied independently below. */
+		if (uRowKey == uPreviousRowKey)
 		{
-			Uint32 uRowKey = uRowAddr | ((pTiles->uFlip & 1u) << 15);
-			if (uRowKey == uPreviousRowKey) g_DbgBGChrRepeatRows++;
-			uPreviousRowKey = uRowKey;
+			uTile0 = uPreviousRowData;
+			uMask = uPreviousRowMask;
+			#if SNDBG_LOG
+			g_DbgBGChrRepeatRows++;
+			#endif
 		}
-		#endif
-
-		_FetchPhysicalCHR2Row(pVram, uRowAddr,
-			(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
+		else
+		{
+			_FetchPhysicalCHR2Row(pVram, uRowAddr,
+				(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
+			uPreviousRowKey = uRowKey;
+			uPreviousRowData = uTile0;
+			uPreviousRowMask = uMask;
+		}
 
 		#if SNDBG_LOG
 		if (!uMask) g_DbgBGChrBlankRows++;
@@ -638,15 +651,15 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles, Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask)
 {
 	const SNPPUBg8FlipT *pFlip;
-	#if SNDBG_LOG
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
-	#endif
+	Uint64 uPreviousRowData = 0;
+	Uint32 uPreviousRowMask = 0;
 
 	PROF_ENTER("_FetchCHR4_64");
 
 	while (nTiles > 0)
 	{
-		Uint32 uTileAddr, uRowAddr;
+		Uint32 uTileAddr, uRowAddr, uRowKey;
 		Uint64 uTile0;
 		Uint32 uMask;
 
@@ -658,17 +671,25 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		// get pointer to tile data (y flipped)
 		uRowAddr = uTileAddr +
 			((uScrollY + pTiles->uOffsetY) ^ pFlip->uFlipXOR);
+		uRowKey = (uRowAddr & 0x7FFFu) |
+			((pTiles->uFlip & 1u) << 15);
 
-		#if SNDBG_LOG
+		if (uRowKey == uPreviousRowKey)
 		{
-			Uint32 uRowKey = uRowAddr | ((pTiles->uFlip & 1u) << 15);
-			if (uRowKey == uPreviousRowKey) g_DbgBGChrRepeatRows++;
-			uPreviousRowKey = uRowKey;
+			uTile0 = uPreviousRowData;
+			uMask = uPreviousRowMask;
+			#if SNDBG_LOG
+			g_DbgBGChrRepeatRows++;
+			#endif
 		}
-		#endif
-
-		_FetchPhysicalCHR4Row(pVram, uRowAddr,
-			(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
+		else
+		{
+			_FetchPhysicalCHR4Row(pVram, uRowAddr,
+				(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
+			uPreviousRowKey = uRowKey;
+			uPreviousRowData = uTile0;
+			uPreviousRowMask = uMask;
+		}
 
 		#if SNDBG_LOG
 		if (!uMask) g_DbgBGChrBlankRows++;
