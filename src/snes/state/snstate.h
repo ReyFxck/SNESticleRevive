@@ -73,6 +73,7 @@ struct SnesStateT
 	SNStateSPCT		SPC;
 	SNStateSPCDSPT	SPCDSP;
 	SNStateSPCIOT	SPCIO;
+	SA1SaveState	SA1;
 
 	Uint8			Ram[SNES_RAMSIZE];
 	Uint8			SpcRam[SNSPC_RAM_SIZE];

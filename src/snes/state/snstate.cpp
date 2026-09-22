@@ -72,6 +72,7 @@ void SnesSystem::SaveState(SnesStateT *pState)
 	m_SpcDsp.SaveState(&pState->SPCDSP);
 	m_SpcDspMixer.SaveState(&pState->SPCDSP);
 	m_SpcIO.SaveState(&pState->SPCIO);
+	m_SA1.SaveState(&pState->SA1);
 
 	// save memory state
 	memcpy(pState->Ram, m_Ram, sizeof(pState->Ram));
@@ -132,9 +133,23 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_SpcDspMixer.RestoreState(&pState->SPCDSP);
 	m_SpcIO.RestoreState(&pState->SPCIO);
 
-	// restore memory state
+	// Restore shared RAM before rebuilding the SA-1 maps, because BW-RAM is
+	// backed by m_SRam and the coprocessor keeps only that live pointer.
 	memcpy(m_Ram, pState->Ram, sizeof(m_Ram));
 	memcpy(m_SRam, pState->SRam, sizeof(m_SRam));
+	if (m_bSA1)
+	{
+		m_SA1.SetMemory(m_pRom ? m_pRom->GetData() : NULL,
+		                 m_pRom ? m_pRom->GetBytes() : 0,
+		                 m_SRam, m_uSramSize);
+		m_SA1.RestoreState(&pState->SA1);
+		for (Uint32 i = 0; i < 4; i++)
+			RemapSA1ROM(i, pState->SA1.State.Registers[0x020 + i]);
+		RefreshSCPUIRQ();
+	}
+
+	// Base RAM/SRAM were restored above so coprocessor maps already point at
+	// the restored backing bytes.
 
     // copy spc ram
     SNSPCSetRomEnable(&m_Spc, FALSE);
@@ -261,5 +276,6 @@ void SNStateCompare(SnesStateT *pStateA, SnesStateT *pStateB)
     _SNStateMemDiff("IO", (Uint8 *)&pStateA->IO, (Uint8 *)&pStateB->IO, sizeof(pStateA->IO));
     _SNStateMemDiff("PPU", (Uint8 *)&pStateA->PPU, (Uint8 *)&pStateB->PPU, sizeof(pStateA->PPU));
     _SNStateMemDiff("DMAC", (Uint8 *)&pStateA->DMAC, (Uint8 *)&pStateB->DMAC, sizeof(pStateA->DMAC));
+    _SNStateMemDiff("SA1", (Uint8 *)&pStateA->SA1, (Uint8 *)&pStateB->SA1, sizeof(pStateA->SA1));
 
 }

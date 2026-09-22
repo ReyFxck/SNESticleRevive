@@ -1201,7 +1201,8 @@ static void _MainLoopStateDeleteSettings()
 
 static const Char *_MainLoopStateGetUnsupportedChip(Uint32 uFlags)
 {
-    if (uFlags & SNROM_FLAG_SA1)     return "SA-1";
+    /* SA-1 is serialized in SnesStateT; the remaining coprocessors below
+       still need dedicated snapshots before their state UI can be enabled. */
     if (uFlags & SNROM_FLAG_SUPERFX) return "SuperFX";
     if (uFlags & SNROM_FLAG_GAMEBOY) return "Super Game Boy";
     if (uFlags & SNROM_FLAG_DSP1)    return "DSP-1";
@@ -1278,7 +1279,9 @@ static Bool _MainLoopStateCheckAvailability(Char *pReason, Int32 nReasonBytes)
         nReasonBytes,
         _pSystem == _pNes
             ? "Ready: NES cartridge and mapper state."
-            : "Ready: base SNES hardware."
+            : ((_pSnesRom->m_Flags & SNROM_FLAG_SA1)
+                ? "Ready: SNES + SA-1 state."
+                : "Ready: base SNES hardware.")
     );
     return TRUE;
 }

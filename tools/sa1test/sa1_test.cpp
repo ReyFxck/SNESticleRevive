@@ -397,6 +397,52 @@ static void TestTimerIRQ(void)
 	CHECK(sa1.ReadIRAM(0x0013) == 0x99, "timer IRQ must enter the SA-1 IRQ vector");
 }
 
+
+static void TestSaveStateRoundTrip(void)
+{
+	std::vector<Uint8> rom(0x800000, 0xEA);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	// Make segment 2 visibly different after MMC reconstruction.
+	rom[0x000000] = 0x10;
+	rom[0x200000] = 0x32;
+
+	SNSA1 sa1;
+	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2220, 0x82);
+	sa1.WriteRegister(0x2229, 0x00);
+	sa1.WriteIRAM(0x0123, 0xA5);
+	sa1.WriteRegister(0x2203, 0x00);
+	sa1.WriteRegister(0x2204, 0x80);
+	sa1.WriteRegister(0x2200, 0x00);
+	sa1.StepMasterCycles(32);
+	sa1.GetCpu()->Regs.rA.w = 0xBEEF;
+	sa1.GetCpu()->Regs.rX.w = 0x1234;
+
+	SA1SaveState snap;
+	sa1.SaveState(&snap);
+
+	// Destroy live state and mapping before restore.
+	sa1.WriteRegister(0x2220, 0x00);
+	sa1.WriteIRAM(0x0123, 0x5A);
+	sa1.GetCpu()->Regs.rA.w = 0;
+	sa1.GetCpu()->Regs.rX.w = 0;
+
+	sa1.RestoreState(&snap);
+	CHECK(sa1.ReadIRAM(0x0123) == 0xA5, "save state must restore SA-1 I-RAM");
+	CHECK(sa1.GetCpu()->Regs.rA.w == 0xBEEF &&
+	      sa1.GetCpu()->Regs.rX.w == 0x1234,
+	      "save state must restore independent 65C816 registers");
+	CHECK(sa1.GetState()->Registers[0x020] == 0x82,
+	      "save state must restore MMC register state");
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x008000) == 0x32,
+	      "restore must rebuild SA-1 ROM bank pointers from MMC state");
+	CHECK(sa1.GetState()->MasterCycles == snap.State.MasterCycles &&
+	      sa1.GetState()->ScheduledCycles == snap.State.ScheduledCycles,
+	      "save state must restore scheduler counters");
+}
+
 static void TestMMCMapping(void)
 {
 	std::vector<Uint8> rom(0x800000, 0xFF);
@@ -514,6 +560,7 @@ int main(void)
 	TestNormalDMA();
 	TestArithmetic();
 	TestVariableLengthBit();
+	TestSaveStateRoundTrip();
 	TestMMCMapping();
 	TestInstructionExecution();
 	TestIRQVector();

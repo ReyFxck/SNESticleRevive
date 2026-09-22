@@ -48,6 +48,20 @@ struct SA1State
 	Bool   Running;
 };
 
+struct SA1SaveState
+{
+	SA1State State;
+	SNCpuRegsT CpuRegs;
+	Int32 CpuCycles;
+	Int32 CpuCounter[SNCPU_COUNTER_NUM];
+	Int32 CpuAbortCycles;
+	Uint8 CpuSignal;
+	Uint8 CpuNmiDmaDelay;
+	Uint8 CpuIrqPending;
+	Uint8 Reserved;
+	Uint8 IRAM[SNSA1_IRAM_SIZE];
+};
+
 class SNSA1
 {
 public:
@@ -57,6 +71,8 @@ public:
 	void SetMemory(const Uint8 *pRom, Uint32 uRomBytes,
 	               Uint8 *pBWRAM, Uint32 uBWRAMBytes);
 	void Reset(Bool bHardReset);
+	void SaveState(SA1SaveState *pState) const;
+	void RestoreState(const SA1SaveState *pState);
 
 	Uint8 ReadRegister(Uint16 uAddr);
 	void  WriteRegister(Uint16 uAddr, Uint8 uData);

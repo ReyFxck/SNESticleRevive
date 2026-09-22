@@ -38,6 +38,47 @@ void SNSA1::SetMemory(const Uint8 *pRom, Uint32 uRomBytes,
 	MapCpuMemory();
 }
 
+void SNSA1::SaveState(SA1SaveState *pState) const
+{
+	if (!pState)
+		return;
+
+	memset(pState, 0, sizeof(*pState));
+	pState->State = m_State;
+	pState->CpuRegs = m_Cpu.Regs;
+	pState->CpuCycles = m_Cpu.Cycles;
+	memcpy(pState->CpuCounter, m_Cpu.Counter, sizeof(pState->CpuCounter));
+	pState->CpuAbortCycles = m_Cpu.nAbortCycles;
+	pState->CpuSignal = m_Cpu.uSignal;
+	pState->CpuNmiDmaDelay = m_Cpu.uNmiDmaDelay;
+	pState->CpuIrqPending = m_Cpu.uIrqPending;
+	memcpy(pState->IRAM, m_IRAM, sizeof(pState->IRAM));
+}
+
+void SNSA1::RestoreState(const SA1SaveState *pState)
+{
+	if (!pState)
+		return;
+
+	m_State = pState->State;
+	memcpy(m_IRAM, pState->IRAM, sizeof(m_IRAM));
+
+	m_Cpu.Regs = pState->CpuRegs;
+	m_Cpu.Cycles = pState->CpuCycles;
+	memcpy(m_Cpu.Counter, pState->CpuCounter, sizeof(m_Cpu.Counter));
+	m_Cpu.nAbortCycles = pState->CpuAbortCycles;
+	m_Cpu.bRunning = FALSE;
+	m_Cpu.uSignal = pState->CpuSignal;
+	m_Cpu.uNmiDmaDelay = pState->CpuNmiDmaDelay;
+	m_Cpu.uIrqPending = pState->CpuIrqPending;
+	m_Cpu.pUserData = this;
+
+	// Bank pointers and trap callbacks are process-local and are never
+	// serialized. Rebuild them from the restored MMC/register state.
+	MapCpuMemory();
+	UpdateIRQLine();
+}
+
 void SNSA1::ResetCPUContext()
 {
 	SNCPUResetCounters(&m_Cpu);
