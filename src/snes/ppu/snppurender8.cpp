@@ -33,16 +33,19 @@
 
 #define SNPPU_BGPLANE_SIZE 48
 #define SNPPURENDER_CHR64 (TRUE)
+#ifndef SNPPU_BG_CACHE
+#define SNPPU_BG_CACHE (TRUE)
+#endif
 
 static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque);
 
-#if SNPPU_OBJ_CACHE
+#if SNPPU_OBJ_CACHE || SNPPU_BG_CACHE
 static SnesPPUChrCacheT _SnesPPU_ChrCache _ALIGN(64);
 #endif
 
 void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords)
 {
-#if SNPPU_OBJ_CACHE
+#if SNPPU_OBJ_CACHE || SNPPU_BG_CACHE
 	Uint32 nInvalidated = SnesPPUChrCacheInvalidateRange(
 		&_SnesPPU_ChrCache, uWordAddress, nWords);
 #if SNDBG_LOG
@@ -509,6 +512,73 @@ static void _FetchCHR(Uint8 *pLine, SnesPPU *pPPU, SnesBGInfoT *pBGInfo, struct 
 
 #else
 
+static _INLINE void _FetchPhysicalCHR2Row(
+	const Uint16 *pVram, Uint32 uRowAddr, Bool bHFlip,
+	Uint64 *pData, Uint32 *pOpaque)
+{
+#if SNPPU_BG_CACHE
+	if (SnesPPUChrCacheLookup2(&_SnesPPU_ChrCache, uRowAddr,
+		bHFlip, pData, pOpaque))
+		return;
+#endif
+	{
+		const SnesPPUTile2T *pTile2 =
+			(const SnesPPUTile2T *)(pVram + (uRowAddr & 0x7FFFu));
+		const SnesChrLookup64T *pLookup =
+			(const SnesChrLookup64T *)&SNPPU_BG_PLANE_LOOKUP[0];
+		Uint32 p0 = pTile2->uPlane01[0][0];
+		Uint32 p1 = pTile2->uPlane01[0][1];
+		Uint64 uData = (*pLookup)[p0] | ((*pLookup)[p1] << 1);
+		Uint32 uOpaque = SNPPU_BG_HFLIP_LOOKUP[1][p0 | p1];
+
+#if SNPPU_BG_CACHE
+		SnesPPUChrCacheStore2(&_SnesPPU_ChrCache, uRowAddr,
+			uData, uOpaque);
+#endif
+		if (bHFlip)
+			SnesPPUChrCacheFlipRow(&uData, &uOpaque);
+		*pData = uData;
+		*pOpaque = uOpaque;
+	}
+}
+
+static _INLINE void _FetchPhysicalCHR4Row(
+	const Uint16 *pVram, Uint32 uRowAddr, Bool bHFlip,
+	Uint64 *pData, Uint32 *pOpaque)
+{
+#if SNPPU_BG_CACHE || SNPPU_OBJ_CACHE
+	if (SnesPPUChrCacheLookup4(&_SnesPPU_ChrCache, uRowAddr,
+		bHFlip, pData, pOpaque))
+		return;
+#endif
+	{
+		const SnesPPUTile4T *pTile4 =
+			(const SnesPPUTile4T *)(pVram + (uRowAddr & 0x7FFFu));
+		const SnesChrLookup64T *pLookup =
+			(const SnesChrLookup64T *)&SNPPU_BG_PLANE_LOOKUP[0];
+		Uint32 p0 = pTile4->uPlane01[0][0];
+		Uint32 p1 = pTile4->uPlane01[0][1];
+		Uint32 p2 = pTile4->uPlane23[0][0];
+		Uint32 p3 = pTile4->uPlane23[0][1];
+		Uint64 uData =
+			(*pLookup)[p0] |
+			((*pLookup)[p1] << 1) |
+			((*pLookup)[p2] << 2) |
+			((*pLookup)[p3] << 3);
+		Uint32 uOpaque =
+			SNPPU_BG_HFLIP_LOOKUP[1][p0 | p1 | p2 | p3];
+
+#if SNPPU_BG_CACHE || SNPPU_OBJ_CACHE
+		SnesPPUChrCacheStore4(&_SnesPPU_ChrCache, uRowAddr,
+			uData, uOpaque);
+#endif
+		if (bHFlip)
+			SnesPPUChrCacheFlipRow(&uData, &uOpaque);
+		*pData = uData;
+		*pOpaque = uOpaque;
+	}
+}
+
 static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles, Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask, Uint64 *pPalLookup)
 {
 	const SNPPUBg8FlipT *pFlip;
@@ -540,19 +610,8 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		}
 		#endif
 
-		{
-			const SnesPPUTile2T *pTile2 =
-				(const SnesPPUTile2T *)(pVram + uRowAddr);
-			const SnesChrLookup64T *pLookup =
-				(const SnesChrLookup64T *)pFlip->pLookup;
-			Uint8 *pHFlip = pFlip->pFlipLookup;
-			Uint32 uPlane0 = pTile2->uPlane01[0][0];
-			Uint32 uPlane1 = pTile2->uPlane01[0][1];
-
-			uMask = pHFlip[uPlane0 | uPlane1];
-			uTile0  = (*pLookup)[uPlane0] << 0;
-			uTile0 |= (*pLookup)[uPlane1] << 1;
-		}
+		_FetchPhysicalCHR2Row(pVram, uRowAddr,
+			(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
 
 		#if SNDBG_LOG
 		if (!uMask) g_DbgBGChrBlankRows++;
@@ -608,23 +667,8 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		}
 		#endif
 
-		{
-			const SnesPPUTile4T *pTile4 =
-				(const SnesPPUTile4T *)(pVram + uRowAddr);
-			const SnesChrLookup64T *pLookup =
-				(const SnesChrLookup64T *)pFlip->pLookup;
-			Uint8 *pHFlip = pFlip->pFlipLookup;
-			Uint32 uPlane0 = pTile4->uPlane01[0][0];
-			Uint32 uPlane1 = pTile4->uPlane01[0][1];
-			Uint32 uPlane2 = pTile4->uPlane23[0][0];
-			Uint32 uPlane3 = pTile4->uPlane23[0][1];
-
-			uMask = pHFlip[uPlane0 | uPlane1 | uPlane2 | uPlane3];
-			uTile0  = (*pLookup)[uPlane0] << 0;
-			uTile0 |= (*pLookup)[uPlane1] << 1;
-			uTile0 |= (*pLookup)[uPlane2] << 2;
-			uTile0 |= (*pLookup)[uPlane3] << 3;
-		}
+		_FetchPhysicalCHR4Row(pVram, uRowAddr,
+			(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
 
 		#if SNDBG_LOG
 		if (!uMask) g_DbgBGChrBlankRows++;
@@ -693,8 +737,6 @@ static void _FetchCHR2HiresPair_64(
 	while (nTiles-- > 0)
 	{
 		const SNPPUBg8FlipT *pFlip = &_FlipTable8[pTiles->uFlip];
-		const SnesChrLookup64T *pLookup =
-			(const SnesChrLookup64T *)pFlip->pLookup;
 		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
 		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
 		Uint32 uRow = ((uScrollY + pTiles->uOffsetY) & 7u) ^
@@ -715,13 +757,12 @@ static void _FetchCHR2HiresPair_64(
 
 		for (x = 0; x < 2; ++x)
 		{
-			const SnesPPUTile2T *pTile =
-				(const SnesPPUTile2T *)(pVram +
-				 ((uBaseAddr + uTileNo[x] * 8u) & 0x7FFFu));
-			Uint32 p0 = pTile->uPlane01[uRow][0];
-			Uint32 p1 = pTile->uPlane01[uRow][1];
-			uDecoded[x] =
-				((*pLookup)[p0] | ((*pLookup)[p1] << 1)) | uPalette;
+			Uint32 uOpaque;
+			Uint32 uRowAddr =
+				(uBaseAddr + uTileNo[x] * 8u + uRow) & 0x7FFFu;
+			_FetchPhysicalCHR2Row(pVram, uRowAddr, bHFlip,
+				&uDecoded[x], &uOpaque);
+			uDecoded[x] |= uPalette;
 		}
 
 		pDecoded0 = (Uint8 *)&uDecoded[0];
@@ -766,8 +807,6 @@ static void _FetchCHR4HiresPair_64(
 	while (nTiles-- > 0)
 	{
 		const SNPPUBg8FlipT *pFlip = &_FlipTable8[pTiles->uFlip];
-		const SnesChrLookup64T *pLookup =
-			(const SnesChrLookup64T *)pFlip->pLookup;
 		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
 		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
 		Uint32 uRow = ((uScrollY + pTiles->uOffsetY) & 7u) ^
@@ -786,18 +825,12 @@ static void _FetchCHR4HiresPair_64(
 
 		for (x = 0; x < 2; ++x)
 		{
-			const SnesPPUTile4T *pTile =
-				(const SnesPPUTile4T *)(pVram +
-				 ((uBaseAddr + uTileNo[x] * 16u) & 0x7FFFu));
-			Uint32 p0 = pTile->uPlane01[uRow][0];
-			Uint32 p1 = pTile->uPlane01[uRow][1];
-			Uint32 p2 = pTile->uPlane23[uRow][0];
-			Uint32 p3 = pTile->uPlane23[uRow][1];
-			uDecoded[x] =
-				((*pLookup)[p0] |
-				 ((*pLookup)[p1] << 1) |
-				 ((*pLookup)[p2] << 2) |
-				 ((*pLookup)[p3] << 3)) | uPalette;
+			Uint32 uOpaque;
+			Uint32 uRowAddr =
+				(uBaseAddr + uTileNo[x] * 16u + uRow) & 0x7FFFu;
+			_FetchPhysicalCHR4Row(pVram, uRowAddr, bHFlip,
+				&uDecoded[x], &uOpaque);
+			uDecoded[x] |= uPalette;
 		}
 
 		pDecoded0 = (Uint8 *)&uDecoded[0];
