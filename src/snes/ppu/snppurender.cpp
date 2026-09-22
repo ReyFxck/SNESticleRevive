@@ -222,25 +222,21 @@ static void _SnesPPUBuildPseudoHiresLine(
 static _INLINE Uint16 _SnesPPUColor15ToGS16(Uint16 uColor15,
 	Uint32 uIntensity)
 {
-	Uint32 uColor32 = SNPPUColorConvert15to32(uColor15 & 0x7FFFu);
-	Uint32 r = (uColor32 >> 0) & 0xFFu;
-	Uint32 g = (uColor32 >> 8) & 0xFFu;
-	Uint32 b = (uColor32 >> 16) & 0xFFu;
+	Uint32 c = uColor15 & 0x7FFFu;
 
-	if (uIntensity < 15u)
+	/* SNES CGRAM and GS PSMCT16 both store R5/G5/B5 in bits 0..14.
+	   Do not round-trip through 32-bit RGB for every hires dot. */
+	if (uIntensity >= 15u)
+		return (Uint16)(c | 0x8000u);
+	if (uIntensity == 0u)
+		return 0x8000u;
+
 	{
-		r = r * uIntensity / 15u;
-		g = g * uIntensity / 15u;
-		b = b * uIntensity / 15u;
+		Uint32 r = (c & 0x1Fu) * uIntensity / 15u;
+		Uint32 g = ((c >> 5) & 0x1Fu) * uIntensity / 15u;
+		Uint32 b = ((c >> 10) & 0x1Fu) * uIntensity / 15u;
+		return (Uint16)(r | (g << 5) | (b << 10) | 0x8000u);
 	}
-
-	/* GS PSMCT16 uses R5:G5:B5:A1 in the same low-to-high component order
-	   as SNES BGR555 after the calibrated 32-bit lookup. */
-	return (Uint16)(
-		((r >> 3) & 0x1Fu) |
-		(((g >> 3) & 0x1Fu) << 5) |
-		(((b >> 3) & 0x1Fu) << 10) |
-		0x8000u);
 }
 
 static void _SnesPPUBuildNativeHires512(
@@ -248,15 +244,26 @@ static void _SnesPPUBuildNativeHires512(
 	Uint32 uIntensity)
 {
 	Int32 x;
-	for (x = 0; x < 256; ++x)
+
+	if (uIntensity >= 15u)
 	{
-		/* Public SNES PPU behavior: even physical dot = sub screen,
-		   odd physical dot = main screen. Keep this ordering all the way to
-		   the GS instead of collapsing back into Revive's old 256 carrier. */
-		pOut[(x << 1) + 0] = _SnesPPUColor15ToGS16(
-			pCGRAM[pInfo->uSub8[x]], uIntensity);
-		pOut[(x << 1) + 1] = _SnesPPUColor15ToGS16(
-			pCGRAM[pInfo->uMain8[x]], uIntensity);
+		for (x = 0; x < 256; ++x)
+		{
+			pOut[(x << 1) + 0] =
+				(Uint16)((pCGRAM[pInfo->uSub8[x]] & 0x7FFFu) | 0x8000u);
+			pOut[(x << 1) + 1] =
+				(Uint16)((pCGRAM[pInfo->uMain8[x]] & 0x7FFFu) | 0x8000u);
+		}
+	}
+	else
+	{
+		for (x = 0; x < 256; ++x)
+		{
+			pOut[(x << 1) + 0] = _SnesPPUColor15ToGS16(
+				pCGRAM[pInfo->uSub8[x]], uIntensity);
+			pOut[(x << 1) + 1] = _SnesPPUColor15ToGS16(
+				pCGRAM[pInfo->uMain8[x]], uIntensity);
+		}
 	}
 }
 #endif
