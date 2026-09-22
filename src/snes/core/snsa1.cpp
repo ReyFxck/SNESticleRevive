@@ -894,26 +894,35 @@ void SNSA1::CompleteDMA()
 
 Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
 {
-	Uint32 uStartTicks = uSA1Ticks;
 	Uint8 uSource = m_State.Registers[0x030] & 0x03;
 	Bool bDestBWRAM = (m_State.Registers[0x030] & 0x04) ? TRUE : FALSE;
-	Uint8 uCost = (uSource == 0 && !bDestBWRAM) ? 1 : 2;
+	Uint8 uBaseCost = (uSource == 0 && !bDestBWRAM) ? 1 : 2;
 
 	while (m_State.DMARunning && uSA1Ticks)
 	{
 		Uint8 uData;
+		Uint32 uConsume;
+		Int32 iCounter;
 
 		if (!m_State.DMAWaitTicks)
-			m_State.DMAWaitTicks = uCost;
-		if (uSA1Ticks < m_State.DMAWaitTicks)
 		{
-			m_State.DMAWaitTicks = (Uint8)(m_State.DMAWaitTicks - uSA1Ticks);
-			m_State.DMAStallTicks += uStartTicks;
-			return 0;
+			Uint32 uConflict =
+				SNCPUSA1BusDMAPenaltyTicks(&m_Cpu, uSource, bDestBWRAM);
+			m_State.DMAWaitTicks = (Uint8)(uBaseCost + uConflict);
 		}
 
-		uSA1Ticks -= m_State.DMAWaitTicks;
-		m_State.DMAWaitTicks = 0;
+		uConsume = uSA1Ticks;
+		if (uConsume > m_State.DMAWaitTicks)
+			uConsume = m_State.DMAWaitTicks;
+		uSA1Ticks -= uConsume;
+		m_State.DMAWaitTicks = (Uint8)(m_State.DMAWaitTicks - uConsume);
+		m_State.DMAStallTicks += uConsume;
+
+		for (iCounter = 0; iCounter < SNCPU_COUNTER_NUM; iCounter++)
+			m_Cpu.Counter[iCounter] += (Int32)(uConsume * SNCPU_CYCLE_FAST);
+
+		if (m_State.DMAWaitTicks)
+			return 0;
 
 		uData = ReadDMASource(uSource, m_State.DMASource);
 		if (bDestBWRAM)
@@ -943,8 +952,6 @@ Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
 		if (!m_State.DMARemaining)
 			CompleteDMA();
 	}
-
-	m_State.DMAStallTicks += (uStartTicks - uSA1Ticks);
 	return uSA1Ticks;
 }
 

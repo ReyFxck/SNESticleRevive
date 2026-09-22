@@ -136,6 +136,7 @@ void SNCPUSA1BusBeginLine(void);
 void SNCPUSA1BusRecord(SNCpuT *pCpu, Uint32 uAddr, Uint32 uCyclesPerByte, Uint32 nBytes);
 void SNCPUSA1BusFinalize(Uint32 uMasterClock);
 Uint32 SNCPUSA1BusPenalty(SNCpuT *pSA1Cpu, Uint32 uAddr, Uint32 uCyclesPerByte);
+Uint32 SNCPUSA1BusDMAPenaltyTicks(SNCpuT *pSA1Cpu, Uint8 uSourceDevice, Bool bDestBWRAM);
 Uint32 SNCPUSA1BusGetConflictTicks(void);
 Uint32 SNCPUSA1BusGetDroppedEvents(void);
 

@@ -153,6 +153,9 @@ static void TestSharedBusContention(void)
 	CHECK(SNCPUSA1BusPenalty(&sa1cpu, 0x400000, SNCPU_CYCLE_FAST * 2) ==
 	      SNCPU_CYCLE_FAST * 2,
 	      "SA-1 BW-RAM contention must add two internal ticks");
+	sa1cpu.Counter[SNCPU_COUNTER_LINE]=0; sa1cpu.Cycles=0;
+	CHECK(SNCPUSA1BusDMAPenaltyTicks(&sa1cpu,0,TRUE)==2,
+	      "ROM-to-BW-RAM DMA contention must add two SA-1 ticks");
 
 	// I-RAM overlapping a fast S-CPU access receives the second wait tick.
 	SNCPUSA1BusBeginLine();
@@ -165,6 +168,9 @@ static void TestSharedBusContention(void)
 	CHECK(SNCPUSA1BusPenalty(&sa1cpu, 0x003000, SNCPU_CYCLE_FAST) ==
 	      SNCPU_CYCLE_FAST * 2,
 	      "fast S-CPU I-RAM contention must add two internal ticks");
+	sa1cpu.Counter[SNCPU_COUNTER_LINE]=0; sa1cpu.Cycles=0;
+	CHECK(SNCPUSA1BusDMAPenaltyTicks(&sa1cpu,0,FALSE)==2,
+	      "ROM-to-I-RAM DMA conflict with I-RAM must add two SA-1 ticks");
 
 	// No overlap means no penalty.
 	sa1cpu.Counter[SNCPU_COUNTER_LINE] = 24;
@@ -526,7 +532,11 @@ static void TestNormalDMA(void)
 	CHECK(sa1.IsDMARunning(), "normal DMA must arm instead of completing inside the register write");
 	CHECK(sa1.ReadIRAM(0x0400) == 0x00, "normal DMA must not be instantaneous");
 
+	Int32 dmaClockStart = SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME);
 	sa1.StepMasterCycles(4); // 2 SA-1 ticks -> 2 bytes
+	CHECK(SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME) - dmaClockStart ==
+	      2 * SNCPU_CYCLE_FAST,
+	      "normal DMA must advance the free-running SA-1 CPU clock");
 	CHECK(sa1.ReadIRAM(0x0400) == 0x11 &&
 	      sa1.ReadIRAM(0x0401) == 0x22 &&
 	      sa1.ReadIRAM(0x0402) == 0x00,

@@ -109,6 +109,33 @@ Uint32 SNCPUSA1BusPenalty(SNCpuT *pSA1Cpu, Uint32 uAddr, Uint32 uCyclesPerByte)
 	uPenaltyTicks=(uType==SNCPU_SA1_BUS_BWRAM)?2u:1u; if (uType==SNCPU_SA1_BUS_IRAM && bFastIRAM) uPenaltyTicks++;
 	g_SNCPU_SA1BusConflictTicks+=uPenaltyTicks; return uPenaltyTicks*SNCPU_CYCLE_FAST;
 }
+Uint32 SNCPUSA1BusDMAPenaltyTicks(SNCpuT *pSA1Cpu, Uint8 uSourceDevice, Bool bDestBWRAM)
+{
+	Uint32 uLineUnits, uTick, uMask, uPenalty = 0;
+	Bool bROM, bBW, bIRAM;
+	if (!g_SNCPU_SA1BusTrackEnabled || !pSA1Cpu) return 0;
+	uLineUnits=(Uint32)SNCPUGetCounter(pSA1Cpu,SNCPU_COUNTER_LINE);
+	uTick=uLineUnits/SNCPU_CYCLE_FAST;
+	if (uTick>=SNCPU_SA1_BUS_TICK_MAX) return 0;
+	uMask=1u<<(uTick&31);
+	bROM=(g_SNCPU_SA1BusBits[SNCPU_SA1_BUS_ROM][uTick>>5]&uMask)?TRUE:FALSE;
+	bBW=(g_SNCPU_SA1BusBits[SNCPU_SA1_BUS_BWRAM][uTick>>5]&uMask)?TRUE:FALSE;
+	bIRAM=(g_SNCPU_SA1BusBits[SNCPU_SA1_BUS_IRAM][uTick>>5]&uMask)?TRUE:FALSE;
+
+	if (uSourceDevice==0 && !bDestBWRAM) {
+		if (bROM || bIRAM) uPenalty++;
+		if (bIRAM) uPenalty++;
+	} else if (uSourceDevice==0 && bDestBWRAM) {
+		if (bBW) uPenalty+=2;
+	} else if ((uSourceDevice==1 && !bDestBWRAM) ||
+	           (uSourceDevice==2 && bDestBWRAM)) {
+		if (bBW || bIRAM) uPenalty++;
+		if (bBW) uPenalty++;
+	}
+	g_SNCPU_SA1BusConflictTicks+=uPenalty;
+	return uPenalty;
+}
+
 Uint32 SNCPUSA1BusGetConflictTicks(void){return g_SNCPU_SA1BusConflictTicks;}
 Uint32 SNCPUSA1BusGetDroppedEvents(void){return g_SNCPU_SA1BusDroppedEvents;}
 
