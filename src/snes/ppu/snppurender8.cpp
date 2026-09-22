@@ -692,49 +692,54 @@ static void _FetchCHR2HiresPair_64(
 {
 	while (nTiles-- > 0)
 	{
+		const SNPPUBg8FlipT *pFlip = &_FlipTable8[pTiles->uFlip];
+		const SnesChrLookup64T *pLookup =
+			(const SnesChrLookup64T *)pFlip->pLookup;
 		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
-		Uint32 uRow = (uScrollY + pTiles->uOffsetY) & 7u;
+		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
+		Uint32 uRow = ((uScrollY + pTiles->uOffsetY) & 7u) ^
+			pFlip->uFlipXOR;
+		Uint32 uTileNo[2];
+		Uint64 uDecoded[2];
+		Uint8 *pDecoded0;
+		Uint8 *pDecoded1;
 		Uint8 uMainOpaque = 0;
 		Uint8 uSubOpaque = 0;
-		Uint8 uPalByte = (Uint8)pPalLookup[pTiles->uPal];
-		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
-		const SnesPPUTile2T *pTile[2];
-		Uint8 p0[2], p1[2];
+		Uint64 uPalette = pPalLookup[pTiles->uPal];
 		Int32 x;
 
-		if (pTiles->uFlip & 2u)
-			uRow ^= 7u;
+		/* H-flip reverses the full 16-dot cell: swap its two 8-dot CHR
+		   halves and use the normal 8-dot flip lookup within each half. */
+		uTileNo[0] = (uBaseTile + (bHFlip ? 1u : 0u)) & 0x03FFu;
+		uTileNo[1] = (uBaseTile + (bHFlip ? 0u : 1u)) & 0x03FFu;
 
-		pTile[0] = (const SnesPPUTile2T *)(pVram +
-			((uBaseAddr + uBaseTile * 8u) & 0x7FFFu));
-		pTile[1] = (const SnesPPUTile2T *)(pVram +
-			((uBaseAddr + ((uBaseTile + 1u) & 0x03FFu) * 8u) & 0x7FFFu));
-		p0[0] = pTile[0]->uPlane01[uRow][0];
-		p1[0] = pTile[0]->uPlane01[uRow][1];
-		p0[1] = pTile[1]->uPlane01[uRow][0];
-		p1[1] = pTile[1]->uPlane01[uRow][1];
-
-		for (x = 0; x < 8; ++x)
+		for (x = 0; x < 2; ++x)
 		{
-			Uint32 uSubPhysical = (Uint32)x << 1;
-			Uint32 uMainPhysical = uSubPhysical | (bMosaic ? 0u : 1u);
-			Uint32 uSubSource = bHFlip ? (15u - uSubPhysical) : uSubPhysical;
-			Uint32 uMainSource = bHFlip ? (15u - uMainPhysical) : uMainPhysical;
-			Uint32 uSubHalf = uSubSource >> 3;
-			Uint32 uMainHalf = uMainSource >> 3;
-			Uint32 uSubBit = 7u - (uSubSource & 7u);
-			Uint32 uMainBit = 7u - (uMainSource & 7u);
-			Uint8 uSubColor = (Uint8)(
-				((p0[uSubHalf] >> uSubBit) & 1u) |
-				(((p1[uSubHalf] >> uSubBit) & 1u) << 1));
-			Uint8 uMainColor = (Uint8)(
-				((p0[uMainHalf] >> uMainBit) & 1u) |
-				(((p1[uMainHalf] >> uMainBit) & 1u) << 1));
+			const SnesPPUTile2T *pTile =
+				(const SnesPPUTile2T *)(pVram +
+				 ((uBaseAddr + uTileNo[x] * 8u) & 0x7FFFu));
+			Uint32 p0 = pTile->uPlane01[uRow][0];
+			Uint32 p1 = pTile->uPlane01[uRow][1];
+			uDecoded[x] =
+				((*pLookup)[p0] | ((*pLookup)[p1] << 1)) | uPalette;
+		}
 
-			pSubDest[x] = (Uint8)(uPalByte | uSubColor);
-			pMainDest[x] = (Uint8)(uPalByte | uMainColor);
-			if (uSubColor) uSubOpaque |= (Uint8)(1u << x);
-			if (uMainColor) uMainOpaque |= (Uint8)(1u << x);
+		pDecoded0 = (Uint8 *)&uDecoded[0];
+		pDecoded1 = (Uint8 *)&uDecoded[1];
+		for (x = 0; x < 4; ++x)
+		{
+			Uint8 s0 = pDecoded0[x << 1];
+			Uint8 m0 = bMosaic ? s0 : pDecoded0[(x << 1) + 1];
+			Uint8 s1 = pDecoded1[x << 1];
+			Uint8 m1 = bMosaic ? s1 : pDecoded1[(x << 1) + 1];
+			pSubDest[x] = s0;
+			pMainDest[x] = m0;
+			pSubDest[x + 4] = s1;
+			pMainDest[x + 4] = m1;
+			if (s0 & 0x03u) uSubOpaque |= (Uint8)(1u << x);
+			if (m0 & 0x03u) uMainOpaque |= (Uint8)(1u << x);
+			if (s1 & 0x03u) uSubOpaque |= (Uint8)(1u << (x + 4));
+			if (m1 & 0x03u) uMainOpaque |= (Uint8)(1u << (x + 4));
 		}
 
 		pMainMask[0] = uMainOpaque;
@@ -743,7 +748,6 @@ static void _FetchCHR2HiresPair_64(
 		pSubMask[0] = uSubOpaque;
 		pSubMask[SNPPU_BGPLANE_SIZE] =
 			(pTiles->uPal & 8u) ? uSubOpaque : 0;
-
 		pMainDest += 8;
 		pSubDest += 8;
 		pMainMask++;
@@ -761,57 +765,57 @@ static void _FetchCHR4HiresPair_64(
 {
 	while (nTiles-- > 0)
 	{
+		const SNPPUBg8FlipT *pFlip = &_FlipTable8[pTiles->uFlip];
+		const SnesChrLookup64T *pLookup =
+			(const SnesChrLookup64T *)pFlip->pLookup;
 		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
-		Uint32 uRow = (uScrollY + pTiles->uOffsetY) & 7u;
+		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
+		Uint32 uRow = ((uScrollY + pTiles->uOffsetY) & 7u) ^
+			pFlip->uFlipXOR;
+		Uint32 uTileNo[2];
+		Uint64 uDecoded[2];
+		Uint8 *pDecoded0;
+		Uint8 *pDecoded1;
 		Uint8 uMainOpaque = 0;
 		Uint8 uSubOpaque = 0;
-		Uint8 uPalByte = (Uint8)_SnesPPU_Tile4PalLookup64[pTiles->uPal];
-		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
-		const SnesPPUTile4T *pTile[2];
-		Uint8 p0[2], p1[2], p2[2], p3[2];
+		Uint64 uPalette = _SnesPPU_Tile4PalLookup64[pTiles->uPal];
 		Int32 x;
 
-		if (pTiles->uFlip & 2u)
-			uRow ^= 7u;
+		uTileNo[0] = (uBaseTile + (bHFlip ? 1u : 0u)) & 0x03FFu;
+		uTileNo[1] = (uBaseTile + (bHFlip ? 0u : 1u)) & 0x03FFu;
 
-		pTile[0] = (const SnesPPUTile4T *)(pVram +
-			((uBaseAddr + uBaseTile * 16u) & 0x7FFFu));
-		pTile[1] = (const SnesPPUTile4T *)(pVram +
-			((uBaseAddr + ((uBaseTile + 1u) & 0x03FFu) * 16u) & 0x7FFFu));
-		p0[0] = pTile[0]->uPlane01[uRow][0];
-		p1[0] = pTile[0]->uPlane01[uRow][1];
-		p2[0] = pTile[0]->uPlane23[uRow][0];
-		p3[0] = pTile[0]->uPlane23[uRow][1];
-		p0[1] = pTile[1]->uPlane01[uRow][0];
-		p1[1] = pTile[1]->uPlane01[uRow][1];
-		p2[1] = pTile[1]->uPlane23[uRow][0];
-		p3[1] = pTile[1]->uPlane23[uRow][1];
-
-		for (x = 0; x < 8; ++x)
+		for (x = 0; x < 2; ++x)
 		{
-			Uint32 uSubPhysical = (Uint32)x << 1;
-			Uint32 uMainPhysical = uSubPhysical | (bMosaic ? 0u : 1u);
-			Uint32 uSubSource = bHFlip ? (15u - uSubPhysical) : uSubPhysical;
-			Uint32 uMainSource = bHFlip ? (15u - uMainPhysical) : uMainPhysical;
-			Uint32 uSubHalf = uSubSource >> 3;
-			Uint32 uMainHalf = uMainSource >> 3;
-			Uint32 uSubBit = 7u - (uSubSource & 7u);
-			Uint32 uMainBit = 7u - (uMainSource & 7u);
-			Uint8 uSubColor = (Uint8)(
-				((p0[uSubHalf] >> uSubBit) & 1u) |
-				(((p1[uSubHalf] >> uSubBit) & 1u) << 1) |
-				(((p2[uSubHalf] >> uSubBit) & 1u) << 2) |
-				(((p3[uSubHalf] >> uSubBit) & 1u) << 3));
-			Uint8 uMainColor = (Uint8)(
-				((p0[uMainHalf] >> uMainBit) & 1u) |
-				(((p1[uMainHalf] >> uMainBit) & 1u) << 1) |
-				(((p2[uMainHalf] >> uMainBit) & 1u) << 2) |
-				(((p3[uMainHalf] >> uMainBit) & 1u) << 3));
+			const SnesPPUTile4T *pTile =
+				(const SnesPPUTile4T *)(pVram +
+				 ((uBaseAddr + uTileNo[x] * 16u) & 0x7FFFu));
+			Uint32 p0 = pTile->uPlane01[uRow][0];
+			Uint32 p1 = pTile->uPlane01[uRow][1];
+			Uint32 p2 = pTile->uPlane23[uRow][0];
+			Uint32 p3 = pTile->uPlane23[uRow][1];
+			uDecoded[x] =
+				((*pLookup)[p0] |
+				 ((*pLookup)[p1] << 1) |
+				 ((*pLookup)[p2] << 2) |
+				 ((*pLookup)[p3] << 3)) | uPalette;
+		}
 
-			pSubDest[x] = (Uint8)(uPalByte | uSubColor);
-			pMainDest[x] = (Uint8)(uPalByte | uMainColor);
-			if (uSubColor) uSubOpaque |= (Uint8)(1u << x);
-			if (uMainColor) uMainOpaque |= (Uint8)(1u << x);
+		pDecoded0 = (Uint8 *)&uDecoded[0];
+		pDecoded1 = (Uint8 *)&uDecoded[1];
+		for (x = 0; x < 4; ++x)
+		{
+			Uint8 s0 = pDecoded0[x << 1];
+			Uint8 m0 = bMosaic ? s0 : pDecoded0[(x << 1) + 1];
+			Uint8 s1 = pDecoded1[x << 1];
+			Uint8 m1 = bMosaic ? s1 : pDecoded1[(x << 1) + 1];
+			pSubDest[x] = s0;
+			pMainDest[x] = m0;
+			pSubDest[x + 4] = s1;
+			pMainDest[x + 4] = m1;
+			if (s0 & 0x0Fu) uSubOpaque |= (Uint8)(1u << x);
+			if (m0 & 0x0Fu) uMainOpaque |= (Uint8)(1u << x);
+			if (s1 & 0x0Fu) uSubOpaque |= (Uint8)(1u << (x + 4));
+			if (m1 & 0x0Fu) uMainOpaque |= (Uint8)(1u << (x + 4));
 		}
 
 		pMainMask[0] = uMainOpaque;
@@ -820,7 +824,6 @@ static void _FetchCHR4HiresPair_64(
 		pSubMask[0] = uSubOpaque;
 		pSubMask[SNPPU_BGPLANE_SIZE] =
 			(pTiles->uPal & 8u) ? uSubOpaque : 0;
-
 		pMainDest += 8;
 		pSubDest += 8;
 		pMainMask++;
