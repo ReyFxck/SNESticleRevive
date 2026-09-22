@@ -1333,6 +1333,8 @@ void SnesSystem::Reset()
 
 	m_GSU.Reset();
 	m_SA1.Reset(TRUE);
+	m_SA1.SetVideoRegion(
+		m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE);
 
 	m_SDD1.Reset();
 
@@ -1373,7 +1375,11 @@ void SnesSystem::SoftReset()
 	SNCPUReset(&m_Cpu, false);
 	SNSPCReset(&m_Spc, false);
 	if (m_bSA1)
+	{
 		m_SA1.Reset(FALSE);
+		m_SA1.SetVideoRegion(
+			m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE);
+	}
 #if SNDBG_LOG
 	SnesDbgResetSession();
 	m_GSU.ClearDiagWindow();

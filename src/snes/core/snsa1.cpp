@@ -1,9 +1,9 @@
 /*
  * Experimental SA-1 support for SNESticle Revive.
  *
- * Phase 3 adds the first SA-1 hardware engines around the independent 65C816:
- * NMI/timer interrupt paths, RAM write protection, arithmetic, variable-length
- * bit processing and virtual bitmap BW-RAM. Normal/character DMA comes next.
+ * Experimental correctness-first SA-1 implementation around an independent
+ * 65C816 context. Hardware engines stay in readable C++ while timing, mapping
+ * and shared-bus behavior are validated before any SA-1-specific MIPS tuning.
  */
 
 #include <string.h>
@@ -36,6 +36,11 @@ void SNSA1::SetMemory(const Uint8 *pRom, Uint32 uRomBytes,
 	m_pBWRAM = pBWRAM;
 	m_uBWRAMBytes = uBWRAMBytes;
 	MapCpuMemory();
+}
+
+void SNSA1::SetVideoRegion(Bool bPAL)
+{
+	m_State.TimerScanlines = bPAL ? 312 : 262;
 }
 
 void SNSA1::SaveState(SA1SaveState *pState) const
@@ -109,6 +114,10 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.Registers[0x028] = 0x0F; // $2228: BW-RAM protected area
 	m_State.HCounter = 0;
 	m_State.VCounter = 0;
+	m_State.HCounterLatch = 0;
+	m_State.VCounterLatch = 0;
+	m_State.TimerScanlines = 262;
+	m_State.TimerRemainder = 0;
 	m_State.ArithmeticResult = 0;
 	m_State.ArithmeticOverflow = FALSE;
 	m_State.VariableData = 0;
@@ -169,25 +178,32 @@ Uint8 SNSA1::ReadRegister(Uint16 uAddr)
 	if (uAddr == 0x2301)
 		return (Uint8)((m_State.Registers[0x000] & 0x0F) |
 		               (m_State.Registers[0x101] & 0xF0));
-	if (uAddr == 0x2302 || uAddr == 0x2303)
+	if (uAddr == 0x2302)
 	{
-		Uint16 uH = (Uint16)(m_State.HCounter >> 2);
-		return (uAddr == 0x2302) ? (Uint8)uH : (Uint8)(uH >> 8);
+		m_State.HCounterLatch = (Uint16)(m_State.HCounter >> 2);
+		m_State.VCounterLatch = m_State.VCounter;
+		return (Uint8)m_State.HCounterLatch;
 	}
+	if (uAddr == 0x2303)
+		return (Uint8)(m_State.HCounterLatch >> 8);
 	if (uAddr == 0x2304 || uAddr == 0x2305)
-		return (uAddr == 0x2304) ? (Uint8)m_State.VCounter :
-		                            (Uint8)(m_State.VCounter >> 8);
+		return (uAddr == 0x2304) ? (Uint8)m_State.VCounterLatch :
+		                            (Uint8)(m_State.VCounterLatch >> 8);
 	if (uAddr >= 0x2306 && uAddr <= 0x230A)
 		return (Uint8)(m_State.ArithmeticResult >> ((uAddr - 0x2306) * 8));
 	if (uAddr == 0x230B)
 		return m_State.ArithmeticOverflow ? 0x80 : 0x00;
 	if (uAddr == 0x230C)
+	{
+		LoadVariableData();
 		return (Uint8)m_State.VariableData;
+	}
 	if (uAddr == 0x230D)
 	{
+		LoadVariableData();
 		uValue = (Uint8)(m_State.VariableData >> 8);
 		if (m_State.Registers[0x058] & 0x80)
-			UpdateVariableData(TRUE, FALSE);
+			IncrementVariablePosition();
 		return uValue;
 	}
 	if (uAddr == 0x230E)
@@ -272,7 +288,16 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 	case 0x2211:
 		m_State.HCounter = 0;
 		m_State.VCounter = 0;
+		m_State.TimerRemainder = 0;
 		m_State.TimerMatch = FALSE;
+		break;
+
+	case 0x2213:
+		m_State.Registers[0x013] &= 0x01;
+		break;
+
+	case 0x2215:
+		m_State.Registers[0x015] &= 0x01;
 		break;
 
 	case 0x2230:
@@ -281,8 +306,16 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		break;
 
 	case 0x2231:
-		if (uData & 0x80)
-			m_State.CC1Active = FALSE;
+		{
+			Uint8 uFormat = uData & 0x03;
+			Uint8 uWidth = (uData >> 2) & 0x07;
+			if (uFormat > 2) uFormat = 2;
+			if (uWidth > 5) uWidth = 5;
+			m_State.Registers[0x031] =
+				(Uint8)((uData & 0x80) | (uWidth << 2) | uFormat);
+			if (uData & 0x80)
+				m_State.CC1Active = FALSE;
+		}
 		break;
 
 	case 0x2236:
@@ -328,13 +361,14 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		break;
 
 	case 0x2258:
-		UpdateVariableData(TRUE, FALSE);
+		if (!(uData & 0x80))
+			IncrementVariablePosition();
 		break;
 	case 0x2259:
 	case 0x225A:
+		break;
 	case 0x225B:
 		m_State.VariableBitPos = 0;
-		UpdateVariableData(FALSE, TRUE);
 		break;
 
 	case 0x2220:
@@ -356,9 +390,10 @@ Uint8 SNSA1::ReadIRAM(Uint16 uAddr) const
 
 Bool SNSA1::CanWriteIRAM(Uint16 uAddr, Bool bSA1Side) const
 {
-	Uint8 uProtect = m_State.Registers[bSA1Side ? 0x02A : 0x029];
+	Uint8 uWriteEnable = m_State.Registers[bSA1Side ? 0x02A : 0x029];
 	Uint8 uPage = (Uint8)((uAddr & (SNSA1_IRAM_SIZE - 1)) >> 8);
-	return (uProtect & (1u << uPage)) ? FALSE : TRUE;
+	// SIWP/CIWP bits are per-256-byte write-enable bits: 1 = writable.
+	return (uWriteEnable & (1u << uPage)) ? TRUE : FALSE;
 }
 
 void SNSA1::WriteIRAM(Uint16 uAddr, Uint8 uData)
@@ -382,14 +417,15 @@ Uint32 SNSA1::MirrorBWRAM(Uint32 uOffset) const
 
 Bool SNSA1::CanWriteBWRAM(Uint32 uOffset, Bool bSA1Side) const
 {
-	Uint8 uEnable = m_State.Registers[bSA1Side ? 0x027 : 0x026];
 	Uint32 uProtected = 0x100u << (m_State.Registers[0x028] & 0x0F);
+	(void)bSA1Side;
 
-	if (!(uEnable & 0x80))
-		return FALSE;
+	// Hardware BWPA protection is active only while BOTH write-enable bits
+	// are clear. This detail is required by games such as Kirby's Dream Land 3.
+	if ((m_State.Registers[0x026] & 0x80) ||
+	    (m_State.Registers[0x027] & 0x80))
+		return TRUE;
 
-	// BWPA compares against the logical 256 KiB BW-RAM address before
-	// mirroring to the physically installed RAM.
 	uOffset &= 0x3FFFFu;
 	return (uOffset < uProtected) ? FALSE : TRUE;
 }
@@ -763,92 +799,134 @@ void SNSA1::ExecuteArithmetic()
 	m_State.ArithmeticOverflow = FALSE;
 }
 
-void SNSA1::UpdateVariableData(Bool bIncrement, Bool bNoShift)
+Uint8 SNSA1::ReadVariableBus(Uint32 uAddr)
+{
+	uAddr &= 0xFFFFFF;
+	Uint8 uBank = (Uint8)(uAddr >> 16);
+	Uint16 uLow = (Uint16)uAddr;
+	Bool bSystemBank = (uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF));
+
+	// VBR intentionally cannot access MMIO. ROM follows the active MMC map.
+	if ((bSystemBank && uLow >= 0x8000) || uBank >= 0xC0)
+		return SNCPURead8(&m_Cpu, uAddr);
+
+	if (bSystemBank && (uLow < 0x0800 ||
+	    (uLow >= 0x3000 && uLow <= 0x37FF)))
+		return m_IRAM[uLow & (SNSA1_IRAM_SIZE - 1)];
+
+	if (m_pBWRAM && m_uBWRAMBytes)
+	{
+		if (bSystemBank && uLow >= 0x6000 && uLow <= 0x7FFF)
+			return m_pBWRAM[MirrorBWRAM(uAddr)];
+		if (uBank >= 0x40 && uBank <= 0x4F)
+			return m_pBWRAM[MirrorBWRAM(uAddr & 0x0FFFFF)];
+	}
+
+	return 0;
+}
+
+void SNSA1::LoadVariableData()
 {
 	Uint32 uAddr = (Uint32)m_State.Registers[0x059] |
 	               ((Uint32)m_State.Registers[0x05A] << 8) |
 	               ((Uint32)m_State.Registers[0x05B] << 16);
-	Uint8 uShift = m_State.Registers[0x058] & 0x0F;
+	Uint32 uData = (Uint32)ReadVariableBus(uAddr) |
+	               ((Uint32)ReadVariableBus((uAddr + 1) & 0xFFFFFF) << 8) |
+	               ((Uint32)ReadVariableBus((uAddr + 2) & 0xFFFFFF) << 16);
+	m_State.VariableData = (Uint16)(uData >> m_State.VariableBitPos);
+}
+
+void SNSA1::IncrementVariablePosition()
+{
+	Uint8 uBits = m_State.Registers[0x058] & 0x0F;
+	Uint32 uAddr = (Uint32)m_State.Registers[0x059] |
+	               ((Uint32)m_State.Registers[0x05A] << 8) |
+	               ((Uint32)m_State.Registers[0x05B] << 16);
 	Uint8 uBit;
-	Uint32 uData;
 
-	if (bNoShift)
-		uShift = 0;
-	else if (!uShift)
-		uShift = 16;
+	if (!uBits)
+		uBits = 16;
 
-	uBit = (Uint8)(uShift + m_State.VariableBitPos);
-	if (uBit >= 16)
-	{
-		uAddr = (uAddr + ((Uint32)(uBit >> 4) << 1)) & 0xFFFFFF;
-		uBit &= 15;
-	}
-
-	uData = (Uint32)SNCPURead8(&m_Cpu, uAddr) |
-	        ((Uint32)SNCPURead8(&m_Cpu, (uAddr + 1) & 0xFFFFFF) << 8) |
-	        ((Uint32)SNCPURead8(&m_Cpu, (uAddr + 2) & 0xFFFFFF) << 16) |
-	        ((Uint32)SNCPURead8(&m_Cpu, (uAddr + 3) & 0xFFFFFF) << 24);
-	m_State.VariableData = (Uint16)(uData >> uBit);
-
-	if (bIncrement)
-	{
-		m_State.VariableBitPos = (Uint8)((m_State.VariableBitPos + uShift) & 15);
-		m_State.Registers[0x059] = (Uint8)uAddr;
-		m_State.Registers[0x05A] = (Uint8)(uAddr >> 8);
-		m_State.Registers[0x05B] = (Uint8)(uAddr >> 16);
-	}
+	uBit = (Uint8)(m_State.VariableBitPos + uBits);
+	uAddr = (uAddr + (uBit >> 3)) & 0xFFFFFF;
+	m_State.VariableBitPos = uBit & 7;
+	m_State.Registers[0x059] = (Uint8)uAddr;
+	m_State.Registers[0x05A] = (Uint8)(uAddr >> 8);
+	m_State.Registers[0x05B] = (Uint8)(uAddr >> 16);
 }
 
 void SNSA1::UpdateTimer(Uint32 uMasterCycles)
 {
-	Uint32 uLineClocks = (m_State.Registers[0x010] & 0x80) ?
-	                     0x800u : (Uint32)SNES_CYCLESPERLINE;
-	Uint32 uOldH = m_State.HCounter;
-	Uint16 uOldV = m_State.VCounter;
-	Uint16 uHCompare = (Uint16)(m_State.Registers[0x012] |
-	                           ((Uint16)(m_State.Registers[0x013] & 1) << 8));
-	Uint16 uVCompare = (Uint16)(m_State.Registers[0x014] |
-	                           ((Uint16)(m_State.Registers[0x015] & 1) << 8));
-	Uint32 uCompareMaster = (Uint32)uHCompare * 4u;
-	Bool bMatch = TRUE;
+	Uint32 uAdvance;
+	Uint32 uTotal;
+	Uint32 uLineClocks;
+	Uint32 uPeriod;
+	Uint32 uStart;
+	Uint32 uEnd;
+	Uint32 uDistance;
+	Uint16 uHCompare;
+	Uint16 uVCompare;
+	Bool bTriggered = FALSE;
+	Bool bLinear = (m_State.Registers[0x010] & 0x80) ? TRUE : FALSE;
+	Bool bH = (m_State.Registers[0x010] & 0x01) ? TRUE : FALSE;
+	Bool bV = (m_State.Registers[0x010] & 0x02) ? TRUE : FALSE;
 
-	m_State.HCounter += uMasterCycles;
-	while (m_State.HCounter >= uLineClocks)
+	// SA-1 timer counters advance on the same 2-master-clock cadence as the
+	// coprocessor. Preserve odd synchronization fragments for the next call.
+	uTotal = uMasterCycles + m_State.TimerRemainder;
+	uAdvance = (uTotal / 2u) * 2u;
+	m_State.TimerRemainder = (Uint8)(uTotal & 1u);
+	if (!uAdvance)
+		return;
+
+	uHCompare = (Uint16)(m_State.Registers[0x012] |
+	                    ((Uint16)(m_State.Registers[0x013] & 1) << 8));
+	uVCompare = (Uint16)(m_State.Registers[0x014] |
+	                    ((Uint16)(m_State.Registers[0x015] & 1) << 8));
+
+	if (bLinear)
 	{
-		m_State.HCounter -= uLineClocks;
-		m_State.VCounter++;
-		if (m_State.VCounter >= ((m_State.Registers[0x010] & 0x80) ?
-		                        0x200u : (Uint32)(SNES_CYCLESPERFRAME / SNES_CYCLESPERLINE)))
-			m_State.VCounter = 0;
+		uLineClocks = 0x800u;
+		uPeriod = uLineClocks * 0x200u;
+	}
+	else
+	{
+		uLineClocks = (Uint32)SNES_CYCLESPERLINE;
+		uPeriod = uLineClocks *
+		          (m_State.TimerScanlines ? m_State.TimerScanlines : 262u);
 	}
 
-	if (!(m_State.Registers[0x010] & 0x03))
-		bMatch = FALSE;
-	if (m_State.Registers[0x010] & 0x01)
+	uStart = ((Uint32)m_State.VCounter * uLineClocks +
+	          m_State.HCounter) % uPeriod;
+
+	if (bH && !bV)
 	{
-		Bool bCrossed = FALSE;
-		if (uMasterCycles >= uLineClocks)
-			bCrossed = (uCompareMaster < uLineClocks);
-		else if (m_State.HCounter >= uOldH)
-			bCrossed = (uCompareMaster >= uOldH && uCompareMaster < m_State.HCounter);
-		else
-			bCrossed = (uCompareMaster >= uOldH || uCompareMaster < m_State.HCounter);
-		if (!bCrossed)
-			bMatch = FALSE;
+		Uint32 uTargetH = ((Uint32)uHCompare * 4u) % uLineClocks;
+		uDistance = (uTargetH + uLineClocks -
+		             (m_State.HCounter % uLineClocks)) % uLineClocks;
+		if (!uDistance) uDistance = uLineClocks;
+		bTriggered = (uDistance <= uAdvance) ? TRUE : FALSE;
 	}
-	if (m_State.Registers[0x010] & 0x02)
+	else if (bV)
 	{
-		Bool bVSeen = (uOldV == uVCompare || m_State.VCounter == uVCompare);
-		if (!bVSeen)
-			bMatch = FALSE;
+		Uint32 uTargetH = bH ? (((Uint32)uHCompare * 4u) % uLineClocks) : 0u;
+		Uint32 uTarget = (((Uint32)uVCompare & 0x1FFu) * uLineClocks +
+		                  uTargetH) % uPeriod;
+		uDistance = (uTarget + uPeriod - uStart) % uPeriod;
+		if (!uDistance) uDistance = uPeriod;
+		bTriggered = (uDistance <= uAdvance) ? TRUE : FALSE;
 	}
 
-	if (bMatch && !m_State.TimerMatch)
+	uEnd = (uStart + uAdvance) % uPeriod;
+	m_State.VCounter = (Uint16)(uEnd / uLineClocks);
+	m_State.HCounter = uEnd % uLineClocks;
+
+	if (bTriggered)
 	{
 		m_State.Registers[0x101] |= 0x40;
 		UpdateIRQLine();
 	}
-	m_State.TimerMatch = bMatch;
+	m_State.TimerMatch = bTriggered;
 }
 
 Uint32 SNSA1::MirrorRomOffset(Uint32 uSize, Uint32 uPos)
@@ -917,13 +995,25 @@ void SNSA1::MapRomGroup(Uint32 uWhich, Uint8 uMap)
 
 void SNSA1::MapCpuMemory()
 {
-	Uint32 i;
+	Uint32 i, uBank;
 
 	SNCPUSetTrap(&m_Cpu, 0, SNCPU_MEM_SIZE, CpuReadTrap, CpuWriteTrap);
 	SNCPUSetMemSpeed(&m_Cpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_FAST);
 
 	for (i = 0; i < 4; i++)
 		MapRomGroup(i, m_State.Registers[0x020 + i]);
+
+	// ROM/I-RAM/MMIO run at one SA-1 tick; BW-RAM and bitmap accesses take
+	// two ticks (~5.37 MHz). SNCpu timing units use FAST=6 for one tick.
+	for (uBank = 0; uBank <= 0x3F; uBank++)
+	{
+		SNCPUSetMemSpeed(&m_Cpu, (uBank << 16) | 0x6000,
+		                  0x2000, SNCPU_CYCLE_FAST * 2);
+		SNCPUSetMemSpeed(&m_Cpu, ((uBank + 0x80) << 16) | 0x6000,
+		                  0x2000, SNCPU_CYCLE_FAST * 2);
+	}
+	SNCPUSetMemSpeed(&m_Cpu, 0x400000, 0x100000, SNCPU_CYCLE_FAST * 2);
+	SNCPUSetMemSpeed(&m_Cpu, 0x600000, 0x100000, SNCPU_CYCLE_FAST * 2);
 
 	SNCPUMirror24BitBus(&m_Cpu);
 }
@@ -936,7 +1026,8 @@ Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
 
 	if (bSystemBank)
 	{
-		if (uLow < 0x0800)
+		if (uLow < 0x0800 ||
+		    (uLow >= 0x3000 && uLow <= 0x37FF))
 			return ReadIRAM(uLow);
 		if (uLow >= 0x2200 && uLow <= 0x23FF)
 			return ReadRegister(uLow);
@@ -945,7 +1036,7 @@ Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
 		return 0xFF;
 	}
 
-	if (uBank >= 0x40 && uBank <= 0x5F)
+	if (uBank >= 0x40 && uBank <= 0x4F)
 		return ReadBWRAMDirect(uAddr);
 	if (uBank >= 0x60 && uBank <= 0x6F)
 		return ReadBitmap(uAddr & 0x0FFFFF);
@@ -961,7 +1052,8 @@ void SNSA1::WriteCpuBus(Uint32 uAddr, Uint8 uData)
 
 	if (bSystemBank)
 	{
-		if (uLow < 0x0800)
+		if (uLow < 0x0800 ||
+		    (uLow >= 0x3000 && uLow <= 0x37FF))
 		{
 			WriteIRAMSA1(uLow, uData);
 			return;
@@ -979,7 +1071,7 @@ void SNSA1::WriteCpuBus(Uint32 uAddr, Uint8 uData)
 		return;
 	}
 
-	if (uBank >= 0x40 && uBank <= 0x5F)
+	if (uBank >= 0x40 && uBank <= 0x4F)
 		WriteBWRAMDirectSA1(uAddr, uData);
 	else if (uBank >= 0x60 && uBank <= 0x6F)
 		WriteBitmap(uAddr & 0x0FFFFF, uData);

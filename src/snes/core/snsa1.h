@@ -34,12 +34,16 @@ struct SA1State
 	Uint16 LastResetVector;
 	Uint32 HCounter;
 	Uint16 VCounter;
+	Uint16 HCounterLatch;
+	Uint16 VCounterLatch;
+	Uint16 TimerScanlines;
 	Uint16 ArithmeticOp1;
 	Uint16 ArithmeticOp2;
 	Uint64 ArithmeticResult;
 	Uint16 VariableData;
 	Uint8  VariableBitPos;
 	Uint8  MasterRemainder;
+	Uint8  TimerRemainder;
 	Uint8  CharConvLine;
 	Bool   ArithmeticOverflow;
 	Bool   TimerMatch;
@@ -70,6 +74,7 @@ public:
 
 	void SetMemory(const Uint8 *pRom, Uint32 uRomBytes,
 	               Uint8 *pBWRAM, Uint32 uBWRAMBytes);
+	void SetVideoRegion(Bool bPAL);
 	void Reset(Bool bHardReset);
 	void SaveState(SA1SaveState *pState) const;
 	void RestoreState(const SA1SaveState *pState);
@@ -125,7 +130,9 @@ private:
 	Bool ServiceIRQ();
 	void UpdateTimer(Uint32 uMasterCycles);
 	void ExecuteArithmetic();
-	void UpdateVariableData(Bool bIncrement, Bool bNoShift);
+	Uint8 ReadVariableBus(Uint32 uAddr);
+	void LoadVariableData();
+	void IncrementVariablePosition();
 	void ExecuteDMA();
 	void StartCC1();
 	void ExecuteCC2();

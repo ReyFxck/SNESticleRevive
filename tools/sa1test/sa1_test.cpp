@@ -37,6 +37,7 @@ static void TestResetReleaseAndScheduler(void)
 	sa1.WriteRegister(0x2204, 0x12);
 	sa1.StepMasterCycles(1364);
 	CHECK(sa1.GetLastSliceCycles() == 0, "reset blocks scheduler credits");
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
 	CHECK(sa1.IsRunning(), "reset release starts scheduler");
 	CHECK(sa1.GetResetVector() == 0x1234, "reset vector");
@@ -55,6 +56,8 @@ static void TestIRAMAndBWRAM(void)
 	sa1.WriteRegister(0x2226, 0x80);
 	sa1.WriteRegister(0x2227, 0x80);
 	sa1.WriteRegister(0x2228, 0x00);
+	sa1.WriteRegister(0x2229, 0xFF);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteIRAM(0x0123, 0xA5);
 	CHECK(sa1.ReadIRAM(0x0123) == 0xA5, "I-RAM round trip");
 	sa1.WriteIRAM(0x0923, 0x5A);
@@ -81,32 +84,36 @@ static void TestWriteProtection(void)
 
 	SNSA1 sa1;
 	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
-	sa1.WriteRegister(0x2226, 0x80);
-	sa1.WriteRegister(0x2227, 0x80);
-	sa1.WriteRegister(0x2228, 0x00); // first 256 bytes protected
 
+	// With both write-enable bits clear, BWPA=0 protects the first $100 bytes.
+	sa1.WriteRegister(0x2228, 0x00);
 	sa1.WriteBWRAMDirect(0x400080, 0x11);
-	CHECK(bwram[0x0080] == 0x00, "BWPA must protect first 256 bytes");
+	CHECK(bwram[0x0080] == 0x00, "BWPA must protect first 256 bytes when SWEN/CWEN are clear");
 	sa1.WriteBWRAMDirect(0x400100, 0x22);
-	CHECK(bwram[0x0100] == 0x22, "S-CPU BW-RAM write enable above BWPA");
+	CHECK(bwram[0x0100] == 0x22, "BWPA must leave bytes at/above protection boundary writable");
 
+	// Either write-enable bit disables BWPA protection for both bus masters.
+	sa1.WriteRegister(0x2226, 0x80);
+	sa1.WriteBWRAMDirect(0x400080, 0x33);
+	CHECK(bwram[0x0080] == 0x33, "SWEN must allow S-CPU writes inside BWPA");
 	sa1.WriteRegister(0x2226, 0x00);
-	sa1.WriteBWRAMDirect(0x400100, 0x33);
-	CHECK(bwram[0x0100] == 0x22, "SBWE clear must block S-CPU BW-RAM writes");
+	sa1.WriteRegister(0x2227, 0x80);
+	SNCPUWrite8(sa1.GetCpu(), 0x400081, 0x44);
+	CHECK(bwram[0x0081] == 0x44, "CWEN must allow SA-1 writes inside BWPA");
 
-	sa1.WriteRegister(0x2229, 0x02);
-	sa1.WriteIRAM(0x0100, 0x44);
-	CHECK(sa1.ReadIRAM(0x0100) == 0x00, "SIWP must protect selected S-CPU I-RAM page");
-	sa1.WriteIRAM(0x0200, 0x55);
-	CHECK(sa1.ReadIRAM(0x0200) == 0x55, "SIWP must leave other pages writable");
+	// SIWP/CIWP bits are write enables, not protection bits.
+	sa1.WriteRegister(0x2229, 0xFD); // page 1 disabled, page 2 enabled
+	sa1.WriteIRAM(0x0100, 0x55);
+	CHECK(sa1.ReadIRAM(0x0100) == 0x00, "SIWP clear bit must block selected S-CPU I-RAM page");
+	sa1.WriteIRAM(0x0200, 0x66);
+	CHECK(sa1.ReadIRAM(0x0200) == 0x66, "SIWP set bit must enable selected S-CPU I-RAM page");
 
-	sa1.WriteRegister(0x222A, 0x04);
-	SNCPUWrite8(sa1.GetCpu(), 0x000200, 0x66);
-	CHECK(sa1.ReadIRAM(0x0200) == 0x55, "CIWP must protect selected SA-1 I-RAM page");
-	SNCPUWrite8(sa1.GetCpu(), 0x000300, 0x77);
-	CHECK(sa1.ReadIRAM(0x0300) == 0x77, "CIWP must leave other SA-1 pages writable");
+	sa1.WriteRegister(0x222A, 0xFB); // page 2 disabled, page 3 enabled
+	SNCPUWrite8(sa1.GetCpu(), 0x000200, 0x77);
+	CHECK(sa1.ReadIRAM(0x0200) == 0x66, "CIWP clear bit must block selected SA-1 I-RAM page");
+	SNCPUWrite8(sa1.GetCpu(), 0x000300, 0x88);
+	CHECK(sa1.ReadIRAM(0x0300) == 0x88, "CIWP set bit must enable selected SA-1 I-RAM page");
 }
-
 static void TestBitmapModes(void)
 {
 	Uint8 bwram[0x8000];
@@ -327,15 +334,26 @@ static void TestVariableLengthBit(void)
 	sa1.WriteRegister(0x225A, 0x80);
 	sa1.WriteRegister(0x225B, 0x00);
 	CHECK(sa1.ReadRegister(0x230C) == 0x34 && sa1.ReadRegister(0x230D) == 0x12,
-	      "VBR address writes must preload an unshifted word");
+	      "VBR address writes must expose an unshifted word");
 
-	sa1.WriteRegister(0x2258, 0x84); // auto mode, 4-bit fields
-	CHECK(sa1.ReadRegister(0x230C) == 0x23, "VBR 4-bit shift low byte");
-	CHECK(sa1.ReadRegister(0x230D) == 0x81, "VBR 4-bit shift high byte");
+	// Auto mode does not advance until VDPH is read.
+	sa1.WriteRegister(0x2258, 0x84);
+	CHECK(sa1.ReadRegister(0x230C) == 0x34, "VBR auto mode first low byte is unshifted");
+	CHECK(sa1.ReadRegister(0x230D) == 0x12, "VBR auto mode first high byte is unshifted");
+	CHECK(sa1.ReadRegister(0x230C) == 0x23 && sa1.ReadRegister(0x230D) == 0x81,
+	      "VBR auto mode must advance by four bits after high-port read");
+
+	// Four more bits cross one byte: VA increments by one and bit offset returns to 0.
 	CHECK(sa1.ReadRegister(0x230C) == 0x12 && sa1.ReadRegister(0x230D) == 0x78,
-	      "VBR auto mode must advance after reading the high port");
-}
+	      "VBR auto mode must carry bit position into the byte address");
 
+	// VBR must never expose SA-1 MMIO through $230C/$230D.
+	sa1.WriteRegister(0x2259, 0x00);
+	sa1.WriteRegister(0x225A, 0x22);
+	sa1.WriteRegister(0x225B, 0x00);
+	CHECK(sa1.ReadRegister(0x230C) == 0x00,
+	      "VBR reads from MMIO space must not recurse into SA-1 registers");
+}
 static void TestNMI(void)
 {
 	std::vector<Uint8> rom(0x200000, 0xEA);
@@ -355,6 +373,7 @@ static void TestNMI(void)
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2203, 0x00); sa1.WriteRegister(0x2204, 0x80);
 	sa1.WriteRegister(0x2205, 0x00); sa1.WriteRegister(0x2206, 0x82);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
 	sa1.StepMasterCycles(64);
 	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0, "NMI fixture must enter WAI");
@@ -384,6 +403,7 @@ static void TestTimerIRQ(void)
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2203, 0x00); sa1.WriteRegister(0x2204, 0x80);
 	sa1.WriteRegister(0x2207, 0x00); sa1.WriteRegister(0x2208, 0x81);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
 	sa1.StepMasterCycles(64);
 	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0, "timer fixture must enter WAI");
@@ -411,10 +431,11 @@ static void TestSaveStateRoundTrip(void)
 	SNSA1 sa1;
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2220, 0x82);
-	sa1.WriteRegister(0x2229, 0x00);
+	sa1.WriteRegister(0x2229, 0xFF);
 	sa1.WriteIRAM(0x0123, 0xA5);
 	sa1.WriteRegister(0x2203, 0x00);
 	sa1.WriteRegister(0x2204, 0x80);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
 	sa1.StepMasterCycles(32);
 	sa1.GetCpu()->Regs.rA.w = 0xBEEF;
@@ -496,6 +517,7 @@ static void TestInstructionExecution(void)
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2203, 0x00);
 	sa1.WriteRegister(0x2204, 0x80);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
 	sa1.StepMasterCycles(256);
 
@@ -532,6 +554,7 @@ static void TestIRQVector(void)
 	sa1.WriteRegister(0x2204, 0x80);
 	sa1.WriteRegister(0x2207, 0x00);
 	sa1.WriteRegister(0x2208, 0x81);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
 	sa1.StepMasterCycles(64);
 	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0,
@@ -543,6 +566,35 @@ static void TestIRQVector(void)
 	sa1.StepMasterCycles(256);
 	CHECK(sa1.ReadIRAM(0x0011) == 0x66,
 	      "SA-1 IRQ must use vector from $2207/$2208");
+}
+
+static void TestSA1BusMirrorsAndTimerLatch(void)
+{
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+	SNSA1 sa1;
+	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
+	sa1.WriteRegister(0x222A, 0xFF);
+
+	SNCPUWrite8(sa1.GetCpu(), 0x003123, 0x5A);
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x000123) == 0x5A,
+	      "SA-1 I-RAM must mirror at $3000-$37FF");
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x500000) == 0xFF,
+	      "$50-$5F must not decode as direct BW-RAM");
+
+	sa1.WriteRegister(0x2211, 0x00);
+	sa1.StepMasterCycles(40);
+	CHECK(sa1.ReadRegister(0x2302) == 10, "HCR low read must latch H counter in dots");
+	sa1.StepMasterCycles(8);
+	CHECK(sa1.ReadRegister(0x2303) == 0, "HCR high must use previous latch");
+	CHECK(sa1.ReadRegister(0x2304) == 0, "VCR must share HCR latch event");
+	CHECK(sa1.ReadRegister(0x2302) == 12, "new HCR low read must refresh latch");
+
+	sa1.SetVideoRegion(TRUE);
+	sa1.WriteRegister(0x2211, 0x00);
+	sa1.StepMasterCycles(SNES_CYCLESPERLINE * 262);
+	CHECK(sa1.GetState()->VCounter == 262,
+	      "PAL SA-1 timer must not wrap at NTSC 262-line boundary");
 }
 
 int main(void)
@@ -566,6 +618,7 @@ int main(void)
 	TestIRQVector();
 	TestNMI();
 	TestTimerIRQ();
+	TestSA1BusMirrorsAndTimerLatch();
 
 	if (g_Failures)
 	{
