@@ -125,6 +125,8 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.DMASource = 0;
 	m_State.DMADest = 0;
 	m_State.DMARemaining = 0;
+	m_State.DMAStallTicks = 0;
+	m_State.DMATransferredBytes = 0;
 	m_State.DMAWaitTicks = 0;
 	m_State.DMARunning = FALSE;
 	m_State.ArithmeticResult = 0;
@@ -761,6 +763,7 @@ void SNSA1::CompleteDMA()
 
 Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
 {
+	Uint32 uStartTicks = uSA1Ticks;
 	Uint8 uSource = m_State.Registers[0x030] & 0x03;
 	Bool bDestBWRAM = (m_State.Registers[0x030] & 0x04) ? TRUE : FALSE;
 	Uint8 uCost = (uSource == 0 && !bDestBWRAM) ? 1 : 2;
@@ -774,6 +777,7 @@ Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
 		if (uSA1Ticks < m_State.DMAWaitTicks)
 		{
 			m_State.DMAWaitTicks = (Uint8)(m_State.DMAWaitTicks - uSA1Ticks);
+			m_State.DMAStallTicks += uStartTicks;
 			return 0;
 		}
 
@@ -794,6 +798,7 @@ Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
 		m_State.DMASource = (m_State.DMASource + 1) & 0xFFFFFF;
 		m_State.DMADest = (m_State.DMADest + 1) & 0xFFFFFF;
 		m_State.DMARemaining--;
+		m_State.DMATransferredBytes++;
 
 		m_State.Registers[0x032] = (Uint8)m_State.DMASource;
 		m_State.Registers[0x033] = (Uint8)(m_State.DMASource >> 8);
@@ -808,6 +813,7 @@ Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
 			CompleteDMA();
 	}
 
+	m_State.DMAStallTicks += (uStartTicks - uSA1Ticks);
 	return uSA1Ticks;
 }
 

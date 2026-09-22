@@ -326,17 +326,18 @@ static void TestArithmetic(void)
 	      sa1.ReadRegister(0x230A) == 0xFF,
 	      "signed multiplication must produce 40-bit two's-complement result");
 
-	// signed dividend / unsigned divisor: -10 / 3 = -3 remainder 1.
+	// signed dividend / unsigned divisor uses a non-negative remainder:
+	// -10 = (-4 * 3) + 2.
 	sa1.WriteRegister(0x2250, 0x01);
 	sa1.WriteRegister(0x2251, 0xF6);
 	sa1.WriteRegister(0x2252, 0xFF);
 	sa1.WriteRegister(0x2253, 0x03);
 	sa1.WriteRegister(0x2254, 0x00);
-	CHECK(sa1.ReadRegister(0x2306) == 0xFD &&
+	CHECK(sa1.ReadRegister(0x2306) == 0xFC &&
 	      sa1.ReadRegister(0x2307) == 0xFF &&
-	      sa1.ReadRegister(0x2308) == 0x01 &&
+	      sa1.ReadRegister(0x2308) == 0x02 &&
 	      sa1.ReadRegister(0x2309) == 0x00,
-	      "division must expose signed quotient and unsigned remainder");
+	      "division must expose floor quotient with non-negative remainder");
 
 	// Negative division uses a non-negative remainder: -11 = (-4 * 3) + 1.
 	sa1.WriteRegister(0x2250, 0x01);

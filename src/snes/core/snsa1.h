@@ -28,8 +28,10 @@ struct SA1State
 	Uint64 MasterCycles;
 	Uint64 ScheduledCycles;
 	Uint64 ExecutedCycles;
+	Uint64 DMAStallTicks;
 	Uint32 LastSliceCycles;
 	Uint32 ExecutionSlices;
+	Uint32 DMATransferredBytes;
 	Uint32 ResetEpoch;
 	Uint16 LastResetVector;
 	Uint32 HCounter;

@@ -31,6 +31,7 @@ static Uint64 g_TmgWinSumM7   = 0;   // soma de ciclos do Mode-7 na janela
 static Uint64 g_TmgWinSumObj  = 0;   // soma de ciclos de sprites na janela
 static Uint64 g_TmgWinSumPPU  = 0;
 static Uint64 g_TmgWinSumCPU  = 0;
+static Uint64 g_TmgWinSumSA1  = 0;
 static Uint64 g_TmgWinSumGSU  = 0;
 static Uint64 g_TmgWinSumMDMA = 0;
 static Uint64 g_TmgWinSumHDMA = 0;
@@ -61,6 +62,7 @@ Uint32 g_TmgCycM7  = 0;
 Uint32 g_TmgCycObj = 0;
 Uint32 g_TmgCycPPU = 0;
 Uint32 g_TmgCycCPU = 0;
+Uint32 g_TmgCycSA1 = 0;
 Uint32 g_TmgCycGSU = 0;
 Uint32 g_TmgCycMDMA = 0;
 Uint32 g_TmgCycHDMA = 0;
@@ -216,6 +218,7 @@ static void SnesDbgResetWindow(void)
 	g_TmgWinSumObj = 0;
 	g_TmgWinSumPPU = 0;
 	g_TmgWinSumCPU = 0;
+	g_TmgWinSumSA1 = 0;
 	g_TmgWinSumGSU = 0;
 	g_TmgWinSumMDMA = 0;
 	g_TmgWinSumHDMA = 0;
@@ -451,7 +454,13 @@ void SnesSystem::SyncSA1To(Int32 nClock)
 	if (nClock <= m_nSA1LineClock)
 		return;
 
+#if SNDBG_LOG
+	Uint32 uSA1Start = ProfCtrGetCycle();
+#endif
 	m_SA1.StepMasterCycles(nClock - m_nSA1LineClock);
+#if SNDBG_LOG
+	g_TmgCycSA1 += ProfCtrGetCycle() - uSA1Start;
+#endif
 	m_nSA1LineClock = nClock;
 	RefreshSCPUIRQ();
 }
@@ -507,11 +516,17 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
 		{
 			pSnes->SyncSA1();
+#if SNDBG_LOG
+			g_DbgChipReads[SNDBG_CHIP_SA1]++;
+#endif
 			return pSnes->m_SA1.ReadRegister((Uint16)uAddr);
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x37FF)
 		{
 			pSnes->SyncSA1();
+#if SNDBG_LOG
+			g_DbgChipReads[SNDBG_CHIP_SA1]++;
+#endif
 			return pSnes->m_SA1.ReadIRAM((Uint16)(uAddr - 0x3000));
 		}
 	}
@@ -662,6 +677,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
 		{
 			pSnes->SyncSA1();
+#if SNDBG_LOG
+			g_DbgChipWrites[SNDBG_CHIP_SA1]++;
+#endif
 			pSnes->m_SA1.WriteRegister((Uint16)uAddr, uData);
 			if (uAddr >= 0x2220 && uAddr <= 0x2223)
 				pSnes->RemapSA1ROM((Uint32)(uAddr - 0x2220), uData);
@@ -671,6 +689,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		if (uAddr >= 0x3000 && uAddr <= 0x37FF)
 		{
 			pSnes->SyncSA1();
+#if SNDBG_LOG
+			g_DbgChipWrites[SNDBG_CHIP_SA1]++;
+#endif
 			pSnes->m_SA1.WriteIRAM((Uint16)(uAddr - 0x3000), uData);
 			return;
 		}
@@ -1263,6 +1284,9 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr)
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 	Uint8 uBank = (Uint8)(uAddr >> 16);
 	pSnes->SyncSA1();
+#if SNDBG_LOG
+	g_DbgChipReads[SNDBG_CHIP_SA1]++;
+#endif
 	if (uBank >= 0x40 && uBank <= 0x4F)
 		return pSnes->m_SA1.ReadBWRAMDirect(uAddr);
 	return pSnes->m_SA1.ReadBWRAMWindow((Uint16)uAddr);
@@ -1273,6 +1297,9 @@ void SNCPU_TRAPFUNC SnesSystem::WriteSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr, Uint8 
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 	Uint8 uBank = (Uint8)(uAddr >> 16);
 	pSnes->SyncSA1();
+#if SNDBG_LOG
+	g_DbgChipWrites[SNDBG_CHIP_SA1]++;
+#endif
 	if (uBank >= 0x40 && uBank <= 0x4F)
 		pSnes->m_SA1.WriteBWRAMDirect(uAddr, uData);
 	else
@@ -1966,6 +1993,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	g_TmgCycObj = 0;
 	g_TmgCycPPU = 0;
 	g_TmgCycCPU = 0;
+	g_TmgCycSA1 = 0;
 	g_TmgCycGSU = 0;
 	g_TmgCycMDMA = 0;
 	g_TmgCycHDMA = 0;
@@ -2129,6 +2157,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 		g_TmgWinSumObj += g_TmgCycObj;
 		g_TmgWinSumPPU += g_TmgCycPPU;
 		g_TmgWinSumCPU += g_TmgCycCPU;
+		g_TmgWinSumSA1 += g_TmgCycSA1;
 		g_TmgWinSumGSU += g_TmgCycGSU;
 		g_TmgWinSumMDMA += g_TmgCycMDMA;
 		g_TmgWinSumHDMA += g_TmgCycHDMA;
@@ -2251,6 +2280,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			Uint32 pObj  = (Uint32)(((Uint64)g_TmgWinSumObj * 100u) / sum);
 			Uint32 pPPU  = (Uint32)(((Uint64)g_TmgWinSumPPU * 100u) / sum);
 			Uint32 pCPU  = (Uint32)(((Uint64)g_TmgWinSumCPU * 100u) / sum);
+			Uint32 pSA1  = (Uint32)(((Uint64)g_TmgWinSumSA1 * 100u) / sum);
 			Uint32 pGSU  = (Uint32)(((Uint64)g_TmgWinSumGSU * 100u) / sum);
 			Uint32 pMDMA = (Uint32)(((Uint64)g_TmgWinSumMDMA * 100u) / sum);
 			Uint32 pHDMA = (Uint32)(((Uint64)g_TmgWinSumHDMA * 100u) / sum);
@@ -2292,12 +2322,12 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_TmgWinMaxCyc, (unsigned)g_TmgWinSlowFrames,
 				(unsigned)SNDBG_SLOW_PERCENT,
 				(unsigned)(fps10 / 10), (unsigned)(fps10 % 10));
-			DLog("[snes-perf] diag=%s f=%u avg=%u capacity=%u.%u fps peak=%u%% cpu=%u%% ppu=%u%% gsu=%u%% apu=%u%% mix=%u%% mdma=%u%% hdma=%u%%",
+			DLog("[snes-perf] diag=%s f=%u avg=%u capacity=%u.%u fps peak=%u%% cpu=%u%% ppu=%u%% sa1=%u%% gsu=%u%% apu=%u%% mix=%u%% mdma=%u%% hdma=%u%%",
 				SNDBG_DEEP ? "deep" : "general",
 				(unsigned)g_TmgFrameNo, (unsigned)avg,
 				(unsigned)(fps10 / 10), (unsigned)(fps10 % 10),
 				(unsigned)ratio,
-				(unsigned)pCPU, (unsigned)pPPU, (unsigned)pGSU,
+				(unsigned)pCPU, (unsigned)pPPU, (unsigned)pSA1, (unsigned)pGSU,
 				(unsigned)pAPU, (unsigned)pMix, (unsigned)pMDMA,
 				(unsigned)pHDMA);
 			DLog("[snes-render] bg+compose=%u%% mode7=%u%% obj=%u%% blend=%u%% dsp=%u/%u hirq=%d..%d n=%u rearm/instant=%u/%u",
@@ -2500,6 +2530,35 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)m_Cpu.Regs.rP, (unsigned)m_Cpu.Regs.rE,
 				(unsigned)m_Cpu.uSignal, (unsigned)m_Spc.Regs.rPC,
 				(unsigned)m_Spc.Regs.rPSW);
+			if (m_bSA1)
+			{
+				const SA1State *pSA1 = m_SA1.GetState();
+				const SNCpuT *pSA1Cpu = m_SA1.GetCpu();
+				Uint32 uPC = pSA1Cpu->Regs.rPC & 0xFFFFFFu;
+				const SNCpuBankT *pBank = &pSA1Cpu->Bank[uPC >> SNCPU_BANK_SHIFT];
+				Uint8 uOpcode = pBank->pMem ? pBank->pMem[uPC] : 0xFF;
+				DLog("[snes-sa1] io-rw=%u/%u pc/op/p/e/a/x/y=%06X/%02X/%02X/%u/%04X/%04X/%04X run=%u sig=%02X ticks sched/exec=%u/%u slices=%u dma run/rem/bytes/stall=%u/%u/%u/%u",
+					(unsigned)g_DbgChipReads[SNDBG_CHIP_SA1],
+					(unsigned)g_DbgChipWrites[SNDBG_CHIP_SA1],
+					(unsigned)uPC, (unsigned)uOpcode,
+					(unsigned)pSA1Cpu->Regs.rP, (unsigned)pSA1Cpu->Regs.rE,
+					(unsigned)pSA1Cpu->Regs.rA.w, (unsigned)pSA1Cpu->Regs.rX.w,
+					(unsigned)pSA1Cpu->Regs.rY.w, (unsigned)pSA1->Running,
+					(unsigned)pSA1Cpu->uSignal,
+					(unsigned)pSA1->ScheduledCycles, (unsigned)pSA1->ExecutedCycles,
+					(unsigned)pSA1->ExecutionSlices, (unsigned)pSA1->DMARunning,
+					(unsigned)pSA1->DMARemaining, (unsigned)pSA1->DMATransferredBytes,
+					(unsigned)pSA1->DMAStallTicks);
+				DLog("[snes-sa1] irq sfr/cfr/cie/sie=%02X/%02X/%02X/%02X timer h/v=%u/%u bw map-s/map-c/ctrl=%02X/%02X/%02X mmc=%02X/%02X/%02X/%02X",
+					(unsigned)((pSA1->Registers[0x009] & 0x5F) | (pSA1->Registers[0x100] & 0xA0)),
+					(unsigned)((pSA1->Registers[0x000] & 0x0F) | (pSA1->Registers[0x101] & 0xF0)),
+					(unsigned)pSA1->Registers[0x00A], (unsigned)pSA1->Registers[0x001],
+					(unsigned)(pSA1->HCounter >> 2), (unsigned)pSA1->VCounter,
+					(unsigned)pSA1->Registers[0x024], (unsigned)pSA1->Registers[0x025],
+					(unsigned)pSA1->Registers[0x030],
+					(unsigned)pSA1->Registers[0x020], (unsigned)pSA1->Registers[0x021],
+					(unsigned)pSA1->Registers[0x022], (unsigned)pSA1->Registers[0x023]);
+			}
 			#if SNDBG_DEEP
 			{
 				Uint32 uTopReg[4] = {0,0,0,0};

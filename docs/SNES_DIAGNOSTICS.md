@@ -46,7 +46,7 @@ throughput ceiling instead of making the logger itself steal frame time:
 | Tag | Meaning |
 |---|---|
 | `[snes-frame]` | ROM region, physical 50/60 Hz host target, EE Count budget, min/average/max cycles, slow-frame count and estimated compute capacity. |
-| `[snes-perf]` | Inclusive CPU, PPU, GSU, APU, mixer, MDMA and HDMA time. Inclusive percentages can overlap. |
+| `[snes-perf]` | Inclusive CPU, PPU, SA-1, GSU, APU, mixer, MDMA and HDMA time. Inclusive percentages can overlap. |
 | `[snes-ppu-stage]` | PPU sync, BG register decode, offset-per-tile, map, CHR, main/sub composition and color-math cost. |
 | `[snes-ppu-modes]` | Visible rendered lines in modes 0 through 7, mode transitions and forced blank. |
 | `[snes-ppu-layers]` | Main-screen, sub-screen and actually fetched BG1-BG4 lines. |
@@ -57,7 +57,8 @@ throughput ceiling instead of making the logger itself steal frame time:
 | `[snes-audio]` | Mixer requests, sample range and zero-sample anomalies; this is not an audsrv underrun claim. |
 | `[snes-cart]` | Video type, mapping, flags and DSP/GSU/OBC1/CX4/S-DD1/S-RTC register traffic. |
 | `[snes-sdd1]` | Bounded S-DD1 DMA/decompression, remap and unmapped-source totals; per-DMA text is deep-capture only. |
-| `[snes-core-state]` | Final 65816 and SPC700 execution state for the window, useful for comparing freezes. |
+| `[snes-core-state]` | Final S-CPU 65816 and SPC700 execution state for the window, useful for comparing freezes. |
+| `[snes-sa1]` | SA-1 register traffic, PC/opcode/registers, run/signal state, scheduled/executed ticks, DMA progress/stall ticks, IRQ flags, timer counters, BW-RAM maps and MMC banks. |
 | `[snes-gsu]` | SuperFX job state; per-instruction details require level 2. |
 
 `capacity` is the speed of the measured emulation work on the EE, not the

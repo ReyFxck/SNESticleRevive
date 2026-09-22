@@ -55,7 +55,8 @@
 #define SNDBG_CHIP_CX4           3u
 #define SNDBG_CHIP_SDD1          4u
 #define SNDBG_CHIP_SRTC          5u
-#define SNDBG_CHIP_COUNT         6u
+#define SNDBG_CHIP_SA1           6u
+#define SNDBG_CHIP_COUNT         7u
 
 _INLINE Uint32 SnesDbgFrameBudget(Uint32 uTargetHz)
 {
@@ -83,6 +84,7 @@ extern Uint32 g_TmgCycM7;    // ciclos no _FetchMode7 (Mode-7)
 extern Uint32 g_TmgCycObj;   // ciclos em FetchOBJ + RenderOBJ8 (sprites)
 extern Uint32 g_TmgCycPPU;   // RenderLine completo
 extern Uint32 g_TmgCycCPU;   // loop 65816 por scanline (inclusivo)
+extern Uint32 g_TmgCycSA1;   // sincronizacao/execucao SA-1
 extern Uint32 g_TmgCycGSU;   // execucao SuperFX/GSU
 extern Uint32 g_TmgCycMDMA;  // DMA geral (inclui uploads de OAM/VRAM)
 extern Uint32 g_TmgCycHDMA;  // HDMA por scanline
