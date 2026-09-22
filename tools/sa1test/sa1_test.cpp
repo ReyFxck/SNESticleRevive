@@ -45,10 +45,16 @@ static void TestResetReleaseAndScheduler(void)
 	sa1.WriteRegister(0x2204, 0x12);
 	sa1.StepMasterCycles(1364);
 	CHECK(sa1.GetLastSliceCycles() == 0, "reset blocks scheduler credits");
+	CHECK(SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME) ==
+	      682 * SNCPU_CYCLE_FAST,
+	      "SA-1 internal clock must free-run while reset is asserted");
 	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
 	CHECK(sa1.ReadRegister(0x222A) == 0x00,
 	      "reset release must clear SA-1 CIWP");
+	CHECK(SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME) ==
+	      682 * SNCPU_CYCLE_FAST,
+	      "reset release must preserve the free-running SA-1 clock epoch");
 	CHECK(sa1.IsRunning(), "reset release starts scheduler");
 	CHECK(sa1.GetResetVector() == 0x1234, "reset vector");
 	CHECK(sa1.GetCpu()->Regs.rPC == 0x1234, "SA-1 PC must start at $2203/$2204");

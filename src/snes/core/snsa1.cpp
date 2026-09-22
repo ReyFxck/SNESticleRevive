@@ -176,10 +176,22 @@ Uint16 SNSA1::GetSCPUIRQVector() const
 
 void SNSA1::ReleaseCPUReset()
 {
+	Uint32 uElapsedTicks;
+	Int32 nElapsedUnits;
+
 	// Releasing CCNT.RESET resets the SA-1-side I-RAM write-enable mask.
 	// Software must reprogram CIWP ($222A) after the CPU leaves reset.
 	m_State.Registers[0x02A] = 0;
+
+	// Reset the architectural CPU state, but keep its clock on the same
+	// free-running epoch as the rest of the SA-1. MesenCE resets the SA-1 CPU
+	// here and then aligns its cycle count to the current master clock / 2.
+	uElapsedTicks = (Uint32)(m_State.MasterCycles / SNSA1_MASTER_PER_TICK);
+	nElapsedUnits = (Int32)(uElapsedTicks * SNCPU_CYCLE_FAST);
 	ResetCPUContext();
+	for (Int32 i = 0; i < SNCPU_COUNTER_NUM; i++)
+		m_Cpu.Counter[i] = nElapsedUnits;
+
 	m_State.LastResetVector = GetResetVector();
 	m_State.ResetEpoch++;
 	m_State.MasterRemainder = 0;
