@@ -31,6 +31,7 @@
 
 extern "C" {
 #include "gpprim.h"
+#include "gs.h"
 };
 
 extern "C" {
