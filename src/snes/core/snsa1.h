@@ -129,6 +129,7 @@ public:
 	Bool   IsDMARunning() const { return m_State.DMARunning; }
 	Uint16 GetResetVector() const;
 	Uint32 GetLastSliceCycles() const { return m_State.LastSliceCycles; }
+	Uint64 GetIdleFastForwardTicks() const { return m_uIdleFastForwardTicks; }
 	const SA1State *GetState() const { return &m_State; }
 	SNCpuT *GetCpu() { return &m_Cpu; }
 	const SNCpuT *GetCpu() const { return &m_Cpu; }
@@ -147,6 +148,8 @@ private:
 	void RunScheduled(Uint32 uSA1Cycles);
 	Bool ExecuteCpuC();
 	Bool ExecuteCpuFast();
+	Bool TryFastForwardIdleLoop();
+	Bool PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const;
 	Bool ServiceNMI();
 	Bool ServiceIRQ();
 	void UpdateTimer(Uint32 uMasterCycles);

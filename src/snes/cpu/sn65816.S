@@ -1069,8 +1069,9 @@ _SNCPU_Read8SA1IRAM:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		sll		t0,t0,4
 		addu		t0,t0,R_pCpu
+		addiu		t2,zr,SNCPU_CYCLE_FAST
 		b		_SNCPU_Read8Trap
-		subu		R_Cycles,R_Cycles,SNCPU_CYCLE_FAST
+		subu		R_Cycles,R_Cycles,t2
 
 _SNCPU_Read8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr

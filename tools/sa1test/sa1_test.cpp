@@ -896,6 +896,54 @@ static void TestMMCMapping(void)
 	      "MMC bit 7 must remap the matching LoROM window");
 }
 
+static void TestIdlePollingFastForward(void)
+{
+	std::vector<Uint8> rom(0x200000, 0xEA);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	// Generic stable poll: LDA $00 ; BEQ back to LDA.
+	rom[0x0000] = 0xA5;
+	rom[0x0001] = 0x00;
+	rom[0x0002] = 0xF0;
+	rom[0x0003] = 0xFC;
+	rom[0x0004] = 0xDB;
+
+	SNSA1 sa1;
+	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2203, 0x00);
+	sa1.WriteRegister(0x2204, 0x80);
+	sa1.WriteRegister(0x2200, 0x00);
+
+	// Establish the state that one completed polling iteration would leave.
+	sa1.GetCpu()->Regs.rA.w = 0x7F00;
+	sa1.GetCpu()->Regs.rP |= SNCPU_FLAG_Z | SNCPU_FLAG_M;
+	sa1.GetCpu()->Regs.rP &= (Uint8)~SNCPU_FLAG_N;
+
+	Int32 nStart = SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME);
+	sa1.StepMasterCycles(200);
+	CHECK((sa1.GetCpu()->Regs.rPC & 0xFFFF) == 0x8000,
+	      "stable I-RAM polling fast-forward must preserve loop PC");
+	CHECK((sa1.GetCpu()->Regs.rA.w & 0x00FF) == 0 &&
+	      (sa1.GetCpu()->Regs.rP & SNCPU_FLAG_Z),
+	      "stable polling fast-forward must preserve A/N/Z state");
+	CHECK(SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME) - nStart ==
+	      100 * SNCPU_CYCLE_FAST,
+	      "idle fast-forward must advance the full SA-1 clock slice");
+	CHECK(sa1.GetIdleFastForwardTicks() == 100,
+	      "stable polling loop should fast-forward all scheduled ticks");
+
+	// Once the shared byte changes, the branch is no longer taken and the
+	// optimizer must stand down so execution can leave the loop normally.
+	sa1.WriteRegister(0x222A, 0xFF);
+	sa1.WriteIRAM(0x0000, 0x01);
+	sa1.StepMasterCycles(128);
+	CHECK(sa1.GetIdleFastForwardTicks() == 100,
+	      "changed I-RAM polling value must disable fast-forward");
+	CHECK((sa1.GetCpu()->Regs.rPC & 0xFFFF) != 0x8000,
+	      "changed polling value must allow SA-1 to leave the idle loop");
+}
+
 static void TestInstructionExecution(void)
 {
 	std::vector<Uint8> rom(0x200000, 0xEA);
@@ -1052,6 +1100,7 @@ int main(void)
 	TestVariableLengthBit();
 	TestSaveStateRoundTrip();
 	TestMMCMapping();
+	TestIdlePollingFastForward();
 	TestInstructionExecution();
 	TestIndependentCBackend();
 	TestIRQVector();

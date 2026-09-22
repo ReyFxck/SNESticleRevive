@@ -32,6 +32,7 @@ SNSA1::SNSA1()
 	m_uRomBytes = 0;
 	m_pBWRAM = NULL;
 	m_uBWRAMBytes = 0;
+	m_uIdleFastForwardTicks = 0;
 	SNCPUNew(&m_Cpu);
 	m_Cpu.pUserData = this;
 	Reset(TRUE);
@@ -148,6 +149,7 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.CharConvLine = 0;
 	m_State.CC1Active = FALSE;
 	m_State.Running = FALSE;
+	m_uIdleFastForwardTicks = 0;
 
 	ResetCPUContext();
 	MapCpuMemory();
@@ -1454,6 +1456,92 @@ Bool SNSA1::ExecuteCpuFast()
 #endif
 }
 
+Bool SNSA1::PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const
+{
+	const SNCpuBankT *pBank;
+	uAddr &= 0xFFFFFFu;
+	pBank = &m_Cpu.Bank[uAddr >> SNCPU_BANK_SHIFT];
+	if (!pValue || !pBank->pMem)
+		return FALSE;
+	*pValue = pBank->pMem[uAddr];
+	return TRUE;
+}
+
+Bool SNSA1::TryFastForwardIdleLoop()
+{
+	Uint32 uPC;
+	Uint32 uTarget;
+	Uint16 uDirect;
+	Uint16 uIRAM;
+	Uint8 uOp0, uArg, uBranch, uRel;
+	Uint8 uValue;
+	Bool bZero;
+	Bool bNegative;
+	Bool bBranchTaken;
+	Uint32 uSkippedUnits;
+
+	/* This optimization is deliberately narrow: a two-instruction LDA dp /
+	   BEQ-or-BNE polling loop in mapped program ROM, reading only SA-1 I-RAM.
+	   S-CPU accesses to shared I-RAM synchronize SA-1 first, so while one
+	   scheduler slice is executing this byte cannot change externally. */
+	if (m_State.DMARunning || m_State.ArithmeticPending ||
+	    m_State.NMIPending || m_State.TimerMatch ||
+	    (m_Cpu.uSignal & (SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_NMI |
+	                      SNCPU_SIGNAL_NMIEDGE | SNCPU_SIGNAL_WAI |
+	                      SNCPU_SIGNAL_STP)))
+		return FALSE;
+
+	/* Keep the first version 8-bit-accumulator only. That is the hot SA-1
+	   polling form observed in SMRPG and avoids inventing 16-bit boundary
+	   semantics in the optimizer. */
+	if (!(m_Cpu.Regs.rP & SNCPU_FLAG_M))
+		return FALSE;
+
+	uPC = m_Cpu.Regs.rPC & 0xFFFFFFu;
+	if (!PeekMappedCpuByte(uPC + 0, &uOp0) ||
+	    !PeekMappedCpuByte(uPC + 1, &uArg) ||
+	    !PeekMappedCpuByte(uPC + 2, &uBranch) ||
+	    !PeekMappedCpuByte(uPC + 3, &uRel))
+		return FALSE;
+
+	if (uOp0 != 0xA5 || (uBranch != 0xF0 && uBranch != 0xD0))
+		return FALSE;
+
+	uTarget = (uPC & 0xFF0000u) |
+	          (((uPC + 4u) + (Int8)uRel) & 0xFFFFu);
+	if (uTarget != uPC)
+		return FALSE;
+
+	uDirect = (Uint16)(m_Cpu.Regs.rDP + uArg);
+	if (uDirect < 0x0800)
+		uIRAM = uDirect;
+	else if (uDirect >= 0x3000 && uDirect < 0x3800)
+		uIRAM = (Uint16)(uDirect & 0x07FF);
+	else
+		return FALSE;
+
+	uValue = m_IRAM[uIRAM];
+	bZero = (uValue == 0) ? TRUE : FALSE;
+	bNegative = (uValue & 0x80) ? TRUE : FALSE;
+	bBranchTaken = (uBranch == 0xF0) ? bZero : !bZero;
+	if (!bBranchTaken)
+		return FALSE;
+
+	/* We must already be at the architectural state produced by one completed
+	   polling iteration. Otherwise execute normally once to establish A/N/Z. */
+	if ((Uint8)m_Cpu.Regs.rA.w != uValue)
+		return FALSE;
+	if (((m_Cpu.Regs.rP & SNCPU_FLAG_Z) ? TRUE : FALSE) != bZero)
+		return FALSE;
+	if (((m_Cpu.Regs.rP & SNCPU_FLAG_N) ? TRUE : FALSE) != bNegative)
+		return FALSE;
+
+	uSkippedUnits = (m_Cpu.Cycles > 0) ? (Uint32)m_Cpu.Cycles : 0;
+	m_uIdleFastForwardTicks += uSkippedUnits / SNCPU_CYCLE_FAST;
+	m_Cpu.Cycles = 0;
+	return TRUE;
+}
+
 void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 {
 	Int32 nExecUnits;
@@ -1488,6 +1576,9 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 	{
 		ServiceNMI();
 		ServiceIRQ();
+
+		if (TryFastForwardIdleLoop())
+			break;
 
 		if ((m_Cpu.uSignal & SNCPU_SIGNAL_STP) ||
 		    ((m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
