@@ -310,6 +310,26 @@ static void TestNormalDMA(void)
 	sa1.StepMasterCycles(8);
 	CHECK(bwram[0x0300] == 0x5A && bwram[0x0301] == 0xC3,
 	      "normal DMA must copy I-RAM to BW-RAM on scheduled time");
+
+	// BWRAM -> BWRAM is an invalid device pair: addresses/DTC advance, but
+	// memory is untouched and no scheduled DMA stall is created.
+	bwram[0x0400] = 0x9A;
+	sa1.WriteRegister(0x220B, 0x20);
+	sa1.WriteRegister(0x2230, 0x85);
+	sa1.WriteRegister(0x2232, 0x00);
+	sa1.WriteRegister(0x2233, 0x04);
+	sa1.WriteRegister(0x2234, 0x00);
+	sa1.WriteRegister(0x2238, 1);
+	sa1.WriteRegister(0x2239, 0);
+	sa1.WriteRegister(0x2235, 0x10);
+	sa1.WriteRegister(0x2236, 0x04);
+	sa1.WriteRegister(0x2237, 0x00);
+	CHECK(!sa1.IsDMARunning(), "invalid DMA pair must complete without scheduled bus work");
+	CHECK(bwram[0x0410] == 0x00, "invalid DMA pair must not write destination memory");
+	CHECK(sa1.ReadRegister(0x2232) == 0x01 &&
+	      sa1.ReadRegister(0x2235) == 0x11 &&
+	      sa1.ReadRegister(0x2238) == 0x00,
+	      "invalid DMA pair must still consume DTC and advance DSA/DDA");
 }
 static void TestArithmetic(void)
 {

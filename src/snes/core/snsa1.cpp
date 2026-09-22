@@ -730,6 +730,34 @@ void SNSA1::StartDMA()
 	m_State.DMAWaitTicks = 0;
 	m_State.DMARunning = m_State.DMARemaining ? TRUE : FALSE;
 
+	if (m_State.DMARunning)
+	{
+		Uint8 uSource = m_State.Registers[0x030] & 0x03;
+		Bool bDestBWRAM = (m_State.Registers[0x030] & 0x04) ? TRUE : FALSE;
+		Bool bValidPair =
+			(uSource == 0) ||
+			(uSource == 1 && !bDestBWRAM) ||
+			(uSource == 2 && bDestBWRAM);
+
+		if (!bValidPair)
+		{
+			// Invalid source/destination combinations still consume DTC and
+			// advance DSA/DDA, but no bus transfer or DMA step occurs.
+			m_State.DMASource =
+				(m_State.DMASource + m_State.DMARemaining) & 0xFFFFFF;
+			m_State.DMADest =
+				(m_State.DMADest + m_State.DMARemaining) & 0xFFFFFF;
+			m_State.Registers[0x032] = (Uint8)m_State.DMASource;
+			m_State.Registers[0x033] = (Uint8)(m_State.DMASource >> 8);
+			m_State.Registers[0x034] = (Uint8)(m_State.DMASource >> 16);
+			m_State.Registers[0x035] = (Uint8)m_State.DMADest;
+			m_State.Registers[0x036] = (Uint8)(m_State.DMADest >> 8);
+			m_State.Registers[0x037] = (Uint8)(m_State.DMADest >> 16);
+			CompleteDMA();
+			return;
+		}
+	}
+
 	if (!m_State.DMARunning)
 		CompleteDMA();
 }

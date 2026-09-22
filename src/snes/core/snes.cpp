@@ -1887,6 +1887,12 @@ void SnesSystem::ExecuteLine()
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
 
+	// A free-running SA-1 can raise an interrupt without an S-CPU access.
+	// Synchronize at the visible/HBlank boundary so the S-CPU can observe it
+	// during HBlank instead of delaying every asynchronous event to line end.
+	if (m_bSA1)
+		SyncSA1();
+
 	// set h-blank enable flag
 	m_IO.m_Regs.hvbjoy|= 0x40;
 
