@@ -679,6 +679,196 @@ static _INLINE Uint8 _SnesPPUDecode4bppPixel(
 		(((p3 >> uBit) & 1u) << 3));
 }
 
+/* Decode both physical hires phases from one set of tile-row loads.
+   The old path walked the same Mode 5/6 tiles twice (main then sub) and,
+   worse, reloaded the four bitplanes for every individual pixel.  On EE
+   that made CHR decode dominate the frame. */
+static void _FetchCHR2HiresPair_64(
+	const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles,
+	Int32 nTiles, Uint32 uScrollY,
+	Uint8 *pMainDest, Uint8 *pMainMask,
+	Uint8 *pSubDest, Uint8 *pSubMask,
+	Uint64 *pPalLookup, Bool bMosaic)
+{
+	while (nTiles-- > 0)
+	{
+		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
+		Uint32 uRow = (uScrollY + pTiles->uOffsetY) & 7u;
+		Uint8 uMainOpaque = 0;
+		Uint8 uSubOpaque = 0;
+		Uint8 uPalByte = (Uint8)pPalLookup[pTiles->uPal];
+		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
+		const SnesPPUTile2T *pTile[2];
+		Uint8 p0[2], p1[2];
+		Int32 x;
+
+		if (pTiles->uFlip & 2u)
+			uRow ^= 7u;
+
+		pTile[0] = (const SnesPPUTile2T *)(pVram +
+			((uBaseAddr + uBaseTile * 8u) & 0x7FFFu));
+		pTile[1] = (const SnesPPUTile2T *)(pVram +
+			((uBaseAddr + ((uBaseTile + 1u) & 0x03FFu) * 8u) & 0x7FFFu));
+		p0[0] = pTile[0]->uPlane01[uRow][0];
+		p1[0] = pTile[0]->uPlane01[uRow][1];
+		p0[1] = pTile[1]->uPlane01[uRow][0];
+		p1[1] = pTile[1]->uPlane01[uRow][1];
+
+		for (x = 0; x < 8; ++x)
+		{
+			Uint32 uSubPhysical = (Uint32)x << 1;
+			Uint32 uMainPhysical = uSubPhysical | (bMosaic ? 0u : 1u);
+			Uint32 uSubSource = bHFlip ? (15u - uSubPhysical) : uSubPhysical;
+			Uint32 uMainSource = bHFlip ? (15u - uMainPhysical) : uMainPhysical;
+			Uint32 uSubHalf = uSubSource >> 3;
+			Uint32 uMainHalf = uMainSource >> 3;
+			Uint32 uSubBit = 7u - (uSubSource & 7u);
+			Uint32 uMainBit = 7u - (uMainSource & 7u);
+			Uint8 uSubColor = (Uint8)(
+				((p0[uSubHalf] >> uSubBit) & 1u) |
+				(((p1[uSubHalf] >> uSubBit) & 1u) << 1));
+			Uint8 uMainColor = (Uint8)(
+				((p0[uMainHalf] >> uMainBit) & 1u) |
+				(((p1[uMainHalf] >> uMainBit) & 1u) << 1));
+
+			pSubDest[x] = (Uint8)(uPalByte | uSubColor);
+			pMainDest[x] = (Uint8)(uPalByte | uMainColor);
+			if (uSubColor) uSubOpaque |= (Uint8)(1u << x);
+			if (uMainColor) uMainOpaque |= (Uint8)(1u << x);
+		}
+
+		pMainMask[0] = uMainOpaque;
+		pMainMask[SNPPU_BGPLANE_SIZE] =
+			(pTiles->uPal & 8u) ? uMainOpaque : 0;
+		pSubMask[0] = uSubOpaque;
+		pSubMask[SNPPU_BGPLANE_SIZE] =
+			(pTiles->uPal & 8u) ? uSubOpaque : 0;
+
+		pMainDest += 8;
+		pSubDest += 8;
+		pMainMask++;
+		pSubMask++;
+		pTiles++;
+	}
+}
+
+static void _FetchCHR4HiresPair_64(
+	const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles,
+	Int32 nTiles, Uint32 uScrollY,
+	Uint8 *pMainDest, Uint8 *pMainMask,
+	Uint8 *pSubDest, Uint8 *pSubMask,
+	Bool bMosaic)
+{
+	while (nTiles-- > 0)
+	{
+		Uint32 uBaseTile = pTiles->uTile & 0x03FFu;
+		Uint32 uRow = (uScrollY + pTiles->uOffsetY) & 7u;
+		Uint8 uMainOpaque = 0;
+		Uint8 uSubOpaque = 0;
+		Uint8 uPalByte = (Uint8)_SnesPPU_Tile4PalLookup64[pTiles->uPal];
+		Bool bHFlip = (pTiles->uFlip & 1u) != 0;
+		const SnesPPUTile4T *pTile[2];
+		Uint8 p0[2], p1[2], p2[2], p3[2];
+		Int32 x;
+
+		if (pTiles->uFlip & 2u)
+			uRow ^= 7u;
+
+		pTile[0] = (const SnesPPUTile4T *)(pVram +
+			((uBaseAddr + uBaseTile * 16u) & 0x7FFFu));
+		pTile[1] = (const SnesPPUTile4T *)(pVram +
+			((uBaseAddr + ((uBaseTile + 1u) & 0x03FFu) * 16u) & 0x7FFFu));
+		p0[0] = pTile[0]->uPlane01[uRow][0];
+		p1[0] = pTile[0]->uPlane01[uRow][1];
+		p2[0] = pTile[0]->uPlane23[uRow][0];
+		p3[0] = pTile[0]->uPlane23[uRow][1];
+		p0[1] = pTile[1]->uPlane01[uRow][0];
+		p1[1] = pTile[1]->uPlane01[uRow][1];
+		p2[1] = pTile[1]->uPlane23[uRow][0];
+		p3[1] = pTile[1]->uPlane23[uRow][1];
+
+		for (x = 0; x < 8; ++x)
+		{
+			Uint32 uSubPhysical = (Uint32)x << 1;
+			Uint32 uMainPhysical = uSubPhysical | (bMosaic ? 0u : 1u);
+			Uint32 uSubSource = bHFlip ? (15u - uSubPhysical) : uSubPhysical;
+			Uint32 uMainSource = bHFlip ? (15u - uMainPhysical) : uMainPhysical;
+			Uint32 uSubHalf = uSubSource >> 3;
+			Uint32 uMainHalf = uMainSource >> 3;
+			Uint32 uSubBit = 7u - (uSubSource & 7u);
+			Uint32 uMainBit = 7u - (uMainSource & 7u);
+			Uint8 uSubColor = (Uint8)(
+				((p0[uSubHalf] >> uSubBit) & 1u) |
+				(((p1[uSubHalf] >> uSubBit) & 1u) << 1) |
+				(((p2[uSubHalf] >> uSubBit) & 1u) << 2) |
+				(((p3[uSubHalf] >> uSubBit) & 1u) << 3));
+			Uint8 uMainColor = (Uint8)(
+				((p0[uMainHalf] >> uMainBit) & 1u) |
+				(((p1[uMainHalf] >> uMainBit) & 1u) << 1) |
+				(((p2[uMainHalf] >> uMainBit) & 1u) << 2) |
+				(((p3[uMainHalf] >> uMainBit) & 1u) << 3));
+
+			pSubDest[x] = (Uint8)(uPalByte | uSubColor);
+			pMainDest[x] = (Uint8)(uPalByte | uMainColor);
+			if (uSubColor) uSubOpaque |= (Uint8)(1u << x);
+			if (uMainColor) uMainOpaque |= (Uint8)(1u << x);
+		}
+
+		pMainMask[0] = uMainOpaque;
+		pMainMask[SNPPU_BGPLANE_SIZE] =
+			(pTiles->uPal & 8u) ? uMainOpaque : 0;
+		pSubMask[0] = uSubOpaque;
+		pSubMask[SNPPU_BGPLANE_SIZE] =
+			(pTiles->uPal & 8u) ? uSubOpaque : 0;
+
+		pMainDest += 8;
+		pSubDest += 8;
+		pMainMask++;
+		pSubMask++;
+		pTiles++;
+	}
+}
+
+static void _FetchCHRHiresPair_64(
+	Uint8 *pMainLine, Uint8 *pSubLine, SnesPPU *pPPU,
+	SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTiles, Int32 nTiles,
+	Int32 iLine, Uint8 *pMainMask, Uint8 *pSubMask, Bool bOffset)
+{
+	Uint32 uScrollY = 0;
+	const Uint8 uBGMode = (Uint8)(pPPU->GetRegs()->bgmode & 7);
+	const Bool bMosaic = pBGInfo->uMosaic > 0;
+
+	if (pBGInfo->uMosaic > 0)
+	{
+		iLine /= pBGInfo->uMosaic + 1;
+		iLine *= pBGInfo->uMosaic + 1;
+	}
+	if (!bOffset)
+		uScrollY = pBGInfo->uScrollY + iLine;
+
+	if (pBGInfo->uBitDepth == 2 && uBGMode == 5)
+	{
+		_FetchCHR2HiresPair_64(pPPU->GetVramPtr(0), pBGInfo->uChrAddr,
+			pTiles, nTiles, uScrollY & 7, pMainLine, pMainMask,
+			pSubLine, pSubMask,
+			_SnesPPU_Tile2PalLookup64[pBGInfo->uPalBase], bMosaic);
+	}
+	else if (pBGInfo->uBitDepth == 4 && (uBGMode == 5 || uBGMode == 6))
+	{
+		_FetchCHR4HiresPair_64(pPPU->GetVramPtr(0), pBGInfo->uChrAddr,
+			pTiles, nTiles, uScrollY & 7, pMainLine, pMainMask,
+			pSubLine, pSubMask, bMosaic);
+	}
+
+	if (pBGInfo->uMosaic > 0)
+	{
+		_MosaicBG8(pMainLine + (pBGInfo->uScrollX & 7), 256,
+			pBGInfo->uMosaic + 1);
+		_MosaicBG8(pSubLine + (pBGInfo->uScrollX & 7), 256,
+			pBGInfo->uMosaic + 1);
+	}
+}
+
 static void _FetchCHR2Hires_64(
 	const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles,
 	Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask,
@@ -1715,54 +1905,70 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					g_DbgBGChrRowsByDepth[2] += 33;
 #endif
 
-				// fetch bg tile data
-				#if SNPPURENDER_CHR64
-				_FetchCHR_64((Uint8 *)pRenderInfo->BGPlanes[iBG], m_pPPU, &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iLine, TempMask[0], (uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET), FALSE);
-				#else
-				_FetchCHR((Uint8 *)pRenderInfo->BGPlanes[iBG], m_pPPU, &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iLine, TempMask[0], (uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET));
-				#endif
-
-				// shift mask based on h-scroll of BG
-				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE], TempMask[0], (BGInfo[iBG].uScrollX & 7));
-				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI], TempMask[1], (BGInfo[iBG].uScrollX & 7));
-
-				if (BGInfo[iBG].uMosaic > 0)
-				{
-					_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE], 256, BGInfo[iBG].uMosaic + 1);
-					_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI], 256, BGInfo[iBG].uMosaic + 1);
-				}
-			}
-		}
-
 #if SNPPURENDER_CHR64
-		/* BG3/BG4 are invisible in modes 5/6 and are safe scratch planes for
-		   the exact even physical-dot phase required by TS. */
-		if (uBGMode == 5 || uBGMode == 6)
-		{
-			for (iBG = 0; iBG < 2; ++iBG)
-			{
-				if (!(ts & (1 << iBG)) || !BGInfo[iBG].uBitDepth)
-					continue;
-				const Int32 iSubPlane = iBG + 2;
-				Uint8 SubMask[2][SNPPU_BGPLANE_SIZE];
-				_FetchCHR_64((Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
-					m_pPPU, &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33,
-					iLine, SubMask[0],
-					(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET), TRUE);
-				SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
-					SubMask[0], (BGInfo[iBG].uScrollX & 7));
-				SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
-					SubMask[1], (BGInfo[iBG].uScrollX & 7));
-				if (BGInfo[iBG].uMosaic > 0)
+				if ((uBGMode == 5 || uBGMode == 6) && iBG < 2 &&
+				    BGInfo[iBG].uBitDepth != 0)
 				{
-					_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
-						256, BGInfo[iBG].uMosaic + 1);
-					_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
-						256, BGInfo[iBG].uMosaic + 1);
+					const Int32 iSubPlane = iBG + 2;
+					Uint8 SubMask[2][SNPPU_BGPLANE_SIZE];
+
+					_FetchCHRHiresPair_64(
+						(Uint8 *)pRenderInfo->BGPlanes[iBG],
+						(Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
+						m_pPPU, &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33,
+						iLine, TempMask[0], SubMask[0],
+						(uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET));
+
+					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+						TempMask[0], (BGInfo[iBG].uScrollX & 7));
+					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+						TempMask[1], (BGInfo[iBG].uScrollX & 7));
+					SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+						SubMask[0], (BGInfo[iBG].uScrollX & 7));
+					SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+						SubMask[1], (BGInfo[iBG].uScrollX & 7));
+
+					if (BGInfo[iBG].uMosaic > 0)
+					{
+						_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+							256, BGInfo[iBG].uMosaic + 1);
+						_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+							256, BGInfo[iBG].uMosaic + 1);
+						_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+							256, BGInfo[iBG].uMosaic + 1);
+						_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+							256, BGInfo[iBG].uMosaic + 1);
+					}
 				}
+				else
+				{
+					_FetchCHR_64((Uint8 *)pRenderInfo->BGPlanes[iBG],
+						m_pPPU, &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33,
+						iLine, TempMask[0],
+						(uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET), FALSE);
+					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+						TempMask[0], (BGInfo[iBG].uScrollX & 7));
+					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+						TempMask[1], (BGInfo[iBG].uScrollX & 7));
+					if (BGInfo[iBG].uMosaic > 0)
+					{
+						_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+							256, BGInfo[iBG].uMosaic + 1);
+						_MosaicBGPlanar((Uint8 *)&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+							256, BGInfo[iBG].uMosaic + 1);
+					}
+				}
+#else
+				_FetchCHR((Uint8 *)pRenderInfo->BGPlanes[iBG], m_pPPU,
+					&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iLine,
+					TempMask[0], (uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET));
+				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+					TempMask[0], (BGInfo[iBG].uScrollX & 7));
+				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+					TempMask[1], (BGInfo[iBG].uScrollX & 7));
+#endif
 			}
 		}
-#endif
 		PROF_LEAVE("BGCHR");
 #if SNDBG_LOG
 		g_TmgCycBGChr += ProfCtrGetCycle() - _tBGChr;
@@ -1783,17 +1989,18 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 		PROF_LEAVE("BGMODE7");
 
-		// only draw BG 1
-		if (tm & 0x3)
+		/* Plain Mode 7 has BG1 only.  BG2 is a distinct EXTBG layer when
+		   SETINI.6 is enabled; it must never be treated as a second copy of
+		   BG1.  The old alias made games that put only BG2 on the sub screen
+		   add the Mode 7 picture to itself, producing the blown-out world-map
+		   colors seen in Trials of Mana. */
 		{
-			tm&=~0xF;
-			tm|=SNESPPU_MASK_BG1;
-		}
-
-		if (ts & 0x3)
-		{
-			ts&=~0xF;
-			ts|=SNESPPU_MASK_BG1;
+			const Uint8 uMainBG1 = tm & SNESPPU_MASK_BG1;
+			const Uint8 uSubBG1 = ts & SNESPPU_MASK_BG1;
+			tm &= (Uint8)~0x0F;
+			ts &= (Uint8)~0x0F;
+			if (uMainBG1) tm |= SNESPPU_MASK_BG1;
+			if (uSubBG1) ts |= SNESPPU_MASK_BG1;
 		}
 	}
 
