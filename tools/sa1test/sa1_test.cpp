@@ -136,6 +136,62 @@ static void TestBitmapModes(void)
 	CHECK(bwram[0x0100] == 0x39, "2bpp bitmap must pack four pixels per byte");
 }
 
+
+static void TestNormalDMA(void)
+{
+	std::vector<Uint8> rom(0x200000, 0x00);
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+	rom[0] = 0x11; rom[1] = 0x22; rom[2] = 0x33; rom[3] = 0x44;
+
+	SNSA1 sa1;
+	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+
+	// ROM -> I-RAM, trigger on DDAH ($2236).
+	sa1.WriteRegister(0x2230, 0x80);
+	sa1.WriteRegister(0x2232, 0x00);
+	sa1.WriteRegister(0x2233, 0x00);
+	sa1.WriteRegister(0x2234, 0xC0);
+	sa1.WriteRegister(0x2238, 4);
+	sa1.WriteRegister(0x2239, 0);
+	sa1.WriteRegister(0x2235, 0x00);
+	sa1.WriteRegister(0x2236, 0x04);
+	CHECK(sa1.ReadIRAM(0x0400) == 0x11 &&
+	      sa1.ReadIRAM(0x0403) == 0x44,
+	      "normal DMA must copy ROM to I-RAM");
+
+	// BW-RAM -> I-RAM.
+	bwram[0x0100] = 0xA1; bwram[0x0101] = 0xB2;
+	sa1.WriteRegister(0x2230, 0x81);
+	sa1.WriteRegister(0x2232, 0x00);
+	sa1.WriteRegister(0x2233, 0x01);
+	sa1.WriteRegister(0x2234, 0x00);
+	sa1.WriteRegister(0x2238, 2);
+	sa1.WriteRegister(0x2239, 0);
+	sa1.WriteRegister(0x2235, 0x20);
+	sa1.WriteRegister(0x2236, 0x04);
+	CHECK(sa1.ReadIRAM(0x0420) == 0xA1 &&
+	      sa1.ReadIRAM(0x0421) == 0xB2,
+	      "normal DMA must copy BW-RAM to I-RAM");
+
+	// I-RAM -> BW-RAM, trigger on DDAB ($2237).
+	sa1.WriteIRAM(0x0500, 0x5A);
+	sa1.WriteIRAM(0x0501, 0xC3);
+	sa1.WriteRegister(0x2230, 0x86);
+	sa1.WriteRegister(0x2232, 0x00);
+	sa1.WriteRegister(0x2233, 0x05);
+	sa1.WriteRegister(0x2234, 0x00);
+	sa1.WriteRegister(0x2238, 2);
+	sa1.WriteRegister(0x2239, 0);
+	sa1.WriteRegister(0x2235, 0x00);
+	sa1.WriteRegister(0x2236, 0x03);
+	sa1.WriteRegister(0x2237, 0x00);
+	CHECK(bwram[0x0300] == 0x5A && bwram[0x0301] == 0xC3,
+	      "normal DMA must copy I-RAM to BW-RAM");
+	CHECK((sa1.ReadRegister(0x2301) & 0x20) != 0,
+	      "normal DMA completion must latch SA-1 DMA IRQ status");
+}
+
 static void TestArithmetic(void)
 {
 	SNSA1 sa1;
@@ -370,6 +426,7 @@ int main(void)
 	TestIRAMAndBWRAM();
 	TestWriteProtection();
 	TestBitmapModes();
+	TestNormalDMA();
 	TestArithmetic();
 	TestVariableLengthBit();
 	TestMMCMapping();

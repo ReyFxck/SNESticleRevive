@@ -97,6 +97,7 @@ private:
 	void UpdateTimer(Uint32 uMasterCycles);
 	void ExecuteArithmetic();
 	void UpdateVariableData(Bool bIncrement, Bool bNoShift);
+	void ExecuteDMA();
 
 	Uint8 ReadCpuBus(Uint32 uAddr);
 	void  WriteCpuBus(Uint32 uAddr, Uint8 uData);

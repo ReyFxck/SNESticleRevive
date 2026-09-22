@@ -210,6 +210,16 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		m_State.TimerMatch = FALSE;
 		break;
 
+	case 0x2236:
+		if ((m_State.Registers[0x030] & 0xA4) == 0x80)
+			ExecuteDMA();
+		break;
+
+	case 0x2237:
+		if ((m_State.Registers[0x030] & 0xA4) == 0x84)
+			ExecuteDMA();
+		break;
+
 	case 0x2250:
 		if (uData & 0x02)
 		{
@@ -437,6 +447,57 @@ void SNSA1::WriteBWRAMDirectSA1(Uint32 uAddr, Uint8 uData)
 		return;
 	if (CanWriteBWRAM(uOffset, TRUE))
 		m_pBWRAM[MirrorBWRAM(uOffset)] = uData;
+}
+
+void SNSA1::ExecuteDMA()
+{
+	Uint32 uSrc = (Uint32)m_State.Registers[0x032] |
+	              ((Uint32)m_State.Registers[0x033] << 8) |
+	              ((Uint32)m_State.Registers[0x034] << 16);
+	Uint32 uDst = (Uint32)m_State.Registers[0x035] |
+	              ((Uint32)m_State.Registers[0x036] << 8) |
+	              ((Uint32)m_State.Registers[0x037] << 16);
+	Uint32 uLen = (Uint32)m_State.Registers[0x038] |
+	              ((Uint32)m_State.Registers[0x039] << 8);
+	Uint8 uSource = m_State.Registers[0x030] & 0x03;
+	Bool bDestBWRAM = (m_State.Registers[0x030] & 0x04) ? TRUE : FALSE;
+	Uint32 i;
+
+	if (!(m_State.Registers[0x030] & 0x80) ||
+	    (m_State.Registers[0x030] & 0x20))
+		return;
+
+	for (i = 0; i < uLen; i++)
+	{
+		Uint8 uData;
+		switch (uSource)
+		{
+		default:
+		case 0:
+			uData = SNCPURead8(&m_Cpu, (uSrc + i) & 0xFFFFFF);
+			break;
+		case 1:
+			uData = (!m_pBWRAM || !m_uBWRAMBytes) ? 0xFF :
+			        m_pBWRAM[MirrorBWRAM(uSrc + i)];
+			break;
+		case 2:
+			uData = m_IRAM[(uSrc + i) & (SNSA1_IRAM_SIZE - 1)];
+			break;
+		}
+
+		if (bDestBWRAM)
+		{
+			if (m_pBWRAM && m_uBWRAMBytes)
+				m_pBWRAM[MirrorBWRAM(uDst + i)] = uData;
+		}
+		else
+		{
+			m_IRAM[(uDst + i) & (SNSA1_IRAM_SIZE - 1)] = uData;
+		}
+	}
+
+	m_State.Registers[0x101] |= 0x20;
+	UpdateIRQLine();
 }
 
 void SNSA1::ExecuteArithmetic()
