@@ -232,6 +232,30 @@
    jump/return destinations consume one additional SA-1 tick. */
 /* Fast form for the hottest SA-1 path: direct I-RAM reads such as the
    Super Mario RPG A5 $00 polling loop.  No bus classification is needed. */
+#define SNCPU_SA1_ROM_PENALTY(_cycles) \
+		lw		t0,SP_SA1Exec				;\
+		beq		t0,zr,85f				;\
+		nop						;\
+		lw		t0,SNCPU_Counter2			;\
+		subu		t0,t0,R_Cycles				;\
+		subu		t0,t0,_cycles				;\
+		sltiu		t1,t0,SNCPU_SA1_BUS_UNIT_MAX		;\
+		beq		t1,zr,85f				;\
+		nop						;\
+		lui		t1,%hi(g_SNCPU_SA1BusPenaltyUnits)	;\
+		addiu		t1,t1,%lo(g_SNCPU_SA1BusPenaltyUnits)	;\
+		addiu		t1,t1,(SNCPU_SA1_BUS_ROM*SNCPU_SA1_BUS_UNIT_MAX) ;\
+		addu		t1,t1,t0				;\
+		lbu		t0,0(t1)				;\
+		beq		t0,zr,85f				;\
+		nop						;\
+		subu		R_Cycles,R_Cycles,t0			;\
+		lui		t1,%hi(g_SNCPU_SA1BusConflictTicks)	;\
+		lw		t0,%lo(g_SNCPU_SA1BusConflictTicks)(t1)	;\
+		addiu		t0,t0,1					;\
+		sw		t0,%lo(g_SNCPU_SA1BusConflictTicks)(t1)	;\
+85:
+
 #define SNCPU_SA1_IRAM_PENALTY() \
 		lw		t0,SNCPU_Counter2			;\
 		subu		t0,t0,R_Cycles				;\
@@ -1505,7 +1529,7 @@ _SNCPU_Fetch8Fast:
 		lbu		R_Data,0(R_PC)
         addiu	R_PC,R_PC,1
         subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_PENALTY(R_Addr,R_PCCycles)
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
 
 		jr		ra
@@ -1570,25 +1594,32 @@ _SNCPU_Fetch16:
 
 _SNCPU_Fetch16Fast:
 		addiu	R_PCCount,R_PCCount,-2
-		lw		t0,SP_SA1Exec
-		bne		t0,zr,_SNCPU_Fetch16Trap
-		nop
 		blez	R_PCCount,_SNCPU_Fetch16Trap
 		nop
 
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
-        subu	R_Cycles,R_Cycles,R_PCCycles
 
-        lwr		R_Data, 0(R_PC)							// load word
-        lwl		R_Data, 3(R_PC)
+		lwr		R_Data,0(R_PC)
+		lwl		R_Data,3(R_PC)
+		addiu	R_PC,R_PC,2
 
-        addiu	R_PC,R_PC,2
-        subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
-
+		lw		t0,SP_SA1Exec
+		beq		t0,zr,_SNCPU_Fetch16HostTiming
+		nop
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		jr		ra
-        andi	R_Data,R_Data,0xFFFF
+		andi	R_Data,R_Data,0xFFFF
+
+_SNCPU_Fetch16HostTiming:
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
+		jr		ra
+		andi	R_Data,R_Data,0xFFFF
 
 _SNCPU_Fetch16Trap:
 		sw		ra, SP_RA0
@@ -1633,27 +1664,36 @@ _SNCPU_Fetch16Slow:
 _SNCPU_Fetch24:
 _SNCPU_Fetch24Fast:
 		addiu	R_PCCount,R_PCCount,-3
-		lw		t0,SP_SA1Exec
-		bne		t0,zr,_SNCPU_Fetch24Trap
-		nop
 		blez	R_PCCount,_SNCPU_Fetch24Trap
 		nop
 
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
-        subu	R_Cycles,R_Cycles,R_PCCycles
+		lwr		R_Data,0(R_PC)
+		lwl		R_Data,3(R_PC)
+		addiu	R_PC,R_PC,3
+		sll		R_Data,R_Data,8
+		srl		R_Data,R_Data,8
 
-        lwr		R_Data, 0(R_PC)							// load word
-        lwl		R_Data, 3(R_PC)
-
-        addiu	R_PC,R_PC,3
-        subu	R_Cycles,R_Cycles,R_PCCycles
-        sll		R_Data,R_Data,8
-        subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
-
+		lw		t0,SP_SA1Exec
+		beq		t0,zr,_SNCPU_Fetch24HostTiming
+		nop
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		jr		ra
-        srl		R_Data,R_Data,8
+		nop
+
+_SNCPU_Fetch24HostTiming:
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
+		jr		ra
+		nop
 
 _SNCPU_Fetch24Trap:
 		sw		ra, SP_RA0
@@ -2030,7 +2070,7 @@ _SNCPUExecute_Loop:
         addiu	R_PC,R_PC,1
 
         subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_PENALTY(R_Addr,R_PCCycles)
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
 
 		sll		t0, R_Data, 2							// R_Data = opcode * 4
