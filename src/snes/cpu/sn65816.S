@@ -71,9 +71,6 @@
 #define SP_SA1Track 0x74(sp)
 #define SP_SA1Exec  0x7C(sp)
 #define SP_SA1Tmp   0x80(sp)
-#define SP_SA1IRAM  0x84(sp)
-#define SP_SA1BWRAM 0x88(sp)
-#define SP_SA1BWRAMMask 0x8C(sp)
 
 #define SP_Data0   	0x78(sp)
 #define SP_Data1   	0x79(sp)
@@ -896,7 +893,8 @@ _SNCPU_Write8SA1IRAM:
 		and		t1,t1,t2
 		beq		t1,zr,_SNCPU_Write8SA1IRAMTimed
 		nop
-		lw		t1,SP_SA1IRAM
+		lui		t1,%hi(g_SNCPU_SA1IRAM)
+		lw		t1,%lo(g_SNCPU_SA1IRAM)(t1)
 		beq		t1,zr,_SNCPU_Write8SA1Generic
 		nop
 		addu		t1,t1,t0
@@ -933,11 +931,13 @@ _SNCPU_Write8SA1BWRAMWindow:
 		nop
 
 _SNCPU_Write8SA1BWRAMWindowStore:
-		lw		t1,SP_SA1BWRAMMask
+		lui		t1,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMMask)(t1)
 		bltz		t1,_SNCPU_Write8SA1Generic
 		nop
 		and		t0,t0,t1
-		lw		t1,SP_SA1BWRAM
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
 		beq		t1,zr,_SNCPU_Write8SA1Generic
 		nop
 		addu		t1,t1,t0
@@ -951,10 +951,12 @@ _SNCPU_Write8SA1BWRAMWindowTimed:
 		nop
 
 _SNCPU_Write8SA1BWRAM:
-		lw		t1,SP_SA1BWRAM
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
 		beq		t1,zr,_SNCPU_Write8SA1Generic
 		nop
-		lw		t2,SP_SA1BWRAMMask
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
 		bltz		t2,_SNCPU_Write8SA1Generic
 		nop
 		/* Logical direct BW-RAM address is always low 18 bits. */
@@ -973,7 +975,8 @@ _SNCPU_Write8SA1BWRAM:
 		nop
 
 _SNCPU_Write8SA1BWRAMStore:
-		lw		t2,SP_SA1BWRAMMask
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
 		and		t0,t0,t2
 		addu		t1,t1,t0
 		sb		R_Data,0(t1)
@@ -1264,11 +1267,13 @@ _SNCPU_Read8SA1BWRAMWindow:
 		sll		t0,t0,13
 		andi		t1,R_Addr,0x1FFF
 		or		t0,t0,t1
-		lw		t1,SP_SA1BWRAMMask
+		lui		t1,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t1,%lo(g_SNCPU_SA1BWRAMMask)(t1)
 		bltz		t1,_SNCPU_Read8SA1Generic
 		nop
 		and		t0,t0,t1
-		lw		t1,SP_SA1BWRAM
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
 		beq		t1,zr,_SNCPU_Read8SA1Generic
 		nop
 		addu		t1,t1,t0
@@ -1280,10 +1285,12 @@ _SNCPU_Read8SA1BWRAMWindow:
 		nop
 
 _SNCPU_Read8SA1BWRAM:
-		lw		t1,SP_SA1BWRAM
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
 		beq		t1,zr,_SNCPU_Read8SA1Generic
 		nop
-		lw		t2,SP_SA1BWRAMMask
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
 		bltz		t2,_SNCPU_Read8SA1Generic
 		nop
 		sll		t0,R_Addr,14
@@ -1327,7 +1334,8 @@ _SNCPU_Read8HostStart:
         nop
 
 _SNCPU_Read8SA1IRAM:
-		lw		t1,SP_SA1IRAM
+		lui		t1,%hi(g_SNCPU_SA1IRAM)
+		lw		t1,%lo(g_SNCPU_SA1IRAM)(t1)
 		beq		t1,zr,2f
 		nop
 		addu		t1,t1,t0
@@ -2139,22 +2147,6 @@ SNCPUExecute_ASM:
 		xor		t0,t0,R_pCpu
 		sltiu		t0,t0,1
 		sw		t0,SP_SA1Exec
-		beq		t0,zr,1f
-		nop
-		lw		t1,SP_SA1IRAM
-		sw		t1,SP_SA1IRAM
-		lw		t1,SP_SA1BWRAM
-		sw		t1,SP_SA1BWRAM
-		lw		t1,SP_SA1BWRAMMask
-		sw		t1,SP_SA1BWRAMMask
-		b		2f
-		nop
-1:
-		sw		zr,SP_SA1IRAM
-		sw		zr,SP_SA1BWRAM
-		addiu		t1,zr,-1
-		sw		t1,SP_SA1BWRAMMask
-2:
 
 //
 //
