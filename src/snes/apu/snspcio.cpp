@@ -74,16 +74,15 @@ void SNSpcIO::SyncQueueAll()
 	m_Queue.Reset();
 }
 
-inline void SNSpcIO::SyncQueue(Uint32 uCycle)
+void SNSpcIO::SyncQueue(Uint32 uCycle)
 {
 	SNQueueElementT *pElement;
 
-	// dequeue all pending writes  up to cycle time
-	while ( (pElement=m_Queue.Dequeue(uCycle)) != NULL)
-	{
-		// perform write
+	/* CPU->SPC writes become visible when the SPC reaches the same master
+	   timestamp.  The generic PPU queue intentionally uses a strict compare,
+	   but APUIO needs the inclusive edge. */
+	while ( (pElement=m_Queue.DequeueAtOrBefore(uCycle)) != NULL)
 		m_Regs.apu_w[pElement->uAddr] = pElement->uData;
-	}
 }
 
 void SNSpcIO::Reset()
