@@ -30,6 +30,13 @@ class SNSpcIO
 	SNSpc_t			*m_pSpc;
 	SNSpcDsp		*m_pSpcDsp;
 
+	/* CPU->SPC input latches are sampled on the SPC clock.  Keep the newest
+	   value per port plus its absolute master-clock visibility point; this
+	   mirrors the hardware latch better than the old frame-relative FIFO. */
+	Uint8			m_uCpuPendingMask;
+	Uint8			m_CpuPendingData[4];
+	Uint32			m_CpuPendingCycle[4];
+
 public:
 	SNSpcIORegsT	m_Regs;
 
@@ -43,6 +50,11 @@ public:
 	static void Write8Trap(struct SNSpc_t *pSpc, Uint32 uAddr, Uint8 uData);
 
 	void	Reset();
+	void	ResetCpuPortPending();
+	void	WriteCpuPort(Uint32 uCpuMasterCycle, Uint32 uSpcMasterCycle,
+		Uint32 uPort, Uint8 uData);
+	void	SyncCpuPorts(Uint32 uSpcMasterCycle);
+	void	ClearCpuPorts(Uint8 uPortMask);
 	void	SetSpc(struct SNSpc_t *pSpc) {m_pSpc = pSpc;}
 	void	SetSpcDsp(SNSpcDsp *pSpcDsp) {m_pSpcDsp = pSpcDsp;}
 
