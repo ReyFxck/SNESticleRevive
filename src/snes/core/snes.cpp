@@ -624,6 +624,8 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
 		{
 			pSnes->m_SA1.WriteRegister((Uint16)uAddr, uData);
+			if (uAddr >= 0x2220 && uAddr <= 0x2223)
+				pSnes->RemapSA1ROM((Uint32)(uAddr - 0x2220), uData);
 			return;
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x37FF)

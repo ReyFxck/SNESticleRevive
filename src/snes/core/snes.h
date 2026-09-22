@@ -164,6 +164,7 @@ private:
 	void	MapMem(struct SnesMemMapT *pMemMap);
 	void	MapMem(SNRomMappingE eRomMapping, Uint32 uFlags);
 	void	MapMemExLoRom(void);
+	void	RemapSA1ROM(Uint32 uWhich, Uint8 uMap);
 	void	RemapSDD1(void);   // (re)mapeia $C0-$FF conforme $4804-$4807
 	void	DumpMemMap();
 

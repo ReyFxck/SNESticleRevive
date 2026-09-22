@@ -1,15 +1,19 @@
 /*
  * Experimental SA-1 support for SNESticle Revive.
  *
- * Clean-room implementation based on public hardware behavior. Phase 1
- * intentionally keeps the coprocessor state independent from the S-CPU and
- * does not execute SA-1 65C816 opcodes yet.
+ * The SA-1 owns a completely separate 65C816 context.  On PS2 that context
+ * is executed by the same hand-written MIPS backend selected for the S-CPU;
+ * on host tests the C backend is selected explicitly.
  */
 
 #ifndef _SNSA1_H
 #define _SNSA1_H
 
 #include "types.h"
+
+extern "C" {
+#include "sncpu.h"
+}
 
 #define SNSA1_IRAM_SIZE          0x0800
 #define SNSA1_REGISTER_BASE      0x2200
@@ -23,7 +27,9 @@ struct SA1State
 	Uint8  Registers[SNSA1_REGISTER_COUNT];
 	Uint64 MasterCycles;
 	Uint64 ScheduledCycles;
+	Uint64 ExecutedCycles;
 	Uint32 LastSliceCycles;
+	Uint32 ExecutionSlices;
 	Uint32 ResetEpoch;
 	Uint16 LastResetVector;
 	Uint8  MasterRemainder;
@@ -34,6 +40,7 @@ class SNSA1
 {
 public:
 	SNSA1();
+	~SNSA1();
 
 	void SetMemory(const Uint8 *pRom, Uint32 uRomBytes,
 	               Uint8 *pBWRAM, Uint32 uBWRAMBytes);
@@ -45,23 +52,45 @@ public:
 	Uint8 ReadIRAM(Uint16 uAddr) const;
 	void  WriteIRAM(Uint16 uAddr, Uint8 uData);
 
+	// S-CPU window selected by $2224.
 	Uint8 ReadBWRAMWindow(Uint16 uAddr) const;
 	void  WriteBWRAMWindow(Uint16 uAddr, Uint8 uData);
+
 	Uint8 ReadBWRAMDirect(Uint32 uAddr) const;
 	void  WriteBWRAMDirect(Uint32 uAddr, Uint8 uData);
 
-	// Deterministic scheduler credit. One SA-1 tick is two SNES master clocks.
+	// Add master-clock time and execute the independent SA-1 65C816 slice.
 	void StepMasterCycles(Int32 nMasterCycles);
 
 	Bool   IsRunning() const { return m_State.Running; }
 	Uint16 GetResetVector() const;
 	Uint32 GetLastSliceCycles() const { return m_State.LastSliceCycles; }
 	const SA1State *GetState() const { return &m_State; }
+	SNCpuT *GetCpu() { return &m_Cpu; }
+	const SNCpuT *GetCpu() const { return &m_Cpu; }
 
 private:
+	static Uint8 SNCPU_TRAPFUNC CpuReadTrap(SNCpuT *pCpu, Uint32 uAddr);
+	static void  SNCPU_TRAPFUNC CpuWriteTrap(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
+
+	static Uint32 MirrorRomOffset(Uint32 uSize, Uint32 uPos);
 	Uint32 MirrorBWRAM(Uint32 uOffset) const;
 
+	void ResetCPUContext();
+	void ReleaseCPUReset();
+	void MapCpuMemory();
+	void MapRomGroup(Uint32 uWhich, Uint8 uMap);
+	void RunScheduled(Uint32 uSA1Cycles);
+	Bool ServiceIRQ();
+
+	Uint8 ReadCpuBus(Uint32 uAddr) const;
+	void  WriteCpuBus(Uint32 uAddr, Uint8 uData);
+	Uint8 ReadSA1BWRAMWindow(Uint16 uAddr) const;
+	void  WriteSA1BWRAMWindow(Uint16 uAddr, Uint8 uData);
+	void  UpdateIRQLine();
+
 	SA1State m_State;
+	SNCpuT   m_Cpu;
 	Uint8    m_IRAM[SNSA1_IRAM_SIZE];
 
 	const Uint8 *m_pRom;

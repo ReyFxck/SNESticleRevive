@@ -119,6 +119,99 @@ static void TestCleanHiRom(void)
 		"HiROM limpa deve preservar o titulo");
 }
 
+static void TestCleanExLoRom(void)
+{
+	std::vector<Uint8> rom(0x600000, 0xFF);
+	PutHeader(rom, 0x407FC0, "TEST EXLOROM", 0x32, 0x4567,
+		0x8000, 0x400000);
+	((SNRomInfoT *)&rom[0x407FC0])->RomSize = 0x0D;
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"ExLoROM limpa deve carregar");
+	CHECK(snesRom.m_eMapping == SNROM_MAPPING_EXLOROM,
+		"header em 0x407FC0 deve selecionar ExLoROM");
+	CHECK(snesRom.GetMapperName() && !strcmp(snesRom.GetMapperName(), "ExLoROM"),
+		"diagnostico deve identificar ExLoROM");
+}
+
+static void TestCleanExHiRom(void)
+{
+	std::vector<Uint8> rom(0x600000, 0xFF);
+
+	/* Muitos dumps/compilacoes grandes conservam uma copia plausivel do
+	   header em $00FFC0. O candidato estendido precisa vencer o empate para
+	   que os bytes acima de 4 MiB continuem enderecaveis. */
+	PutHeader(rom, 0x00FFC0, "LEGACY HI MIRROR", 0x35, 0x5678,
+		0x8000, 0x008000);
+	PutHeader(rom, 0x40FFC0, "TEST EXHIROM", 0x35, 0x6789,
+		0x8000, 0x408000);
+	((SNRomInfoT *)&rom[0x40FFC0])->RomSize = 0x0D;
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"ExHiROM limpa deve carregar");
+	CHECK(snesRom.m_eMapping == SNROM_MAPPING_EXHIROM,
+		"header em 0x40FFC0 deve selecionar ExHiROM");
+	CHECK(snesRom.GetRomTitle() && !strcmp(snesRom.GetRomTitle(), "TEST EXHIROM"),
+		"ExHiROM deve usar o header estendido");
+	CHECK(snesRom.GetMapperName() && !strcmp(snesRom.GetMapperName(), "ExHiROM"),
+		"diagnostico deve identificar ExHiROM");
+}
+
+static void TestSramExponent(void)
+{
+	std::vector<Uint8> rom(0x100000, 0xFF);
+	PutHeader(rom, 0x7FC0, "SRAM EXP TEST", 0x20, 0x789A,
+		0x8000, 0x0000);
+	((SNRomInfoT *)&rom[0x7FC0])->SRAMSize = 8;
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"fixture SRAM deve carregar");
+	CHECK(snesRom.GetSRAMBytes() == 256u * 1024u,
+		"SRAM code 8 deve representar 256 KiB");
+}
+
+static void TestSA1HeaderDetection(void)
+{
+	for (int battery = 0; battery < 2; battery++)
+	{
+		std::vector<Uint8> rom(0x200000, 0xFF);
+		PutHeader(rom, 0x7FC0, battery ? "SA1 TYPE35" : "SA1 TYPE34",
+		          0x23, 0x4567, 0x8000, 0x0000);
+		SNRomInfoT *info = (SNRomInfoT *)&rom[0x7FC0];
+		info->RomType = battery ? 0x35 : 0x34;
+		info->SRAMSize = 0x05;
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		      "SA-1 fixture must load");
+		CHECK(snesRom.m_eMapping == SNROM_MAPPING_SA1,
+		      "23h/34h-35h header must select SA-1 mapping");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_SA1) != 0,
+		      "SA-1 cartridge flag must be set");
+		CHECK(snesRom.GetSRAMBytes() == 32768,
+		      "SA-1 SRAM code 5 must expose 32 KiB");
+		CHECK(snesRom.GetMapperName() && !strcmp(snesRom.GetMapperName(), "SA-1"),
+		      "mapper diagnostic must identify SA-1");
+		if (battery)
+			CHECK((snesRom.m_Flags & SNROM_FLAG_SAVERAM) != 0,
+			      "type 35h must use battery-backed BW-RAM");
+		else
+			CHECK((snesRom.m_Flags & SNROM_FLAG_RAM) != 0,
+			      "type 34h must use volatile BW-RAM");
+	}
+}
+
 static void TestVideoRegionHeaderCodes(void)
 {
 	struct RegionCaseT {
@@ -146,39 +239,6 @@ static void TestVideoRegionHeaderCodes(void)
 		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
 			"region fixture must load");
 		CHECK(snesRom.m_eVideoType == cases[i].expected, cases[i].name);
-	}
-}
-
-static void TestSA1HeaderDetection(void)
-{
-	for (int battery = 0; battery < 2; battery++)
-	{
-		std::vector<Uint8> rom(0x200000, 0xFF);
-		PutHeader(rom, 0x7FC0, battery ? "SA1 TYPE35" : "SA1 TYPE34",
-		          0x23, 0x4567, 0x8000, 0x0000);
-		SNRomInfoT *info = (SNRomInfoT *)&rom[0x7FC0];
-		info->RomType = battery ? 0x35 : 0x34;
-		info->SRAMSize = 0x05;
-
-		CMemFileIO io;
-		SnesRom snesRom;
-		io.Open(&rom[0], (Uint32)rom.size());
-		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
-		      "SA-1 fixture must load");
-		CHECK(snesRom.m_eMapping == SNROM_MAPPING_SA1,
-		      "23h/34h-35h header must select SA-1 mapping");
-		CHECK((snesRom.m_Flags & SNROM_FLAG_SA1) != 0,
-		      "SA-1 cartridge flag must be set");
-		CHECK(snesRom.GetSRAMBytes() == 32768,
-		      "SA-1 SRAM size code 5 must expose 32 KiB");
-		CHECK(snesRom.GetMapperName() && !strcmp(snesRom.GetMapperName(), "SA-1"),
-		      "mapper diagnostic must identify SA-1");
-		if (battery)
-			CHECK((snesRom.m_Flags & SNROM_FLAG_SAVERAM) != 0,
-			      "type 35h must use battery-backed BW-RAM");
-		else
-			CHECK((snesRom.m_Flags & SNROM_FLAG_RAM) != 0,
-			      "type 34h must use volatile BW-RAM");
 	}
 }
 
@@ -236,8 +296,11 @@ int main(void)
 {
 	TestCleanLoRom();
 	TestCleanHiRom();
-	TestVideoRegionHeaderCodes();
+	TestCleanExLoRom();
+	TestCleanExHiRom();
+	TestSramExponent();
 	TestSA1HeaderDetection();
+	TestVideoRegionHeaderCodes();
 	TestPinocchioFalseType1Regression();
 	TestRealType1StillWorks();
 

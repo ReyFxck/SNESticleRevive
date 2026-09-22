@@ -36,8 +36,9 @@ static SnesMemMapT	_SnesMemMap_LoRom[]=
 	{0x40, 0x6F, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM, 0x200000},
 	{0xC0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM, 0x200000},
 
-	// map sram areas
-	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	// standard LoROM SRAM windows
+	{0x70, 0x7D, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xF0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 
 	// map ram
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
@@ -54,13 +55,10 @@ static SnesMemMapT	_SnesMemMap_LoRom[]=
 	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
 };
 
-/* SA-1 S-CPU view (map mode 23h). I-RAM and MMIO are routed through
-   the existing PPU0 trap page; BW-RAM overlays are installed below. */
-static SnesMemMapT _SnesMemMap_SA1[]=
+/* SA-1 S-CPU system view. ROM is installed by RemapSA1ROM() so the
+   $2220-$2223 MMC registers can replace individual 1 MiB groups cheaply. */
+static SnesMemMapT _SnesMemMap_SA1_Sys[]=
 {
-	{0x00, 0x3F, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
-	{0x80, 0xBF, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
-	{0xC0, 0xFF, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
 	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
 	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
@@ -68,43 +66,52 @@ static SnesMemMapT _SnesMemMap_SA1[]=
 	{0x80, 0xBF, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
 	{0x80, 0xBF, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
 	{0x80, 0xBF, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
-	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
+	{0, 0, 0, 0, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_NONE}
 };
 
-static SnesMemMapT	_SnesMemMap_HiRom[]=
+static SnesMemMapT	_SnesMemMap_HiRom_Sys[]=
 {
-	// map slow rom
-	{0x00, 0x3F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
-	{0x40, 0x6F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
+	// standard HiROM SRAM windows
+	{0x20, 0x3F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xA0, 0xBF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 
-	// map fast rom
-	{0x80, 0xBF, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
-	{0xC0, 0xFF, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
-
-	// map sram areas
-	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x00, 0x0F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x10, 0x1F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x20, 0x2F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x30, 0x3F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x80, 0x8F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x90, 0x9F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0xA0, 0xAF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0xB0, 0xBF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-
-	// map ram
+	// WRAM
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
 
-	// map lo-ram / ppu areas
+	// system / PPU windows
 	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
 	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
 	{0x00, 0x3F, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
-
 	{0x80, 0xBF, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
 	{0x80, 0xBF, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
 	{0x80, 0xBF, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
 
-	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
+	{0, 0, 0, 0, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_NONE}
+};
+
+/* Small LoROM boards decode SRAM through the upper half of $70-$7D/$F0-$FF
+   as well. Large ROMs keep that half for ROM. */
+static SnesMemMapT _SnesMemMap_LoRom_SRAMFullHigh[]=
+{
+	{0x70, 0x7D, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xF0, 0xFF, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0, 0, 0, 0, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_NONE}
+};
+
+/* ExHiROM keeps the first 4 MiB in the high half of the address space and
+   exposes bytes above 4 MiB through the low half.  Cartridge RAM is decoded
+   in $80-$BF:6000-$7FFF on strict ExHiROM boards. */
+static SnesMemMapT _SnesMemMap_ExHiRom_Sys[]=
+{
+	{0x80, 0xBF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
+	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x00, 0x3F, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0x80, 0xBF, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x80, 0xBF, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x80, 0xBF, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0, 0, 0, 0, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_NONE}
 };
 
 #if SNES_DSP1
@@ -255,6 +262,54 @@ static Uint32 _SnesMirrorRomOffset(Uint32 uSize, Uint32 uPos)
 		return _SnesMirrorRomOffset(uSize, uPos - uMask);
 
 	return uMask + _SnesMirrorRomOffset(uSize - uMask, uPos - uMask);
+}
+
+
+/* HiROM advances one full 64 KiB ROM bank for every CPU bank even when only
+   $8000-$FFFF is visible.  The legacy table mapper advances by the visible
+   byte count, so HiROM/ExHiROM ROM pages are installed explicitly here. */
+static void _MapHiRomRegion(SNCpuT *pCpu, Uint8 *pRom, Uint32 uRomBytes,
+	Uint32 uBankStart, Uint32 uBankEnd, Uint32 uStartAddr,
+	Uint32 uBaseOffset)
+{
+	Uint32 uBank;
+	if (!pRom || !uRomBytes) return;
+
+	for (uBank = uBankStart; uBank <= uBankEnd; ++uBank)
+	{
+		Uint32 uAddr;
+		Uint32 uBankOffset =
+			uBaseOffset + ((uBank - uBankStart) << 16);
+		for (uAddr = uStartAddr; uAddr < 0x10000u;
+		     uAddr += SNCPU_BANK_SIZE)
+		{
+			Uint32 uRomOffset = _SnesMirrorRomOffset(
+				uRomBytes, uBankOffset + uAddr);
+			Uint32 uCpuAddr = (uBank << 16) | uAddr;
+			SNCPUSetMemSpeed(pCpu, uCpuAddr,
+				SNCPU_BANK_SIZE, SNCPU_CYCLE_SLOW);
+			SNCPUSetBank(pCpu, uCpuAddr, SNCPU_BANK_SIZE,
+				pRom + uRomOffset, FALSE);
+		}
+	}
+}
+
+static void _MapHiRomStandard(SNCpuT *pCpu, Uint8 *pRom, Uint32 uRomBytes)
+{
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0x00, 0x3F, 0x8000, 0x000000);
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0x40, 0x7D, 0x0000, 0x000000);
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0x80, 0xBF, 0x8000, 0x000000);
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0xC0, 0xFF, 0x0000, 0x000000);
+}
+
+static void _MapExHiRom(SNCpuT *pCpu, Uint8 *pRom, Uint32 uRomBytes)
+{
+	/* First 4 MiB live in $C0-$FF (and the $80-$BF upper-half mirror).
+	   Bytes above 4 MiB live in $40-$7D and mirror into $00-$3F:$8000+. */
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0xC0, 0xFF, 0x0000, 0x000000);
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0x80, 0xBF, 0x8000, 0x000000);
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0x40, 0x7D, 0x0000, 0x400000);
+	_MapHiRomRegion(pCpu, pRom, uRomBytes, 0x00, 0x3F, 0x8000, 0x400000);
 }
 
 /* Sobrepoe o mapa generico LoROM com as duas visoes do Program ROM usadas
@@ -461,7 +516,8 @@ void SnesSystem::DumpMemMap()
    tem que vencer a ROM que a regiao $40-$7F mapeia ali). */
 static SnesMemMapT _SnesMemMap_ExLoRom_Sys[]=
 {
-	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0x70, 0x7D, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xF0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
 	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
 	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
@@ -521,6 +577,56 @@ void SnesSystem::MapMemExLoRom(void)
 	MapMem(_SnesMemMap_ExLoRom_Sys);
 }
 
+void SnesSystem::RemapSA1ROM(Uint32 uWhich, Uint8 uMap)
+{
+	static const Uint8 s_LoBankBase[4] = { 0x00, 0x20, 0x80, 0xA0 };
+	Uint8 *pRom;
+	Uint32 uRomBytes;
+	Uint32 uBank, uPage;
+	Uint32 uFullSegment, uLoSegment;
+	Uint8 uLoBank;
+
+	if (!m_pRom || uWhich >= 4)
+		return;
+
+	pRom = m_pRom->GetData();
+	uRomBytes = m_pRom->GetBytes();
+	if (!pRom || !uRomBytes)
+		return;
+
+	uFullSegment = (Uint32)(uMap & 7) * 0x100000u;
+	uLoSegment = (Uint32)((uMap & 0x80) ? (uMap & 7) : uWhich) * 0x100000u;
+	uLoBank = s_LoBankBase[uWhich];
+
+	for (uBank = 0; uBank < 16; uBank++)
+	{
+		Uint32 uAddrBase = (0xC0u + uWhich * 0x10u + uBank) << 16;
+		for (uPage = 0; uPage < 0x10000u; uPage += SNCPU_BANK_SIZE)
+		{
+			Uint32 uOff = _SnesMirrorRomOffset(
+				uRomBytes, uFullSegment + uBank * 0x10000u + uPage);
+			SNCPUSetMemSpeed(&m_Cpu, uAddrBase + uPage,
+			                  SNCPU_BANK_SIZE, SNCPU_CYCLE_SLOW);
+			SNCPUSetBank(&m_Cpu, uAddrBase + uPage, SNCPU_BANK_SIZE,
+			             pRom + uOff, FALSE);
+		}
+	}
+
+	for (uBank = 0; uBank < 32; uBank++)
+	{
+		Uint32 uAddrBase = ((Uint32)uLoBank + uBank) << 16;
+		for (uPage = 0; uPage < 0x8000u; uPage += SNCPU_BANK_SIZE)
+		{
+			Uint32 uOff = _SnesMirrorRomOffset(
+				uRomBytes, uLoSegment + uBank * 0x8000u + uPage);
+			SNCPUSetMemSpeed(&m_Cpu, uAddrBase + 0x8000u + uPage,
+			                  SNCPU_BANK_SIZE, SNCPU_CYCLE_SLOW);
+			SNCPUSetBank(&m_Cpu, uAddrBase + 0x8000u + uPage,
+			             SNCPU_BANK_SIZE, pRom + uOff, FALSE);
+		}
+	}
+}
+
 void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 {
 	// set default traps
@@ -539,6 +645,9 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 		// mode 20h
 		case SNROM_MAPPING_LOROM:
 			MapMem(_SnesMemMap_LoRom);
+			if (m_pRom->GetSRAMBytes() > 0 &&
+			    m_pRom->GetBytes() < 0x200000u)
+				MapMem(_SnesMemMap_LoRom_SRAMFullHigh);
 
 #if SNES_DSP1
 			if (uFlags & SNROM_FLAG_DSP1) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP1; }
@@ -615,7 +724,8 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 
 		// mode 21h
 		case SNROM_MAPPING_HIROM:
-			MapMem(_SnesMemMap_HiRom);
+			_MapHiRomStandard(&m_Cpu, m_pRom->GetData(), m_pRom->GetBytes());
+			MapMem(_SnesMemMap_HiRom_Sys);
 
 #if SNES_DSP1
 			if (uFlags & SNROM_FLAG_DSP1)
@@ -637,13 +747,24 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 			MapMemExLoRom();
 			break;
 
+		case SNROM_MAPPING_EXHIROM:
+			_MapExHiRom(&m_Cpu, m_pRom->GetData(), m_pRom->GetBytes());
+			MapMem(_SnesMemMap_ExHiRom_Sys);
+			break;
+
 		case SNROM_MAPPING_SA1:
 		{
 			Uint32 uBank;
-			MapMem(_SnesMemMap_SA1);
+			MapMem(_SnesMemMap_SA1_Sys);
 			m_SA1.SetMemory(m_pRom->GetData(), m_pRom->GetBytes(),
 			                m_SRam, m_uSramSize);
 
+			RemapSA1ROM(0, 0x00);
+			RemapSA1ROM(1, 0x01);
+			RemapSA1ROM(2, 0x02);
+			RemapSA1ROM(3, 0x03);
+
+			// S-CPU 8 KiB BW-RAM window selected by $2224.
 			for (uBank = 0x00; uBank <= 0x3F; uBank++)
 			{
 				Uint32 uAddr = (uBank << 16) | 0x6000;
@@ -653,6 +774,8 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 				SNCPUSetMemSpeed(&m_Cpu, uAddr, 0x2000, SNCPU_CYCLE_SLOW);
 				SNCPUSetTrap(&m_Cpu, uAddr, 0x2000, ReadSA1BWRAM, WriteSA1BWRAM);
 			}
+
+			// Linear BW-RAM view in banks $40-$4F.
 			SNCPUSetMemSpeed(&m_Cpu, 0x400000, 0x100000, SNCPU_CYCLE_SLOW);
 			SNCPUSetTrap(&m_Cpu, 0x400000, 0x100000,
 			             ReadSA1BWRAM, WriteSA1BWRAM);

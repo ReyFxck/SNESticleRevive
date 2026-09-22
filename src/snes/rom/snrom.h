@@ -33,8 +33,9 @@ enum SNRomMappingE
 {
 	SNROM_MAPPING_LOROM,
 	SNROM_MAPPING_HIROM,
-	SNROM_MAPPING_EXLOROM,	// LoROM > 4MB (Jumbo / ExLoROM, ate 8MB)
-	SNROM_MAPPING_SA1,		// SA-1 mode 23h cartridge map
+	SNROM_MAPPING_EXLOROM,	// extended LoROM / Jumbo LoROM
+	SNROM_MAPPING_EXHIROM,	// extended HiROM (>4 MiB, map modes 25h/35h)
+	SNROM_MAPPING_SA1,		// SA-1 map mode 23h
 
 	SNROM_MAPPING_NUM
 };

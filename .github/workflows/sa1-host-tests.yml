@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Build shared CPU tests
+        run: ./tools/cputest/build.sh
+      - name: Run shared CPU tests
+        run: ./tools/cputest/cpu_test
       - name: Build SA-1 tests
         run: ./tools/sa1test/build.sh
       - name: Run SA-1 tests
