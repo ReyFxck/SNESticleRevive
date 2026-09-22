@@ -1490,7 +1490,8 @@ Bool SNSA1::ExecuteCpuFast()
 	SNCPUSA1BusSetExecCpu(&m_Cpu);
 	SNCPUExecute_ASM(&m_Cpu);
 	SNCPUSA1BusSetExecCpu(NULL);
-	SNCPUSA1BusSetIRAM(NULL);
+	/* Keep the I-RAM sidecar published for the host R5900 fast-read path.
+	   Access is still gated by g_SNCPU_SA1HostFastReadEnabled. */
 	m_Cpu.bRunning = FALSE;
 	if (m_Cpu.nAbortCycles != 0)
 	{
