@@ -28,8 +28,8 @@ jobs:
       - name: Ensure PS2DEV
         run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
 
-      - name: Build diagnostic PS2 ELF
-        run: make AUTO_INSTALL=yes COLOR=0 JOBS=2 PACK=0 SNES_DIAGNOSTICS=1 fast
+      - name: Build deep-diagnostic PS2 ELF
+        run: make AUTO_INSTALL=yes COLOR=0 JOBS=2 PACK=0 SNES_DIAGNOSTICS=2 fast
 
       - name: Verify PS2 ELF
         run: |

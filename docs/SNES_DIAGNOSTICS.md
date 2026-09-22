@@ -85,12 +85,12 @@ the problem being measured.
 | `0x80` | A coprocessor invariant failed, currently S-DD1 source mapping or the GSU watchdog. |
 
 The `[snes-capture] begin` record prints the combined bitmask. The captured
-frame then adds bounded PPU control-write, DMA/OAM and OBJ scanline traces,
+frame then adds bounded PPU control-write, DMA/OAM, OBJ scanline and SA-1 opcode traces,
 S-DD1 decompression traces, CPU/SPC state and state hashes. Bulk OAM, VRAM and
 CGRAM bytes are counted but not printed one by one. `[snes-ppu-reg]` lists the
-four busiest PPU ports in the window. A capture prints at most 32 ordinary PPU
-writes, 16 MDMA starts, eight S-DD1 DMAs/remaps and eight OBJ records on each
-of the two sampled scanlines.
+four busiest PPU ports in the window. A capture prints at most 32 ordinary PPU writes, 16 MDMA starts, eight S-DD1
+DMAs/remaps, eight OBJ records on each of the two sampled scanlines and 64
+`[snes-sa1-op]` instruction records when an SA-1 cartridge is active.
 
 ## Renderer cache policy
 

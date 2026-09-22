@@ -9,12 +9,19 @@
 #include <string.h>
 #include "snsa1.h"
 #include "sntiming.h"
+#include "sndbglog.h"
 
 extern "C" {
 #include "sncpu_c.h"
 }
 
 static const Uint8 _SA1LoBankBase[4] = { 0x00, 0x20, 0x80, 0xA0 };
+
+#if SNDBG_DEEP
+static Uint32 _SA1TraceFrame = (Uint32)-1;
+static Uint32 _SA1TraceCount = 0;
+#define SNSA1_TRACE_MAX 64u
+#endif
 
 SNSA1::SNSA1()
 {
@@ -1280,7 +1287,13 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 {
 	Int32 nExecUnits;
 	Int32 nGuard;
+	Int32 nGuardLimit = 4;
 	Uint32 uCpuCycles = uSA1Cycles;
+
+#if SNDBG_DEEP
+	if (g_DbgCaptureActive)
+		nGuardLimit = (Int32)SNSA1_TRACE_MAX + 4;
+#endif
 
 	if (!uSA1Cycles || !m_State.Running)
 		return;
@@ -1300,7 +1313,7 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 	nExecUnits = (Int32)(uCpuCycles * SNCPU_CYCLE_FAST);
 	SNCPUAddCycles(&m_Cpu, nExecUnits);
 
-	for (nGuard = 0; nGuard < 4 && m_Cpu.Cycles > 0; nGuard++)
+	for (nGuard = 0; nGuard < nGuardLimit && m_Cpu.Cycles > 0; nGuard++)
 	{
 		ServiceNMI();
 		ServiceIRQ();
@@ -1312,6 +1325,48 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 			m_Cpu.Cycles = 0;
 			break;
 		}
+
+#if SNDBG_DEEP
+		if (g_DbgCaptureActive)
+		{
+			if (_SA1TraceFrame != g_DbgCaptureFrameNo)
+			{
+				_SA1TraceFrame = g_DbgCaptureFrameNo;
+				_SA1TraceCount = 0;
+			}
+			if (_SA1TraceCount < SNSA1_TRACE_MAX)
+			{
+				Uint32 uPC = m_Cpu.Regs.rPC & 0xFFFFFFu;
+				SNCpuBankT *pBank = &m_Cpu.Bank[uPC >> SNCPU_BANK_SHIFT];
+				Uint8 uOpcode = pBank->pMem ? pBank->pMem[uPC] : 0xFF;
+				Int32 nDelta = m_Cpu.Cycles - 1;
+				Int32 iCounter;
+
+				DLog("[snes-sa1-op] f=%u n=%u pc=%06X op=%02X a/x/y/s=%04X/%04X/%04X/%04X p/e=%02X/%u cyc=%d irq=%02X dma=%u/%u",
+					(unsigned)g_DbgCaptureFrameNo, (unsigned)_SA1TraceCount,
+					(unsigned)uPC, (unsigned)uOpcode,
+					(unsigned)m_Cpu.Regs.rA.w, (unsigned)m_Cpu.Regs.rX.w,
+					(unsigned)m_Cpu.Regs.rY.w, (unsigned)m_Cpu.Regs.rS.w,
+					(unsigned)m_Cpu.Regs.rP, (unsigned)m_Cpu.Regs.rE,
+					(int)m_Cpu.Cycles, (unsigned)m_Cpu.uSignal,
+					(unsigned)m_State.DMARunning,
+					(unsigned)m_State.DMARemaining);
+				_SA1TraceCount++;
+
+				// Portable equivalent of SNCPUExecuteOne(): temporarily expose one
+				// cycle of budget, but call the C interpreter directly so the
+				// S-CPU's global MIPS backend selection cannot leak into SA-1.
+				m_Cpu.Cycles -= nDelta;
+				for (iCounter = 0; iCounter < SNCPU_COUNTER_NUM; iCounter++)
+					m_Cpu.Counter[iCounter] -= nDelta;
+				ExecuteCpuC();
+				m_Cpu.Cycles += nDelta;
+				for (iCounter = 0; iCounter < SNCPU_COUNTER_NUM; iCounter++)
+					m_Cpu.Counter[iCounter] += nDelta;
+				continue;
+			}
+		}
+#endif
 
 		// SA-1 intentionally stays on the portable C interpreter until real
 		// game profiling proves which paths deserve R5900 assembly.  Do not use
