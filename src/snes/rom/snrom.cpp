@@ -546,7 +546,16 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			m_uSRAMSize = 64;
 			break;
 		}
-		switch (pCartInfo->RomType)
+		if (pCartInfo->RomMakeup == 0x23 &&
+		    (pCartInfo->RomType == 0x34 || pCartInfo->RomType == 0x35))
+		{
+			m_eMapping = SNROM_MAPPING_SA1;
+			m_Flags = SNROM_FLAG_ROM | SNROM_FLAG_SA1 |
+			          (pCartInfo->RomType == 0x35 ? SNROM_FLAG_SAVERAM : SNROM_FLAG_RAM);
+			if (pCartInfo->SRAMSize && pCartInfo->SRAMSize <= 8)
+				m_uSRAMSize = (Uint32)1 << (pCartInfo->SRAMSize + 3);
+		}
+		else switch (pCartInfo->RomType)
 		{
 		case 0:
 		case 53:
@@ -579,27 +588,6 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			break;
 		case 0x15:
 			m_Flags = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_SUPERFX;
-			break;
-		/* SA-1 cartridges use map mode 23h and type 34h (RAM) or 35h
-		   (battery-backed RAM). Require both fields so an unrelated type byte
-		   cannot accidentally enable the coprocessor. */
-		case 0x34:
-			if (pCartInfo->RomMakeup == 0x23)
-			{
-				m_eMapping = SNROM_MAPPING_SA1;
-				m_Flags = SNROM_FLAG_ROM | SNROM_FLAG_RAM | SNROM_FLAG_SA1;
-				if (pCartInfo->SRAMSize && pCartInfo->SRAMSize <= 8)
-					m_uSRAMSize = (Uint32)1 << (pCartInfo->SRAMSize + 3);
-			}
-			break;
-		case 0x35:
-			if (pCartInfo->RomMakeup == 0x23)
-			{
-				m_eMapping = SNROM_MAPPING_SA1;
-				m_Flags = SNROM_FLAG_ROM | SNROM_FLAG_SAVERAM | SNROM_FLAG_SA1;
-				if (pCartInfo->SRAMSize && pCartInfo->SRAMSize <= 8)
-					m_uSRAMSize = (Uint32)1 << (pCartInfo->SRAMSize + 3);
-			}
 			break;
 		case 227:
 			m_Flags		 = SNROM_FLAG_ROM | SNROM_FLAG_RAM | SNROM_FLAG_GAMEBOY;
