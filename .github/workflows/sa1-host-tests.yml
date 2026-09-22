@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - experimental/sa1-mips
+      - perf/sa1-r5900
   workflow_dispatch:
 
 jobs:
