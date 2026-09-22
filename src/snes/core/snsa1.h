@@ -43,6 +43,7 @@ struct SA1State
 	Uint16 ArithmeticOp1;
 	Uint16 ArithmeticOp2;
 	Uint64 ArithmeticResult;
+	Uint32 ArithmeticStartClock;
 	Uint16 VariableData;
 	Uint32 DMASource;
 	Uint32 DMADest;
@@ -52,6 +53,7 @@ struct SA1State
 	Uint8  DMAWaitTicks;
 	Uint8  CharConvLine;
 	Bool   ArithmeticOverflow;
+	Bool   ArithmeticPending;
 	Bool   TimerMatch;
 	Bool   NMIPending;
 	Bool   CC1Active;
@@ -145,6 +147,7 @@ private:
 	Bool ServiceNMI();
 	Bool ServiceIRQ();
 	void UpdateTimer(Uint32 uMasterCycles);
+	void ProcessArithmetic();
 	void ExecuteArithmetic();
 	Uint8 ReadVariableBus(Uint32 uAddr);
 	void LoadVariableData();

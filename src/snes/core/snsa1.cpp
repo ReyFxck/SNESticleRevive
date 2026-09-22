@@ -208,9 +208,15 @@ Uint8 SNSA1::ReadRegister(Uint16 uAddr)
 		return (uAddr == 0x2304) ? (Uint8)m_State.VCounterLatch :
 		                            (Uint8)(m_State.VCounterLatch >> 8);
 	if (uAddr >= 0x2306 && uAddr <= 0x230A)
+	{
+		ProcessArithmetic();
 		return (Uint8)(m_State.ArithmeticResult >> ((uAddr - 0x2306) * 8));
+	}
 	if (uAddr == 0x230B)
+	{
+		ProcessArithmetic();
 		return m_State.ArithmeticOverflow ? 0x80 : 0x00;
+	}
 	if (uAddr == 0x230C)
 	{
 		LoadVariableData();
@@ -261,6 +267,8 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		return;
 
 	uOld = m_State.Registers[uAddr - SNSA1_REGISTER_BASE];
+	if (uAddr >= 0x2250 && uAddr <= 0x2254)
+		ProcessArithmetic();
 	m_State.Registers[uAddr - SNSA1_REGISTER_BASE] = uData;
 
 	switch (uAddr)
@@ -395,7 +403,11 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 	case 0x2254:
 		m_State.ArithmeticOp2 = (Uint16)((m_State.ArithmeticOp2 & 0x00FF) |
 		                                    ((Uint16)uData << 8));
-		ExecuteArithmetic();
+		// Multiplication/division complete after five SA-1 clocks; cumulative
+		// multiplication takes six. Keep the previous result visible meanwhile.
+		m_State.ArithmeticStartClock =
+			(Uint32)SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME);
+		m_State.ArithmeticPending = TRUE;
 		break;
 
 	case 0x2258:
@@ -893,6 +905,26 @@ Uint32 SNSA1::RunDMA(Uint32 uSA1Ticks)
 
 	m_State.DMAStallTicks += (uStartTicks - uSA1Ticks);
 	return uSA1Ticks;
+}
+
+void SNSA1::ProcessArithmetic()
+{
+	Uint32 uNow;
+	Uint32 uElapsed;
+	Uint32 uRequired;
+
+	if (!m_State.ArithmeticPending)
+		return;
+
+	uNow = (Uint32)SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME);
+	uElapsed = uNow - m_State.ArithmeticStartClock;
+	uRequired = ((m_State.Registers[0x050] & 0x02) ? 6u : 5u) *
+	            (Uint32)SNCPU_CYCLE_FAST;
+	if (uElapsed < uRequired)
+		return;
+
+	m_State.ArithmeticPending = FALSE;
+	ExecuteArithmetic();
 }
 
 void SNSA1::ExecuteArithmetic()

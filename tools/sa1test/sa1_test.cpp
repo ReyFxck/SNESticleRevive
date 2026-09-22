@@ -17,6 +17,13 @@ extern "C" {
 static int g_Failures = 0;
 #define CHECK(c, m) do { if (!(c)) { fprintf(stderr, "FAIL: %s (%s:%d)\n", (m), __FILE__, __LINE__); g_Failures++; } } while (0)
 
+static void AdvanceSA1CpuClock(SNSA1 &sa1, Uint32 uTicks)
+{
+	Int32 nUnits = (Int32)(uTicks * SNCPU_CYCLE_FAST);
+	SNCPUAddCycles(sa1.GetCpu(), nUnits);
+	SNCPUConsumeCycles(sa1.GetCpu(), nUnits);
+}
+
 static void TestResetDefaults(void)
 {
 	SNSA1 sa1;
@@ -459,16 +466,23 @@ static void TestArithmetic(void)
 {
 	SNSA1 sa1;
 
-	// signed -3 * 5 = -15, exposed as a 40-bit result.
+	// signed -3 * 5 = -15. The previous result remains visible for four
+	// SA-1 clocks; multiplication commits on the fifth.
 	sa1.WriteRegister(0x2250, 0x00);
 	sa1.WriteRegister(0x2251, 0xFD);
 	sa1.WriteRegister(0x2252, 0xFF);
 	sa1.WriteRegister(0x2253, 0x05);
 	sa1.WriteRegister(0x2254, 0x00);
+	CHECK(sa1.ReadRegister(0x2306) == 0x00,
+	      "math result must remain old immediately after start");
+	AdvanceSA1CpuClock(sa1, 4);
+	CHECK(sa1.ReadRegister(0x2306) == 0x00,
+	      "multiply result must not commit before five SA-1 clocks");
+	AdvanceSA1CpuClock(sa1, 1);
 	CHECK(sa1.ReadRegister(0x2306) == 0xF1 &&
 	      sa1.ReadRegister(0x2307) == 0xFF &&
 	      sa1.ReadRegister(0x230A) == 0xFF,
-	      "signed multiplication must produce 40-bit two's-complement result");
+	      "signed multiplication must commit after five clocks");
 
 	// signed dividend / unsigned divisor uses a non-negative remainder:
 	// -10 = (-4 * 3) + 2.
@@ -477,6 +491,7 @@ static void TestArithmetic(void)
 	sa1.WriteRegister(0x2252, 0xFF);
 	sa1.WriteRegister(0x2253, 0x03);
 	sa1.WriteRegister(0x2254, 0x00);
+	AdvanceSA1CpuClock(sa1, 5);
 	CHECK(sa1.ReadRegister(0x2306) == 0xFC &&
 	      sa1.ReadRegister(0x2307) == 0xFF &&
 	      sa1.ReadRegister(0x2308) == 0x02 &&
@@ -489,28 +504,38 @@ static void TestArithmetic(void)
 	sa1.WriteRegister(0x2252, 0xFF);
 	sa1.WriteRegister(0x2253, 0x03);
 	sa1.WriteRegister(0x2254, 0x00);
+	AdvanceSA1CpuClock(sa1, 5);
 	CHECK(sa1.ReadRegister(0x2306) == 0xFC &&
 	      sa1.ReadRegister(0x2307) == 0xFF &&
 	      sa1.ReadRegister(0x2308) == 0x01 &&
 	      sa1.ReadRegister(0x2309) == 0x00,
 	      "division must use a positive remainder for negative dividends");
 	CHECK(sa1.ReadRegister(0x2251) == 0 && sa1.ReadRegister(0x2253) == 0,
-	      "division must destroy MA and MB");
+	      "division must destroy MA and MB after completion");
 
-	// Division by zero produces a zero result and still destroys operands.
+	// Division by zero returns zero after the same five-clock latency.
 	sa1.WriteRegister(0x2251, 0x34); sa1.WriteRegister(0x2252, 0x12);
 	sa1.WriteRegister(0x2253, 0x00); sa1.WriteRegister(0x2254, 0x00);
+	AdvanceSA1CpuClock(sa1, 5);
 	CHECK(sa1.ReadRegister(0x2306) == 0 && sa1.ReadRegister(0x2309) == 0,
 	      "division by zero must return zero");
 
-	// cumulative mode: 2*3 + 4*5 = 26.
+	// Cumulative mode takes six clocks per multiply: 2*3 + 4*5 = 26.
 	sa1.WriteRegister(0x2250, 0x02);
 	sa1.WriteRegister(0x2251, 2); sa1.WriteRegister(0x2252, 0);
 	sa1.WriteRegister(0x2253, 3); sa1.WriteRegister(0x2254, 0);
+	AdvanceSA1CpuClock(sa1, 5);
+	CHECK(sa1.ReadRegister(0x2306) == 0,
+	      "cumulative multiply must remain pending for six clocks");
+	AdvanceSA1CpuClock(sa1, 1);
+	CHECK(sa1.ReadRegister(0x2306) == 6,
+	      "first cumulative multiply must commit on sixth clock");
 	CHECK(sa1.ReadRegister(0x2253) == 0,
-	      "cumulative multiply must destroy MB");
+	      "cumulative multiply must destroy MB after completion");
+
 	sa1.WriteRegister(0x2251, 4); sa1.WriteRegister(0x2252, 0);
 	sa1.WriteRegister(0x2253, 5); sa1.WriteRegister(0x2254, 0);
+	AdvanceSA1CpuClock(sa1, 6);
 	CHECK(sa1.ReadRegister(0x2306) == 26 && sa1.ReadRegister(0x2307) == 0,
 	      "cumulative arithmetic must retain the 40-bit sum");
 }
