@@ -638,19 +638,14 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	// mirror through the same SPC write queue and timing path as $2140-43.
 	if (uAddr >= 0x2140 && uAddr <= 0x217F)
 	{
-		/* Both MesenCE and Snes9x bring the SPC to the current S-CPU time
-		   before changing an APUIO input latch. This keeps consecutive command
-		   bytes from collapsing into one value when the audio driver is polling
-		   the ports during a transition. */
+		/* Advance the SPC to the S-CPU access time, then update the input
+		   latch directly. This matches Snes9x's port-access ordering and avoids
+		   a frame-relative queue delaying/merging handshake edges at frame wrap.
+		   A future cycle-exact latch can model MesenCE's half-SPC-cycle rule,
+		   but an immediate post-sync latch is both deterministic and far closer
+		   to hardware than the old zero-latency queued write. */
 		pSnes->SyncSPC();
-		#if SNSPCIO_WRITEQUEUE
-		if (!pSnes->m_SpcIO.EnqueueWrite(
-		        SNCPUGetCounter(pCpu, SNCPU_COUNTER_FRAME) + SNES_SPCWRITE_LATENCY,
-		        uAddr & 3, uData))
-		#endif
-		{
-			pSnes->m_SpcIO.m_Regs.apu_w[uAddr & 3] = uData;
-		}
+		pSnes->m_SpcIO.m_Regs.apu_w[uAddr & 3] = uData;
 		return;
 	}
 
@@ -1975,12 +1970,6 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 
 	SyncPPU();
 	SyncSPC();
-#if SNSPCIO_WRITEQUEUE
-	/* Frame-relative timestamps are reset at the next ExecuteFrame().
-	   Nothing from the old frame may remain in the queue or it would be
-	   delayed by almost an entire frame after the counter wraps. */
-	m_SpcIO.SyncQueueAll();
-#endif
 
 	// update spc timers
 	SNSpcTimerSync(&m_SpcIO.m_Regs.spc_timer[0], SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_TOTAL));
