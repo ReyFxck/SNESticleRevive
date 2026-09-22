@@ -137,6 +137,88 @@ static void TestBitmapModes(void)
 }
 
 
+
+static void TestSCPUBridge(void)
+{
+	SNSA1 sa1;
+
+	sa1.WriteRegister(0x220C, 0x34);
+	sa1.WriteRegister(0x220D, 0x12);
+	sa1.WriteRegister(0x220E, 0x78);
+	sa1.WriteRegister(0x220F, 0x56);
+	sa1.WriteRegister(0x2209, 0x50);
+	CHECK(sa1.SCPUUseNMIVector(), "$2209 bit 4 must select SA-1 S-CPU NMI vector");
+	CHECK(sa1.SCPUUseIRQVector(), "$2209 bit 6 must select SA-1 S-CPU IRQ vector");
+	CHECK(sa1.GetSCPUNMIVector() == 0x1234, "$220C/$220D S-CPU NMI vector");
+	CHECK(sa1.GetSCPUIRQVector() == 0x5678, "$220E/$220F S-CPU IRQ vector");
+
+	sa1.WriteRegister(0x2201, 0x80);
+	sa1.WriteRegister(0x2209, 0x80);
+	CHECK(sa1.SCPUIRQPending(), "S-CPU IRQ request+enable must assert bridge");
+	sa1.WriteRegister(0x2202, 0x80);
+	CHECK(!sa1.SCPUIRQPending(), "$2202 must clear S-CPU IRQ bridge");
+}
+
+static void TestCharConvertType2(void)
+{
+	SNSA1 sa1;
+	// CC2, 2bpp, destination I-RAM $0600.
+	sa1.WriteRegister(0x2230, 0xA0);
+	sa1.WriteRegister(0x2231, 0x02);
+	sa1.WriteRegister(0x2235, 0x00);
+	sa1.WriteRegister(0x2236, 0x06);
+	sa1.WriteRegister(0x2237, 0x00);
+
+	const Uint8 pixels0[8] = {0,1,2,3,0,1,2,3};
+	for (int i = 0; i < 8; i++)
+		sa1.WriteRegister((Uint16)(0x2240 + i), pixels0[i]);
+	CHECK(sa1.ReadIRAM(0x0600) == 0x55, "CC2 plane 0 packing");
+	CHECK(sa1.ReadIRAM(0x0601) == 0x33, "CC2 plane 1 packing");
+
+	for (int i = 0; i < 8; i++)
+		sa1.WriteRegister((Uint16)(0x2248 + i), 0x03);
+	CHECK(sa1.ReadIRAM(0x0602) == 0xFF, "CC2 second line plane 0");
+	CHECK(sa1.ReadIRAM(0x0603) == 0xFF, "CC2 second line plane 1");
+}
+
+static void TestCharConvertType1(void)
+{
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	// One 2bpp tile, every pixel value = 1. Packed source is 01,01,...,
+	// so planar output must be plane0=$FF, plane1=$00 on every row.
+	for (int y = 0; y < 8; y++)
+	{
+		bwram[y * 2 + 0] = 0x55;
+		bwram[y * 2 + 1] = 0x55;
+	}
+
+	SNSA1 sa1;
+	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2201, 0x20);
+	sa1.WriteRegister(0x2230, 0xB0);
+	sa1.WriteRegister(0x2231, 0x02);
+	sa1.WriteRegister(0x2232, 0x00);
+	sa1.WriteRegister(0x2233, 0x00);
+	sa1.WriteRegister(0x2234, 0x00);
+	sa1.WriteRegister(0x2235, 0x00);
+	sa1.WriteRegister(0x2236, 0x01);
+
+	CHECK(sa1.IsCC1Active(), "CC1 must arm when DDA high is written");
+	CHECK((sa1.ReadRegister(0x2300) & 0x20) != 0, "CC1 must latch S-CPU CHDMA flag");
+	CHECK(sa1.SCPUIRQPending(), "CC1 flag + SIE must assert S-CPU IRQ bridge");
+	CHECK(sa1.ReadCC1Byte(0x400000) == 0xFF, "CC1 first planar byte");
+	CHECK(sa1.ReadCC1Byte(0x400001) == 0x00, "CC1 second planar byte");
+	CHECK(sa1.ReadIRAM(0x0100) == 0xFF && sa1.ReadIRAM(0x0101) == 0x00,
+	      "CC1 must buffer converted row in I-RAM");
+	CHECK(sa1.ReadIRAM(0x0102) == 0xFF && sa1.ReadIRAM(0x0103) == 0x00,
+	      "CC1 must convert all 8 rows");
+
+	sa1.WriteRegister(0x2231, 0x82);
+	CHECK(!sa1.IsCC1Active(), "CDMA CHDEND must stop CC1");
+}
+
 static void TestNormalDMA(void)
 {
 	std::vector<Uint8> rom(0x200000, 0x00);
@@ -426,6 +508,9 @@ int main(void)
 	TestIRAMAndBWRAM();
 	TestWriteProtection();
 	TestBitmapModes();
+	TestSCPUBridge();
+	TestCharConvertType2();
+	TestCharConvertType1();
 	TestNormalDMA();
 	TestArithmetic();
 	TestVariableLengthBit();

@@ -173,6 +173,7 @@ private:
 
 	void	SyncSPC(Int32 uExtra = 0);
 	void	SyncPPU();
+	void	RefreshSCPUIRQ();
 	Int32	CalculateLineIRQCycle();
 	void	RescheduleLineIRQ(Bool bAllowImmediate);
 	void	ExecuteLine();

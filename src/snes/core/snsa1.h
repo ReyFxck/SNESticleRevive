@@ -40,9 +40,11 @@ struct SA1State
 	Uint16 VariableData;
 	Uint8  VariableBitPos;
 	Uint8  MasterRemainder;
+	Uint8  CharConvLine;
 	Bool   ArithmeticOverflow;
 	Bool   TimerMatch;
 	Bool   NMIPending;
+	Bool   CC1Active;
 	Bool   Running;
 };
 
@@ -69,6 +71,17 @@ public:
 
 	Uint8 ReadBWRAMDirect(Uint32 uAddr) const;
 	void  WriteBWRAMDirect(Uint32 uAddr, Uint8 uData);
+
+	// Character conversion type 1 is consumed by the SNES MDMA source path.
+	Bool  IsCC1Active() const { return m_State.CC1Active; }
+	Uint8 ReadCC1Byte(Uint32 uAddr);
+
+	// S-CPU interrupt/vector bridge.  State remains owned by the SA-1.
+	Bool  SCPUIRQPending() const;
+	Bool  SCPUUseNMIVector() const { return (m_State.Registers[0x009] & 0x10) ? TRUE : FALSE; }
+	Bool  SCPUUseIRQVector() const { return (m_State.Registers[0x009] & 0x40) ? TRUE : FALSE; }
+	Uint16 GetSCPUNMIVector() const;
+	Uint16 GetSCPUIRQVector() const;
 
 	// Add master-clock time and execute the independent SA-1 65C816 slice.
 	void StepMasterCycles(Int32 nMasterCycles);
@@ -98,6 +111,9 @@ private:
 	void ExecuteArithmetic();
 	void UpdateVariableData(Bool bIncrement, Bool bNoShift);
 	void ExecuteDMA();
+	void StartCC1();
+	void ExecuteCC2();
+	void ConvertCC1Tile(Uint32 uAddr);
 
 	Uint8 ReadCpuBus(Uint32 uAddr);
 	void  WriteCpuBus(Uint32 uAddr, Uint8 uData);

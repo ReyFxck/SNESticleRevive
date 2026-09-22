@@ -439,6 +439,16 @@ void SnesSystem::SyncSPC(Int32 uExtra)
     */
 }
 
+void SnesSystem::RefreshSCPUIRQ()
+{
+	Bool bPending = (m_IO.m_Regs.timeup & 0x80) ? TRUE : FALSE;
+	if (m_bSuperFX && m_GSU.IrqPending())
+		bPending = TRUE;
+	if (m_bSA1 && m_SA1.SCPUIRQPending())
+		bPending = TRUE;
+	SNCPUSignalIRQ(&m_Cpu, bPending ? 1 : 0);
+}
+
 inline void SnesSystem::SyncPPU()
 {
 #if SNDBG_LOG
@@ -498,9 +508,9 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 		g_DbgChipReads[SNDBG_CHIP_GSU]++;
 		#endif
 		Uint8 v = pSnes->m_GSU.ReadReg((Uint16)uAddr);
-		// ler o SFR ($3031) limpa o flag de IRQ do GSU -> baixa a linha de IRQ.
-		if (!pSnes->m_GSU.IrqPending())
-			SNCPUSignalIRQ(&pSnes->m_Cpu, 0);
+		// Recompute the shared S-CPU IRQ line instead of clearing another
+		// coprocessor's pending source by accident.
+		pSnes->RefreshSCPUIRQ();
 		return v;
 	}
 
@@ -626,6 +636,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 			pSnes->m_SA1.WriteRegister((Uint16)uAddr, uData);
 			if (uAddr >= 0x2220 && uAddr <= 0x2223)
 				pSnes->RemapSA1ROM((Uint32)(uAddr - 0x2220), uData);
+			pSnes->RefreshSCPUIRQ();
 			return;
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x37FF)
@@ -799,7 +810,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
         {
             Uint8 uData = pIO->m_Regs.timeup;
             pIO->m_Regs.timeup &= ~0x80;
-            SNCPUSignalIRQ(pCpu, 0);
+            pSnes->RefreshSCPUIRQ();
             return uData;
         }
     case 0x4212:	// HVBJOY
@@ -932,8 +943,8 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
                     // remove timeup bit
                     pIO->m_Regs.timeup &= ~0x80;
                 }
-                // clear IRQ
-                SNCPUSignalIRQ(pCpu, 0);
+                // Clear the timer source, but preserve SA-1/GSU IRQ sources.
+                pSnes->RefreshSCPUIRQ();
             }
 
             // set new nmi signal
@@ -1271,6 +1282,7 @@ SnesSystem::SnesSystem()
 	m_DMAC.SetCPU(&m_Cpu);
 	m_DMAC.SetPPU(&m_PPU);
 	m_DMAC.SetSDD1(&m_SDD1);
+	m_DMAC.SetSA1(&m_SA1);
 
 	m_bSDD1 = FALSE;
 	m_bSA1 = FALSE;
@@ -1570,6 +1582,11 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 				}
 
                 SNCPUNMI(&m_Cpu);
+				if (m_bSA1 && m_SA1.SCPUUseNMIVector())
+				{
+					m_Cpu.Regs.rPC = m_SA1.GetSCPUNMIVector();
+					SNCPUConsumeCycles(&m_Cpu, SNCPU_CYCLE_FAST * 2);
+				}
                 // clear NMI edge signal
                 m_Cpu.uSignal&= ~SNCPU_SIGNAL_NMIEDGE;
             } else
@@ -1584,6 +1601,11 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
                 // attempt irq
                 // irqs will always be attempted until signal has been cleared
                 SNCPUIRQ(&m_Cpu);
+				if (m_bSA1 && m_SA1.SCPUUseIRQVector())
+				{
+					m_Cpu.Regs.rPC = m_SA1.GetSCPUIRQVector();
+					SNCPUConsumeCycles(&m_Cpu, SNCPU_CYCLE_FAST * 2);
+				}
             } else
             if (m_Cpu.uSignal & SNCPU_SIGNAL_RESET)
             {
@@ -1827,7 +1849,10 @@ void SnesSystem::ExecuteLine()
 	// Phase 1 schedules SA-1 in deterministic scanline slices. The second
 	// 65C816 core will consume these credits in the next phase.
 	if (m_bSA1)
+	{
 		m_SA1.StepMasterCycles(SNES_CYCLESPERLINE);
+		RefreshSCPUIRQ();
+	}
 
 	// O hardware GSU roda em paralelo com o 65816. Este emulador sincroniza
 	// os dois uma vez por scanline, como uma aproximacao de baixo custo para
@@ -1842,8 +1867,8 @@ void SnesSystem::ExecuteLine()
 		g_TmgCycGSU += ProfCtrGetCycle() - _tGSU;
 #endif
 	}
-	if (m_bSuperFX && m_GSU.IrqPending())
-		SNCPUSignalIRQ(&m_Cpu, 1);
+	if (m_bSuperFX)
+		RefreshSCPUIRQ();
 
 	// clear h-blank enable flag
 	m_IO.m_Regs.hvbjoy&= ~0x40;

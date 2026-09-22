@@ -19,6 +19,18 @@ jobs:
         run: ./tools/sa1test/build.sh
       - name: Run SA-1 tests
         run: ./tools/sa1test/sa1_test
+      - name: Build PPU/DMA regression tests
+        run: ./tools/pputest/build.sh
+      - name: Run PPU/DMA regression tests
+        run: |
+          ./tools/pputest/obj_test
+          ./tools/pputest/oam_test
+          ./tools/pputest/chrcache_test
+          ./tools/pputest/audioschedule_test
+          ./tools/pputest/mode7_test
+          ./tools/pputest/queue_test
+          ./tools/pputest/safe_frameskip_test
+          ./tools/pputest/diag_test
       - name: Build ROM loader tests
         run: ./tools/romtest/build.sh
       - name: Run ROM loader tests

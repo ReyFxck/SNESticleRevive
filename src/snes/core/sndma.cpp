@@ -19,6 +19,7 @@ extern "C" {
 #include "sndma.h"
 #include "snppu.h"
 #include "snsdd1.h"
+#include "snsa1.h"
 #include "sndbglog.h"
 
 #define SNESDMA_DEBUG 0
@@ -52,6 +53,19 @@ static Int8 _SNDma_MDMAInc[4] =
 {
 	1, 0, -1, 0
 };
+
+SnesDMAC::SnesDMAC()
+{
+	memset(m_Channels, 0, sizeof(m_Channels));
+	m_MDMAEnable = 0;
+	m_HDMAEnable = 0;
+	m_HDMAEnded = 0;
+	m_HDMADoTransfer = 0;
+	m_pCPU = NULL;
+	m_pPPU = NULL;
+	m_pSDD1 = NULL;
+	m_pSA1 = NULL;
+}
 
 void SnesDMAWritePPUPort(SnesPPU *pPPU, Uint32 uPort, Uint8 uData)
 {
@@ -564,6 +578,10 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 		return ProcessMDMAChRead(uChan);
 	}
 
+	Bool bSA1CC1 = (m_pSA1 && m_pSA1->IsCC1Active() &&
+	               pChan->bbadx == 0x18 &&
+	               (pChan->a1bx & 0xF0) == 0x40) ? TRUE : FALSE;
+
 	// S-DD1: descomprime quando o DMA tem endereco-A fixo (dmapx bit 0x08) e
 	// $4801 != 0 (mesma condicao do snes9x). Antes eu so' checava o bit do
 	// canal em $4801, o que podia disparar num DMA normal por engano.
@@ -645,25 +663,31 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 		    {
 		    case 0: //+1 increment
                 {
-					Int32 nFirst = nBytes;
-					Int32 nToBankEnd = 0x10000 - (Int32)pChan->a1tx;
-
-					if (nFirst > nToBankEnd)
-						nFirst = nToBankEnd;
-
-			        // A1T wraps inside A1B. Keep both pieces in one buffer so
-			        // TransferData also keeps its B-bus mode phase continuous.
-			        SNCPUReadMem(m_pCPU,
-			                     pChan->a1tx | (pChan->a1bx << 16),
-			                     DmaBuffer, nFirst);
-					if (nFirst < nBytes)
+					if (bSA1CC1)
 					{
-						SNCPUReadMem(m_pCPU, pChan->a1bx << 16,
-						             DmaBuffer + nFirst, nBytes - nFirst);
+						Int32 iByte;
+						for (iByte = 0; iByte < nBytes; iByte++)
+						{
+							Uint32 uSrc = (Uint32)pChan->a1tx |
+							              ((Uint32)pChan->a1bx << 16);
+							DmaBuffer[iByte] = m_pSA1->ReadCC1Byte(uSrc);
+							pChan->a1tx++;
+						}
 					}
-
-			        // increment src address
-			        pChan->a1tx = (Uint16)(pChan->a1tx + nBytes);
+					else
+					{
+						Int32 nFirst = nBytes;
+						Int32 nToBankEnd = 0x10000 - (Int32)pChan->a1tx;
+						if (nFirst > nToBankEnd)
+							nFirst = nToBankEnd;
+						SNCPUReadMem(m_pCPU,
+						             pChan->a1tx | (pChan->a1bx << 16),
+						             DmaBuffer, nFirst);
+						if (nFirst < nBytes)
+							SNCPUReadMem(m_pCPU, pChan->a1bx << 16,
+							             DmaBuffer + nFirst, nBytes - nFirst);
+						pChan->a1tx = (Uint16)(pChan->a1tx + nBytes);
+					}
                 }
 			    break;
 		    case 2: //-1 decrement
@@ -672,7 +696,9 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 				    Int32 iByte;
 				    for (iByte=0; iByte < nBytes; iByte++)
 				    {
-					    DmaBuffer[iByte] = SNCPURead8(m_pCPU, pChan->a1tx | (pChan->a1bx << 16));
+					    Uint32 uSrc = (Uint32)pChan->a1tx | ((Uint32)pChan->a1bx << 16);
+					    DmaBuffer[iByte] = bSA1CC1 ?
+					        m_pSA1->ReadCC1Byte(uSrc) : SNCPURead8(m_pCPU, uSrc);
 					    pChan->a1tx--;
 				    }
 			    }
@@ -680,7 +706,12 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 		    case 1:
 		    case 3: // 0
 			    // read data into dma buffer (no increment)
-			    memset(DmaBuffer, SNCPURead8(m_pCPU, pChan->a1tx | (pChan->a1bx << 16)), nBytes);
+			    {
+					Uint32 uSrc = (Uint32)pChan->a1tx | ((Uint32)pChan->a1bx << 16);
+					Uint8 uData = bSA1CC1 ?
+					    m_pSA1->ReadCC1Byte(uSrc) : SNCPURead8(m_pCPU, uSrc);
+					memset(DmaBuffer, uData, nBytes);
+			    }
 			    break;
 		    }
 		    PROF_LEAVE("DMAREADMEM");

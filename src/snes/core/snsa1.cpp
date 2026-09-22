@@ -74,6 +74,8 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.VariableBitPos = 0;
 	m_State.TimerMatch = FALSE;
 	m_State.NMIPending = FALSE;
+	m_State.CharConvLine = 0;
+	m_State.CC1Active = FALSE;
 	m_State.Running = FALSE;
 
 	ResetCPUContext();
@@ -84,6 +86,24 @@ Uint16 SNSA1::GetResetVector() const
 {
 	return (Uint16)(m_State.Registers[0x003] |
 	                ((Uint16)m_State.Registers[0x004] << 8));
+}
+
+Bool SNSA1::SCPUIRQPending() const
+{
+	return ((m_State.Registers[0x100] &
+	         m_State.Registers[0x001] & 0xA0) != 0) ? TRUE : FALSE;
+}
+
+Uint16 SNSA1::GetSCPUNMIVector() const
+{
+	return (Uint16)(m_State.Registers[0x00C] |
+	                ((Uint16)m_State.Registers[0x00D] << 8));
+}
+
+Uint16 SNSA1::GetSCPUIRQVector() const
+{
+	return (Uint16)(m_State.Registers[0x00E] |
+	                ((Uint16)m_State.Registers[0x00F] << 8));
 }
 
 void SNSA1::ReleaseCPUReset()
@@ -174,6 +194,10 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		UpdateIRQLine();
 		break;
 
+	case 0x2201:
+		// S-CPU IRQ enables are consumed by the SnesSystem bridge.
+		break;
+
 	case 0x2202:
 		if (uData & 0x80) m_State.Registers[0x100] &= (Uint8)~0x80;
 		if (uData & 0x20) m_State.Registers[0x100] &= (Uint8)~0x20;
@@ -210,14 +234,32 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		m_State.TimerMatch = FALSE;
 		break;
 
+	case 0x2230:
+		if (!(uData & 0x80))
+			m_State.CharConvLine = 0;
+		break;
+
+	case 0x2231:
+		if (uData & 0x80)
+			m_State.CC1Active = FALSE;
+		break;
+
 	case 0x2236:
 		if ((m_State.Registers[0x030] & 0xA4) == 0x80)
 			ExecuteDMA();
+		else if ((m_State.Registers[0x030] & 0xB0) == 0xB0)
+			StartCC1();
 		break;
 
 	case 0x2237:
 		if ((m_State.Registers[0x030] & 0xA4) == 0x84)
 			ExecuteDMA();
+		break;
+
+	case 0x2247:
+	case 0x224F:
+		if ((m_State.Registers[0x030] & 0xB0) == 0xA0)
+			ExecuteCC2();
 		break;
 
 	case 0x2250:
@@ -447,6 +489,136 @@ void SNSA1::WriteBWRAMDirectSA1(Uint32 uAddr, Uint8 uData)
 		return;
 	if (CanWriteBWRAM(uOffset, TRUE))
 		m_pBWRAM[MirrorBWRAM(uOffset)] = uData;
+}
+
+void SNSA1::StartCC1()
+{
+	if (!(m_State.Registers[0x030] & 0x80) ||
+	    !(m_State.Registers[0x030] & 0x20) ||
+	    !(m_State.Registers[0x030] & 0x10))
+		return;
+
+	m_State.CC1Active = TRUE;
+	m_State.Registers[0x100] |= 0x20;
+}
+
+void SNSA1::ConvertCC1Tile(Uint32 uAddr)
+{
+	Uint8 uFormat = m_State.Registers[0x031] & 0x03;
+	Uint8 uWidth = (m_State.Registers[0x031] >> 2) & 0x07;
+	Uint32 uBpp;
+	Uint32 uTilesPerLine;
+	Uint32 uBytesPerLine;
+	Uint32 uSourceBase;
+	Uint32 uDestBase;
+	Uint32 uOffset;
+	Uint32 uTileNumber;
+	Uint32 uTileX;
+	Uint32 uTileY;
+	Uint32 uSrc;
+	Uint32 y;
+
+	if (!m_pBWRAM || !m_uBWRAMBytes)
+		return;
+	if (uFormat > 2)
+		uFormat = 2;
+	if (uWidth > 5)
+		uWidth = 5;
+
+	uBpp = 8u >> uFormat;
+	uTilesPerLine = 1u << uWidth;
+	uBytesPerLine = (uTilesPerLine * 8u) >> uFormat;
+	uSourceBase = ((Uint32)m_State.Registers[0x032] |
+	              ((Uint32)m_State.Registers[0x033] << 8) |
+	              ((Uint32)m_State.Registers[0x034] << 16)) & 0x3FFFFu;
+	uDestBase = ((Uint32)m_State.Registers[0x035] |
+	            ((Uint32)m_State.Registers[0x036] << 8) |
+	            ((Uint32)m_State.Registers[0x037] << 16)) & 0x07FFu;
+	uOffset = uAddr & 0x3FFFFu;
+	uTileNumber = ((uOffset - uSourceBase) & 0x3FFFFu) >> (6 - uFormat);
+	uTileX = uTileNumber & (uTilesPerLine - 1);
+	uTileY = uTileNumber >> uWidth;
+	uSrc = uSourceBase + uTileY * 8u * uBytesPerLine + uTileX * uBpp;
+
+	for (y = 0; y < 8; y++)
+	{
+		Uint64 uPixels = 0;
+		Uint8 uPlane[8] = {0,0,0,0,0,0,0,0};
+		Uint32 p, x;
+
+		for (p = 0; p < uBpp; p++)
+			uPixels |= (Uint64)m_pBWRAM[MirrorBWRAM(uSrc + p)] << (p * 8);
+		uSrc += uBytesPerLine;
+
+		for (x = 0; x < 8; x++)
+		{
+			for (p = 0; p < uBpp; p++)
+			{
+				uPlane[p] |= (Uint8)((uPixels & 1) << (7 - x));
+				uPixels >>= 1;
+			}
+		}
+
+		for (p = 0; p < uBpp; p++)
+		{
+			Uint32 uPlanar = (y << 1) + ((p >> 1) << 4) + (p & 1);
+			m_IRAM[(uDestBase + uPlanar) & (SNSA1_IRAM_SIZE - 1)] = uPlane[p];
+		}
+	}
+}
+
+Uint8 SNSA1::ReadCC1Byte(Uint32 uAddr)
+{
+	Uint8 uFormat = m_State.Registers[0x031] & 0x03;
+	Uint32 uMask;
+	Uint32 uOffset;
+	Uint32 uDest;
+
+	if (!m_State.CC1Active)
+		return ReadBWRAMDirect(uAddr);
+	if (uFormat > 2)
+		uFormat = 2;
+
+	uMask = (1u << (6 - uFormat)) - 1u;
+	uOffset = uAddr & 0x3FFFFu;
+	if ((uOffset & uMask) == 0)
+		ConvertCC1Tile(uOffset);
+
+	uDest = ((Uint32)m_State.Registers[0x035] |
+	        ((Uint32)m_State.Registers[0x036] << 8) |
+	        ((Uint32)m_State.Registers[0x037] << 16)) & 0x07FFu;
+	return m_IRAM[(uDest + (uOffset & uMask)) & (SNSA1_IRAM_SIZE - 1)];
+}
+
+void SNSA1::ExecuteCC2()
+{
+	Uint8 uFormat = m_State.Registers[0x031] & 0x03;
+	Uint32 uBpp;
+	Uint32 uDest;
+	Uint32 uRegBase;
+	Uint32 p, x;
+
+	if (uFormat > 2)
+		uFormat = 2;
+	uBpp = 8u >> uFormat;
+	uDest = ((Uint32)m_State.Registers[0x035] |
+	        ((Uint32)m_State.Registers[0x036] << 8) |
+	        ((Uint32)m_State.Registers[0x037] << 16)) & 0x07FFu;
+	uDest &= ~((uBpp << 4) - 1u);
+	uDest += (m_State.CharConvLine & 7u) * 2u;
+	uDest += (m_State.CharConvLine & 8u) * uBpp;
+	uRegBase = (m_State.CharConvLine & 1u) ? 0x048u : 0x040u;
+
+	for (p = 0; p < uBpp; p++)
+	{
+		Uint8 uOut = 0;
+		Uint32 uPlanar = ((p >> 1) << 4) + (p & 1);
+		for (x = 0; x < 8; x++)
+			uOut |= (Uint8)(((m_State.Registers[uRegBase + x] >> p) & 1u) << (7 - x));
+		m_IRAM[(uDest + uPlanar) & (SNSA1_IRAM_SIZE - 1)] = uOut;
+	}
+
+	m_State.CharConvLine = (Uint8)((m_State.CharConvLine + 1) & 15);
 }
 
 void SNSA1::ExecuteDMA()
