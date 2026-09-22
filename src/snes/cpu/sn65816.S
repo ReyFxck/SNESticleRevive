@@ -1199,6 +1199,115 @@ _SNCPU_Read8SA1Generic:
 		nop
 
 _SNCPU_Read8HostStart:
+		/* When the SA-1 is in a proven event-driven idle latch, shared state is
+		   immutable from the coprocessor side. Read the hot shared memories
+		   directly instead of crossing into a C trap just to discover that no
+		   SA-1 execution is required. */
+		lui		t1,%hi(g_SNCPU_SA1HostFastReadEnabled)
+		lw		t1,%lo(g_SNCPU_SA1HostFastReadEnabled)(t1)
+		beq		t1,zr,_SNCPU_Read8HostGeneric
+		nop
+
+		srl		t0,R_Addr,16
+		/* Linear S-CPU BW-RAM: banks $40-$4F. */
+		sltiu		t1,t0,0x40
+		bne		t1,zr,_SNCPU_Read8HostSystemCheck
+		nop
+		sltiu		t1,t0,0x50
+		bne		t1,zr,_SNCPU_Read8HostFastBWRAMDirect
+		nop
+
+_SNCPU_Read8HostSystemCheck:
+		/* Shared register/I-RAM/window mirrors exist only in system banks
+		   $00-$3F and $80-$BF. */
+		sltiu		t1,t0,0x40
+		bne		t1,zr,_SNCPU_Read8HostSystemLow
+		nop
+		addiu		t1,t0,-0x80
+		sltiu		t1,t1,0x40
+		beq		t1,zr,_SNCPU_Read8HostGeneric
+		nop
+
+_SNCPU_Read8HostSystemLow:
+		andi		t0,R_Addr,0xFFFF
+		sltiu		t1,t0,0x3000
+		bne		t1,zr,_SNCPU_Read8HostGeneric
+		nop
+		sltiu		t1,t0,0x3800
+		bne		t1,zr,_SNCPU_Read8HostFastIRAM
+		nop
+		sltiu		t1,t0,0x6000
+		bne		t1,zr,_SNCPU_Read8HostGeneric
+		nop
+		sltiu		t1,t0,0x8000
+		bne		t1,zr,_SNCPU_Read8HostFastBWRAMWindow
+		nop
+		b		_SNCPU_Read8HostGeneric
+		nop
+
+_SNCPU_Read8HostFastIRAM:
+		lui		t1,%hi(g_SNCPU_SA1IRAM)
+		lw		t1,%lo(g_SNCPU_SA1IRAM)(t1)
+		beq		t1,zr,_SNCPU_Read8HostGeneric
+		andi		t0,R_Addr,0x07FF
+		addu		t1,t1,t0
+		lbu		R_Data,0(t1)
+		b		_SNCPU_Read8HostFastFinish
+		nop
+
+_SNCPU_Read8HostFastBWRAMDirect:
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
+		beq		t1,zr,_SNCPU_Read8HostGeneric
+		nop
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
+		bltz		t2,_SNCPU_Read8HostGeneric
+		nop
+		sll		t0,R_Addr,14
+		srl		t0,t0,14
+		and		t0,t0,t2
+		addu		t1,t1,t0
+		lbu		R_Data,0(t1)
+		b		_SNCPU_Read8HostFastFinish
+		nop
+
+_SNCPU_Read8HostFastBWRAMWindow:
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
+		beq		t1,zr,_SNCPU_Read8HostGeneric
+		nop
+		lui		t2,%hi(g_SNCPU_SA1BWRAMMask)
+		lw		t2,%lo(g_SNCPU_SA1BWRAMMask)(t2)
+		bltz		t2,_SNCPU_Read8HostGeneric
+		nop
+		lui		t0,%hi(g_SNCPU_SA1HostBWRAMBase)
+		lw		t0,%lo(g_SNCPU_SA1HostBWRAMBase)(t0)
+		andi		t1,R_Addr,0x1FFF
+		addu		t0,t0,t1
+		and		t0,t0,t2
+		lui		t1,%hi(g_SNCPU_SA1BWRAM)
+		lw		t1,%lo(g_SNCPU_SA1BWRAM)(t1)
+		addu		t1,t1,t0
+		lbu		R_Data,0(t1)
+
+_SNCPU_Read8HostFastFinish:
+		/* Preserve the S-CPU bus timing and contention event even though the
+		   value itself no longer needs the C trap. */
+		srl		t0,R_Addr,SNCPU_BANK_SHIFT
+		sll		t0,t0,4
+		addu		t0,t0,R_pCpu
+		lbu		t2,SNCPU_uBankCycle(t0)
+		subu		R_Cycles,R_Cycles,t2
+		SNCPU_SA1_TRACK(R_Addr,t2,1)
+		lui		t0,%hi(g_SNCPU_SA1HostFastReadCount)
+		lw		t1,%lo(g_SNCPU_SA1HostFastReadCount)(t0)
+		addiu		t1,t1,1
+		sw		t1,%lo(g_SNCPU_SA1HostFastReadCount)(t0)
+		jr		ra
+		nop
+
+_SNCPU_Read8HostGeneric:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		beq		t0,zr,_SNCPU_Read8ZeroBank
 		nop

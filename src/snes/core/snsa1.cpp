@@ -69,7 +69,8 @@ void SNSA1::UpdateFastMemorySidecars()
 
 	SNCPUSA1FastMemConfig(m_IRAM, m_State.Registers[0x02A],
 	                     m_pBWRAM, m_uBWRAMBytes,
-	                     bWriteEnabled, uProtected);
+	                     bWriteEnabled, uProtected,
+	                     m_State.Registers[0x024]);
 }
 
 void SNSA1::SetVideoRegion(Bool bPAL)
@@ -1514,31 +1515,38 @@ Bool SNSA1::PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const
 	return TRUE;
 }
 
-Bool SNSA1::TrySkipSCPUReadSync()
+Bool SNSA1::IsHostFastReadSafe() const
 {
-	/* A latched polling loop only reads immutable ROM plus one I-RAM byte.
-	   With no asynchronous wake source armed, read-only host accesses can use
-	   the already materialized state and defer clock catch-up until the next
-	   true synchronization point. */
 	if (!m_bIdlePollSleeping || !m_State.Running)
 		return FALSE;
 	if (m_State.DMARunning || m_State.ArithmeticPending ||
 	    m_State.NMIPending || m_State.TimerMatch || m_State.CC1Active)
 		return FALSE;
-	/* An enabled H/V timer could become pending during a deferred interval. */
 	if (m_State.Registers[0x010] & 0x03)
 		return FALSE;
 	if (m_Cpu.uSignal & (SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_NMI |
 	                    SNCPU_SIGNAL_NMIEDGE | SNCPU_SIGNAL_WAI |
 	                    SNCPU_SIGNAL_STP))
 		return FALSE;
+	return TRUE;
+}
 
+void SNSA1::UpdateHostFastReadSidecar()
+{
+	SNCPUSA1HostFastReadEnable(IsHostFastReadSafe());
+}
+
+Bool SNSA1::TrySkipSCPUReadSync()
+{
+	if (!IsHostFastReadSafe())
+		return FALSE;
 	m_uSCPUReadSyncSkips++;
 	return TRUE;
 }
 
 void SNSA1::ClearIdlePollSleep()
 {
+	SNCPUSA1HostFastReadEnable(FALSE);
 	m_bIdlePollSleeping = FALSE;
 	m_uIdlePollIRAM = 0;
 	m_uIdlePollValue = 0;
@@ -1581,6 +1589,7 @@ Bool SNSA1::FastForwardSleepingIdle(Uint32 uSA1Cycles)
 	m_Cpu.Cycles = 0;
 	m_uIdleFastForwardTicks += uSA1Cycles;
 	m_uIdleSleepSlices++;
+	UpdateHostFastReadSidecar();
 	return TRUE;
 }
 
@@ -1684,6 +1693,7 @@ Bool SNSA1::TryFastForwardIdleLoop()
 	m_uIdlePollIRAM = uIRAM;
 	m_uIdlePollValue = uValue;
 	m_uIdlePollLoopPC = uLoopPC;
+	UpdateHostFastReadSidecar();
 	m_uIdleFastForwardTicks += uSkippedUnits / SNCPU_CYCLE_FAST;
 	m_Cpu.Cycles = 0;
 	return TRUE;

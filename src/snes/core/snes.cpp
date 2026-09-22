@@ -2589,7 +2589,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				const SNCpuBankT *pBank = &pSA1Cpu->Bank[uPC >> SNCPU_BANK_SHIFT];
 				Uint8 uOpcode = pBank->pMem ? pBank->pMem[uPC] : 0xFF;
 				DLog("[snes-sa1] io-rw=%u/%u pc/op/p/e/a/x/y=%06X/%02X/%02X/%u/%04X/%04X/%04X run=%u sig=%02X ticks sched/exec=%u/%u slices=%u dma run/rem/bytes/stall=%u/%u/%u/%u",
-					(unsigned)g_DbgChipReads[SNDBG_CHIP_SA1],
+					(unsigned)(g_DbgChipReads[SNDBG_CHIP_SA1] + SNCPUSA1HostFastReadGetCount()),
 					(unsigned)g_DbgChipWrites[SNDBG_CHIP_SA1],
 					(unsigned)uPC, (unsigned)uOpcode,
 					(unsigned)pSA1Cpu->Regs.rP, (unsigned)pSA1Cpu->Regs.rE,
@@ -2601,11 +2601,12 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)pSA1->DMARemaining, (unsigned)pSA1->DMATransferredBytes,
 					(unsigned)pSA1->DMAStallTicks);
 				DLog("[snes-sa1-bus] conflict-ticks=%u dropped-events=%u",(unsigned)SNCPUSA1BusGetConflictTicks(),(unsigned)SNCPUSA1BusGetDroppedEvents());
-				DLog("[snes-sa1-idle] fast-forward-ticks=%llu sleep-slices=%llu active=%u host-read-sync-skips=%llu",
+				DLog("[snes-sa1-idle] fast-forward-ticks=%llu sleep-slices=%llu active=%u host-read-sync-skips=%llu asm-fast-reads=%u",
 					(unsigned long long)m_SA1.GetIdleFastForwardTicks(),
 					(unsigned long long)m_SA1.GetIdleSleepSlices(),
 					(unsigned)m_SA1.IsIdlePollSleeping(),
-					(unsigned long long)m_SA1.GetSCPUReadSyncSkips());
+					(unsigned long long)m_SA1.GetSCPUReadSyncSkips(),
+					(unsigned)SNCPUSA1HostFastReadGetCount());
 				DLog("[snes-sa1] irq sfr/cfr/cie/sie=%02X/%02X/%02X/%02X timer h/v=%u/%u bw map-s/map-c/ctrl=%02X/%02X/%02X mmc=%02X/%02X/%02X/%02X",
 					(unsigned)((pSA1->Registers[0x009] & 0x5F) | (pSA1->Registers[0x100] & 0xA0)),
 					(unsigned)((pSA1->Registers[0x000] & 0x0F) | (pSA1->Registers[0x101] & 0xF0)),
