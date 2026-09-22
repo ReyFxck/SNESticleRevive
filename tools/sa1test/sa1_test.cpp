@@ -933,6 +933,23 @@ static void TestIdlePollingFastForward(void)
 	CHECK(sa1.GetIdleFastForwardTicks() == 100,
 	      "stable polling loop should fast-forward all scheduled ticks");
 
+	// The no-diagnostic R5900 backend can end a slice on the BEQ itself.
+	// That phase must be recognized too, otherwise deep tracing accidentally
+	// makes the diagnostic build faster by single-stepping back to LDA.
+	SNSA1 branchPhase;
+	branchPhase.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	branchPhase.WriteRegister(0x2203, 0x02);
+	branchPhase.WriteRegister(0x2204, 0x80);
+	branchPhase.WriteRegister(0x2200, 0x00);
+	branchPhase.GetCpu()->Regs.rA.w = 0x0000;
+	branchPhase.GetCpu()->Regs.rP |= SNCPU_FLAG_Z | SNCPU_FLAG_M;
+	branchPhase.GetCpu()->Regs.rP &= (Uint8)~SNCPU_FLAG_N;
+	branchPhase.StepMasterCycles(200);
+	CHECK((branchPhase.GetCpu()->Regs.rPC & 0xFFFF) == 0x8002,
+	      "branch-phase idle fast-forward must preserve branch PC");
+	CHECK(branchPhase.GetIdleFastForwardTicks() == 100,
+	      "branch-phase polling loop must fast-forward full scheduled slice");
+
 	// Once the shared byte changes, the branch is no longer taken and the
 	// optimizer must stand down so execution can leave the loop normally.
 	sa1.WriteRegister(0x2229, 0xFF);

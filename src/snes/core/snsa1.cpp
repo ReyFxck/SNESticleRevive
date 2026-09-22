@@ -1470,6 +1470,7 @@ Bool SNSA1::PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const
 Bool SNSA1::TryFastForwardIdleLoop()
 {
 	Uint32 uPC;
+	Uint32 uLoopPC;
 	Uint32 uTarget;
 	Uint16 uDirect;
 	Uint16 uIRAM;
@@ -1491,26 +1492,50 @@ Bool SNSA1::TryFastForwardIdleLoop()
 	                      SNCPU_SIGNAL_STP)))
 		return FALSE;
 
-	/* Keep the first version 8-bit-accumulator only. That is the hot SA-1
-	   polling form observed in SMRPG and avoids inventing 16-bit boundary
-	   semantics in the optimizer. */
 	if (!(m_Cpu.Regs.rP & SNCPU_FLAG_M))
 		return FALSE;
 
 	uPC = m_Cpu.Regs.rPC & 0xFFFFFFu;
-	if (!PeekMappedCpuByte(uPC + 0, &uOp0) ||
-	    !PeekMappedCpuByte(uPC + 1, &uArg) ||
-	    !PeekMappedCpuByte(uPC + 2, &uBranch) ||
-	    !PeekMappedCpuByte(uPC + 3, &uRel))
+	if (!PeekMappedCpuByte(uPC, &uOp0))
 		return FALSE;
 
-	if (uOp0 != 0xA5 || (uBranch != 0xF0 && uBranch != 0xD0))
+	if (uOp0 == 0xA5)
+	{
+		/* Slice ended at the load half of: LDA dp / BEQ|BNE loop. */
+		uLoopPC = uPC;
+		if (!PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 1u) & 0xFFFFu), &uArg) ||
+		    !PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 2u) & 0xFFFFu), &uBranch) ||
+		    !PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 3u) & 0xFFFFu), &uRel))
+			return FALSE;
+		if (uBranch != 0xF0 && uBranch != 0xD0)
+			return FALSE;
+		uTarget = (uPC & 0xFF0000u) |
+		          (((uPC + 4u) + (Int8)uRel) & 0xFFFFu);
+		if (uTarget != uLoopPC)
+			return FALSE;
+	}
+	else if (uOp0 == 0xF0 || uOp0 == 0xD0)
+	{
+		/* A full-speed R5900 slice often expires at the branch half instead.
+		   Deep diagnostics single-step and happened to move execution back to
+		   LDA before the next idle check, which made diagnostic builds faster.
+		   Recognize the same loop from either architectural phase. */
+		uBranch = uOp0;
+		if (!PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 1u) & 0xFFFFu), &uRel))
+			return FALSE;
+		uLoopPC = (uPC & 0xFF0000u) |
+		          (((uPC + 2u) + (Int8)uRel) & 0xFFFFu);
+		if (!PeekMappedCpuByte(uLoopPC, &uOp0) || uOp0 != 0xA5 ||
+		    !PeekMappedCpuByte((uLoopPC & 0xFF0000u) | ((uLoopPC + 1u) & 0xFFFFu), &uArg))
+			return FALSE;
+		/* The load must be immediately followed by this exact branch. */
+		if (((uLoopPC + 2u) & 0xFFFFu) != (uPC & 0xFFFFu))
+			return FALSE;
+	}
+	else
+	{
 		return FALSE;
-
-	uTarget = (uPC & 0xFF0000u) |
-	          (((uPC + 4u) + (Int8)uRel) & 0xFFFFu);
-	if (uTarget != uPC)
-		return FALSE;
+	}
 
 	uDirect = (Uint16)(m_Cpu.Regs.rDP + uArg);
 	if (uDirect < 0x0800)
@@ -1527,8 +1552,9 @@ Bool SNSA1::TryFastForwardIdleLoop()
 	if (!bBranchTaken)
 		return FALSE;
 
-	/* We must already be at the architectural state produced by one completed
-	   polling iteration. Otherwise execute normally once to establish A/N/Z. */
+	/* Only skip when the architectural A/N/Z state already agrees with the
+	   polled byte. If the S-CPU changed I-RAM at the sync boundary, this fails
+	   and normal execution observes the new value immediately. */
 	if ((Uint8)m_Cpu.Regs.rA.w != uValue)
 		return FALSE;
 	if (((m_Cpu.Regs.rP & SNCPU_FLAG_Z) ? TRUE : FALSE) != bZero)

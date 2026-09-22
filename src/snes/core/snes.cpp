@@ -2593,6 +2593,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)pSA1->DMARemaining, (unsigned)pSA1->DMATransferredBytes,
 					(unsigned)pSA1->DMAStallTicks);
 				DLog("[snes-sa1-bus] conflict-ticks=%u dropped-events=%u",(unsigned)SNCPUSA1BusGetConflictTicks(),(unsigned)SNCPUSA1BusGetDroppedEvents());
+				DLog("[snes-sa1-idle] fast-forward-ticks=%llu",
+					(unsigned long long)m_SA1.GetIdleFastForwardTicks());
 				DLog("[snes-sa1] irq sfr/cfr/cie/sie=%02X/%02X/%02X/%02X timer h/v=%u/%u bw map-s/map-c/ctrl=%02X/%02X/%02X mmc=%02X/%02X/%02X/%02X",
 					(unsigned)((pSA1->Registers[0x009] & 0x5F) | (pSA1->Registers[0x100] & 0xA0)),
 					(unsigned)((pSA1->Registers[0x000] & 0x0F) | (pSA1->Registers[0x101] & 0xF0)),
