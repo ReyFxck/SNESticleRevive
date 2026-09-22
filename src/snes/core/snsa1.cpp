@@ -1510,12 +1510,26 @@ void SNSA1::StepMasterCycles(Int32 nMasterCycles)
 
 	m_State.MasterCycles += (Uint32)nMasterCycles;
 	UpdateTimer((Uint32)nMasterCycles);
-	if (!m_State.Running)
-		return;
 
+	// The SA-1 internal clock keeps running while CCNT WAIT/RESET prevents
+	// instruction execution.  Keep the independent 65C816 timebase moving so
+	// clocked units (notably arithmetic) observe elapsed SA-1 ticks exactly as
+	// they do while the core is executing instructions.
 	uTotal = (Uint32)nMasterCycles + m_State.MasterRemainder;
 	uTicks = uTotal / SNSA1_MASTER_PER_TICK;
 	m_State.MasterRemainder = (Uint8)(uTotal % SNSA1_MASTER_PER_TICK);
+
+	if (!m_State.Running)
+	{
+		if (uTicks)
+		{
+			Int32 nIdleUnits = (Int32)(uTicks * SNCPU_CYCLE_FAST);
+			for (Int32 i = 0; i < SNCPU_COUNTER_NUM; i++)
+				m_Cpu.Counter[i] += nIdleUnits;
+		}
+		return;
+	}
+
 	m_State.LastSliceCycles = uTicks;
 	m_State.ScheduledCycles += uTicks;
 

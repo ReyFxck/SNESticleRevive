@@ -556,6 +556,31 @@ static void TestArithmetic(void)
 	AdvanceSA1CpuClock(sa1, 6);
 	CHECK(sa1.ReadRegister(0x2306) == 26 && sa1.ReadRegister(0x2307) == 0,
 	      "cumulative arithmetic must retain the 40-bit sum");
+
+	// CCNT WAIT stops instruction execution, not the 10.74 MHz SA-1 clock.
+	// A math operation already in flight must therefore complete while WAIT
+	// is asserted. MesenCE advances the SA-1 cycle counter in this state.
+	SNSA1 waitClock;
+	waitClock.WriteSCPURegister(0x2200, 0x00);
+	waitClock.WriteSA1Register(0x2250, 0x00);
+	waitClock.WriteSA1Register(0x2251, 0x07);
+	waitClock.WriteSA1Register(0x2252, 0x00);
+	waitClock.WriteSA1Register(0x2253, 0x09);
+	waitClock.WriteSA1Register(0x2254, 0x00);
+	waitClock.WriteSCPURegister(0x2200, 0x40);
+	Uint32 waitPC = waitClock.GetCpu()->Regs.rPC;
+	Int32 waitStart = SNCPUGetCounter(waitClock.GetCpu(), SNCPU_COUNTER_FRAME);
+	waitClock.StepMasterCycles(8);
+	CHECK(waitClock.ReadRegister(0x2306) == 0x00,
+	      "WAIT must not complete multiply before five SA-1 clocks");
+	waitClock.StepMasterCycles(2);
+	CHECK(waitClock.ReadRegister(0x2306) == 63,
+	      "arithmetic clock must continue while CCNT WAIT is asserted");
+	CHECK(waitClock.GetCpu()->Regs.rPC == waitPC,
+	      "CCNT WAIT must not execute SA-1 instructions");
+	CHECK(SNCPUGetCounter(waitClock.GetCpu(), SNCPU_COUNTER_FRAME) - waitStart ==
+	      5 * SNCPU_CYCLE_FAST,
+	      "CCNT WAIT must advance the independent SA-1 clock");
 }
 
 static void TestVariableLengthBit(void)
