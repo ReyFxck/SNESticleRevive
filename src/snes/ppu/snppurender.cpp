@@ -217,6 +217,49 @@ static void _SnesPPUBuildPseudoHiresLine(
 	}
 }
 
+#if CODE_PLATFORM == CODE_PS2
+static _INLINE Uint16 _SnesPPUColor15ToGS16(Uint16 uColor15,
+	Uint32 uIntensity)
+{
+	Uint32 uColor32 = SNPPUColorConvert15to32(uColor15 & 0x7FFFu);
+	Uint32 r = (uColor32 >> 0) & 0xFFu;
+	Uint32 g = (uColor32 >> 8) & 0xFFu;
+	Uint32 b = (uColor32 >> 16) & 0xFFu;
+
+	if (uIntensity < 15u)
+	{
+		r = r * uIntensity / 15u;
+		g = g * uIntensity / 15u;
+		b = b * uIntensity / 15u;
+	}
+
+	/* GS PSMCT16 uses R5:G5:B5:A1 in the same low-to-high component order
+	   as SNES BGR555 after the calibrated 32-bit lookup. */
+	return (Uint16)(
+		((r >> 3) & 0x1Fu) |
+		(((g >> 3) & 0x1Fu) << 5) |
+		(((b >> 3) & 0x1Fu) << 10) |
+		0x8000u);
+}
+
+static void _SnesPPUBuildNativeHires512(
+	Uint16 *pOut, const SNPPUBlendInfoT *pInfo, const Uint16 *pCGRAM,
+	Uint32 uIntensity)
+{
+	Int32 x;
+	for (x = 0; x < 256; ++x)
+	{
+		/* Public SNES PPU behavior: even physical dot = sub screen,
+		   odd physical dot = main screen. Keep this ordering all the way to
+		   the GS instead of collapsing back into Revive's old 256 carrier. */
+		pOut[(x << 1) + 0] = _SnesPPUColor15ToGS16(
+			pCGRAM[pInfo->uSub8[x]], uIntensity);
+		pOut[(x << 1) + 1] = _SnesPPUColor15ToGS16(
+			pCGRAM[pInfo->uMain8[x]], uIntensity);
+	}
+}
+#endif
+
 void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 {
 	SnesRender8pInfoT *pRenderInfo;
@@ -226,6 +269,10 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 	const Bool bPseudoHiresSimple =
 		((pRegs->setini & SNESPPU_SETINI_PSEUDOHIR) != 0) &&
 		(uBGMode != 5u && uBGMode != 6u) &&
+		((pRegs->cgadsub & 0x3Fu) == 0) &&
+		((pRegs->cgwsel & 0xC0u) == 0);
+	const Bool bMode56HiresSimple =
+		(uBGMode == 5u || uBGMode == 6u) &&
 		((pRegs->cgadsub & 0x3Fu) == 0) &&
 		((pRegs->cgwsel & 0xC0u) == 0);
 
@@ -349,7 +396,7 @@ static Bool bPrint = TRUE;
 		   all add/sub masks are mathematically unable to change the result.
 		   With main clipping disabled and brightness at 15, the GS can expand
 		   the indexed main line directly into the output texture. */
-		bDirectMain = !bPseudoHiresSimple &&
+		bDirectMain = !bPseudoHiresSimple && !bMode56HiresSimple &&
 		              (pRegs->cgadsub & 0x3F) == 0 &&
 		              (pRegs->cgwsel & 0xC0) == 0 &&
 		              m_pPPU->GetIntensity() == 15;
@@ -421,7 +468,21 @@ static Bool bPrint = TRUE;
 		g_TmgCycColorMath += ProfCtrGetCycle() - _tColorMath;
 		Uint32 _tBlend = ProfCtrGetCycle();
 #endif
-		if (bPseudoHiresSimple)
+		if (bMode56HiresSimple)
+		{
+#if CODE_PLATFORM == CODE_PS2
+			Uint16 HiresLine[512] _ALIGN(64);
+			_SnesPPUBuildNativeHires512(
+				HiresLine, pBlendInfo, m_pPPU->GetCGData(),
+				m_pPPU->GetIntensity());
+			m_pBlend->ExecHires512(HiresLine, iLine);
+#else
+			m_pBlend->Exec(
+				pBlendInfo, iLine, pRegs->coldata, ColorMask,
+				(pRegs->cgadsub & 0x80), m_pPPU->GetIntensity());
+#endif
+		}
+		else if (bPseudoHiresSimple)
 		{
 			Uint16 PseudoCGRAM[256] _ALIGN(16);
 			Int32 i;
