@@ -59,6 +59,83 @@ Bool SNSpcIO::EnqueueWrite(Uint32 uCycle, Uint32 uAddr, Uint8 uData)
 	return m_Queue.Enqueue(uCycle, uAddr, uData);
 }
 
+void SNSpcIO::ResetCpuPortPending()
+{
+	m_uCpuPendingMask = 0;
+	memset(m_CpuPendingData, 0, sizeof(m_CpuPendingData));
+	memset(m_CpuPendingCycle, 0, sizeof(m_CpuPendingCycle));
+}
+
+void SNSpcIO::SyncCpuPorts(Uint32 uSpcMasterCycle)
+{
+	Uint32 i;
+	Uint8 uMask = m_uCpuPendingMask;
+
+	for (i = 0; i < 4 && uMask; ++i)
+	{
+		Uint8 uBit = (Uint8)(1u << i);
+		if (!(uMask & uBit))
+			continue;
+
+		/* Signed subtraction is wrap-safe as long as events are less than
+		   2^31 master clocks apart (we only ever defer by one SPC cycle). */
+		if ((Int32)(uSpcMasterCycle - m_CpuPendingCycle[i]) >= 0)
+		{
+			m_Regs.apu_w[i] = m_CpuPendingData[i];
+			m_uCpuPendingMask &= (Uint8)~uBit;
+			uMask &= (Uint8)~uBit;
+		}
+	}
+}
+
+void SNSpcIO::WriteCpuPort(Uint32 uCpuMasterCycle, Uint32 uSpcMasterCycle,
+	Uint32 uPort, Uint8 uData)
+{
+	Uint32 uPhase;
+	Uint32 uLatchCycle;
+	Uint8 uBit;
+
+	uPort &= 3u;
+	uBit = (Uint8)(1u << uPort);
+	uPhase = uCpuMasterCycle % SNSPC_CYCLE;
+	uLatchCycle = uCpuMasterCycle;
+
+	/* The SPC input latch is sampled at ~2 MHz.  Following MesenCE's
+	   documented behavior: a CPU write in the first half of the current
+	   SPC cycle is visible immediately; one in the second half becomes
+	   visible at the next SPC-cycle boundary. */
+	if (uPhase > (SNSPC_CYCLE / 2u))
+		uLatchCycle += SNSPC_CYCLE - uPhase;
+
+	m_CpuPendingData[uPort] = uData;
+	m_CpuPendingCycle[uPort] = uLatchCycle;
+
+	if ((Int32)(uSpcMasterCycle - uLatchCycle) >= 0)
+	{
+		m_Regs.apu_w[uPort] = uData;
+		m_uCpuPendingMask &= (Uint8)~uBit;
+	}
+	else
+	{
+		m_uCpuPendingMask |= uBit;
+	}
+}
+
+void SNSpcIO::ClearCpuPorts(Uint8 uPortMask)
+{
+	Uint32 i;
+	for (i = 0; i < 4; ++i)
+	{
+		Uint8 uBit = (Uint8)(1u << i);
+		if (uPortMask & uBit)
+		{
+			m_Regs.apu_w[i] = 0;
+			m_CpuPendingData[i] = 0;
+			m_uCpuPendingMask &= (Uint8)~uBit;
+		}
+	}
+}
+
 void SNSpcIO::SyncQueueAll()
 {
 	SNQueueElementT *pElement;
@@ -88,6 +165,7 @@ void SNSpcIO::SyncQueue(Uint32 uCycle)
 void SNSpcIO::Reset()
 {
 	memset(&m_Regs, 0, sizeof(m_Regs));
+	ResetCpuPortPending();
 
 	m_Queue.Reset();
 
@@ -123,10 +201,8 @@ Uint8 SNSpcIO::Read8Trap(SNSpcT *pSpc, Uint32 uAddr)
 		#if SNES_DEBUGSPCIO
 		#endif
 
-		#if SNSPCIO_WRITEQUEUE
-		pIO->SyncQueue(SNSPCGetCounter(pSpc, SNSPC_COUNTER_FRAME));
-		#endif
-
+		pIO->SyncCpuPorts((Uint32)SNSPCGetCounter(
+			pSpc, SNSPC_COUNTER_TOTAL));
 		return pIO->m_Regs.apu_w[uAddr & 3];
 
 	case 0xFD:	// counter0
@@ -158,24 +234,21 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 	{
 	case 0xF1:	// control
 		{
-#if SNSPCIO_WRITEQUEUE
-			/* Clear commands act on the CPU->SPC latch at this SPC time.
-			   First consume writes that really happened before the clear;
-			   otherwise an old queued value can reappear after the clear and
-			   leave a driver handshake permanently non-zero. */
-			if (uData & 0x30)
-				pIO->SyncQueue((Uint32)SNSPCGetCounter(
-					pSpc, SNSPC_COUNTER_FRAME));
-#endif
+			/* Apply already-visible CPU writes, then clear both the live latch
+			   and any deferred value for the selected port pair. */
+			pIO->SyncCpuPorts((Uint32)SNSPCGetCounter(
+				pSpc, SNSPC_COUNTER_TOTAL));
 			if (uData&0x10)
 			{
-				pSpc->Mem[0xf4] = pIO->m_Regs.apu_w[0] = 0x00;
-				pSpc->Mem[0xf5] = pIO->m_Regs.apu_w[1] = 0x00;
+				pIO->ClearCpuPorts(0x03);
+				pSpc->Mem[0xf4] = 0x00;
+				pSpc->Mem[0xf5] = 0x00;
 			}
 			if (uData&0x20)
 			{
-				pSpc->Mem[0xf6] = pIO->m_Regs.apu_w[2] = 0x00;
-				pSpc->Mem[0xf7] = pIO->m_Regs.apu_w[3] = 0x00;
+				pIO->ClearCpuPorts(0x0C);
+				pSpc->Mem[0xf6] = 0x00;
+				pSpc->Mem[0xf7] = 0x00;
 			}
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[0], iCycle, (uData & 1));
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[1], iCycle, (uData & 2));
