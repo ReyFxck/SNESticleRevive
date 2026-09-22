@@ -579,7 +579,6 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 	}
 
 	Bool bSA1CC1 = (m_pSA1 && m_pSA1->IsCC1Active() &&
-	               pChan->bbadx == 0x18 &&
 	               (pChan->a1bx & 0xF0) == 0x40) ? TRUE : FALSE;
 
 	// S-DD1: descomprime quando o DMA tem endereco-A fixo (dmapx bit 0x08) e
@@ -670,7 +669,7 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 						{
 							Uint32 uSrc = (Uint32)pChan->a1tx |
 							              ((Uint32)pChan->a1bx << 16);
-							DmaBuffer[iByte] = m_pSA1->ReadCC1Byte(uSrc);
+							DmaBuffer[iByte] = m_pSA1->ReadSCPUBWRAMDirect(uSrc);
 							pChan->a1tx++;
 						}
 					}
@@ -698,7 +697,7 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 				    {
 					    Uint32 uSrc = (Uint32)pChan->a1tx | ((Uint32)pChan->a1bx << 16);
 					    DmaBuffer[iByte] = bSA1CC1 ?
-					        m_pSA1->ReadCC1Byte(uSrc) : SNCPURead8(m_pCPU, uSrc);
+					        m_pSA1->ReadSCPUBWRAMDirect(uSrc) : SNCPURead8(m_pCPU, uSrc);
 					    pChan->a1tx--;
 				    }
 			    }
@@ -709,7 +708,7 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
 			    {
 					Uint32 uSrc = (Uint32)pChan->a1tx | ((Uint32)pChan->a1bx << 16);
 					Uint8 uData = bSA1CC1 ?
-					    m_pSA1->ReadCC1Byte(uSrc) : SNCPURead8(m_pCPU, uSrc);
+					    m_pSA1->ReadSCPUBWRAMDirect(uSrc) : SNCPURead8(m_pCPU, uSrc);
 					memset(DmaBuffer, uData, nBytes);
 			    }
 			    break;

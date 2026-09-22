@@ -533,6 +533,29 @@ void SNSA1::WriteBWRAMWindow(Uint16 uAddr, Uint8 uData)
 		m_pBWRAM[MirrorBWRAM(uOffset)] = uData;
 }
 
+Uint8 SNSA1::ReadSCPUBWRAMWindow(Uint16 uAddr)
+{
+	Uint32 uOffset;
+
+	if (!m_pBWRAM || !m_uBWRAMBytes)
+		return 0xFF;
+
+	uOffset = ((Uint32)(m_State.Registers[0x024] & 0x1F) << 13) |
+	          (uAddr & 0x1FFF);
+	return m_State.CC1Active ? ReadCC1Byte(uOffset) :
+	                           m_pBWRAM[MirrorBWRAM(uOffset)];
+}
+
+Uint8 SNSA1::ReadSCPUBWRAMDirect(Uint32 uAddr)
+{
+	Uint32 uOffset = uAddr & 0x3FFFFu;
+
+	if (!m_pBWRAM || !m_uBWRAMBytes)
+		return 0xFF;
+	return m_State.CC1Active ? ReadCC1Byte(uOffset) :
+	                           m_pBWRAM[MirrorBWRAM(uOffset)];
+}
+
 Uint8 SNSA1::ReadSA1BWRAMWindow(Uint16 uAddr) const
 {
 	Uint8 uMap = m_State.Registers[0x025];

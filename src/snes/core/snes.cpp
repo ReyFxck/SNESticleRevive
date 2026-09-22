@@ -1293,8 +1293,8 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr)
 	g_DbgChipReads[SNDBG_CHIP_SA1]++;
 #endif
 	if (uBank >= 0x40 && uBank <= 0x4F)
-		return pSnes->m_SA1.ReadBWRAMDirect(uAddr);
-	return pSnes->m_SA1.ReadBWRAMWindow((Uint16)uAddr);
+		return pSnes->m_SA1.ReadSCPUBWRAMDirect(uAddr);
+	return pSnes->m_SA1.ReadSCPUBWRAMWindow((Uint16)uAddr);
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)

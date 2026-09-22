@@ -349,8 +349,21 @@ static void TestCharConvertType1(void)
 	CHECK(sa1.IsCC1Active(), "CC1 must arm when DDA high is written");
 	CHECK((sa1.ReadRegister(0x2300) & 0x20) != 0, "CC1 must latch S-CPU CHDMA flag");
 	CHECK(sa1.SCPUIRQPending(), "CC1 flag + SIE must assert S-CPU IRQ bridge");
-	CHECK(sa1.ReadCC1Byte(0x400000) == 0xFF, "CC1 first planar byte");
-	CHECK(sa1.ReadCC1Byte(0x400001) == 0x00, "CC1 second planar byte");
+
+	// CC1 belongs to the S-CPU BW-RAM bus itself, not only to the MDMA->VRAM
+	// shortcut. Raw/SA-1-side reads still see packed BW-RAM.
+	CHECK(sa1.ReadBWRAMDirect(0x400000) == 0x55,
+	      "raw BW-RAM must remain packed while CC1 is active");
+	CHECK(sa1.ReadSCPUBWRAMDirect(0x400000) == 0xFF,
+	      "S-CPU direct BW-RAM must expose CC1 planar byte 0");
+	CHECK(sa1.ReadSCPUBWRAMDirect(0x400001) == 0x00,
+	      "S-CPU direct BW-RAM must expose CC1 planar byte 1");
+
+	// The $6000-$7FFF S-CPU window is the same wrapped BW-RAM handler.
+	sa1.WriteRegister(0x2224, 0x00);
+	CHECK(sa1.ReadSCPUBWRAMWindow(0x6000) == 0xFF &&
+	      sa1.ReadSCPUBWRAMWindow(0x6001) == 0x00,
+	      "S-CPU mapped BW-RAM window must also expose CC1 data");
 	CHECK(sa1.ReadIRAM(0x0100) == 0xFF && sa1.ReadIRAM(0x0101) == 0x00,
 	      "CC1 must buffer converted row in I-RAM");
 	CHECK(sa1.ReadIRAM(0x0102) == 0xFF && sa1.ReadIRAM(0x0103) == 0x00,
@@ -358,6 +371,8 @@ static void TestCharConvertType1(void)
 
 	sa1.WriteRegister(0x2231, 0x82);
 	CHECK(!sa1.IsCC1Active(), "CDMA CHDEND must stop CC1");
+	CHECK(sa1.ReadSCPUBWRAMDirect(0x400000) == 0x55,
+	      "ending CC1 must restore ordinary packed S-CPU BW-RAM reads");
 }
 
 static void TestNormalDMA(void)

@@ -102,14 +102,16 @@ public:
 	// Public write path is the S-CPU side ($3000-$37FF).
 	void  WriteIRAM(Uint16 uAddr, Uint8 uData);
 
-	// S-CPU window selected by $2224.
+	// Raw BW-RAM accessors.  S-CPU reads use the wrappers below so active
+	// character-conversion type 1 can replace the packed BW-RAM data.
 	Uint8 ReadBWRAMWindow(Uint16 uAddr) const;
 	void  WriteBWRAMWindow(Uint16 uAddr, Uint8 uData);
-
 	Uint8 ReadBWRAMDirect(Uint32 uAddr) const;
 	void  WriteBWRAMDirect(Uint32 uAddr, Uint8 uData);
+	Uint8 ReadSCPUBWRAMWindow(Uint16 uAddr);
+	Uint8 ReadSCPUBWRAMDirect(Uint32 uAddr);
 
-	// Character conversion type 1 is consumed by the SNES MDMA source path.
+	// Character conversion type 1 is exposed through the S-CPU BW-RAM bus.
 	Bool  IsCC1Active() const { return m_State.CC1Active; }
 	Uint8 ReadCC1Byte(Uint32 uAddr);
 
