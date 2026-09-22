@@ -392,11 +392,16 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 #endif
         PROF_LEAVE("SNSpcExecute");
 
-#if SNSPCIO_WRITEQUEUE
-        /* Do not publish future CPU->SPC writes just because one SPC slice
-           finished.  Only latch events whose timestamp the SPC consumed. */
-        m_SpcIO.SyncQueue((Uint32)SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME));
-#endif
+        /* A pending CPU input latch can become visible while this SPC
+           slice runs. Reads from $F4-$F7 also call this at the exact access,
+           so instruction-level execution cannot skip the transition. */
+        m_SpcIO.SyncCpuPorts((Uint32)SNSPCGetCounter(
+            &m_Spc, SNSPC_COUNTER_TOTAL));
+    }
+    else
+    {
+        m_SpcIO.SyncCpuPorts((Uint32)SNSPCGetCounter(
+            &m_Spc, SNSPC_COUNTER_TOTAL));
     }
 
 //#if SNES_DEBUG
@@ -634,18 +639,17 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		return;
 	}
 
-	// APUIO0-3 are mirrored every four bytes through $217F.  Route every
-	// mirror through the same SPC write queue and timing path as $2140-43.
+	// APUIO0-3 are mirrored every four bytes through $217F.
 	if (uAddr >= 0x2140 && uAddr <= 0x217F)
 	{
-		/* Advance the SPC to the S-CPU access time, then update the input
-		   latch directly. This matches Snes9x's port-access ordering and avoids
-		   a frame-relative queue delaying/merging handshake edges at frame wrap.
-		   A future cycle-exact latch can model MesenCE's half-SPC-cycle rule,
-		   but an immediate post-sync latch is both deterministic and far closer
-		   to hardware than the old zero-latency queued write. */
+		/* Catch SPC up first, then let the input latch decide whether this
+		   write lands in the current SPC half-cycle or at the next boundary.
+		   Absolute counters avoid the old frame-wrap FIFO bug. */
 		pSnes->SyncSPC();
-		pSnes->m_SpcIO.m_Regs.apu_w[uAddr & 3] = uData;
+		pSnes->m_SpcIO.WriteCpuPort(
+			(Uint32)SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_TOTAL),
+			(Uint32)SNSPCGetCounter(&pSnes->m_Spc, SNSPC_COUNTER_TOTAL),
+			uAddr & 3u, uData);
 		return;
 	}
 
@@ -2188,10 +2192,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
 			// diretamente qual rotina esta consumindo o tempo da EE.
-			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=0 obj-cache=%u",
+			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=%u obj-cache=%u",
 				SNDBG_SCHEMA, (unsigned)(SNDBG_DEEP ? 2 : 1),
 				(unsigned)g_DbgSessionId, (unsigned)g_TmgWinFrames,
-				(unsigned)SNPPU_OBJ_CACHE);
+				(unsigned)SNPPU_BG_CACHE, (unsigned)SNPPU_OBJ_CACHE);
 			DLog("[snes-frame] f=%u rom-video=%s host-target=%u budget=%u cycles min/avg/max=%u/%u/%u slow=%u threshold=%u%% capacity=%u.%u fps",
 				(unsigned)g_TmgFrameNo, bPAL ? "pal" : "ntsc",
 				(unsigned)uTargetFPS, (unsigned)uBudget,
