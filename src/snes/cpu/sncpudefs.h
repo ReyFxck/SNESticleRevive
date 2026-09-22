@@ -58,4 +58,14 @@
 #define SNCPU_CYCLE_SLOW (8)
 #define SNCPU_CYCLE_FAST (6)
 
+/* SA-1 bus tags live in SNCpuBankT::uPad[0].  They keep the bank structure
+   ABI unchanged for sn65816.S while giving the R5900 path O(1) arbitration. */
+#define SNCPU_SA1_BUS_NONE       0
+#define SNCPU_SA1_BUS_ROM        1
+#define SNCPU_SA1_BUS_BWRAM      2
+#define SNCPU_SA1_BUS_IRAM       3
+#define SNCPU_SA1_BUS_MIX_LOW    4
+#define SNCPU_SA1_BUS_MIX_HIGH   5
+#define SNCPU_SA1_BUS_UNIT_MAX   (1024 * SNCPU_CYCLE_FAST)
+
 #endif

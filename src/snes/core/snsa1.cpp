@@ -1255,6 +1255,7 @@ void SNSA1::MapCpuMemory()
 	SNCPUSetMemSpeed(&m_Cpu, 0x600000, 0x100000, SNCPU_CYCLE_FAST * 2);
 
 	SNCPUMirror24BitBus(&m_Cpu);
+	SNCPUSA1BusTagCpu(&m_Cpu);
 }
 
 Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
