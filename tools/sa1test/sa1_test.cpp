@@ -935,7 +935,7 @@ static void TestIdlePollingFastForward(void)
 
 	// Once the shared byte changes, the branch is no longer taken and the
 	// optimizer must stand down so execution can leave the loop normally.
-	sa1.WriteRegister(0x222A, 0xFF);
+	sa1.WriteRegister(0x2229, 0xFF);
 	sa1.WriteIRAM(0x0000, 0x01);
 	sa1.StepMasterCycles(128);
 	CHECK(sa1.GetIdleFastForwardTicks() == 100,
