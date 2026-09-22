@@ -195,6 +195,7 @@ private:
 	Uint32       m_uBWRAMBytes;
 	Uint64       m_uIdleFastForwardTicks;
 	Uint64       m_uIdleSleepSlices;
+	Uint64       m_uSCPUReadSyncSkips;
 	Bool         m_bIdlePollSleeping;
 	Uint16       m_uIdlePollIRAM;
 	Uint8        m_uIdlePollValue;
