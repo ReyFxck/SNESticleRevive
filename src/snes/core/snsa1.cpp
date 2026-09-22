@@ -916,17 +916,22 @@ Uint8 SNSA1::ReadVariableBus(Uint32 uAddr)
 	if ((bSystemBank && uLow >= 0x8000) || uBank >= 0xC0)
 		return SNCPURead8(&m_Cpu, uAddr);
 
-	if (bSystemBank && (uLow < 0x0800 ||
-	    (uLow >= 0x3000 && uLow <= 0x37FF)))
-		return m_IRAM[uLow & (SNSA1_IRAM_SIZE - 1)];
-
-	if (m_pBWRAM && m_uBWRAMBytes)
+	if (bSystemBank)
 	{
-		if (bSystemBank && uLow >= 0x6000 && uLow <= 0x7FFF)
-			return m_pBWRAM[MirrorBWRAM(uAddr)];
-		if (uBank >= 0x40 && uBank <= 0x4F)
-			return m_pBWRAM[MirrorBWRAM(uAddr & 0x0FFFFF)];
+		if (uLow < 0x1000)
+			return (uLow < 0x0800) ?
+			       m_IRAM[uLow & (SNSA1_IRAM_SIZE - 1)] : 0;
+		if (uLow >= 0x3000 && uLow <= 0x3FFF)
+			return (uLow < 0x3800) ?
+			       m_IRAM[uLow & (SNSA1_IRAM_SIZE - 1)] : 0;
+		if (uLow >= 0x6000 && uLow <= 0x7FFF)
+			return ReadSA1BWRAMWindow(uLow);
 	}
+
+	if (uBank >= 0x40 && uBank <= 0x5F)
+		return ReadBWRAMDirect(uAddr);
+	if (uBank >= 0x60 && uBank <= 0x6F)
+		return ReadBitmap(uAddr & 0x0FFFFF);
 
 	return 0;
 }
@@ -1118,7 +1123,9 @@ void SNSA1::MapCpuMemory()
 		SNCPUSetMemSpeed(&m_Cpu, ((uBank + 0x80) << 16) | 0x6000,
 		                  0x2000, SNCPU_CYCLE_FAST * 2);
 	}
-	SNCPUSetMemSpeed(&m_Cpu, 0x400000, 0x100000, SNCPU_CYCLE_FAST * 2);
+	// The SA-1 CPU sees direct BW-RAM through $40-$5F.  The S-CPU only
+	// exposes $40-$4F; do not reuse the narrower host-CPU map here.
+	SNCPUSetMemSpeed(&m_Cpu, 0x400000, 0x200000, SNCPU_CYCLE_FAST * 2);
 	SNCPUSetMemSpeed(&m_Cpu, 0x600000, 0x100000, SNCPU_CYCLE_FAST * 2);
 
 	SNCPUMirror24BitBus(&m_Cpu);
@@ -1132,9 +1139,12 @@ Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
 
 	if (bSystemBank)
 	{
-		if (uLow < 0x0800 ||
-		    (uLow >= 0x3000 && uLow <= 0x37FF))
-			return ReadIRAM(uLow);
+		// I-RAM is decoded over 4 KiB windows but only the lower 2 KiB is
+		// implemented.  The upper half reads as zero rather than mirroring.
+		if (uLow < 0x1000)
+			return (uLow < 0x0800) ? ReadIRAM(uLow) : 0;
+		if (uLow >= 0x3000 && uLow <= 0x3FFF)
+			return (uLow < 0x3800) ? ReadIRAM(uLow) : 0;
 		if (uLow >= 0x2200 && uLow <= 0x23FF)
 			return ReadRegister(uLow);
 		if (uLow >= 0x6000 && uLow <= 0x7FFF)
@@ -1142,7 +1152,7 @@ Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
 		return 0xFF;
 	}
 
-	if (uBank >= 0x40 && uBank <= 0x4F)
+	if (uBank >= 0x40 && uBank <= 0x5F)
 		return ReadBWRAMDirect(uAddr);
 	if (uBank >= 0x60 && uBank <= 0x6F)
 		return ReadBitmap(uAddr & 0x0FFFFF);
@@ -1158,10 +1168,16 @@ void SNSA1::WriteCpuBus(Uint32 uAddr, Uint8 uData)
 
 	if (bSystemBank)
 	{
-		if (uLow < 0x0800 ||
-		    (uLow >= 0x3000 && uLow <= 0x37FF))
+		if (uLow < 0x1000)
 		{
-			WriteIRAMSA1(uLow, uData);
+			if (uLow < 0x0800)
+				WriteIRAMSA1(uLow, uData);
+			return;
+		}
+		if (uLow >= 0x3000 && uLow <= 0x3FFF)
+		{
+			if (uLow < 0x3800)
+				WriteIRAMSA1(uLow, uData);
 			return;
 		}
 		if (uLow >= 0x2200 && uLow <= 0x23FF)
@@ -1177,7 +1193,7 @@ void SNSA1::WriteCpuBus(Uint32 uAddr, Uint8 uData)
 		return;
 	}
 
-	if (uBank >= 0x40 && uBank <= 0x4F)
+	if (uBank >= 0x40 && uBank <= 0x5F)
 		WriteBWRAMDirectSA1(uAddr, uData);
 	else if (uBank >= 0x60 && uBank <= 0x6F)
 		WriteBitmap(uAddr & 0x0FFFFF, uData);

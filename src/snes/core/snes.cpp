@@ -521,13 +521,16 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 #endif
 			return pSnes->m_SA1.ReadRegister((Uint16)uAddr);
 		}
-		if (uAddr >= 0x3000 && uAddr <= 0x37FF)
+		if (uAddr >= 0x3000 && uAddr <= 0x3FFF)
 		{
 			pSnes->SyncSA1();
 #if SNDBG_LOG
 			g_DbgChipReads[SNDBG_CHIP_SA1]++;
 #endif
-			return pSnes->m_SA1.ReadIRAM((Uint16)(uAddr - 0x3000));
+			// S-CPU sees the same 4 KiB decode window: $3000-$37FF is
+			// physical I-RAM, while $3800-$3FFF reads as zero.
+			return (uAddr < 0x3800) ?
+			       pSnes->m_SA1.ReadIRAM((Uint16)(uAddr - 0x3000)) : 0;
 		}
 	}
 
@@ -686,13 +689,15 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 			pSnes->RefreshSCPUIRQ();
 			return;
 		}
-		if (uAddr >= 0x3000 && uAddr <= 0x37FF)
+		if (uAddr >= 0x3000 && uAddr <= 0x3FFF)
 		{
 			pSnes->SyncSA1();
 #if SNDBG_LOG
 			g_DbgChipWrites[SNDBG_CHIP_SA1]++;
 #endif
-			pSnes->m_SA1.WriteIRAM((Uint16)(uAddr - 0x3000), uData);
+			// $3800-$3FFF is decoded but has no backing I-RAM.
+			if (uAddr < 0x3800)
+				pSnes->m_SA1.WriteIRAM((Uint16)(uAddr - 0x3000), uData);
 			return;
 		}
 	}

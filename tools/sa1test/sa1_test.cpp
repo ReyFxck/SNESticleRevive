@@ -78,6 +78,95 @@ static void TestIRAMAndBWRAM(void)
 }
 
 
+
+static void TestSA1BusDecode(void)
+{
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	SNSA1 sa1;
+	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
+	sa1.WriteRegister(0x2227, 0x80);
+	sa1.WriteRegister(0x222A, 0xFF);
+
+	// The 4 KiB I-RAM decode windows only implement their lower 2 KiB.
+	SNCPUWrite8(sa1.GetCpu(), 0x000123, 0x11);
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x000123) == 0x11,
+	      "$0000-$07FF must access SA-1 I-RAM");
+	SNCPUWrite8(sa1.GetCpu(), 0x000923, 0x22);
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x000923) == 0x00,
+	      "$0800-$0FFF must read zero");
+	CHECK(sa1.ReadIRAM(0x0123) == 0x11,
+	      "$0800-$0FFF writes must not mirror into I-RAM");
+
+	SNCPUWrite8(sa1.GetCpu(), 0x003123, 0x33);
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x003123) == 0x33,
+	      "$3000-$37FF must access SA-1 I-RAM");
+	SNCPUWrite8(sa1.GetCpu(), 0x003923, 0x44);
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x003923) == 0x00,
+	      "$3800-$3FFF must read zero");
+	CHECK(sa1.ReadIRAM(0x0123) == 0x33,
+	      "$3800-$3FFF writes must be ignored");
+
+	// Unlike the S-CPU's $40-$4F view, the SA-1 CPU decodes $40-$5F.
+	SNCPUWrite8(sa1.GetCpu(), 0x500123, 0x5A);
+	CHECK(bwram[0x0123] == 0x5A,
+	      "SA-1 direct BW-RAM must include bank $50");
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x5F0123) == 0x5A,
+	      "SA-1 $40-$5F direct BW-RAM must mirror installed RAM");
+}
+
+static void TestVariableBusMappings(void)
+{
+	Uint8 bwram[0x8000];
+	memset(bwram, 0, sizeof(bwram));
+
+	SNSA1 sa1;
+	sa1.SetMemory(NULL, 0, bwram, sizeof(bwram));
+
+	// VBR must use the SA-1 BMAP window, not the raw 24-bit address.
+	sa1.WriteRegister(0x2225, 0x01);
+	bwram[0x2000] = 0x34;
+	bwram[0x2001] = 0x12;
+	sa1.WriteRegister(0x2259, 0x00);
+	sa1.WriteRegister(0x225A, 0x60);
+	sa1.WriteRegister(0x225B, 0x00);
+	CHECK(sa1.ReadRegister(0x230C) == 0x34 &&
+	      sa1.ReadRegister(0x230D) == 0x12,
+	      "VBR $6000-$7FFF must honor $2225 BMAP");
+
+	// Direct BW-RAM on the SA-1 side includes banks $50-$5F.
+	bwram[0x0010] = 0x78;
+	bwram[0x0011] = 0x56;
+	sa1.WriteRegister(0x2259, 0x10);
+	sa1.WriteRegister(0x225A, 0x00);
+	sa1.WriteRegister(0x225B, 0x50);
+	CHECK(sa1.ReadRegister(0x230C) == 0x78 &&
+	      sa1.ReadRegister(0x230D) == 0x56,
+	      "VBR must reach direct BW-RAM in bank $50");
+
+	// $60-$6F is always the bitmap projection. In 4bpp each byte exposes
+	// two pixels, low nibble first.
+	bwram[0] = 0xBA;
+	bwram[1] = 0xDC;
+	sa1.WriteRegister(0x223F, 0x00);
+	sa1.WriteRegister(0x2259, 0x00);
+	sa1.WriteRegister(0x225A, 0x00);
+	sa1.WriteRegister(0x225B, 0x60);
+	CHECK(sa1.ReadRegister(0x230C) == 0x0A &&
+	      sa1.ReadRegister(0x230D) == 0x0B,
+	      "VBR $60-$6F must read the bitmap projection");
+
+	// BMAP bit 7 selects that same bitmap projection for the $6000 window.
+	sa1.WriteRegister(0x2225, 0x80);
+	sa1.WriteRegister(0x2259, 0x00);
+	sa1.WriteRegister(0x225A, 0x60);
+	sa1.WriteRegister(0x225B, 0x00);
+	CHECK(sa1.ReadRegister(0x230C) == 0x0A &&
+	      sa1.ReadRegister(0x230D) == 0x0B,
+	      "VBR must honor $2225 bitmap mode");
+}
+
 static void TestWriteProtection(void)
 {
 	Uint8 bwram[0x8000];
@@ -714,6 +803,8 @@ int main(void)
 	TestResetDefaults();
 	TestResetReleaseAndScheduler();
 	TestIRAMAndBWRAM();
+	TestSA1BusDecode();
+	TestVariableBusMappings();
 	TestWriteProtection();
 	TestBitmapModes();
 	TestSCPUBridge();
