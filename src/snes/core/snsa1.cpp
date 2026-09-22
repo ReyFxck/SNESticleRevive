@@ -176,6 +176,9 @@ Uint16 SNSA1::GetSCPUIRQVector() const
 
 void SNSA1::ReleaseCPUReset()
 {
+	// Releasing CCNT.RESET resets the SA-1-side I-RAM write-enable mask.
+	// Software must reprogram CIWP ($222A) after the CPU leaves reset.
+	m_State.Registers[0x02A] = 0;
 	ResetCPUContext();
 	m_State.LastResetVector = GetResetVector();
 	m_State.ResetEpoch++;

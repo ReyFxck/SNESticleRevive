@@ -45,8 +45,10 @@ static void TestResetReleaseAndScheduler(void)
 	sa1.WriteRegister(0x2204, 0x12);
 	sa1.StepMasterCycles(1364);
 	CHECK(sa1.GetLastSliceCycles() == 0, "reset blocks scheduler credits");
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
+	CHECK(sa1.ReadRegister(0x222A) == 0x00,
+	      "reset release must clear SA-1 CIWP");
 	CHECK(sa1.IsRunning(), "reset release starts scheduler");
 	CHECK(sa1.GetResetVector() == 0x1234, "reset vector");
 	CHECK(sa1.GetCpu()->Regs.rPC == 0x1234, "SA-1 PC must start at $2203/$2204");
@@ -369,10 +371,10 @@ static void TestNormalDMA(void)
 	SNSA1 sa1;
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2229, 0xFF);
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2203, 0x00);
 	sa1.WriteRegister(0x2204, 0x81);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.StepMasterCycles(16);
 
 	// ROM -> I-RAM, trigger on DDAH ($2236). DMA starts asynchronously and
@@ -595,8 +597,8 @@ static void TestNMI(void)
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2203, 0x00); sa1.WriteRegister(0x2204, 0x80);
 	sa1.WriteRegister(0x2205, 0x00); sa1.WriteRegister(0x2206, 0x82);
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.StepMasterCycles(64);
 	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0, "NMI fixture must enter WAI");
 	sa1.WriteRegister(0x220A, 0x10);
@@ -625,8 +627,8 @@ static void TestTimerIRQ(void)
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2203, 0x00); sa1.WriteRegister(0x2204, 0x80);
 	sa1.WriteRegister(0x2207, 0x00); sa1.WriteRegister(0x2208, 0x81);
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.StepMasterCycles(64);
 	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0, "timer fixture must enter WAI");
 
@@ -657,8 +659,8 @@ static void TestSaveStateRoundTrip(void)
 	sa1.WriteIRAM(0x0123, 0xA5);
 	sa1.WriteRegister(0x2203, 0x00);
 	sa1.WriteRegister(0x2204, 0x80);
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.StepMasterCycles(32);
 	sa1.GetCpu()->Regs.rA.w = 0xBEEF;
 	sa1.GetCpu()->Regs.rX.w = 0x1234;
@@ -739,8 +741,8 @@ static void TestInstructionExecution(void)
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
 	sa1.WriteRegister(0x2203, 0x00);
 	sa1.WriteRegister(0x2204, 0x80);
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.StepMasterCycles(256);
 
 	CHECK(sa1.ReadIRAM(0x0010) == 0x42,
@@ -776,8 +778,8 @@ static void TestIRQVector(void)
 	sa1.WriteRegister(0x2204, 0x80);
 	sa1.WriteRegister(0x2207, 0x00);
 	sa1.WriteRegister(0x2208, 0x81);
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.StepMasterCycles(64);
 	CHECK((sa1.GetCpu()->uSignal & SNCPU_SIGNAL_WAI) != 0,
 	      "SA-1 program must enter WAI before IRQ");
@@ -840,13 +842,13 @@ static void TestIndependentCBackend(void)
 
 	SNSA1 sa1;
 	sa1.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
-	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.WriteRegister(0x2203, 0x00);
 	sa1.WriteRegister(0x2204, 0x80);
 
 	g_PoisonExecutorCalls = 0;
 	SNCPUSetExecuteFunc(PoisonGlobalExecutor);
 	sa1.WriteRegister(0x2200, 0x00);
+	sa1.WriteRegister(0x222A, 0xFF);
 	sa1.StepMasterCycles(128);
 	SNCPUSetExecuteFunc(SNCPUExecute_C);
 
