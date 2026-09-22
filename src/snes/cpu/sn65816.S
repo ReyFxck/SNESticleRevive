@@ -133,6 +133,42 @@
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)
 //#define SNCPU_SUBCYCLES(_nCycles)
 
+/* SA-1 S-CPU bus recorder. Non-SA-1 games take only the initial load/branch.
+   bits 0-15=end master clock, bit16=fast access, bits17-18=byte count. */
+#define SNCPU_SA1_TRACK(_addr,_cycles,_bytes) \
+		lui		t0,%hi(g_SNCPU_SA1BusTrackEnabled)	;\
+		lw		t0,%lo(g_SNCPU_SA1BusTrackEnabled)(t0)	;\
+		beq		t0,zr,99f				;\
+		nop						;\
+		sltiu		t1,_cycles,SNCPU_CYCLE_SLOW		;\
+		lw		t2,SNCPU_Counter2			;\
+		subu		t2,t2,R_Cycles				;\
+		andi		t2,t2,0xFFFF				;\
+		sll		t1,t1,16				;\
+		or		t2,t2,t1				;\
+		addiu		t1,zr,_bytes				;\
+		sll		t1,t1,17				;\
+		or		t2,t2,t1				;\
+		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
+		lw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
+		sltiu		t0,t1,SNCPU_SA1_BUS_EVENT_MAX		;\
+		beq		t0,zr,99f				;\
+		nop						;\
+		sll		t1,t1,2					;\
+		lui		t0,%hi(g_SNCPU_SA1BusEventAddr)		;\
+		addiu		t0,t0,%lo(g_SNCPU_SA1BusEventAddr)	;\
+		addu		t0,t0,t1				;\
+		sw		_addr,0(t0)				;\
+		lui		t0,%hi(g_SNCPU_SA1BusEventInfo)		;\
+		addiu		t0,t0,%lo(g_SNCPU_SA1BusEventInfo)	;\
+		addu		t0,t0,t1				;\
+		sw		t2,0(t0)					;\
+		srl		t1,t1,2					;\
+		addiu		t1,t1,1					;\
+		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
+		sw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
+99:
+
 #define SNCPU_ENDOP(_nCycles)		\
 		j		_SNCPUExecute_Loop	;	\
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)	\
@@ -650,9 +686,11 @@ _SNCPU_Write8:
 
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
+        sb		R_Data, 0(t0)
+		SNCPU_SA1_TRACK(R_Addr,t2,1)
 
 		jr		ra
-        sb		R_Data, 0(t0)							// load byte unsigned
+        nop
 
 _SNCPU_Write8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
@@ -662,8 +700,11 @@ _SNCPU_Write8ZeroBank:
         sb		R_Data, 0(t0)							// load byte unsigned
 
 _SNCPU_Write8Trap:
-        lw		t1,SNCPU_WriteTrap(t0)					// t1 -> trap handler
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
+		sw		t0,SP_SaveTrap
+		SNCPU_SA1_TRACK(R_Addr,t2,1)
+		lw		t0,SP_SaveTrap
+        lw		t1,SNCPU_WriteTrap(t0)					// t1 -> trap handler
 
 		// save volatile and temporary registers
 		sw		ra,SP_RA1
@@ -740,14 +781,19 @@ _SNCPU_Write16_Fast:
 
         sb		R_Data, 0(t0)							// store low byte
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
+        sb		t1, 1(t0)								// store high byte
+		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
 		jr		ra
-        sb		t1, 1(t0)								// store high byte
+        nop
 
 _SNCPU_Write16Trap:
+		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
+		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
+		sw		t0,SP_SaveTrap
+		SNCPU_SA1_TRACK(R_Addr,t2,2)
+		lw		t0,SP_SaveTrap
         lw		t1,SNCPU_WriteTrap(t0)					// t1 -> trap handler
-		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
-		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 
 		// save volatile and temporary registers
 		sw		ra,SP_RA1
@@ -835,9 +881,11 @@ _SNCPU_Read8:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
 
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
+        lbu		R_Data, 0(t0)							// load byte unsigned
+		SNCPU_SA1_TRACK(R_Addr,t2,1)
 
 		jr		ra
-        lbu		R_Data, 0(t0)							// load byte unsigned
+        nop
 
 _SNCPU_Read8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
@@ -847,6 +895,9 @@ _SNCPU_Read8ZeroBank:
         lbu		R_Data, 0(t0)							// load byte unsigned
 
 _SNCPU_Read8Trap:
+		sw		t0,SP_SaveTrap
+		SNCPU_SA1_TRACK(R_Addr,t2,1)
+		lw		t0,SP_SaveTrap
         lw		t1,SNCPU_ReadTrap(t0)					// t1 -> trap handler
 
 		// save volatile and temporary registers
@@ -922,13 +973,17 @@ _SNCPU_Read16_Fast:
 
         lwr		R_Data, 0(t0)							// load word
         lwl		R_Data, 3(t0)
+		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
 		jr		ra
         andi	R_Data,R_Data,0xFFFF
 
 _SNCPU_Read16Trap:
-        lw		t1,SNCPU_ReadTrap(t0)					// t1 -> trap handler
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for second memory access
+		sw		t0,SP_SaveTrap
+		SNCPU_SA1_TRACK(R_Addr,t2,2)
+		lw		t0,SP_SaveTrap
+        lw		t1,SNCPU_ReadTrap(t0)					// t1 -> trap handler
 
 		// save volatile and temporary registers
 		sw		ra,SP_RA1
@@ -1109,11 +1164,15 @@ _SNCPU_Fetch8Fast:
 		bltz	R_PCCount,_SNCPU_Fetch8Update
 		addiu	R_PCCount,R_PCCount,-1
 
+		lwu		t0,SP_PCBank
+		subu	R_Addr,R_PC,t0
 		lbu		R_Data,0(R_PC)
         addiu	R_PC,R_PC,1
+        subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
 
 		jr		ra
-        subu	R_Cycles,R_Cycles,R_PCCycles
+        nop
 
 _SNCPU_Fetch8Update:
 		lwu		t0,SP_PCBank			// restore PC to normal
@@ -1176,6 +1235,8 @@ _SNCPU_Fetch16Fast:
 		blez	R_PCCount,_SNCPU_Fetch16Trap
 		addiu	R_PCCount,R_PCCount,-2
 
+		lwu		t0,SP_PCBank
+		subu	R_Addr,R_PC,t0
         subu	R_Cycles,R_Cycles,R_PCCycles
 
         lwr		R_Data, 0(R_PC)							// load word
@@ -1183,6 +1244,7 @@ _SNCPU_Fetch16Fast:
 
         addiu	R_PC,R_PC,2
         subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
 
 		jr		ra
         andi	R_Data,R_Data,0xFFFF
@@ -1234,6 +1296,8 @@ _SNCPU_Fetch24Fast:
 		blez	R_PCCount,_SNCPU_Fetch24Trap
 		addiu	R_PCCount,R_PCCount,-2
 
+		lwu		t0,SP_PCBank
+		subu	R_Addr,R_PC,t0
         subu	R_Cycles,R_Cycles,R_PCCycles
 
         lwr		R_Data, 0(R_PC)							// load word
@@ -1243,6 +1307,7 @@ _SNCPU_Fetch24Fast:
         subu	R_Cycles,R_Cycles,R_PCCycles
         sll		R_Data,R_Data,8
         subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
 
 		jr		ra
         srl		R_Data,R_Data,8
