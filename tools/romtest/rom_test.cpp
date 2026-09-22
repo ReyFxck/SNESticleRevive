@@ -119,6 +119,66 @@ static void TestCleanHiRom(void)
 		"HiROM limpa deve preservar o titulo");
 }
 
+static void TestCleanExLoRom(void)
+{
+	std::vector<Uint8> rom(0x600000, 0xFF);
+	PutHeader(rom, 0x407FC0, "TEST EXLOROM", 0x32, 0x4567,
+		0x8000, 0x400000);
+	((SNRomInfoT *)&rom[0x407FC0])->RomSize = 0x0D;
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"ExLoROM limpa deve carregar");
+	CHECK(snesRom.m_eMapping == SNROM_MAPPING_EXLOROM,
+		"header em 0x407FC0 deve selecionar ExLoROM");
+	CHECK(snesRom.GetMapperName() && !strcmp(snesRom.GetMapperName(), "ExLoROM"),
+		"diagnostico deve identificar ExLoROM");
+}
+
+static void TestCleanExHiRom(void)
+{
+	std::vector<Uint8> rom(0x600000, 0xFF);
+
+	/* Muitos dumps/compilacoes grandes conservam uma copia plausivel do
+	   header em $00FFC0. O candidato estendido precisa vencer o empate para
+	   que os bytes acima de 4 MiB continuem enderecaveis. */
+	PutHeader(rom, 0x00FFC0, "LEGACY HI MIRROR", 0x35, 0x5678,
+		0x8000, 0x008000);
+	PutHeader(rom, 0x40FFC0, "TEST EXHIROM", 0x35, 0x6789,
+		0x8000, 0x408000);
+	((SNRomInfoT *)&rom[0x40FFC0])->RomSize = 0x0D;
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"ExHiROM limpa deve carregar");
+	CHECK(snesRom.m_eMapping == SNROM_MAPPING_EXHIROM,
+		"header em 0x40FFC0 deve selecionar ExHiROM");
+	CHECK(snesRom.GetRomTitle() && !strcmp(snesRom.GetRomTitle(), "TEST EXHIROM"),
+		"ExHiROM deve usar o header estendido");
+	CHECK(snesRom.GetMapperName() && !strcmp(snesRom.GetMapperName(), "ExHiROM"),
+		"diagnostico deve identificar ExHiROM");
+}
+
+static void TestSramExponent(void)
+{
+	std::vector<Uint8> rom(0x100000, 0xFF);
+	PutHeader(rom, 0x7FC0, "SRAM EXP TEST", 0x20, 0x789A,
+		0x8000, 0x0000);
+	((SNRomInfoT *)&rom[0x7FC0])->SRAMSize = 8;
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"fixture SRAM deve carregar");
+	CHECK(snesRom.GetSRAMBytes() == 256u * 1024u,
+		"SRAM code 8 deve representar 256 KiB");
+}
+
 static void TestVideoRegionHeaderCodes(void)
 {
 	struct RegionCaseT {
@@ -203,6 +263,9 @@ int main(void)
 {
 	TestCleanLoRom();
 	TestCleanHiRom();
+	TestCleanExLoRom();
+	TestCleanExHiRom();
+	TestSramExponent();
 	TestVideoRegionHeaderCodes();
 	TestPinocchioFalseType1Regression();
 	TestRealType1StillWorks();
