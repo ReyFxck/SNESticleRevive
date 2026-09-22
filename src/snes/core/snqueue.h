@@ -74,6 +74,19 @@ public:
 		return NULL;
 	}
 
+	inline SNQueueElementT *DequeueAtOrBefore(Uint32 uCycle)
+	{
+		if (m_nCount > 0 && (uCycle >= m_Elements[m_iHead].uCycle))
+		{
+			SNQueueElementT *pElement = &m_Elements[m_iHead];
+			if (++m_iHead == t_nSize)
+				m_iHead = 0;
+			m_nCount--;
+			return pElement;
+		}
+		return NULL;
+	}
+
 	inline SNQueueElementT	*Dequeue()
 	{
 		if (m_nCount > 0)
