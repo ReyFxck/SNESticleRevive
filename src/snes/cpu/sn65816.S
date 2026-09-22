@@ -228,6 +228,42 @@
 		sw		t0,%lo(g_SNCPU_SA1BusConflictTicks)(t2)	;\
 90:
 
+/* SA-1 control-flow timing: odd PRG-ROM branch targets and PRG-ROM
+   jump/return destinations consume one additional SA-1 tick. */
+#define SNCPU_SA1_JUMP_PENALTY() \
+		lw		t0,SP_SA1Exec				;\
+		beq		t0,zr,88f				;\
+		nop						;\
+		lwu		t0,SP_PCBank				;\
+		subu		t0,R_PC,t0				;\
+		srl		t1,t0,SNCPU_BANK_SHIFT			;\
+		sll		t1,t1,4					;\
+		addu		t1,t1,R_pCpu				;\
+		lbu		t1,SNCPU_uSA1Bus(t1)			;\
+		addiu		t2,zr,SNCPU_SA1_BUS_ROM		;\
+		bne		t1,t2,88f				;\
+		nop						;\
+		addiu		R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST	;\
+88:
+
+#define SNCPU_SA1_BRANCH_PENALTY() \
+		lw		t0,SP_SA1Exec				;\
+		beq		t0,zr,87f				;\
+		nop						;\
+		lwu		t0,SP_PCBank				;\
+		subu		t0,R_PC,t0				;\
+		andi		t1,t0,1					;\
+		beq		t1,zr,87f				;\
+		srl		t1,t0,SNCPU_BANK_SHIFT			;\
+		sll		t1,t1,4					;\
+		addu		t1,t1,R_pCpu				;\
+		lbu		t1,SNCPU_uSA1Bus(t1)			;\
+		addiu		t2,zr,SNCPU_SA1_BUS_ROM		;\
+		bne		t1,t2,87f				;\
+		nop						;\
+		addiu		R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST	;\
+87:
+
 #define SNCPU_ENDOP(_nCycles)		\
 		j		_SNCPUExecute_Loop	;	\
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)	\
