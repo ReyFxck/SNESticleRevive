@@ -171,7 +171,11 @@ void MainLoopRender()
 
         PolyBlend(FALSE);
         PolyTexture(&_OutTex);
-        PolyUV(0,0,256,240);
+        /* SNES uses a 512-dot PSMCT16 carrier; NES keeps 256 RGBA32.
+           The physical gsKit mode can be 640 pixels wide, so using the
+           texture's real U range preserves SNES hires detail instead of
+           collapsing it before the final display transform. */
+        PolyUV(0,0,(Int32)_OutTex.uWidth,240);
 		PolyColor4f(fColor, fColor, fColor, 1.0f);
 
                 if (g_GskVideoMode == GSK_VIDMODE_240P && _pSystem == _pNes)
