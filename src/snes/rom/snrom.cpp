@@ -363,7 +363,10 @@ static Int32 _SNRomHeaderScore(const Uint8 *pRom, Uint32 uRomBytes,
 	if (uReset < 0x8000)
 		return -1000;
 
-	uResetBase = bLoHeader ? 0 : 0x8000;
+	/* Header candidates live at $7FC0/$FFC0 and, for extended maps,
+	   $407FC0/$40FFC0.  Subtracting the LoROM header position yields the
+	   physical 32 KiB reset window base used by all four layouts. */
+	uResetBase = uHeaderOffset - 0x7FC0u;
 	uOpcodeOffset = uResetBase + (uReset & 0x7FFF);
 	if (uOpcodeOffset >= uRomBytes)
 		return -1000;
@@ -530,22 +533,15 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 
 		m_eVideoType = pCountry ? pCountry->eVideoType : SNROM_VIDEO_NTSC;
 		m_uROMSize	  = 1 << (pCartInfo->RomSize - 7);
-		switch (pCartInfo->SRAMSize)
-		{
-		default:
-		case 0:
+		/* Header SRAMSize is an exponent. m_uSRAMSize is stored in
+		   kilobits, so code N maps to 8 << N kbit.  The core already owns
+		   a 256 KiB backing store, therefore codes 1..8 are representable. */
+		if (pCartInfo->SRAMSize == 0)
 			m_uSRAMSize = 0;
-			break;
-		case 1:
-			m_uSRAMSize = 16;
-			break;
-		case 2:
-			m_uSRAMSize = 32;
-			break;
-		case 3:
-			m_uSRAMSize = 64;
-			break;
-		}
+		else if (pCartInfo->SRAMSize <= 8)
+			m_uSRAMSize = (Uint32)8 << pCartInfo->SRAMSize;
+		else
+			m_uSRAMSize = 0;
 		switch (pCartInfo->RomType)
 		{
 		case 0:
@@ -883,95 +879,123 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 	}
 
 	SNRomInfoT *pCartInfo;
-	SNRomInfoT *pLoCartInfo;
-	SNRomInfoT *pHiCartInfo;
+	SNRomInfoT *pCandidates[4];
+	Int32 nScores[4];
+	static const Uint32 uHeaderOffsets[4] = {
+		0x007FC0u, 0x00FFC0u, 0x407FC0u, 0x40FFC0u
+	};
+	static const Bool bLoCandidate[4] = {
+		TRUE, FALSE, TRUE, FALSE
+	};
+	static const SNRomMappingE eCandidateMap[4] = {
+		SNROM_MAPPING_LOROM, SNROM_MAPPING_HIROM,
+		SNROM_MAPPING_EXLOROM, SNROM_MAPPING_EXHIROM
+	};
+	Int32 iBest = -1;
+	Int32 nBestScore = -1001;
+	Int32 i;
 
-	/* Score both physical header positions first.  Only the best plausible
-	   candidate may request Type-1 conversion; accepting either candidate
-	   unconditionally corrupted clean HiROM images such as Pinocchio. */
-	pLoCartInfo = GetCartInfo(32704);
-	pHiCartInfo = GetCartInfo(65472);
-	Int32 nLoScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 32704, TRUE);
-	Int32 nHiScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 65472, FALSE);
-	Bool bBestIsLo = (nLoScore >= nHiScore);
-	SNRomInfoT *pBestCartInfo = bBestIsLo ? pLoCartInfo : pHiCartInfo;
-
-	/* Some genuine Type-1 images do not expose a usable reset opcode until
-	   after conversion.  Preserve the old checksum/map fallback, but only
-	   when neither normal candidate could be scored. */
-	if (nLoScore <= -1000 && nHiScore <= -1000)
+	/* Evaluate all four physical header positions.  MesenCE uses the same
+	   normal/extended LoROM+HiROM candidate model.  Later candidates win
+	   equal scores so a >4 MiB image with duplicated legacy headers selects
+	   the extended map rather than silently truncating its address space. */
+	for (i = 0; i < 4; i++)
 	{
-		if (_SNRomHeaderSaysType1(pLoCartInfo, TRUE))
+		pCandidates[i] = GetCartInfo(uHeaderOffsets[i]);
+		nScores[i] = _SNRomHeaderScore(m_pRomData, m_uRomBytes,
+			uHeaderOffsets[i], bLoCandidate[i]);
+		if (nScores[i] >= nBestScore)
 		{
-			bBestIsLo = TRUE;
-			pBestCartInfo = pLoCartInfo;
-		}
-		else if (_SNRomHeaderSaysType1(pHiCartInfo, FALSE))
-		{
-			bBestIsLo = FALSE;
-			pBestCartInfo = pHiCartInfo;
-		}
-		else
-		{
-			pBestCartInfo = NULL;
+			nBestScore = nScores[i];
+			iBest = i;
 		}
 	}
 
+	/* Preserve copier Type-1 recovery for the normal header pair.  Extended
+	   images are already linear cartridge data and must never be shuffled by
+	   this legacy conversion. */
+	if (nBestScore <= -1000)
+	{
+		if (_SNRomHeaderSaysType1(pCandidates[0], TRUE))
+			iBest = 0;
+		else if (_SNRomHeaderSaysType1(pCandidates[1], FALSE))
+			iBest = 1;
+		else
+			iBest = -1;
+	}
+
 #if SNDBG_LOG
-	DLog("[rom-map] raw lo=%d hi=%d selected=%s type1=%d",
-	     (int)nLoScore, (int)nHiScore,
-	     pBestCartInfo ? (bBestIsLo ? "Lo" : "Hi") : "none",
-	     pBestCartInfo && _SNRomHeaderSaysType1(pBestCartInfo, bBestIsLo));
+	DLog("[rom-map] raw lo/hi/exlo/exhi=%d/%d/%d/%d selected=%s type1=%d",
+		(int)nScores[0], (int)nScores[1], (int)nScores[2], (int)nScores[3],
+		iBest < 0 ? "none" :
+		(iBest == 0 ? "Lo" : (iBest == 1 ? "Hi" : (iBest == 2 ? "ExLo" : "ExHi"))),
+		(iBest == 0 || iBest == 1) &&
+		_SNRomHeaderSaysType1(pCandidates[iBest], bLoCandidate[iBest]));
 #endif
 
-	if (pBestCartInfo &&
-	    _SNRomHeaderSaysType1(pBestCartInfo, bBestIsLo))
+	if ((iBest == 0 || iBest == 1) &&
+	    _SNRomHeaderSaysType1(pCandidates[iBest], bLoCandidate[iBest]))
 	{
 		if (_SNRomDeinterleaveType1(m_pRomData, m_uRomBytes))
 		{
-			pLoCartInfo = GetCartInfo(32704);
-			pHiCartInfo = GetCartInfo(65472);
+			iBest = -1;
+			nBestScore = -1001;
+			for (i = 0; i < 4; i++)
+			{
+				pCandidates[i] = GetCartInfo(uHeaderOffsets[i]);
+				nScores[i] = _SNRomHeaderScore(m_pRomData, m_uRomBytes,
+					uHeaderOffsets[i], bLoCandidate[i]);
+				if (nScores[i] >= nBestScore)
+				{
+					nBestScore = nScores[i];
+					iBest = i;
+				}
+			}
 		}
 	}
 
-	/* Rescore because Type-1 conversion moves both the header and reset
-	   opcode.  Fall back to the historical checksum-only choice for unusual
-	   homebrew/copier headers which are valid but use an uncommon reset prologue. */
-	nLoScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 32704, TRUE);
-	nHiScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes, 65472, FALSE);
-	if (nLoScore > -1000 || nHiScore > -1000)
+	if (iBest >= 0 && nScores[iBest] > -1000)
 	{
-		if (nLoScore >= nHiScore)
-		{
-			pCartInfo = pLoCartInfo;
-			m_eMapping = SNROM_MAPPING_LOROM;
-		}
-		else
-		{
-			pCartInfo = pHiCartInfo;
-			m_eMapping = SNROM_MAPPING_HIROM;
-		}
-	}
-	else if (_SNRomIsValidCartInfo(pLoCartInfo))
-	{
-		pCartInfo = pLoCartInfo;
-		m_eMapping = SNROM_MAPPING_LOROM;
-	}
-	else if (_SNRomIsValidCartInfo(pHiCartInfo))
-	{
-		pCartInfo = pHiCartInfo;
-		m_eMapping = SNROM_MAPPING_HIROM;
+		pCartInfo = pCandidates[iBest];
+		m_eMapping = eCandidateMap[iBest];
 	}
 	else
 	{
+		/* Unusual homebrew/copier images can carry a checksum-valid header
+		   with a reset prologue outside the scorer's conservative opcode set.
+		   Keep the historical checksum fallback, now across all four maps. */
 		pCartInfo = NULL;
+		for (i = 0; i < 4; i++)
+		{
+			if (_SNRomIsValidCartInfo(pCandidates[i]))
+			{
+				pCartInfo = pCandidates[i];
+				m_eMapping = eCandidateMap[i];
+			}
+		}
+	}
+
+	/* Map modes 25h/35h identify ExHiROM even when a legacy dump duplicates
+	   its header in the ordinary HiROM position. */
+	if (pCartInfo && m_eMapping == SNROM_MAPPING_HIROM &&
+	    m_uRomBytes > 0x400000u &&
+	    ((pCartInfo->RomMakeup & (Uint8)~0x10u) == 0x25u))
+	{
+		m_eMapping = SNROM_MAPPING_EXHIROM;
 	}
 
 #if SNDBG_LOG
-	DLog("[rom-map] final lo=%d hi=%d mapper=%s title='%.21s'",
-	     (int)nLoScore, (int)nHiScore,
-	     pCartInfo ? (m_eMapping == SNROM_MAPPING_HIROM ? "HiROM" : "LoROM") : "none",
-	     pCartInfo ? (const char *)pCartInfo->Title : "");
+	{
+		const char *pMapper =
+			m_eMapping == SNROM_MAPPING_LOROM ? "LoROM" :
+			m_eMapping == SNROM_MAPPING_HIROM ? "HiROM" :
+			m_eMapping == SNROM_MAPPING_EXLOROM ? "ExLoROM" :
+			m_eMapping == SNROM_MAPPING_EXHIROM ? "ExHiROM" : "unknown";
+		DLog("[rom-map] final lo/hi/exlo/exhi=%d/%d/%d/%d mapper=%s title='%.21s'",
+			(int)nScores[0], (int)nScores[1], (int)nScores[2], (int)nScores[3],
+			pCartInfo ? pMapper : "none",
+			pCartInfo ? (const char *)pCartInfo->Title : "");
+	}
 #endif
 
 	SetCartInfo(pCartInfo);
@@ -1094,6 +1118,8 @@ char   *SnesRom::GetMapperName()
 		return (char *)"HiROM";
 	case SNROM_MAPPING_EXLOROM:
 		return (char *)"ExLoROM";
+	case SNROM_MAPPING_EXHIROM:
+		return (char *)"ExHiROM";
 	default:
 		return NULL;
 	}
