@@ -34,6 +34,7 @@ SNSA1::SNSA1()
 	m_uBWRAMBytes = 0;
 	m_uIdleFastForwardTicks = 0;
 	m_uIdleSleepSlices = 0;
+	m_uSCPUReadSyncSkips = 0;
 	m_bIdlePollSleeping = FALSE;
 	m_uIdlePollIRAM = 0;
 	m_uIdlePollValue = 0;
@@ -174,6 +175,7 @@ void SNSA1::Reset(Bool bHardReset)
 	m_State.Running = FALSE;
 	m_uIdleFastForwardTicks = 0;
 	m_uIdleSleepSlices = 0;
+	m_uSCPUReadSyncSkips = 0;
 	ClearIdlePollSleep();
 
 	ResetCPUContext();
@@ -497,7 +499,10 @@ void SNSA1::WriteSCPURegister(Uint16 uAddr, Uint8 uData)
 		(uAddr >= 0x2231 && uAddr <= 0x2237);
 
 	if (bAllowed)
+	{
+		ClearIdlePollSleep();
 		WriteRegister(uAddr, uData);
+	}
 }
 
 void SNSA1::WriteSA1Register(Uint16 uAddr, Uint8 uData)
@@ -530,8 +535,17 @@ Bool SNSA1::CanWriteIRAM(Uint16 uAddr, Bool bSA1Side) const
 
 void SNSA1::WriteIRAM(Uint16 uAddr, Uint8 uData)
 {
-	if (CanWriteIRAM(uAddr, FALSE))
-		m_IRAM[uAddr & (SNSA1_IRAM_SIZE - 1)] = uData;
+	Uint16 uOffset = uAddr & (SNSA1_IRAM_SIZE - 1);
+	if (!CanWriteIRAM(uOffset, FALSE))
+		return;
+
+	if (m_bIdlePollSleeping && uOffset == m_uIdlePollIRAM &&
+	    m_IRAM[uOffset] != uData)
+	{
+		m_Cpu.Regs.rPC = m_uIdlePollLoopPC;
+		ClearIdlePollSleep();
+	}
+	m_IRAM[uOffset] = uData;
 }
 
 void SNSA1::WriteIRAMSA1(Uint16 uAddr, Uint8 uData)
@@ -1497,6 +1511,29 @@ Bool SNSA1::PeekMappedCpuByte(Uint32 uAddr, Uint8 *pValue) const
 	if (!pValue || !pBank->pMem)
 		return FALSE;
 	*pValue = pBank->pMem[uAddr];
+	return TRUE;
+}
+
+Bool SNSA1::TrySkipSCPUReadSync()
+{
+	/* A latched polling loop only reads immutable ROM plus one I-RAM byte.
+	   With no asynchronous wake source armed, read-only host accesses can use
+	   the already materialized state and defer clock catch-up until the next
+	   true synchronization point. */
+	if (!m_bIdlePollSleeping || !m_State.Running)
+		return FALSE;
+	if (m_State.DMARunning || m_State.ArithmeticPending ||
+	    m_State.NMIPending || m_State.TimerMatch || m_State.CC1Active)
+		return FALSE;
+	/* An enabled H/V timer could become pending during a deferred interval. */
+	if (m_State.Registers[0x010] & 0x03)
+		return FALSE;
+	if (m_Cpu.uSignal & (SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_NMI |
+	                    SNCPU_SIGNAL_NMIEDGE | SNCPU_SIGNAL_WAI |
+	                    SNCPU_SIGNAL_STP))
+		return FALSE;
+
+	m_uSCPUReadSyncSkips++;
 	return TRUE;
 }
 

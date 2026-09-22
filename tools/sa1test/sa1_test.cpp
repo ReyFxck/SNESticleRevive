@@ -934,6 +934,14 @@ static void TestIdlePollingFastForward(void)
 	      "stable polling loop should fast-forward all scheduled ticks");
 	CHECK(sa1.IsIdlePollSleeping(),
 	      "stable polling loop should latch persistent idle sleep");
+	CHECK(sa1.TrySkipSCPUReadSync(),
+	      "latched idle poll with timers disabled should skip host read sync");
+	CHECK(sa1.GetSCPUReadSyncSkips() == 1,
+	      "host read sync skip counter should record lazy read");
+	sa1.WriteRegister(0x2210, 0x01);
+	CHECK(!sa1.TrySkipSCPUReadSync(),
+	      "enabled SA-1 timer must prevent lazy host read synchronization");
+	sa1.WriteRegister(0x2210, 0x00);
 
 	Int32 nSleepStart = SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME);
 	sa1.StepMasterCycles(200);
@@ -966,6 +974,8 @@ static void TestIdlePollingFastForward(void)
 	// optimizer must stand down so execution can leave the loop normally.
 	sa1.WriteRegister(0x2229, 0xFF);
 	sa1.WriteIRAM(0x0000, 0x01);
+	CHECK(!sa1.IsIdlePollSleeping(),
+	      "write to watched I-RAM must wake idle latch immediately");
 	sa1.StepMasterCycles(128);
 	CHECK(sa1.GetIdleFastForwardTicks() == 200,
 	      "changed I-RAM polling value must disable further fast-forward");

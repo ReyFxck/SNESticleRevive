@@ -131,7 +131,9 @@ public:
 	Uint32 GetLastSliceCycles() const { return m_State.LastSliceCycles; }
 	Uint64 GetIdleFastForwardTicks() const { return m_uIdleFastForwardTicks; }
 	Uint64 GetIdleSleepSlices() const { return m_uIdleSleepSlices; }
+	Uint64 GetSCPUReadSyncSkips() const { return m_uSCPUReadSyncSkips; }
 	Bool   IsIdlePollSleeping() const { return m_bIdlePollSleeping; }
+	Bool   TrySkipSCPUReadSync();
 	const SA1State *GetState() const { return &m_State; }
 	SNCpuT *GetCpu() { return &m_Cpu; }
 	const SNCpuT *GetCpu() const { return &m_Cpu; }

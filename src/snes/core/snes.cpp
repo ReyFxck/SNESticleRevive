@@ -523,22 +523,28 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	{
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
 		{
-			pSnes->SyncSA1();
 #if SNDBG_LOG
 			g_DbgChipReads[SNDBG_CHIP_SA1]++;
 #endif
+			/* The S-CPU can only read SFR at $2300. Everything else in this
+			   decode range is constant open bus and never needs SA-1 execution. */
+			if (uAddr != 0x2300)
+				return 0xFF;
+			if (!pSnes->m_SA1.TrySkipSCPUReadSync())
+				pSnes->SyncSA1();
 			return pSnes->m_SA1.ReadSCPURegister((Uint16)uAddr);
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x3FFF)
 		{
-			pSnes->SyncSA1();
 #if SNDBG_LOG
 			g_DbgChipReads[SNDBG_CHIP_SA1]++;
 #endif
-			// S-CPU sees the same 4 KiB decode window: $3000-$37FF is
-			// physical I-RAM, while $3800-$3FFF reads as zero.
-			return (uAddr < 0x3800) ?
-			       pSnes->m_SA1.ReadIRAM((Uint16)(uAddr - 0x3000)) : 0;
+			/* $3800-$3FFF is decoded but has no physical I-RAM. */
+			if (uAddr >= 0x3800)
+				return 0;
+			if (!pSnes->m_SA1.TrySkipSCPUReadSync())
+				pSnes->SyncSA1();
+			return pSnes->m_SA1.ReadIRAM((Uint16)(uAddr - 0x3000));
 		}
 	}
 
@@ -699,13 +705,14 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x3FFF)
 		{
-			pSnes->SyncSA1();
 #if SNDBG_LOG
 			g_DbgChipWrites[SNDBG_CHIP_SA1]++;
 #endif
 			// $3800-$3FFF is decoded but has no backing I-RAM.
-			if (uAddr < 0x3800)
-				pSnes->m_SA1.WriteIRAM((Uint16)(uAddr - 0x3000), uData);
+			if (uAddr >= 0x3800)
+				return;
+			pSnes->SyncSA1();
+			pSnes->m_SA1.WriteIRAM((Uint16)(uAddr - 0x3000), uData);
 			return;
 		}
 	}
@@ -1294,7 +1301,8 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadSA1BWRAM(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 	Uint8 uBank = (Uint8)(uAddr >> 16);
-	pSnes->SyncSA1();
+	if (!pSnes->m_SA1.TrySkipSCPUReadSync())
+		pSnes->SyncSA1();
 #if SNDBG_LOG
 	g_DbgChipReads[SNDBG_CHIP_SA1]++;
 #endif
@@ -2593,10 +2601,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)pSA1->DMARemaining, (unsigned)pSA1->DMATransferredBytes,
 					(unsigned)pSA1->DMAStallTicks);
 				DLog("[snes-sa1-bus] conflict-ticks=%u dropped-events=%u",(unsigned)SNCPUSA1BusGetConflictTicks(),(unsigned)SNCPUSA1BusGetDroppedEvents());
-				DLog("[snes-sa1-idle] fast-forward-ticks=%llu sleep-slices=%llu active=%u",
+				DLog("[snes-sa1-idle] fast-forward-ticks=%llu sleep-slices=%llu active=%u host-read-sync-skips=%llu",
 					(unsigned long long)m_SA1.GetIdleFastForwardTicks(),
 					(unsigned long long)m_SA1.GetIdleSleepSlices(),
-					(unsigned)m_SA1.IsIdlePollSleeping());
+					(unsigned)m_SA1.IsIdlePollSleeping(),
+					(unsigned long long)m_SA1.GetSCPUReadSyncSkips());
 				DLog("[snes-sa1] irq sfr/cfr/cie/sie=%02X/%02X/%02X/%02X timer h/v=%u/%u bw map-s/map-c/ctrl=%02X/%02X/%02X mmc=%02X/%02X/%02X/%02X",
 					(unsigned)((pSA1->Registers[0x009] & 0x5F) | (pSA1->Registers[0x100] & 0xA0)),
 					(unsigned)((pSA1->Registers[0x000] & 0x0F) | (pSA1->Registers[0x101] & 0xF0)),
