@@ -519,7 +519,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 #if SNDBG_LOG
 			g_DbgChipReads[SNDBG_CHIP_SA1]++;
 #endif
-			return pSnes->m_SA1.ReadRegister((Uint16)uAddr);
+			return pSnes->m_SA1.ReadSCPURegister((Uint16)uAddr);
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x3FFF)
 		{
@@ -683,7 +683,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 #if SNDBG_LOG
 			g_DbgChipWrites[SNDBG_CHIP_SA1]++;
 #endif
-			pSnes->m_SA1.WriteRegister((Uint16)uAddr, uData);
+			pSnes->m_SA1.WriteSCPURegister((Uint16)uAddr, uData);
 			if (uAddr >= 0x2220 && uAddr <= 0x2223)
 				pSnes->RemapSA1ROM((Uint32)(uAddr - 0x2220), uData);
 			pSnes->RefreshSCPUIRQ();

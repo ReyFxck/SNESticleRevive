@@ -230,6 +230,22 @@ Uint8 SNSA1::ReadRegister(Uint16 uAddr)
 	return m_State.Registers[uAddr - SNSA1_REGISTER_BASE];
 }
 
+Uint8 SNSA1::ReadSCPURegister(Uint16 uAddr)
+{
+	// The host CPU can read only SFR and the SA-1 version register.
+	if (uAddr == 0x2300 || uAddr == 0x230E)
+		return ReadRegister(uAddr);
+	return 0xFF;
+}
+
+Uint8 SNSA1::ReadSA1Register(Uint16 uAddr)
+{
+	// CFR/counters/math/VBR are visible to the SA-1 CPU itself.
+	if (uAddr >= 0x2301 && uAddr <= 0x230D)
+		return ReadRegister(uAddr);
+	return 0xFF;
+}
+
 void SNSA1::UpdateIRQLine()
 {
 	Bool bPending = ((m_State.Registers[0x101] &
@@ -403,6 +419,33 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 	default:
 		break;
 	}
+}
+
+void SNSA1::WriteSCPURegister(Uint16 uAddr, Uint8 uData)
+{
+	Bool bAllowed =
+		(uAddr >= 0x2200 && uAddr <= 0x2208) ||
+		(uAddr >= 0x2220 && uAddr <= 0x2224) ||
+		uAddr == 0x2226 || uAddr == 0x2228 || uAddr == 0x2229 ||
+		(uAddr >= 0x2231 && uAddr <= 0x2237);
+
+	if (bAllowed)
+		WriteRegister(uAddr, uData);
+}
+
+void SNSA1::WriteSA1Register(Uint16 uAddr, Uint8 uData)
+{
+	Bool bAllowed =
+		(uAddr >= 0x2209 && uAddr <= 0x2215) ||
+		uAddr == 0x2225 || uAddr == 0x2227 || uAddr == 0x222A ||
+		uAddr == 0x2230 ||
+		(uAddr >= 0x2231 && uAddr <= 0x2239) ||
+		uAddr == 0x223F ||
+		(uAddr >= 0x2240 && uAddr <= 0x2254) ||
+		(uAddr >= 0x2258 && uAddr <= 0x225B);
+
+	if (bAllowed)
+		WriteRegister(uAddr, uData);
 }
 
 Uint8 SNSA1::ReadIRAM(Uint16 uAddr) const
@@ -1146,7 +1189,7 @@ Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
 		if (uLow >= 0x3000 && uLow <= 0x3FFF)
 			return (uLow < 0x3800) ? ReadIRAM(uLow) : 0;
 		if (uLow >= 0x2200 && uLow <= 0x23FF)
-			return ReadRegister(uLow);
+			return ReadSA1Register(uLow);
 		if (uLow >= 0x6000 && uLow <= 0x7FFF)
 			return ReadSA1BWRAMWindow(uLow);
 		return 0xFF;
@@ -1182,7 +1225,7 @@ void SNSA1::WriteCpuBus(Uint32 uAddr, Uint8 uData)
 		}
 		if (uLow >= 0x2200 && uLow <= 0x23FF)
 		{
-			WriteRegister(uLow, uData);
+			WriteSA1Register(uLow, uData);
 			return;
 		}
 		if (uLow >= 0x6000 && uLow <= 0x7FFF)

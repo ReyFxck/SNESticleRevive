@@ -86,8 +86,15 @@ public:
 	void SaveState(SA1SaveState *pState) const;
 	void RestoreState(const SA1SaveState *pState);
 
+	// Raw register helpers are kept for focused unit tests and state setup.
 	Uint8 ReadRegister(Uint16 uAddr);
 	void  WriteRegister(Uint16 uAddr, Uint8 uData);
+
+	// Hardware-visible register ports differ between the S-CPU and SA-1 CPU.
+	Uint8 ReadSCPURegister(Uint16 uAddr);
+	void  WriteSCPURegister(Uint16 uAddr, Uint8 uData);
+	Uint8 ReadSA1Register(Uint16 uAddr);
+	void  WriteSA1Register(Uint16 uAddr, Uint8 uData);
 
 	Uint8 ReadIRAM(Uint16 uAddr) const;
 	// Public write path is the S-CPU side ($3000-$37FF).

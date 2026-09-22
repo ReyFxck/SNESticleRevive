@@ -235,6 +235,41 @@ static void TestBitmapModes(void)
 
 
 
+
+static void TestRegisterPortIsolation(void)
+{
+	SNSA1 sa1;
+
+	CHECK(sa1.ReadSCPURegister(0x230E) == SNSA1_VERSION_CODE,
+	      "S-CPU must read the SA-1 version register");
+	CHECK(sa1.ReadSCPURegister(0x2301) == 0xFF,
+	      "S-CPU must not read SA-1-only CFR/math status");
+	CHECK(sa1.ReadSA1Register(0x230E) == 0xFF,
+	      "SA-1 CPU must not see the S-CPU-only version port");
+
+	// The S-CPU cannot program the SA-1 arithmetic unit directly.
+	sa1.WriteSCPURegister(0x2250, 0x03);
+	CHECK(sa1.ReadRegister(0x2250) == 0x00,
+	      "S-CPU writes to SA-1-only arithmetic registers must be ignored");
+
+	// Conversely, the SA-1 CPU cannot release/reset itself through CCNT.
+	sa1.WriteSA1Register(0x2200, 0x00);
+	CHECK(sa1.ReadRegister(0x2200) == 0x20 && !sa1.IsRunning(),
+	      "SA-1 CPU writes to S-CPU-only CCNT must be ignored");
+
+	// The proper S-CPU port can configure the vector and release reset.
+	sa1.WriteSCPURegister(0x2203, 0x34);
+	sa1.WriteSCPURegister(0x2204, 0x12);
+	sa1.WriteSCPURegister(0x2200, 0x00);
+	CHECK(sa1.IsRunning() && sa1.GetCpu()->Regs.rPC == 0x1234,
+	      "S-CPU CCNT/vector port must control SA-1 reset");
+
+	// SCNT belongs to the SA-1 side and must still signal the host CPU.
+	sa1.WriteSA1Register(0x2209, 0x80);
+	CHECK((sa1.ReadSCPURegister(0x2300) & 0x80) != 0,
+	      "SA-1 SCNT request must appear in S-CPU SFR");
+}
+
 static void TestSCPUBridge(void)
 {
 	SNSA1 sa1;
@@ -741,8 +776,8 @@ static void TestSA1BusMirrorsAndTimerLatch(void)
 	SNCPUWrite8(sa1.GetCpu(), 0x003123, 0x5A);
 	CHECK(SNCPURead8(sa1.GetCpu(), 0x000123) == 0x5A,
 	      "SA-1 I-RAM must mirror at $3000-$37FF");
-	CHECK(SNCPURead8(sa1.GetCpu(), 0x500000) == 0xFF,
-	      "$50-$5F must not decode as direct BW-RAM");
+	CHECK(SNCPURead8(sa1.GetCpu(), 0x500000) == bwram[0],
+	      "$50-$5F must decode as SA-1 direct BW-RAM");
 
 	sa1.WriteRegister(0x2211, 0x00);
 	sa1.StepMasterCycles(40);
@@ -807,6 +842,7 @@ int main(void)
 	TestVariableBusMappings();
 	TestWriteProtection();
 	TestBitmapModes();
+	TestRegisterPortIsolation();
 	TestSCPUBridge();
 	TestCharConvertType2();
 	TestCharConvertType1();
