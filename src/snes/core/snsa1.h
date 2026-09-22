@@ -186,6 +186,7 @@ private:
 	Uint32       m_uRomBytes;
 	Uint8       *m_pBWRAM;
 	Uint32       m_uBWRAMBytes;
+	Uint64       m_uIdleFastForwardTicks;
 };
 
 #endif
