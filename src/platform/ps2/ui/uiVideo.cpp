@@ -329,21 +329,10 @@ void VideoSettingsLoad(void)
 CVideoScreen::CVideoScreen()
 {
 	m_iSelect = 0;
-	m_iNavHeld = 0;
-	m_iNavDelay = 0;
 }
 
 void CVideoScreen::Process()
 {
-}
-
-void CVideoScreen::MoveSelection(int delta)
-{
-	m_iSelect += delta;
-	if (m_iSelect < 0)
-		m_iSelect = VIDEO_ITEM_COUNT - 1;
-	else if (m_iSelect >= VIDEO_ITEM_COUNT)
-		m_iSelect = 0;
 }
 
 static void _VideoScrollTriangle(int x, int y, Bool down)
@@ -600,36 +589,17 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	/* Up/Down repeat is local to this screen. The global menu trigger starts
-	   repeating every frame after its initial delay, which is too fast for a
-	   long settings list. Here the first move is immediate, then we wait
-	   ~250 ms and advance roughly every 4 frames (~67 ms at 60 Hz). The
-	   analog stick is already synthesized into PAD_UP/PAD_DOWN upstream. */
+	/* Use the same global held-button repeat as the browser and the rest of
+	   the menu. Analog-stick directions are already synthesized upstream. */
+	if (trigger & PAD_UP)
 	{
-		int nav = 0;
-		if ((buttons & PAD_UP) && !(buttons & PAD_DOWN)) nav = -1;
-		if ((buttons & PAD_DOWN) && !(buttons & PAD_UP)) nav = +1;
-
-		if (nav == 0)
-		{
-			m_iNavHeld = 0;
-			m_iNavDelay = 0;
-		}
-		else if (nav != m_iNavHeld)
-		{
-			m_iNavHeld = nav;
-			m_iNavDelay = 15;
-			MoveSelection(nav);
-		}
-		else if (m_iNavDelay > 0)
-		{
-			m_iNavDelay--;
-		}
-		else
-		{
-			MoveSelection(nav);
-			m_iNavDelay = 3;
-		}
+		m_iSelect--;
+		if (m_iSelect < 0) m_iSelect = VIDEO_ITEM_COUNT - 1;
+	}
+	if (trigger & PAD_DOWN)
+	{
+		m_iSelect++;
+		if (m_iSelect >= VIDEO_ITEM_COUNT) m_iSelect = 0;
 	}
 
 	if (trigger & PAD_LEFT)  dir = -1;
