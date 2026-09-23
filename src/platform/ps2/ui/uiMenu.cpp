@@ -211,10 +211,13 @@ void CMenuScreen::Draw()
 		FontColor4f(0.48f, 0.48f, 0.48f, 1.0f);
 		_MenuPrintAlignCenter(128, 171, "Deleting a state removes both banks");
 
-		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 39, 198, "Select");
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 29, 198, "Select");
 		if (m_iSelect == 1 || m_iSelect == 2)
 		{
-			UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 132, 198, "Change");
+			/* L/R previews only. Cross is deliberately still visible because
+			   it is the explicit commit action for Storage/Quick Slot. */
+			UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 105, 198, "Change");
+			UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 181, 198, "Choose");
 		}
 		else
 		{
