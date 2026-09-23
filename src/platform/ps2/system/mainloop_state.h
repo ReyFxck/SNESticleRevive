@@ -45,6 +45,7 @@ Int32 MainLoopStateGetSlot();
 MainLoopStateDeviceE MainLoopStateGetDevice();
 const Char *MainLoopStateGetDeviceName();
 Bool MainLoopStateGetPreferredRoot(Char *pOut, Int32 nOut);
+void MainLoopStateMigrateLegacyStates();
 const Char *MainLoopStateGetAvailability();
 const Char *MainLoopStateGetLastMessage();
 Int32 MainLoopStateGetUnformattedCard();
