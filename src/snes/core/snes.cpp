@@ -2285,6 +2285,34 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)m_Cpu.Regs.rP, (unsigned)m_Cpu.Regs.rE,
 				(unsigned)m_Cpu.uSignal, (unsigned)m_Cpu.uIrqPending,
 				(unsigned)m_Cpu.uNmiDmaDelay);
+			{
+				Uint32 pc = m_Cpu.Regs.rPC & 0xFFFFFFu;
+				Uint8 b[16];
+				for (Uint32 i = 0; i < 16; i++)
+					b[i] = SNCPUPeek8(&m_Cpu, (pc + i) & 0xFFFFFFu);
+				DLog("[snes-cpu-code] f=%u pc=%06X bytes=%02X%02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X",
+					(unsigned)g_TmgFrameNo, (unsigned)pc,
+					(unsigned)b[0], (unsigned)b[1], (unsigned)b[2], (unsigned)b[3],
+					(unsigned)b[4], (unsigned)b[5], (unsigned)b[6], (unsigned)b[7],
+					(unsigned)b[8], (unsigned)b[9], (unsigned)b[10], (unsigned)b[11],
+					(unsigned)b[12], (unsigned)b[13], (unsigned)b[14], (unsigned)b[15]);
+			}
+			if (m_bSA1)
+			{
+				const SA1State *pSA1 = m_SA1.GetState();
+				Uint64 master = pSA1->MasterCycles;
+				Uint64 sched = pSA1->ScheduledCycles;
+				Uint64 exec = pSA1->ExecutedCycles;
+				DLog("[snes-sa1-clock] f=%u master=%08X:%08X sched=%08X:%08X exec=%08X:%08X last=%u slices=%u reset-epoch=%u lineclock=%d",
+					(unsigned)g_TmgFrameNo,
+					(unsigned)(master >> 32), (unsigned)master,
+					(unsigned)(sched >> 32), (unsigned)sched,
+					(unsigned)(exec >> 32), (unsigned)exec,
+					(unsigned)pSA1->LastSliceCycles,
+					(unsigned)pSA1->ExecutionSlices,
+					(unsigned)pSA1->ResetEpoch,
+					(int)m_nSA1LineClock);
+			}
 			DLog("[snes-apu-state] f=%u pc=%04X a/x/y/sp/psw=%02X/%02X/%02X/%02X/%02X cycles=%d rom=%u",
 				(unsigned)g_TmgFrameNo, (unsigned)m_Spc.Regs.rPC,
 				(unsigned)m_Spc.Regs.rA, (unsigned)m_Spc.Regs.rX,
