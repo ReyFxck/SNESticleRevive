@@ -1635,6 +1635,108 @@ Bool MainLoopStateGetPreferredRoot(Char *pOut, Int32 nOut)
     return snprintf(pOut, nOut, "%s", Roots[0].Root) < nOut;
 }
 
+static Bool _MainLoopStateLegacyBankName(
+    const Char *pName,
+    const Char **ppSystem)
+{
+    size_t n;
+
+    if (!pName)
+        return FALSE;
+    n = strlen(pName);
+    if (n < 4 ||
+        pName[n - 4] != '.' ||
+        (pName[n - 3] != 's' && pName[n - 3] != 'n') ||
+        pName[n - 2] < '1' || pName[n - 2] > '5' ||
+        (pName[n - 1] != 'a' && pName[n - 1] != 'b'))
+    {
+        return FALSE;
+    }
+
+    if (ppSystem)
+        *ppSystem = pName[n - 3] == 'n' ? "NES" : "SNES";
+    return TRUE;
+}
+
+static void _MainLoopStateMigrateLegacyRoot(
+    const MainLoopStateRootT *pRoot)
+{
+    Char LegacyDir[512];
+    int dfd;
+
+    if (!_MainLoopStateEnsureRoot(pRoot))
+        return;
+
+    _MainLoopStateBuildDirectory(
+        pRoot,
+        TRUE,
+        LegacyDir,
+        sizeof(LegacyDir)
+    );
+
+    dfd = fileXioDopen(LegacyDir);
+    if (dfd < 0)
+        return;
+
+    for (;;)
+    {
+        iox_dirent_t Entry;
+        const Char *pSystem;
+        Char Src[1024];
+        Char Dst[1024];
+        FILE *pExisting;
+        int Result = fileXioDread(dfd, &Entry);
+
+        if (Result <= 0)
+            break;
+        Entry.name[sizeof(Entry.name) - 1] = 0;
+
+        if (!_MainLoopStateLegacyBankName(Entry.name, &pSystem))
+            continue;
+
+        snprintf(Src, sizeof(Src), "%s/%s", LegacyDir, Entry.name);
+        snprintf(
+            Dst,
+            sizeof(Dst),
+            "%s/SNESticle/%s/%s",
+            pRoot->Root,
+            pSystem,
+            Entry.name
+        );
+
+        /* Never overwrite a newer-layout state. Copying (not moving) keeps
+           the old release layout as a rollback backup for users who switch
+           builds after updating. */
+        pExisting = fopen(Dst, "rb");
+        if (pExisting)
+        {
+            fclose(pExisting);
+            continue;
+        }
+
+        if (CopyFile(Dst, Src, NULL) == 0)
+        {
+            printf("[state] migrated legacy copy %s -> %s\n", Src, Dst);
+        }
+    }
+
+    fileXioDclose(dfd);
+}
+
+void MainLoopStateMigrateLegacyStates()
+{
+    MainLoopStateRootT Roots[MAINLOOP_STATE_MAX_ROOTS];
+    Int32 nRoots;
+    Int32 i;
+
+    nRoots = _MainLoopStateBuildRoots(
+        _MainLoop_StateDevice,
+        Roots
+    );
+    for (i = 0; i < nRoots; i++)
+        _MainLoopStateMigrateLegacyRoot(&Roots[i]);
+}
+
 static Bool _MainLoopStateEnsureOneDir(const Char *pPath)
 {
     struct stat Status;
@@ -1920,6 +2022,50 @@ static Bool _MainLoopStateGenerationNewer(Uint32 uA, Uint32 uB)
     return (Int32)(uA - uB) > 0;
 }
 
+static void _MainLoopStateAddCandidateResult(
+    const MainLoopStateRootT *pRoot,
+    const Char *pPath,
+    Int32 iSlot,
+    Uint32 uRomCRC,
+    Uint32 nRomBytes,
+    Uint32 uRomFlags,
+    Bool *pbWrongRom,
+    Bool *pbCorrupt,
+    Int32 *pnCandidates)
+{
+    MainLoopStateFileHeaderT Header;
+    Int32 Result = _MainLoopStateReadHeader(
+        pPath,
+        iSlot,
+        uRomCRC,
+        nRomBytes,
+        uRomFlags,
+        &Header
+    );
+
+    if (Result == 1 && *pnCandidates < MAINLOOP_STATE_MAX_CANDIDATES)
+    {
+        MainLoopStateCandidateT *pCandidate =
+            &_MainLoop_StateCandidates[(*pnCandidates)++];
+        snprintf(pCandidate->Path, sizeof(pCandidate->Path), "%s", pPath);
+        snprintf(
+            pCandidate->DeviceName,
+            sizeof(pCandidate->DeviceName),
+            "%s",
+            pRoot->DeviceName
+        );
+        pCandidate->Header = Header;
+    }
+    else if (Result == -2)
+    {
+        *pbWrongRom = TRUE;
+    }
+    else if (Result == -1)
+    {
+        *pbCorrupt = TRUE;
+    }
+}
+
 static Int32 _MainLoopStateScanCandidates(
     MainLoopStateDeviceE eDevice,
     Int32 iSlot,
@@ -1940,47 +2086,51 @@ static Int32 _MainLoopStateScanCandidates(
     {
         for (iBank = 0; iBank < MAINLOOP_STATE_BANK_NUM; iBank++)
         {
-            MainLoopStateFileHeaderT Header;
             Char Path[1024];
-            Int32 Result;
 
-            _MainLoopStateBuildBankPath(
+            /* Prefer the new system-specific layout. */
+            _MainLoopStateBuildBankPathEx(
                 &Roots[iRoot],
                 iSlot,
                 iBank,
+                FALSE,
                 Path,
                 sizeof(Path)
             );
-            Result = _MainLoopStateReadHeader(
+            _MainLoopStateAddCandidateResult(
+                &Roots[iRoot],
                 Path,
                 iSlot,
                 uRomCRC,
                 nRomBytes,
                 uRomFlags,
-                &Header
+                pbWrongRom,
+                pbCorrupt,
+                &nCandidates
             );
 
-            if (Result == 1 && nCandidates < MAINLOOP_STATE_MAX_CANDIDATES)
-            {
-                MainLoopStateCandidateT *pCandidate =
-                    &_MainLoop_StateCandidates[nCandidates++];
-                snprintf(pCandidate->Path, sizeof(pCandidate->Path), "%s", Path);
-                snprintf(
-                    pCandidate->DeviceName,
-                    sizeof(pCandidate->DeviceName),
-                    "%s",
-                    Roots[iRoot].DeviceName
-                );
-                pCandidate->Header = Header;
-            }
-            else if (Result == -2)
-            {
-                *pbWrongRom = TRUE;
-            }
-            else if (Result == -1)
-            {
-                *pbCorrupt = TRUE;
-            }
+            /* Compatibility fallback for every pre-migration release.
+               Keeping this reader means a failed copy can never make a user's
+               existing state suddenly disappear after an update. */
+            _MainLoopStateBuildBankPathEx(
+                &Roots[iRoot],
+                iSlot,
+                iBank,
+                TRUE,
+                Path,
+                sizeof(Path)
+            );
+            _MainLoopStateAddCandidateResult(
+                &Roots[iRoot],
+                Path,
+                iSlot,
+                uRomCRC,
+                nRomBytes,
+                uRomFlags,
+                pbWrongRom,
+                pbCorrupt,
+                &nCandidates
+            );
         }
     }
 
