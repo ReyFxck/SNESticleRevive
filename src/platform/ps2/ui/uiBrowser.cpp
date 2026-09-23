@@ -1582,7 +1582,7 @@ void CBrowserScreen::Draw()
 	UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 101, 198, "Back");
 	UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 140, 198,
 	             CoverIsEnabled() ? "Cover" : "PgUp");
-	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 190, 198, "PgDn");
+	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 186, 198, "PgDn");
 
 	FontSelect(0);
 
