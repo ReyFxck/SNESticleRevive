@@ -177,8 +177,9 @@ void CMenuScreen::Draw()
 		FontColor4f(0.48f, 0.48f, 0.48f, 1.0f);
 		_MenuPrintAlignCenter(128, 171, "Deleting a state removes both banks");
 
-		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 55, 198, "Select");
-		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 151, 198, "Choose");
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, "Select");
+		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 136, 198, "Choose");
+		UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 191, 198, "Back");
 		return;
 	}
 
@@ -244,9 +245,14 @@ void CMenuScreen::Input(Uint32 buttons, Uint32 trigger)
 	if (m_iSelect < 0) m_iSelect = 0;
 	if (m_iSelect > (m_nItems - 1)) m_iSelect = (m_nItems - 1);
 
-	if (trigger & (PAD_CIRCLE | PAD_START))
-{
-    SendMessage(1, m_iSelect, m_pUserData);
-}
+	if (!strcmp(m_strTitle, "Save States"))
+	{
+		if (trigger & (PAD_CROSS | PAD_START))
+			SendMessage(1, m_iSelect, m_pUserData);
+	}
+	else if (trigger & (PAD_CIRCLE | PAD_START))
+	{
+		SendMessage(1, m_iSelect, m_pUserData);
+	}
 
 }
