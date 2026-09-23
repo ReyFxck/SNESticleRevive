@@ -19,6 +19,8 @@ typedef enum
     UI_ICON_SQUARE,
     UI_ICON_CIRCLE,
     UI_ICON_TRIANGLE,
+    UI_ICON_L1,
+    UI_ICON_R1,
     UI_ICON_COUNT
 } UiIconE;
 
