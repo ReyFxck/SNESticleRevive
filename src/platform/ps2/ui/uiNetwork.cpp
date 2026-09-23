@@ -14,6 +14,7 @@
 #include "font.h"
 #include "poly.h"
 #include "uiNetwork.h"
+#include "uiChrome.h"
 #include "uiVideo.h"
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
@@ -412,8 +413,8 @@ void CNetworkScreen::Draw()
                      m_iEditField == 4);
 
     FontSelect(0);
-    SmbHeader(y, "SMB Network");
-    y += 15;
+    UiChromeHeader("SMB NETWORK", TRUE);
+    y = 31;
 
     FontColor4f(0.55f, 0.55f, 0.55f, 1.0f);
     FontPuts(50, y, "Status");
@@ -422,7 +423,7 @@ void CNetworkScreen::Draw()
     FontPuts(126, y, SmbGetStatusText());
     y += 15;
 
-    SmbHeader(y, "Server / Share");
+    UiChromeSection(y, "Server / Share");
     y += 13;
     SmbRow(y, 0, m_iSelect, "Server IP", "");
     FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -432,26 +433,30 @@ void CNetworkScreen::Draw()
     SmbRow(y, 3, m_iSelect, "Username", user); y += 12;
     SmbRow(y, 4, m_iSelect, "Password", password); y += 15;
 
-    SmbHeader(y, "Actions"); y += 13;
+    UiChromeSection(y, "Actions"); y += 13;
     SmbAction(y, 5, m_iSelect, "Save & Connect"); y += 12;
     SmbAction(y, 6, m_iSelect, "Disconnect");
 
-    y = 183;
-    FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
     if (m_iDigitIP >= 0)
     {
-        SmbCenter(128, y, "L/R: octet  Up/Dn: value"); y += 11;
-        SmbCenter(128, y, "X/Triangle: done");
+        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 8, 198, "Octet");
+        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 71, 198, "Value");
+        UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 138, 198, "Done");
+        UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 190, 198, "Done");
     }
     else if (m_iEditField >= 0)
     {
-        SmbCenter(128, y, "L/R: cursor  Up/Dn: character"); y += 11;
-        SmbCenter(128, y, "X: next  Square: delete  Triangle: done");
+        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 4, 198, "Cursor");
+        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 72, 198, "Char");
+        UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 135, 198, "Delete");
+        UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 193, 198, "Done");
     }
     else
     {
-        SmbCenter(128, y, "X: edit/select  Square: reset field"); y += 11;
-        SmbCenter(128, y, "Circle: reload saved config");
+        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 5, 198, "Select");
+        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 69, 198, "Change");
+        UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 139, 198, "Reset");
+        UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 190, 198, "Edit");
     }
 
     path = SmbGetConfigPath();
