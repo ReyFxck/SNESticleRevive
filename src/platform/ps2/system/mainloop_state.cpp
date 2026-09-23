@@ -469,7 +469,7 @@ Bool _MainLoopCheckSRAM()
 #define MAINLOOP_STATE_FORMAT_VERSION 1
 #define MAINLOOP_STATE_HEADER_BYTES   64
 #define MAINLOOP_STATE_MAX_ROOTS      8
-#define MAINLOOP_STATE_MAX_CANDIDATES (MAINLOOP_STATE_MAX_ROOTS * MAINLOOP_STATE_BANK_NUM)
+#define MAINLOOP_STATE_MAX_CANDIDATES (MAINLOOP_STATE_MAX_ROOTS * MAINLOOP_STATE_BANK_NUM * 2)
 #define MAINLOOP_STATE_PAYLOAD_RAW     0
 #define MAINLOOP_STATE_PAYLOAD_DEFLATE 1
 #define MAINLOOP_STATE_SYSTEM_SNES      0
@@ -557,6 +557,12 @@ static Int32 _MainLoop_StateUnformattedCard = -1;
 static Char _MainLoop_StateConfigPath[1024] = "";
 
 static Bool _MainLoopStateEnsureOneDir(const Char *pPath);
+static Bool _MainLoopStateEnsureRoot(const MainLoopStateRootT *pRoot);
+static void _MainLoopStateBuildDirectory(
+    const MainLoopStateRootT *pRoot,
+    Bool bLegacy,
+    Char *pDirectory,
+    Int32 nDirectoryBytes);
 static void _MainLoopStateDeleteSettings();
 static void _MainLoopStateLoadSettingsFromRomDevice();
 
