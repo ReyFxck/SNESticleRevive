@@ -62,10 +62,12 @@ static Int32 _MainLoopWrapModalText(
     Int32 nLines = 0;
     const Char *p = pText ? pText : "";
 
+    Lines[0][0] = 0;
     while (*p && nLines < MODAL_MAX_LINES)
     {
         Char work[MODAL_LINE_CHARS];
         Int32 len = 0;
+        work[0] = 0;
         Int32 lastSpace = -1;
         const Char *start = p;
         const Char *next = p;
@@ -440,7 +442,7 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 		{
 			FontSelect(0);
 			FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
-			FontPrintf(20, 200, _MainLoop_StatusStr);
+			FontPrintf(20, 200, "%s", _MainLoop_StatusStr);
 
 			_MainLoop_StatusCount--;
 		}
