@@ -59,6 +59,7 @@ extern "C" {
 
 #include "uiBrowser.h"
 #include "uiCover.h"
+#include "uiIcons.h"
 #include "uiNetwork.h"
 #include "uiMenu.h"
 #include "uiLog.h"
@@ -137,6 +138,7 @@ extern "C" void DLog(const char *fmt, ...);
 
 static Uint32 s_FontTexTBP  = 0;
 static Uint32 s_CoverTexTBP = 0;
+static Uint32 s_UiIconsTexTBP = 0;
 
 static Uint32 _MainLoopAlignVramBytes(Uint32 bytes)
 {
@@ -149,6 +151,7 @@ static Bool _MainLoopAllocVideoVram(void)
 	Uint32 outTBP;
 	Uint32 fontTBP;
 	Uint32 coverTBP;
+	Uint32 uiIconsTBP;
 	Uint32 blenderTBP;
 
 	outTBP = GSK_VramAllocTBP(
@@ -157,17 +160,19 @@ static Bool _MainLoopAllocVideoVram(void)
 		_MainLoopAlignVramBytes(FontGetVramSize()));
 	coverTBP = GSK_VramAllocTBP(
 		_MainLoopAlignVramBytes(CoverGetVramSize()));
+	uiIconsTBP = GSK_VramAllocTBP(
+		_MainLoopAlignVramBytes(UiIconsGetVramSize()));
 	blenderTBP = GSK_VramAllocTBP(
 		_MainLoopAlignVramBytes(MAINLOOP_BLEND_VRAM_BYTES));
 
 	/* Address zero is reserved for the first framebuffer, so every user
 	   allocation must be non-zero. A zero here means gsKit rejected the
 	   request because the 4 MiB GS VRAM budget was exhausted. */
-	if (!outTBP || !fontTBP || !coverTBP || !blenderTBP)
+	if (!outTBP || !fontTBP || !coverTBP || !uiIconsTBP || !blenderTBP)
 	{
 		_MainLoop_uOutTexTBP  = 0;
 		_MainLoop_uBlenderTBP = 0;
-		s_FontTexTBP = s_CoverTexTBP = 0;
+		s_FontTexTBP = s_CoverTexTBP = s_UiIconsTexTBP = 0;
 		printf("[video] GS VRAM allocation failed\n");
 		return FALSE;
 	}
@@ -176,10 +181,12 @@ static Bool _MainLoopAllocVideoVram(void)
 	_MainLoop_uBlenderTBP = blenderTBP;
 	s_FontTexTBP          = fontTBP;
 	s_CoverTexTBP         = coverTBP;
+	s_UiIconsTexTBP       = uiIconsTBP;
 
-	printf("[video] VRAM TBP out=%04X font=%04X cover=%04X blend=%04X\n",
+	printf("[video] VRAM TBP out=%04X font=%04X cover=%04X icons=%04X blend=%04X\n",
 	       (unsigned)outTBP, (unsigned)fontTBP,
-	       (unsigned)coverTBP, (unsigned)blenderTBP);
+	       (unsigned)coverTBP, (unsigned)uiIconsTBP,
+	       (unsigned)blenderTBP);
 	return TRUE;
 }
 
@@ -249,6 +256,7 @@ Bool MainLoopInit()
 	PolyInit();
 	FontInit(s_FontTexTBP);
 	CoverInit(s_CoverTexTBP);
+	UiIconsInit(s_UiIconsTexTBP);
 
 	// setup log screen
 	_MainLoop_pLogScreen = new CLogScreen();
@@ -319,6 +327,7 @@ Bool MainLoopInit()
             return FALSE;
         FontInit(s_FontTexTBP);
         CoverInit(s_CoverTexTBP);
+        UiIconsInit(s_UiIconsTexTBP);
     }
     else
     {
