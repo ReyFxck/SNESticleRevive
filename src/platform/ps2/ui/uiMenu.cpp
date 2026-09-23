@@ -86,10 +86,44 @@ void CMenuScreen::Draw()
 	Int32 vx = 48;
 	Int32 vy = 38;
 	Bool bStateManager = !strcmp(m_strTitle, "Save States") ? TRUE : FALSE;
+	Bool bMemCardPrompt = !strcmp(m_strTitle, "Memory Card") ? TRUE : FALSE;
+	Bool bStateLocation = !strcmp(m_strTitle, "Save State Location") ? TRUE : FALSE;
 	Bool shoulders = bStateManager;
 
 	FontSelect(0);
 	UiChromeHeader(m_strTitle, shoulders);
+
+	if (bMemCardPrompt)
+	{
+		UiChromeSection(34, "Format Card");
+		for (iLine = 0; iLine < m_nItems; iLine++)
+		{
+			Int32 rowY = 49 + iLine * 16;
+			if (iLine == m_iSelect)
+			{
+				PolyTexture(NULL);
+				PolyBlend(TRUE);
+				PolyColor4f(0.0f, 0.50f, 0.0f, 0.50f);
+				PolyRect(44, rowY - 1, 168, FontGetHeight() + 2);
+			}
+			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+			if (m_pEntries[iLine])
+				FontPuts(52, rowY, m_pEntries[iLine]);
+		}
+
+		UiChromeSection(91, "Warning");
+		FontColor4f(0.86f, 0.86f, 0.86f, 1.0f);
+		if (m_strText[0][0]) _MenuPrintAlignCenter(128, 107, m_strText[0]);
+		FontColor4f(1.0f, 0.48f, 0.48f, 1.0f);
+		_MenuPrintAlignCenter(128, 123, "Formatting erases the entire card.");
+		FontColor4f(0.62f, 0.62f, 0.62f, 1.0f);
+		_MenuPrintAlignCenter(128, 143, "No / Cancel is selected by default");
+
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, "Select");
+		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 126, 198, "Choose");
+		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 184, 198, "Cancel");
+		return;
+	}
 
 	if (bStateManager)
 	{
@@ -221,8 +255,16 @@ void CMenuScreen::Draw()
 		}
 	}
 
-	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 55, 198, "Select");
-	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 151, 198, "Choose");
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, "Select");
+	if (bStateLocation)
+	{
+		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 127, 198, "Choose");
+		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 185, 198, "Cancel");
+	}
+	else
+	{
+		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 151, 198, "Choose");
+	}
 }
 
 void CMenuScreen::Process()
@@ -244,7 +286,9 @@ void CMenuScreen::Input(Uint32 buttons, Uint32 trigger)
 	if (m_iSelect < 0) m_iSelect = 0;
 	if (m_iSelect > (m_nItems - 1)) m_iSelect = (m_nItems - 1);
 
-	if (!strcmp(m_strTitle, "Save States"))
+	if (!strcmp(m_strTitle, "Save States") ||
+	    !strcmp(m_strTitle, "Save State Location") ||
+	    !strcmp(m_strTitle, "Memory Card"))
 	{
 		if (trigger & (PAD_CROSS | PAD_START))
 			SendMessage(1, m_iSelect, m_pUserData);
