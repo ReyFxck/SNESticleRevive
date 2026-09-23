@@ -448,7 +448,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 
 		    if (_MainLoop_pScreen ==
 		            (CScreen *)_MainLoop_pStateBrowserScreen &&
-		        (trigger & PAD_L1))
+		        (trigger & (PAD_L1 | PAD_TRIANGLE)))
 		    {
 		        _MainLoopStateMenuRefresh();
 		        _MainLoopSetScreen((CScreen *)_MainLoop_pStateScreen);
