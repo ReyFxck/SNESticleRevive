@@ -143,9 +143,9 @@ struct MainLoopStateManagerStorageT
 
 static const MainLoopStateManagerStorageT _MainLoop_StateManagerStorage[] =
 {
-        { "mass0:", "mass0:/SNESticle/states/" },
-        { "mass1:", "mass1:/SNESticle/states/" },
-        { "mass:",  "mass:/SNESticle/states/" },
+        { "mass0:", "mass0:/SNESticle/" },
+        { "mass1:", "mass1:/SNESticle/" },
+        { "mass:",  "mass:/SNESticle/" },
         { "mc0:",   "mc0:/SNESticle/" },
         { "mc1:",   "mc1:/SNESticle/" },
         { "mmce0:", "mmce0:/SNESticle/" },
@@ -244,6 +244,11 @@ void _MainLoopStateMenuSyncStorage()
         {
                 return;
         }
+
+        /* Copy pre-folder-layout banks into SNES/NES once a concrete
+           quick-save target is known. Legacy copies remain untouched so an
+           older build still has a rollback path. */
+        MainLoopStateMigrateLegacyStates();
 
         if (!strncmp(Root, "mass0:", 6))
                 iStorage = MAINLOOP_STATEMANAGER_MASS0;
