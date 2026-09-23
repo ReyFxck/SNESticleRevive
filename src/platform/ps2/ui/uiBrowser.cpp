@@ -26,6 +26,7 @@
 #include "poly.h"
 #include "uiBrowser.h"
 #include "uiCover.h"
+#include "uiChrome.h"
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
 #include "mainloop_ui.h"
@@ -364,7 +365,7 @@ static int BrowserOpenDirectory(const Char *pPath)
    the original font's metrics; the current 9px UI font advances 11px
    per row, so it allowed rows to collide with the green footer text. */
 #define BROWSER_LIST_TOP        (32)
-#define BROWSER_FOOTER_TOP      (211)
+#define BROWSER_FOOTER_TOP      (195)
 #define BROWSER_ROW_ADVANCE     (11)
 #define BROWSER_VISIBLE_LINES   ((BROWSER_FOOTER_TOP - BROWSER_LIST_TOP) / BROWSER_ROW_ADVANCE)
 
@@ -1233,14 +1234,15 @@ void CBrowserScreen::Draw()
 	_StarfieldDraw();
 
 	PolyTexture(NULL);
-    PolyBlend(TRUE);
+	PolyBlend(TRUE);
 
-    PolyColor4f(0.0f, 0.2f, 0.2f, 0.9f);
-	PolyRect(0, vy, 256, 9);
-
-	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
-    FontPrintf(vx, vy, "%s", m_Dir);
-    vy+=12;
+	UiChromeHeader("BROWSER", TRUE);
+	{
+		Char dirView[128];
+		BrowserCopyEllipsis(dirView, sizeof(dirView), m_Dir, 220);
+		UiChromeSection(24, dirView);
+	}
+	vy = BROWSER_LIST_TOP;
 
 	/* Detect selection / directory change before the per-row loop so
 	   the marquee state reset happens exactly once per frame. */
@@ -1554,6 +1556,16 @@ void CBrowserScreen::Draw()
 		/* else: still loading -> just the empty panel (avoids a
 		   "sem capa" flash that would resolve into a real cover) */
 	}
+
+	UiChromeScroll(m_iScroll > 0,
+	               (m_iScroll + m_MaxLines) < m_nEntries,
+	               232, 36, 184);
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 4, 198, "Select");
+	UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 62, 198, "Open");
+	UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 101, 198, "Back");
+	UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 140, 198,
+	             CoverIsEnabled() ? "Cover" : "PgUp");
+	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 190, 198, "PgDn");
 
 	FontSelect(0);
 
