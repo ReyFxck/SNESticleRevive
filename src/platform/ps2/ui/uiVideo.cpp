@@ -347,6 +347,16 @@ static void _VideoRight(int x, int y, const char *pStr)
 	FontPuts(x - FontGetStrWidth(pStr), y, pStr);
 }
 
+static void _VideoSection(int vy, const char *pStr)
+{
+	/* Configurations is a scrolling viewport. Section headers must obey the
+	   same clip window as rows or they bleed into the title/footer while
+	   scrolling. */
+	if (vy < 34 || vy > 181)
+		return;
+	UiChromeSection(vy, pStr);
+}
+
 static void _VideoRow(int vy, int idx, int sel, const char *pLabel, const char *pValue)
 {
 	if (vy < 34 || vy > 181)
@@ -466,7 +476,7 @@ void CVideoScreen::Draw()
 	UiChromeHeader("CONFIGURATIONS", TRUE);
 
 	/* Screen */
-	UiChromeSection(VIDEO_VIEW_TOP + 0 - scroll, "Screen");
+	_VideoSection(VIDEO_VIEW_TOP + 0 - scroll, "Screen");
 	y = VIDEO_VIEW_TOP + _VideoItemY[0] - scroll;
 	_VideoRow(y, 0, m_iSelect, "Video Mode", pMode);
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[1] - scroll, 1, m_iSelect,
@@ -488,12 +498,12 @@ void CVideoScreen::Draw()
 	          "Offset Y", buf);
 
 	/* Interface */
-	UiChromeSection(VIDEO_VIEW_TOP + 114 - scroll, "Interface");
+	_VideoSection(VIDEO_VIEW_TOP + 114 - scroll, "Interface");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[8] - scroll, 8, m_iSelect,
 	          "Cover Art", CoverIsEnabled() ? "On" : "Off");
 
 	/* Audio */
-	UiChromeSection(VIDEO_VIEW_TOP + 144 - scroll, "Audio");
+	_VideoSection(VIDEO_VIEW_TOP + 144 - scroll, "Audio");
 	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[9] - scroll, 9, m_iSelect,
 	          "Game Volume", buf);
@@ -513,12 +523,12 @@ void CVideoScreen::Draw()
 	          "Frequency", buf);
 
 	/* Performance */
-	UiChromeSection(VIDEO_VIEW_TOP + 198 - scroll, "Performance");
+	_VideoSection(VIDEO_VIEW_TOP + 198 - scroll, "Performance");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[12] - scroll, 12, m_iSelect,
 	          "Frameskip", MainLoopSafeFrameskipIsEnabled() ? "On" : "Off");
 
 	/* Storage */
-	UiChromeSection(VIDEO_VIEW_TOP + 228 - scroll, "Storage / Devices");
+	_VideoSection(VIDEO_VIEW_TOP + 228 - scroll, "Storage / Devices");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[13] - scroll, 13, m_iSelect,
 	          "Mass / USB", MassStorageIsEnabled() ? "On" : "Off");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[14] - scroll, 14, m_iSelect,
