@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #define NEWLIB_PORT_AWARE
 #include <io_common.h>
 #include <fileXio.h>
@@ -32,6 +33,23 @@
 #include "mainloop_load.h"
 #include "embedded_irx.h"   /* HddMapPath (hdd0:/PART -> pfs0:) */
 #include "sndbglog.h"
+
+static Char s_MainLoopLoadError[192] = "Unknown ROM load error";
+
+static void _MainLoopSetLoadError(const Char *pFormat, ...)
+{
+        va_list args;
+        va_start(args, pFormat);
+        vsnprintf(s_MainLoopLoadError, sizeof(s_MainLoopLoadError), pFormat, args);
+        va_end(args);
+}
+
+const Char *MainLoopGetLastLoadError()
+{
+        return s_MainLoopLoadError;
+}
+
+extern "C" int MainBuildHostIOPath(const char *pGuestPath, char *pOut, int nOut);
 
 extern "C" {
 #if SNDBG_LOG
@@ -69,9 +87,20 @@ int _MainLoopReadBinaryData(Uint8 *pBuffer, Int32 nBufferBytes, const char *pRom
            newlib's O_RDONLY is zero; passing it directly makes drivers such
            as cdfs reject every ROM before the first byte is read. */
         fd = fileXioOpen(pRomFile, FIO_O_RDONLY, 0);
+        if (fd < 0 && strncmp(pRomFile, "host:", 5) == 0)
+        {
+                char uriPath[1024];
+                if (MainBuildHostIOPath(pRomFile, uriPath, sizeof(uriPath)))
+                {
+#if SNDBG_LOG
+                        DLog("[hostfs-open] binary retry uri=%s first=%d", uriPath, fd);
+#endif
+                        fd = fileXioOpen(uriPath, FIO_O_RDONLY, 0);
+                }
+        }
         if (fd < 0)
         {
-                return -1;
+                return fd;
         }
 
         nBytes = fileXioRead(fd, pBuffer, nBufferBytes);
@@ -136,6 +165,7 @@ Bool _MainLoopLoadRomData(Emu::Rom *pRom, Uint8 *pRomData, Int32 nRomBytes)
         if (eError!=Emu::Rom::LoadErrorE::LOADERROR_NONE)
         {
                 ConPrint("ERROR: loading rom %d\n", eError);
+                _MainLoopSetLoadError("ROM parser rejected image (code %d)", (int)eError);
                 return FALSE;
         }
         return TRUE;
@@ -222,8 +252,10 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 	char FileName[1024];
 	char OriginalPath[1024];
 
+	_MainLoopSetLoadError("Unknown ROM load error");
 	if (pFileName==NULL)
 	{
+		_MainLoopSetLoadError("No ROM path was provided");
 		return FALSE;
 	}
 
@@ -246,6 +278,7 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 	// resolve file extension of filename
 	if (!PathExtResolve(FileName, &eType, TRUE))
 	{
+		_MainLoopSetLoadError("Unsupported file extension");
 		return FALSE;
 	}
 
@@ -275,6 +308,7 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 		// if its a GZ file, then the next extension is the one we use
 		if (!PathExtResolve(FileName, &eType, TRUE))
 		{
+			_MainLoopSetLoadError("GZIP does not contain a recognized ROM name");
 			return FALSE;
 		}
 
@@ -291,6 +325,7 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 			// resolve extension of unzipped file
 			if (!PathExtResolve(FileName, &eType, TRUE))
 			{
+				_MainLoopSetLoadError("ZIP entry has an unsupported ROM type");
 				return FALSE;
 			}
 		}
@@ -304,6 +339,49 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 	// was load successful?
 	if (nRomBytes <= 0)
 	{
+		if (eType == MAINLOOP_ENTRYTYPE_ZIP)
+		{
+			switch (nRomBytes)
+			{
+				case MINIZ_READ_BAD_ARCHIVE:
+					_MainLoopSetLoadError("ZIP is invalid or damaged");
+					break;
+				case MINIZ_READ_NO_MATCH:
+					_MainLoopSetLoadError("ZIP has no supported ROM inside");
+					break;
+				case MINIZ_READ_TOO_LARGE:
+					_MainLoopSetLoadError("ROM inside ZIP is too large");
+					break;
+				case MINIZ_READ_EXTRACT_FAIL:
+					_MainLoopSetLoadError("ZIP decompression failed");
+					break;
+				case MINIZ_READ_IO_FAIL:
+					_MainLoopSetLoadError("ZIP read failed");
+					break;
+				case MINIZ_READ_NO_MEMORY:
+					_MainLoopSetLoadError("Not enough memory to open ZIP");
+					break;
+				default:
+					if (!strncmp(pFileName, "host:", 5))
+						_MainLoopSetLoadError("HostFS could not open ZIP (I/O %d)", nRomBytes);
+					else
+						_MainLoopSetLoadError("Could not open ZIP (I/O %d)", nRomBytes);
+					break;
+			}
+		}
+		else
+		{
+			if (nRomBytes < 0 && !strncmp(pFileName, "host:", 5))
+				_MainLoopSetLoadError("HostFS could not open ROM (I/O %d)", nRomBytes);
+			else if (nRomBytes < 0)
+				_MainLoopSetLoadError("Could not open ROM (I/O %d)", nRomBytes);
+			else
+				_MainLoopSetLoadError("ROM file is empty");
+		}
+#if SNDBG_LOG
+		DLog("[rom-load-error] file=%s reason=%s code=%d",
+		     pFileName, s_MainLoopLoadError, nRomBytes);
+#endif
 		return FALSE;
 	}
 
@@ -363,6 +441,7 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 			_MainLoop_fOutputIntensity = 1.0f;
 			break;
 		default:
+			_MainLoopSetLoadError("Unsupported ROM type");
 			return FALSE;
 	}
 
@@ -487,6 +566,7 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 	// clear screen
     _fbTexture[0]->Clear();
     TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
+	_MainLoopSetLoadError("");
 	if (eType == MAINLOOP_ENTRYTYPE_NESFDSDISK)
 	{
 		/* Phase 2: track disk-inserted state so the SRAM/state path
