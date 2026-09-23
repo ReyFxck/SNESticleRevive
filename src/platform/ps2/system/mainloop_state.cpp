@@ -11,6 +11,13 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <unistd.h>
+
+#define NEWLIB_PORT_AWARE
+#include <io_common.h>
+#include <fileXio.h>
+#include <fileXio_rpc.h>
+#undef NEWLIB_PORT_AWARE
 
 #include "types.h"
 #include "console.h"
@@ -22,6 +29,7 @@
 #include "mainloop_bgm.h"
 #include "embedded_irx.h"
 #include "mainloop_iop.h"
+#include "mainloop_install.h"
 
 extern "C" {
 int MCSave_Write(char *pPath, char *pData, int nBytes);
@@ -1657,53 +1665,69 @@ static Bool _MainLoopStateEnsureRoot(const MainLoopStateRootT *pRoot)
         if (eStatus == MEMCARD_STATUS_UNFORMATTED)
         {
             if (_MainLoop_StateUnformattedCard < 0)
-            {
                 _MainLoop_StateUnformattedCard = iPort;
-            }
             return FALSE;
         }
-        /* For READY, absent and unknown results, retain the established
-           mkdir/stat write probe below. It is the compatibility fallback
-           for unusual drivers that support stdio but not GetStat on "/". */
     }
 
     snprintf(Path, sizeof(Path), "%s/SNESticle", pRoot->Root);
     if (!_MainLoopStateEnsureOneDir(Path))
-    {
         return FALSE;
-    }
 
-    if (!pRoot->bMemCard)
-    {
-        snprintf(Path, sizeof(Path), "%s/SNESticle/states", pRoot->Root);
-        if (!_MainLoopStateEnsureOneDir(Path))
-        {
-            return FALSE;
-        }
-    }
+    /* Save states now share the same system separation already used by SRAM.
+       Create both folders so State Files can present NES/SNES immediately. */
+    snprintf(Path, sizeof(Path), "%s/SNESticle/SNES", pRoot->Root);
+    if (!_MainLoopStateEnsureOneDir(Path))
+        return FALSE;
+    snprintf(Path, sizeof(Path), "%s/SNESticle/NES", pRoot->Root);
+    if (!_MainLoopStateEnsureOneDir(Path))
+        return FALSE;
 
     return TRUE;
 }
 
-static void _MainLoopStateBuildBankPath(
+static void _MainLoopStateBuildDirectory(
+    const MainLoopStateRootT *pRoot,
+    Bool bLegacy,
+    Char *pDirectory,
+    Int32 nDirectoryBytes)
+{
+    if (bLegacy)
+    {
+        if (pRoot->bMemCard)
+            snprintf(pDirectory, nDirectoryBytes, "%s/SNESticle", pRoot->Root);
+        else
+            snprintf(pDirectory, nDirectoryBytes, "%s/SNESticle/states", pRoot->Root);
+        return;
+    }
+
+    snprintf(
+        pDirectory,
+        nDirectoryBytes,
+        "%s/SNESticle/%s",
+        pRoot->Root,
+        _MainLoopSramGetSystemDirectoryName()
+    );
+}
+
+static void _MainLoopStateBuildBankPathEx(
     const MainLoopStateRootT *pRoot,
     Int32 iSlot,
     Int32 iBank,
+    Bool bLegacy,
     Char *pPath,
     Int32 nPathBytes)
 {
     Char SaveName[256];
-    Char Directory[256];
+    Char Directory[512];
     Int32 nMaxName;
 
-    if (pRoot->bMemCard)
-    {
-        snprintf(Directory, sizeof(Directory), "%s/SNESticle", pRoot->Root);
-    }
-    else
-    {
-        snprintf(Directory, sizeof(Directory), "%s/SNESticle/states", pRoot->Root);
-    }
+    _MainLoopStateBuildDirectory(
+        pRoot,
+        bLegacy,
+        Directory,
+        sizeof(Directory)
+    );
 
     nMaxName = PathGetMaxFileNameLength(Directory) - 4;
     PathTruncFileName(SaveName, _RomName, nMaxName);
@@ -1717,6 +1741,17 @@ static void _MainLoopStateBuildBankPath(
         iSlot + 1,
         iBank ? 'b' : 'a'
     );
+}
+
+static void _MainLoopStateBuildBankPath(
+    const MainLoopStateRootT *pRoot,
+    Int32 iSlot,
+    Int32 iBank,
+    Char *pPath,
+    Int32 nPathBytes)
+{
+    _MainLoopStateBuildBankPathEx(
+        pRoot, iSlot, iBank, FALSE, pPath, nPathBytes);
 }
 
 /* Header result: 1 = valid/current ROM, 0 = missing,
