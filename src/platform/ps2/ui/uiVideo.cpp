@@ -563,7 +563,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 
 		case 11: /* Mass / USB on/off -- lista mass0:/mass1: (USB).  O USB core
 		           sobe no boot de qualquer forma (seguro); isto controla a
-		           listagem.  O MX4SIO agora tem toggle proprio (case 15). */
+		           listagem.  O MX4SIO agora tem toggle proprio (case 16). */
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
 
