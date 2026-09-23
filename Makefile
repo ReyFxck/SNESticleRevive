@@ -326,6 +326,7 @@ SRCS := \
 	src/app/emusys.cpp \
 	src/common/base/file.cpp \
 	src/common/base/font_ui.cpp \
+	src/platform/ps2/i18n/i18n.cpp \
 	src/common/base/font.cpp \
 	src/platform/ps2/gs/gpfifo.c \
 	src/platform/ps2/gs/gpprim.c \
