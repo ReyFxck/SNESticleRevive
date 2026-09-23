@@ -38,6 +38,7 @@ void MainLoopStateOnRomChanged();
 Bool MainLoopStateHasDeviceChoice();
 void MainLoopStateForgetDeviceChoice();
 void MainLoopStateSetDevice(MainLoopStateDeviceE eDevice);
+void MainLoopStateSetPreferredRoot(const Char *pRoot);
 Bool MainLoopStateDeviceAvailable(MainLoopStateDeviceE eDevice);
 void MainLoopStateCycleSlot();
 void MainLoopStateCycleDevice();
