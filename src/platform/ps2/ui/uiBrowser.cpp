@@ -75,6 +75,18 @@ static Bool BrowserIsStateBankName(const Char *pName)
 	        pName[nLength - 1] == 'b');
 }
 
+static Bool BrowserIsSramName(const Char *pName)
+{
+	size_t nLength = pName ? strlen(pName) : 0;
+	return nLength >= 4 &&
+	       !strcasecmp(pName + nLength - 4, ".srm");
+}
+
+static Bool BrowserIsStateManagerFileName(const Char *pName)
+{
+	return BrowserIsStateBankName(pName) || BrowserIsSramName(pName);
+}
+
 /* Artwork directories and their generated index belong to the cover system,
    not to the game hierarchy. Keep them usable by uiCover while hiding them
    from the ROM browser on every device, including CDFS. */
@@ -1862,7 +1874,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					   SRAM, state.cfg, icons, or unrelated files that share
 					   mc0:/SNESticle with memory-card state banks. */
 						if (m_bStateManager &&
-						    !BrowserIsStateBankName(pEntryName))
+						    !BrowserIsStateManagerFileName(pEntryName))
 							continue;
 						/* Legacy banks copied from old releases stay on disk as a
 						   rollback backup, but the refreshed manager shows the clean
