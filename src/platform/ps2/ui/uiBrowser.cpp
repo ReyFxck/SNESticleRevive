@@ -104,6 +104,27 @@ static Bool BrowserIsHostPath(const Char *pPath)
 	return pPath && strncasecmp(pPath, "host:", 5) == 0;
 }
 
+/* NetherSX2/PCSX2 HostFS can return a host-side rooted spelling in de.name
+   even though the guest already opened the directory through host:.  A
+   directory entry is always a direct child of the directory being read, so
+   only its final path component belongs in the browser and in subsequent
+   guest-side file opens. */
+static const Char *BrowserHostEntryLeaf(const Char *pName)
+{
+	const Char *pLeaf = pName;
+	const Char *p;
+
+	if (!pName)
+		return pName;
+
+	for (p = pName; *p; p++)
+	{
+		if (*p == '/' || *p == '\\')
+			pLeaf = p + 1;
+	}
+	return pLeaf;
+}
+
 static Bool BrowserIsMassPath(const Char *pPath)
 {
 	return pPath && strncasecmp(pPath, "mass", 4) == 0;
@@ -1773,28 +1794,35 @@ void CBrowserScreen::SetDir(const Char *pDir)
 				BrowserEntryTypeE resolvedType;
 				Bool bIsDir;
 				Int32 nSize;
+				const Char *pEntryName;
 
 				/* Be defensive with third-party iomanX drivers that fill all
 				   256 bytes without writing a final NUL. */
 				de.name[sizeof(de.name) - 1] = '\0';
-				if (!de.name[0] || !strcmp(de.name, ".") || !strcmp(de.name, ".."))
+				pEntryName = BrowserIsHostPath(openPath)
+					? BrowserHostEntryLeaf(de.name)
+					: de.name;
+				if (BrowserIsHostPath(openPath) && strcmp(pEntryName, de.name) != 0)
+					HOSTFS_DLOG_DEEP("[hostfs-entry] normalize raw=%s leaf=%s",
+					                  de.name, pEntryName);
+				if (!pEntryName[0] || !strcmp(pEntryName, ".") || !strcmp(pEntryName, ".."))
 					continue;
-				if (m_bStateManager && BrowserIsSramDirectoryName(de.name))
+				if (m_bStateManager && BrowserIsSramDirectoryName(pEntryName))
 					continue;
-				if (BrowserIsCoverMetadataName(de.name))
+				if (BrowserIsCoverMetadataName(pEntryName))
 					continue;
 
 				/* Hide cover-art PNGs from the browser list - they are
 				   artwork for the cover system, not ROMs. */
 				{
-					size_t nLength = strlen(de.name);
+					size_t nLength = strlen(pEntryName);
 					if (nLength >= 4 &&
-					    strcasecmp(de.name + nLength - 4, ".png") == 0)
+					    strcasecmp(pEntryName + nLength - 4, ".png") == 0)
 						continue;
 				}
 
 				resolvedType = (BrowserEntryTypeE)SendMessage(
-					2, 0, (void *)de.name);
+					2, 0, (void *)pEntryName);
 
 				/* Recognised ROM extensions win over the directory flag and never
 				   need a getstat/dopen fallback. This
@@ -1808,7 +1836,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 				else
 				{
 					bIsDir = BrowserResolveDirectory(
-						openPath, de.name, de.stat.mode);
+						openPath, pEntryName, de.stat.mode);
 					if (bIsDir)
 					{
 						eType = BROWSER_ENTRYTYPE_DIR;
@@ -1819,7 +1847,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					   SRAM, state.cfg, icons, or unrelated files that share
 					   mc0:/SNESticle with memory-card state banks. */
 						if (m_bStateManager &&
-						    !BrowserIsStateBankName(de.name))
+						    !BrowserIsStateBankName(pEntryName))
 							continue;
 						eType = BROWSER_ENTRYTYPE_OTHER;
 					}
@@ -1842,7 +1870,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 						hostFiles++;
 				}
 
-				if (!AddEntry(de.name, eType, nSize))
+				if (!AddEntry(pEntryName, eType, nSize))
 					break;
 			}
 			fileXioDclose(dfd);
