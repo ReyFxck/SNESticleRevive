@@ -30,7 +30,7 @@ extern "C" {
 #include "audmixbuffer.h"
 #include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
 #include "snppucolor.h"
-#include "i18n.h"
+#include "../i18n/i18n.h"
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
