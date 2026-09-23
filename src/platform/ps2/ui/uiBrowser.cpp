@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #define NEWLIB_PORT_AWARE          /* libera fileXio no port newlib (igual main.cpp) */
+#include <io_common.h>
 #include <fileXio.h>
 #include <fileXio_rpc.h>   /* HDD APA: fileXioDopen/Dread (listar particoes) */
 #include <libhdd.h>        /* ATTR_MAIN_PARTITION / FS_TYPE_PFS */
@@ -28,6 +29,7 @@
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
 #include "mainloop_ui.h"
+#include "mainloop_iop.h"
 #include "gpprim.h"
 #include "../gs/gskit_backend.h"
 extern "C" {
@@ -35,6 +37,20 @@ extern "C" {
 };
 
 #include "embedded_irx.h"   /* lazy storage stacks (USB/CDFS/HDD/MMCE) */
+
+extern "C" void DLog(const char *fmt, ...);
+
+#if defined(SNDBG_LOG) && SNDBG_LOG
+#define HOSTFS_DLOG(...) DLog(__VA_ARGS__)
+#else
+#define HOSTFS_DLOG(...) ((void)0)
+#endif
+
+#if defined(SNDBG_DEEP) && SNDBG_DEEP
+#define HOSTFS_DLOG_DEEP(...) DLog(__VA_ARGS__)
+#else
+#define HOSTFS_DLOG_DEEP(...) ((void)0)
+#endif
 
 static const char *_MenuEntries[]=
 {
@@ -83,6 +99,32 @@ static Bool BrowserIsSmbPath(const Char *pPath)
 	return pPath && strncasecmp(pPath, "smb:", 4) == 0;
 }
 
+static Bool BrowserIsHostPath(const Char *pPath)
+{
+	return pPath && strncasecmp(pPath, "host:", 5) == 0;
+}
+
+/* NetherSX2/PCSX2 HostFS can return a host-side rooted spelling in de.name
+   even though the guest already opened the directory through host:.  A
+   directory entry is always a direct child of the directory being read, so
+   only its final path component belongs in the browser and in subsequent
+   guest-side file opens. */
+static const Char *BrowserHostEntryLeaf(const Char *pName)
+{
+	const Char *pLeaf = pName;
+	const Char *p;
+
+	if (!pName)
+		return pName;
+
+	for (p = pName; *p; p++)
+	{
+		if (*p == '/' || *p == '\\')
+			pLeaf = p + 1;
+	}
+	return pLeaf;
+}
+
 static Bool BrowserIsMassPath(const Char *pPath)
 {
 	return pPath && strncasecmp(pPath, "mass", 4) == 0;
@@ -93,6 +135,71 @@ static Bool BrowserIsDiscPath(const Char *pPath)
 	return pPath &&
 	       (strncasecmp(pPath, "cdfs:", 5) == 0 ||
 	        strncasecmp(pPath, "cdrom", 5) == 0);
+}
+
+/* HostFS needs its own classifier. Some emulator/ps2link HostFS bridges
+   return unreliable mode bits (notably marking regular files as directories).
+   Do not copy that flag into the UI. Probe actual file behavior first, then
+   actual directory behavior. Known ROM extensions are handled before this
+   function, so the extra RPCs only apply to otherwise-unknown HostFS entries. */
+static Bool BrowserResolveHostDirectory(const Char *pParent, const Char *pName,
+                                        unsigned int uMode)
+{
+	Char path[1024];
+	size_t nParent;
+	int fd = -1;
+	int readResult = -1;
+	int dfd = -1;
+	unsigned char probe;
+
+	if (!pParent || !pName || !pName[0])
+		return FALSE;
+
+	nParent = strlen(pParent);
+	if (snprintf(path, sizeof(path), "%s%s%s", pParent,
+	             (nParent > 0 && pParent[nParent - 1] != '/' &&
+	              pParent[nParent - 1] != '\\' &&
+	              pParent[nParent - 1] != ':') ? "/" : "",
+	             pName) >= (int)sizeof(path))
+		return FALSE;
+
+	fd = fileXioOpen(path, FIO_O_RDONLY, 0);
+	if (fd >= 0)
+	{
+		readResult = fileXioRead(fd, &probe, 1);
+		fileXioClose(fd);
+		if (readResult >= 0)
+		{
+			HOSTFS_DLOG_DEEP("[hostfs-entry] file path=%s mode=%08X read=%d",
+			                path, (unsigned)uMode, readResult);
+			return FALSE;
+		}
+	}
+
+	dfd = fileXioDopen(path);
+	if (dfd >= 0)
+	{
+		fileXioDclose(dfd);
+		HOSTFS_DLOG_DEEP("[hostfs-entry] dir path=%s mode=%08X fileopen=%d read=%d",
+		                path, (unsigned)uMode, fd, readResult);
+		return TRUE;
+	}
+
+	/* If file open succeeded but the one-byte read was rejected, it is still
+	   safer to keep the item file-like than to repeat the broken DIR bit. */
+	if (fd >= 0)
+	{
+		HOSTFS_DLOG_DEEP("[hostfs-entry] file-fallback path=%s mode=%08X read=%d dopen=%d",
+		                path, (unsigned)uMode, readResult, dfd);
+		return FALSE;
+	}
+
+	HOSTFS_DLOG_DEEP("[hostfs-entry] unresolved-as-file path=%s mode=%08X dopen=%d",
+	                path, (unsigned)uMode, dfd);
+	/* Never re-trust HostFS' broken DIR bit here. A directory that cannot
+	   actually be opened is not useful to the browser; defaulting to file
+	   avoids recreating the original "every file is a folder" failure. */
+	return FALSE;
 }
 
 /* Resolve the rare DT_UNKNOWN equivalent without slowing down normal ROM
@@ -108,6 +215,9 @@ static Bool BrowserResolveDirectory(const Char *pParent, const Char *pName,
 	size_t nParent;
 	iox_stat_t statInfo;
 	int dfd;
+
+	if (BrowserIsHostPath(pParent))
+		return BrowserResolveHostDirectory(pParent, pName, uMode);
 
 	if (FIO_S_ISDIR(uMode))
 		return TRUE;
@@ -157,6 +267,7 @@ static int BrowserOpenDirectory(const Char *pPath)
 	Bool bSmb;
 	Bool bMass;
 	Bool bDisc;
+	Bool bHost;
 
 	if (!pPath)
 		return -1;
@@ -165,6 +276,10 @@ static int BrowserOpenDirectory(const Char *pPath)
 	   it only for the drive the user selected, with a visible marker.  If an
 	   old Fat/Slim-specific module wait ever stalls, it can no longer produce
 	   an unexplained OPL black/white boot screen. */
+	bHost = BrowserIsHostPath(pPath);
+	if (bHost)
+		HOSTFS_DLOG("[hostfs] open path=%s", pPath);
+
 	bMass = BrowserIsMassPath(pPath);
 	if (bMass && !UsbBdmIsLoaded() && !Mx4sioIsLoaded())
 	{
@@ -198,6 +313,8 @@ static int BrowserOpenDirectory(const Char *pPath)
 		return -1;
 
 	dfd = fileXioDopen(pPath);
+	if (bHost)
+		HOSTFS_DLOG("[hostfs] dopen path=%s result=%d", pPath, dfd);
 	if (bSmb && dfd < 0)
 		SmbReportBrowseError(dfd);
 	else if (bSmb)
@@ -1590,6 +1707,9 @@ void CBrowserScreen::SetDir(const Char *pDir)
     /* 0=nao-hdd, 1=dentro de particao (pfs0:), 2=lista de particoes, -1=falha */
     int hddKind = 0;
     int mmceUnavailable = 0;
+    int hostEntries = 0;
+    int hostDirs = 0;
+    int hostFiles = 0;
 
 	/* dopen/dread, device mount and the final sort are intentionally
 	   synchronous so the browser publishes one consistent list. Let the BGM
@@ -1674,28 +1794,35 @@ void CBrowserScreen::SetDir(const Char *pDir)
 				BrowserEntryTypeE resolvedType;
 				Bool bIsDir;
 				Int32 nSize;
+				const Char *pEntryName;
 
 				/* Be defensive with third-party iomanX drivers that fill all
 				   256 bytes without writing a final NUL. */
 				de.name[sizeof(de.name) - 1] = '\0';
-				if (!de.name[0] || !strcmp(de.name, ".") || !strcmp(de.name, ".."))
+				pEntryName = BrowserIsHostPath(openPath)
+					? BrowserHostEntryLeaf(de.name)
+					: de.name;
+				if (BrowserIsHostPath(openPath) && strcmp(pEntryName, de.name) != 0)
+					HOSTFS_DLOG_DEEP("[hostfs-entry] normalize raw=%s leaf=%s",
+					                  de.name, pEntryName);
+				if (!pEntryName[0] || !strcmp(pEntryName, ".") || !strcmp(pEntryName, ".."))
 					continue;
-				if (m_bStateManager && BrowserIsSramDirectoryName(de.name))
+				if (m_bStateManager && BrowserIsSramDirectoryName(pEntryName))
 					continue;
-				if (BrowserIsCoverMetadataName(de.name))
+				if (BrowserIsCoverMetadataName(pEntryName))
 					continue;
 
 				/* Hide cover-art PNGs from the browser list - they are
 				   artwork for the cover system, not ROMs. */
 				{
-					size_t nLength = strlen(de.name);
+					size_t nLength = strlen(pEntryName);
 					if (nLength >= 4 &&
-					    strcasecmp(de.name + nLength - 4, ".png") == 0)
+					    strcasecmp(pEntryName + nLength - 4, ".png") == 0)
 						continue;
 				}
 
 				resolvedType = (BrowserEntryTypeE)SendMessage(
-					2, 0, (void *)de.name);
+					2, 0, (void *)pEntryName);
 
 				/* Recognised ROM extensions win over the directory flag and never
 				   need a getstat/dopen fallback. This
@@ -1709,7 +1836,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 				else
 				{
 					bIsDir = BrowserResolveDirectory(
-						openPath, de.name, de.stat.mode);
+						openPath, pEntryName, de.stat.mode);
 					if (bIsDir)
 					{
 						eType = BROWSER_ENTRYTYPE_DIR;
@@ -1720,7 +1847,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					   SRAM, state.cfg, icons, or unrelated files that share
 					   mc0:/SNESticle with memory-card state banks. */
 						if (m_bStateManager &&
-						    !BrowserIsStateBankName(de.name))
+						    !BrowserIsStateBankName(pEntryName))
 							continue;
 						eType = BROWSER_ENTRYTYPE_OTHER;
 					}
@@ -1734,10 +1861,22 @@ void CBrowserScreen::SetDir(const Char *pDir)
 				else
 					nSize = (Int32)de.stat.size;
 
-				if (!AddEntry(de.name, eType, nSize))
+				if (BrowserIsHostPath(openPath))
+				{
+					hostEntries++;
+					if (eType == BROWSER_ENTRYTYPE_DIR)
+						hostDirs++;
+					else
+						hostFiles++;
+				}
+
+				if (!AddEntry(pEntryName, eType, nSize))
 					break;
 			}
 			fileXioDclose(dfd);
+			if (BrowserIsHostPath(openPath))
+				HOSTFS_DLOG("[hostfs] scan path=%s entries=%d dirs=%d files=%d dread=%d",
+				            openPath, hostEntries, hostDirs, hostFiles, dreadResult);
 			if (dreadResult < 0 && BrowserIsSmbPath(openPath))
 			{
 				SmbReportBrowseError(dreadResult);
@@ -1751,9 +1890,10 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	} else
 	{
         AddEntry("cdfs:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        /* User-facing host: was a ps2link/HostFS development bridge and did
-           not provide trustworthy file-type metadata in several emulators.
-           smb: is a real iomanX filesystem and is mounted only on selection. */
+        /* Emulator/ps2link HostFS is opt-in. Its directory metadata is not
+           trusted; BrowserResolveHostDirectory probes the actual object type. */
+        if (HostFsSupportIsEnabled())
+            AddEntry("host:", BROWSER_ENTRYTYPE_DRIVE, 0);
         if (SmbSupportIsEnabled())
             AddEntry("smb:", BROWSER_ENTRYTYPE_DRIVE, 0);
         /* USB/HD via BDM: cada pendrive, HD externo USB e o HD INTERNO
@@ -1784,6 +1924,11 @@ void CBrowserScreen::SetDir(const Char *pDir)
         AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);
 	}
 
+	if (!pDir[0])
+		HOSTFS_DLOG("[hostfs] root option=%s bootdir=%s",
+		            HostFsSupportIsEnabled() ? "on" : "off",
+		            _MainLoop_BootDir[0] ? _MainLoop_BootDir : "(none)");
+
 	SortEntries();
 	BgmIOEnd();
 
@@ -1797,6 +1942,29 @@ void CBrowserScreen::Chdir(const Char *pSubDir)
 	Char dir[1024];
 
 	strcpy(dir, m_Dir);
+
+	/* When the ELF itself came from HostFS, selecting host: jumps straight
+	   to that launch directory. This is the fast dev loop: rebuild only the
+	   ELF, keep ROMs beside it, and never regenerate an ISO. */
+	if (!dir[0] && pSubDir && !strcasecmp(pSubDir, "host:") &&
+	    HostFsSupportIsEnabled() && BrowserIsHostPath(_MainLoop_BootDir))
+	{
+		size_t n;
+		snprintf(dir, sizeof(dir), "%s", _MainLoop_BootDir);
+		n = strlen(dir);
+		if (n > 0 && n + 1 < sizeof(dir) &&
+		    dir[n - 1] != '/' && dir[n - 1] != '\\' && dir[n - 1] != ':')
+		{
+			dir[n++] = '/';
+			dir[n] = '\0';
+		}
+		/* Keep a device root such as host: exactly as-is. HostFS implementations
+		   commonly treat the text after ':' as a path relative to their already
+		   configured root; forcing host:/ is unnecessary and less portable. */
+		HOSTFS_DLOG("[hostfs] enter bootdir=%s", dir);
+		SetDir(dir);
+		return;
+	}
 
 	if (!strcmp(pSubDir, "."))
 	{

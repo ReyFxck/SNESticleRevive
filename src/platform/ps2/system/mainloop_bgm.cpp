@@ -363,7 +363,11 @@ static void _BuildBootBgm(void)
         n = (int)strlen(s_bootBgm);
     }
 
-    if (n > 0 && s_bootBgm[n - 1] != '/') s_bootBgm[n++] = '/';
+    /* Device roots such as host: are already relative roots. Adding '/' after
+       the colon turns host:bgm into host:/bgm, which Android HostFS treats as
+       an absolute host path and rejects as outside the ELF directory. */
+    if (n > 0 && s_bootBgm[n - 1] != '/' && s_bootBgm[n - 1] != ':')
+        s_bootBgm[n++] = '/';
     s_bootBgm[n] = 0;
     strncat(s_bootBgm, "bgm",
             sizeof(s_bootBgm) - strlen(s_bootBgm) - 1);

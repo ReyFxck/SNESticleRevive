@@ -63,6 +63,7 @@ extern "C" {
 /* Log visivel no splash de boot (real hardware) -- definido em audio_audsrv.c. */
 extern "C" void ScrPrintf(const char *pFormat, ...);
 extern "C" void BootImport(const char *pName, int ret);
+extern "C" void DLog(const char *fmt, ...);
 
 struct EmbeddedEntry
 {
@@ -717,15 +718,29 @@ extern "C" int MmceNeedsRestart(void)
  *    preso na tela preta/branca herdada do OPL.  Este flag controla a
  *    LISTAGEM de mass0:/mass1: no browser e a carga do mx4sio (abaixo).
  *    Padrao LIGADO.
+ *  - HostFS (host:): filesystem supplied by an emulator/ps2link. No module
+ *    is loaded here; the toggle only exposes it in the ROM browser.
+ *    Padrao DESLIGADO.
  *  - SMB (smb:): compartilhamento de rede para ROMs. O toggle controla a
  *    listagem; a rede, o smbman e a autenticacao so' sobem quando o usuario
  *    abre smb:. Padrao DESLIGADO.
  * ------------------------------------------------------------------------ */
-static int s_mass_enabled = 1;   /* padrao LIGADO */
-static int s_smb_enabled = 0;    /* padrao DESLIGADO */
+static int s_mass_enabled   = 1; /* padrao LIGADO */
+static int s_hostfs_enabled = 0; /* padrao DESLIGADO */
+static int s_smb_enabled    = 0; /* padrao DESLIGADO */
 
-extern "C" int  MassStorageIsEnabled(void)   { return s_mass_enabled; }
-extern "C" void MassStorageSetEnabled(int e) { s_mass_enabled = e ? 1 : 0; }
+extern "C" int  MassStorageIsEnabled(void)    { return s_mass_enabled; }
+extern "C" void MassStorageSetEnabled(int e)  { s_mass_enabled = e ? 1 : 0; }
+extern "C" int  HostFsSupportIsEnabled(void)  { return s_hostfs_enabled; }
+extern "C" void HostFsSupportSetEnabled(int e)
+{
+    int next = e ? 1 : 0;
+#if defined(SNDBG_LOG) && SNDBG_LOG
+    if (next != s_hostfs_enabled)
+        DLog("[hostfs] setting enabled=%d", next);
+#endif
+    s_hostfs_enabled = next;
+}
 extern "C" int  SmbSupportIsEnabled(void)     { return s_smb_enabled; }
 extern "C" void SmbSupportSetEnabled(int e)   { s_smb_enabled = e ? 1 : 0; }
 

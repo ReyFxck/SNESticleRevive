@@ -93,6 +93,82 @@ char *MainGetBootPath()
 	return _Main_pBootPath;
 }
 
+/* Android SAF-backed HostFS has a second useful spelling for files: the full
+   content:// document URI used to launch the ELF. Some NetherSX2 builds can
+   enumerate host: but reject relative opens as outside the ELF directory.
+   Rebuild a sibling document URI from argv[0] so callers can retry the same
+   file through the exact URI namespace the emulator already accepted. */
+extern "C" int MainBuildHostIOPath(const char *pGuestPath, char *pOut, int nOut)
+{
+	static const char hex[] = "0123456789ABCDEF";
+	const char *pBoot;
+	const char *pUri;
+	const char *pSep = NULL;
+	const char *p;
+	const char *pRel;
+	size_t rootLen;
+	int pos;
+	int i;
+
+	if (!pGuestPath || !pOut || nOut <= 0 ||
+	    strncmp(pGuestPath, "host:", 5) != 0)
+		return 0;
+
+	pBoot = _Main_pBootPath;
+	if (!pBoot || strncmp(pBoot, "host:content://", 15) != 0)
+		return 0;
+
+	pUri = pBoot + 5;
+	for (p = pUri; p[0] && p[1] && p[2]; p++)
+	{
+		if (p[0] == '%' && p[1] == '2' && (p[2] == 'F' || p[2] == 'f'))
+			pSep = p;
+	}
+	if (!pSep)
+		return 0;
+
+	rootLen = (size_t)(pSep - pUri);
+	pos = snprintf(pOut, (size_t)nOut, "host:%.*s%%2F", (int)rootLen, pUri);
+	if (pos < 0 || pos >= nOut)
+		return 0;
+
+	pRel = pGuestPath + 5;
+	while (*pRel == '/' || *pRel == '\\')
+		pRel++;
+
+	for (; *pRel; pRel++)
+	{
+		unsigned char ch = (unsigned char)*pRel;
+		if (ch == '/' || ch == '\\')
+		{
+			if (pos + 3 >= nOut) return 0;
+			pOut[pos++] = '%'; pOut[pos++] = '2'; pOut[pos++] = 'F';
+		}
+		else if ((ch >= 'A' && ch <= 'Z') ||
+		         (ch >= 'a' && ch <= 'z') ||
+		         (ch >= '0' && ch <= '9') ||
+		         ch == '-' || ch == '_' || ch == '.' || ch == '~')
+		{
+			if (pos + 1 >= nOut) return 0;
+			pOut[pos++] = (char)ch;
+		}
+		else
+		{
+			if (pos + 3 >= nOut) return 0;
+			pOut[pos++] = '%';
+			pOut[pos++] = hex[(ch >> 4) & 15];
+			pOut[pos++] = hex[ch & 15];
+		}
+	}
+	pOut[pos] = 0;
+
+	/* Keep the variable referenced on old GCC builds where warnings are
+	   promoted aggressively and the loop index used to be part of this code. */
+	i = pos;
+	(void)i;
+	return 1;
+}
+
 void MainSetBootDir(const char *pPath)
 {
 	size_t len;
@@ -101,6 +177,18 @@ void MainSetBootDir(const char *pPath)
 
 	if (!pPath || !pPath[0])
 		pPath = "host:";
+
+	/* Android PS2 emulators may expose a Storage Access Framework URI in
+	   argv[0], e.g. host:content://.../SNESticle.elf. That URI is metadata
+	   for the emulator host and is NOT a path that the PS2-side host: device
+	   can reopen. The emulator has already rooted host: at the ELF directory,
+	   so keep the guest-visible boot directory as exactly host:. */
+	if (!strncmp(pPath, "host:", 5) && strstr(pPath + 5, "://"))
+	{
+		strcpy(_Main_BootDir, "host:");
+		DLog("[boot] HostFS URI argv normalized to dir='host:'");
+		return;
+	}
 
 	strncpy(_Main_BootDir, pPath, sizeof(_Main_BootDir) - 1);
 	_Main_BootDir[sizeof(_Main_BootDir) - 1] = 0;

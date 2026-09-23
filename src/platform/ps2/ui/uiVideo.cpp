@@ -34,7 +34,7 @@ extern Char _SramPath[256];
 /* Persistence                                                         */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 18
+#define VIDEOCFG_VERSION 19
 
 typedef struct
 {
@@ -56,7 +56,31 @@ typedef struct
 	Int32  mx4sioenable; /* MX4SIO (SD via SIO2): 0=off, 1=on         */
 	Int32  colorprofile; /* SNPPU_COLOR_PROFILE_*                     */
 	Int32  frameskip;    /* recuperacao adaptativa: 0=off, 1=on       */
+	Int32  hostenable;   /* emulator/ps2link HostFS (host:): 0=off,1=on */
 } VideoCfgT;
+
+/* v18 is the exact prefix before HostFS was restored as its own option. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  frameskip;
+} VideoCfgV18T;
 
 /* v17 added colorprofile to the v16 prefix. */
 typedef struct
@@ -138,6 +162,7 @@ void VideoSettingsSave(void)
 	cfg.mx4sioenable = Mx4sioIsEnabled() ? 1 : 0;
 	cfg.colorprofile = SNPPUColorGetProfile();
 	cfg.frameskip = MainLoopSafeFrameskipIsEnabled() ? 1 : 0;
+	cfg.hostenable = HostFsSupportIsEnabled() ? 1 : 0;
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
@@ -148,6 +173,7 @@ void VideoSettingsSave(void)
 void VideoSettingsLoad(void)
 {
 	VideoCfgT cfg;
+	VideoCfgV18T oldcfg18;
 	VideoCfgV17T oldcfg17;
 	VideoCfgV16T oldcfg;
 	VideoCfgHeaderT header;
@@ -165,6 +191,17 @@ void VideoSettingsLoad(void)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
 		}
+		else if (header.version == 18)
+		{
+			memset(&oldcfg18, 0, sizeof(oldcfg18));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg18, sizeof(oldcfg18)))
+			{
+				memcpy(&cfg, &oldcfg18, sizeof(oldcfg18));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.hostenable = 0;
+				loaded = TRUE;
+			}
+		}
 		else if (header.version == 17)
 		{
 			memset(&oldcfg17, 0, sizeof(oldcfg17));
@@ -173,6 +210,7 @@ void VideoSettingsLoad(void)
 				memcpy(&cfg, &oldcfg17, sizeof(oldcfg17));
 				cfg.version = VIDEOCFG_VERSION;
 				cfg.frameskip = 0;
+				cfg.hostenable = 0;
 				loaded = TRUE;
 			}
 		}
@@ -181,11 +219,14 @@ void VideoSettingsLoad(void)
 			memset(&oldcfg, 0, sizeof(oldcfg));
 			if (MemCardReadFile(path, (Uint8 *)&oldcfg, sizeof(oldcfg)))
 			{
-				/* VideoCfgT only appends colorprofile to the v16 prefix. */
+				/* v16's slot really was HostFS. Do not reinterpret that
+				   preference as SMB when importing the old file. */
 				memcpy(&cfg, &oldcfg, sizeof(oldcfg));
 				cfg.version = VIDEOCFG_VERSION;
+				cfg.smbenable = 0;
 				cfg.colorprofile = SNPPU_COLOR_PROFILE_ORIGINAL;
 				cfg.frameskip = 0;
+				cfg.hostenable = oldcfg.hostenable ? 1 : 0;
 				loaded = TRUE;
 			}
 		}
@@ -223,6 +264,8 @@ void VideoSettingsLoad(void)
 			SNPPUColorSetProfile(cfg.colorprofile);
 		if (cfg.frameskip == 0 || cfg.frameskip == 1)
 			MainLoopSafeFrameskipSetEnabled(cfg.frameskip ? TRUE : FALSE);
+		if (cfg.hostenable == 0 || cfg.hostenable == 1)
+			HostFsSupportSetEnabled(cfg.hostenable);
 	}
 }
 
@@ -394,9 +437,11 @@ void CVideoScreen::Draw()
 		          HddSupportIsEnabled() ? "On" : "Off"); vy += 12;
 		_VideoRow(vy, 13, m_iSelect, "MMCE Cards",
 		          _VideoMmceStatus()); vy += 12;
-		_VideoRow(vy, 14, m_iSelect, "SMB (Network)",
+		_VideoRow(vy, 14, m_iSelect, "HostFS (Emu)",
+		          HostFsSupportIsEnabled() ? "On" : "Off"); vy += 12;
+		_VideoRow(vy, 15, m_iSelect, "SMB (Network)",
 		          SmbGetStatusText()); vy += 12;
-		_VideoRow(vy, 15, m_iSelect, "MX4SIO (SD)",
+		_VideoRow(vy, 16, m_iSelect, "MX4SIO (SD)",
 		          _VideoMx4sioStatus()); vy += 12;
 	}
 
@@ -423,14 +468,14 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 	int dir = 0;
 
 	/* Circle (O) alterna entre as 2 paginas: Video/Audio (idx 0-9) e
-	   Performance/Devices (10-15). NAO uso L1/R1 aqui de proposito -- eles ja trocam
+	   Performance/Devices (10-16). NAO uso L1/R1 aqui de proposito -- eles ja trocam
 	   de ABA no nivel global (Browser/Network/Menu/Log/Video). */
 	if (trigger & PAD_CIRCLE)
 		m_iSelect = (m_iSelect >= 10) ? 0 : 10;
 
 	{
 		int lo = (m_iSelect >= 10) ? 10 : 0;
-		int hi = (m_iSelect >= 10) ? 15 : 9;
+		int hi = (m_iSelect >= 10) ? 16 : 9;
 		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
 		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
 	}
@@ -518,7 +563,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 
 		case 11: /* Mass / USB on/off -- lista mass0:/mass1: (USB).  O USB core
 		           sobe no boot de qualquer forma (seguro); isto controla a
-		           listagem.  O MX4SIO agora tem toggle proprio (case 15). */
+		           listagem.  O MX4SIO agora tem toggle proprio (case 16). */
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
 
@@ -536,7 +581,12 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 
-		case 14: /* SMB on/off. Driver/network stay lazy until smb: is opened. */
+		case 14: /* Emulator/ps2link HostFS. No driver is loaded here: the
+		            option only exposes host: in the ROM browser. */
+			HostFsSupportSetEnabled(!HostFsSupportIsEnabled());
+			break;
+
+		case 15: /* SMB on/off. Driver/network stay lazy until smb: is opened. */
 			if (SmbSupportIsEnabled())
 			{
 				BgmIOBegin();
@@ -550,7 +600,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 
-		case 15: /* MX4SIO (SD via SIO2) on/off -- carga preguicosa (deferida).
+		case 16: /* MX4SIO (SD via SIO2) on/off -- carga preguicosa (deferida).
 		            Padrao OFF: quem nao tem o adaptador evita o flood de
 		            sondagem do SIO2.  Independente do Mass/USB. */
 			Mx4sioSetEnabled(!Mx4sioIsEnabled());

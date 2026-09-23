@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "mainloop_debug.h"
 #include "mainloop_shared.h"
@@ -46,6 +47,151 @@ extern "C" {
    kept commented out in mainloop_init.cpp for reference. */
 #define MAINLOOP_SCREENWIDTH 256
 #define MAINLOOP_SCREENHEIGHT 240
+
+#define MODAL_MAX_LINES 6
+#define MODAL_LINE_CHARS 96
+#define MODAL_MAX_TEXT_PX 220
+
+/* Wrap a modal into bounded lines before rendering. This keeps long paths,
+   error strings and user-controlled filenames inside the 256px UI and avoids
+   feeding arbitrary text back to FontPrintf as a format string. */
+static Int32 _MainLoopWrapModalText(
+        const Char *pText,
+        Char Lines[MODAL_MAX_LINES][MODAL_LINE_CHARS])
+{
+    Int32 nLines = 0;
+    const Char *p = pText ? pText : "";
+
+    Lines[0][0] = 0;
+    while (*p && nLines < MODAL_MAX_LINES)
+    {
+        Char work[MODAL_LINE_CHARS];
+        Int32 len = 0;
+        work[0] = 0;
+        Int32 lastSpace = -1;
+        const Char *start = p;
+        const Char *next = p;
+
+        while (*next && *next != '\n' && len < MODAL_LINE_CHARS - 1)
+        {
+            work[len++] = *next;
+            work[len] = 0;
+            if (*next == ' ' || *next == '\t')
+                lastSpace = len - 1;
+
+            if (FontGetStrWidth(work) > MODAL_MAX_TEXT_PX)
+            {
+                if (lastSpace > 0)
+                {
+                    len = lastSpace;
+                    next = start + lastSpace + 1;
+                }
+                else if (len > 1)
+                {
+                    /* Keep 'next' on the character that did not fit so the
+                       following line consumes it exactly once. */
+                    len--;
+                }
+                break;
+            }
+            next++;
+        }
+
+        while (len > 0 && (work[len - 1] == ' ' || work[len - 1] == '\t'))
+            len--;
+        work[len] = 0;
+
+        if (len == 0 && *next && *next != '\n')
+        {
+            work[0] = *next++;
+            work[1] = 0;
+        }
+
+        snprintf(Lines[nLines], MODAL_LINE_CHARS, "%s", work);
+        nLines++;
+
+        p = next;
+        if (*p == '\n')
+            p++;
+        while (*p == ' ' || *p == '\t')
+            p++;
+    }
+
+    if (*p && nLines > 0)
+    {
+        Char *last = Lines[nLines - 1];
+        Int32 len = (Int32)strlen(last);
+        if (len > 3)
+        {
+            last[len - 3] = '.';
+            last[len - 2] = '.';
+            last[len - 1] = '.';
+        }
+    }
+
+    return nLines > 0 ? nLines : 1;
+}
+
+static void _MainLoopDrawModal(void)
+{
+    Char lines[MODAL_MAX_LINES][MODAL_LINE_CHARS];
+    Int32 nLines;
+    Int32 i;
+    Int32 maxWidth = 0;
+    Int32 fontH;
+    Int32 boxW;
+    Int32 boxH;
+    Int32 boxX;
+    Int32 boxY;
+    Int32 textY;
+
+    FontSelect(0);
+    nLines = _MainLoopWrapModalText(_MainLoop_ModalStr, lines);
+    fontH = FontGetHeight();
+
+    for (i = 0; i < nLines; i++)
+    {
+        Int32 w = FontGetStrWidth(lines[i]);
+        if (w > maxWidth) maxWidth = w;
+    }
+
+    boxW = maxWidth + 16;
+    if (boxW < 112) boxW = 112;
+    if (boxW > 240) boxW = 240;
+    boxH = 18 + 8 + nLines * (fontH + 2) + 6;
+    boxX = (MAINLOOP_SCREENWIDTH - boxW) / 2;
+    boxY = (MAINLOOP_SCREENHEIGHT - boxH) / 2;
+
+    PolyTexture(NULL);
+    PolyBlend(TRUE);
+
+    /* Semi-transparent black body requested for readability over the live UI. */
+    PolyColor4f(0.0f, 0.0f, 0.0f, 0.82f);
+    PolyRect((Float32)boxX, (Float32)boxY, (Float32)boxW, (Float32)boxH);
+
+    /* Entire modal is one semi-transparent black panel: no colored header. */
+    FontColor4f(1.0f, 0.35f, 0.35f, 1.0f);
+    {
+        static const Char *title = "ERROR..";
+        FontPrintf(
+                boxX + (boxW - FontGetStrWidth(title)) / 2,
+                boxY + 2,
+                "%s",
+                title
+        );
+    }
+
+    FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    textY = boxY + 20;
+    for (i = 0; i < nLines; i++)
+    {
+        Int32 w = FontGetStrWidth(lines[i]);
+        Int32 x = boxX + (boxW - w) / 2;
+        if (x < boxX + 5) x = boxX + 5;
+        FontPrintf(x, textY, "%s", lines[i]);
+        textY += fontH + 2;
+    }
+}
 
 static Uint32 _uVblankCycle;
 
@@ -285,10 +431,7 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 
 	if (_MainLoop_ModalCount > 0)
 	{
-		FontSelect(0);
-		FontColor4f(1.0, 1.0f, 1.0f, 1.0f);
-		FontPrintf(128 - FontGetStrWidth(_MainLoop_ModalStr) / 2,100, _MainLoop_ModalStr);
-
+		_MainLoopDrawModal();
 		_MainLoop_ModalCount--;
 	}
 	else
@@ -297,7 +440,7 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 		{
 			FontSelect(0);
 			FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
-			FontPrintf(20, 200, _MainLoop_StatusStr);
+			FontPrintf(20, 200, "%s", _MainLoop_StatusStr);
 
 			_MainLoop_StatusCount--;
 		}
