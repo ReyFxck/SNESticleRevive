@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - perf/sa1-r5900
+      - feature/localization
   workflow_dispatch:
 
 permissions:
