@@ -23,8 +23,8 @@ void UiChromeHeader(const char *title, Bool shoulders)
 
     if (shoulders)
     {
-        UiIconsDraw(UI_ICON_L1, 35, 9, 14);
-        UiIconsDraw(UI_ICON_R1, 207, 9, 14);
+        UiIconsDraw(UI_ICON_L1, 36, 10, 12);
+        UiIconsDraw(UI_ICON_R1, 208, 10, 12);
     }
 }
 
