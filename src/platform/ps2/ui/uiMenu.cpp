@@ -177,9 +177,8 @@ void CMenuScreen::Draw()
 		FontColor4f(0.48f, 0.48f, 0.48f, 1.0f);
 		_MenuPrintAlignCenter(128, 171, "Deleting a state removes both banks");
 
-		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, "Select");
-		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 136, 198, "Choose");
-		UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 191, 198, "Back");
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 62, 198, "Select");
+		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 157, 198, "Choose");
 		return;
 	}
 
