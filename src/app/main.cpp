@@ -102,6 +102,18 @@ void MainSetBootDir(const char *pPath)
 	if (!pPath || !pPath[0])
 		pPath = "host:";
 
+	/* Android PS2 emulators may expose a Storage Access Framework URI in
+	   argv[0], e.g. host:content://.../SNESticle.elf. That URI is metadata
+	   for the emulator host and is NOT a path that the PS2-side host: device
+	   can reopen. The emulator has already rooted host: at the ELF directory,
+	   so keep the guest-visible boot directory as exactly host:. */
+	if (!strncmp(pPath, "host:", 5) && strstr(pPath + 5, "://"))
+	{
+		strcpy(_Main_BootDir, "host:");
+		DLog("[boot] HostFS URI argv normalized to dir='host:'");
+		return;
+	}
+
 	strncpy(_Main_BootDir, pPath, sizeof(_Main_BootDir) - 1);
 	_Main_BootDir[sizeof(_Main_BootDir) - 1] = 0;
 	len = strlen(_Main_BootDir);
