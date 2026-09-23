@@ -120,6 +120,10 @@ int  MmceNeedsRestart(void);
    config se o toggle estiver ligado (chamado em mainloop_init). */
 int  MassStorageIsEnabled(void);
 void MassStorageSetEnabled(int enabled);
+/* Emulator/development HostFS. This only controls whether host: is exposed
+   by the ROM browser; no IRX is loaded by SNESticleRevive for it. */
+int  HostFsSupportIsEnabled(void);
+void HostFsSupportSetEnabled(int enabled);
 int  SmbSupportIsEnabled(void);
 void SmbSupportSetEnabled(int enabled);
 int  Mx4sioLoadIfEnabled(void);
