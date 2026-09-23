@@ -16,7 +16,11 @@ counters and capture code from that build. Level 2 is intentionally more
 intrusive and should be used for short reproductions.
 
 All records go through `DLog()`, so Android emulator builds place them in their
-normal TXT log. Each rolling window starts with:
+normal TXT log. HostFS follows the same rule: level 1 writes `[hostfs]` toggle,
+open and directory-scan summaries, while level 2 also writes per-entry
+`[hostfs-entry]` classification probes. This makes incorrect HostFS file-type
+metadata visible directly in `emulog.txt` without enabling unconditional serial
+spam. Each rolling window starts with:
 
 ```text
 [snes-diag] schema=snesdiag-v1 ...
