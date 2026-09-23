@@ -63,6 +63,7 @@ extern "C" {
 /* Log visivel no splash de boot (real hardware) -- definido em audio_audsrv.c. */
 extern "C" void ScrPrintf(const char *pFormat, ...);
 extern "C" void BootImport(const char *pName, int ret);
+extern "C" void DLog(const char *fmt, ...);
 
 struct EmbeddedEntry
 {
@@ -731,7 +732,15 @@ static int s_smb_enabled    = 0; /* padrao DESLIGADO */
 extern "C" int  MassStorageIsEnabled(void)    { return s_mass_enabled; }
 extern "C" void MassStorageSetEnabled(int e)  { s_mass_enabled = e ? 1 : 0; }
 extern "C" int  HostFsSupportIsEnabled(void)  { return s_hostfs_enabled; }
-extern "C" void HostFsSupportSetEnabled(int e){ s_hostfs_enabled = e ? 1 : 0; }
+extern "C" void HostFsSupportSetEnabled(int e)
+{
+    int next = e ? 1 : 0;
+#if defined(SNES_DIAGNOSTICS) && SNES_DIAGNOSTICS >= 1
+    if (next != s_hostfs_enabled)
+        DLog("[hostfs] setting enabled=%d", next);
+#endif
+    s_hostfs_enabled = next;
+}
 extern "C" int  SmbSupportIsEnabled(void)     { return s_smb_enabled; }
 extern "C" void SmbSupportSetEnabled(int e)   { s_smb_enabled = e ? 1 : 0; }
 
