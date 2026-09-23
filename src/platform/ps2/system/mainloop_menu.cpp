@@ -233,6 +233,44 @@ static void _MainLoopStateManagerCycleStorage()
         }
 }
 
+void _MainLoopStateMenuSyncStorage()
+{
+        Char Root[32];
+        Int32 iStorage = -1;
+
+        if (!MainLoopStateHasDeviceChoice() ||
+            !MainLoopStateGetPreferredRoot(Root, sizeof(Root)))
+        {
+                return;
+        }
+
+        if (!strncmp(Root, "mass0:", 6))
+                iStorage = MAINLOOP_STATEMANAGER_MASS0;
+        else if (!strncmp(Root, "mass1:", 6))
+                iStorage = MAINLOOP_STATEMANAGER_MASS1;
+        else if (!strncmp(Root, "mass:", 5))
+                iStorage = MAINLOOP_STATEMANAGER_MASS;
+        else if (!strncmp(Root, "mc0:", 4))
+                iStorage = MAINLOOP_STATEMANAGER_MC0;
+        else if (!strncmp(Root, "mc1:", 4))
+                iStorage = MAINLOOP_STATEMANAGER_MC1;
+        else if (!strncmp(Root, "mmce0:", 6))
+                iStorage = MAINLOOP_STATEMANAGER_MMCE0;
+        else if (!strncmp(Root, "mmce1:", 6))
+                iStorage = MAINLOOP_STATEMANAGER_MMCE1;
+        else if (!strncmp(Root, "hdd0:", 5) ||
+                 !strncmp(Root, "pfs0:", 5))
+                iStorage = MAINLOOP_STATEMANAGER_HDD;
+
+        if (iStorage >= 0 &&
+            _MainLoopStateManagerStorageAvailable(iStorage))
+        {
+                _MainLoop_StateManagerStorageIndex = iStorage;
+        }
+
+        _MainLoopStateManagerNormalizeStorage();
+}
+
 void _MainLoopStateMenuRefresh()
 {
         const char *pQuickTarget;
