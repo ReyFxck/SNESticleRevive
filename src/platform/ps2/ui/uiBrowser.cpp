@@ -89,10 +89,15 @@ static Bool BrowserIsCoverMetadataName(const Char *pName)
 	        !strcasecmp(pName, "COVERS.IDX")) ? TRUE : FALSE;
 }
 
-static Bool BrowserIsSramDirectoryName(const Char *pName)
+static Bool BrowserIsStateManagerBasePath(const Char *pPath)
 {
-	return pName &&
-	       (!strcasecmp(pName, "SNES") || !strcasecmp(pName, "NES"));
+	size_t n;
+	if (!pPath) return FALSE;
+	n = strlen(pPath);
+	while (n > 0 && (pPath[n - 1] == '/' || pPath[n - 1] == '\\'))
+		n--;
+	return n >= 10 &&
+	       !strncasecmp(pPath + n - 10, "/SNESticle", 10);
 }
 
 static Bool BrowserIsSmbPath(const Char *pPath)
@@ -1819,8 +1824,6 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					                  de.name, pEntryName);
 				if (!pEntryName[0] || !strcmp(pEntryName, ".") || !strcmp(pEntryName, ".."))
 					continue;
-				if (m_bStateManager && BrowserIsSramDirectoryName(pEntryName))
-					continue;
 				if (BrowserIsCoverMetadataName(pEntryName))
 					continue;
 
@@ -1860,6 +1863,12 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					   mc0:/SNESticle with memory-card state banks. */
 						if (m_bStateManager &&
 						    !BrowserIsStateBankName(pEntryName))
+							continue;
+						/* Legacy banks copied from old releases stay on disk as a
+						   rollback backup, but the refreshed manager shows the clean
+						   SNES/NES folders instead of duplicate root files. */
+						if (m_bStateManager &&
+						    BrowserIsStateManagerBasePath(openPath))
 							continue;
 						eType = BROWSER_ENTRYTYPE_OTHER;
 					}
