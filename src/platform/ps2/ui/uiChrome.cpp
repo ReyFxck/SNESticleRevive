@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include "types.h"
 #include "font.h"
 #include "poly.h"
