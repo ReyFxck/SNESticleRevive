@@ -14,6 +14,10 @@
 class CVideoScreen : public CScreen
 {
 	int m_iSelect;
+	int m_iNavHeld;
+	int m_iNavDelay;
+
+	void MoveSelection(int delta);
 
 public:
 	CVideoScreen();
