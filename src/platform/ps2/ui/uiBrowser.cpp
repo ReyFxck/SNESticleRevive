@@ -1955,6 +1955,30 @@ void CBrowserScreen::SetDir(const Char *pDir)
 
 }
 
+Bool CBrowserScreen::IsStateManagerTop() const
+{
+	Char path[sizeof(m_Dir)];
+	size_t n;
+
+	if (!m_bStateManager)
+		return FALSE;
+
+	snprintf(path, sizeof(path), "%s", m_Dir);
+	n = strlen(path);
+	while (n > 0 && (path[n - 1] == '/' || path[n - 1] == '\\'))
+		path[--n] = 0;
+
+	/* State Manager is entered at <device>:/SNESticle/.  HDD may briefly
+	   use hdd0: while selecting a partition; that is also a top level. */
+	if (!strcasecmp(path, "hdd0:"))
+		return TRUE;
+
+	n = strlen(path);
+	return n >= 10 &&
+	       !strncasecmp(path + n - 10, "/SNESticle", 10)
+		? TRUE : FALSE;
+}
+
 void CBrowserScreen::Chdir(const Char *pSubDir)
 {
 	/* m_Dir is 512 and pSubDir can be a 255-char entry name; pick 1024
