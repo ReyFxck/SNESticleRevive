@@ -46,6 +46,7 @@ MainLoopStateDeviceE MainLoopStateGetDevice();
 const Char *MainLoopStateGetDeviceName();
 Bool MainLoopStateGetPreferredRoot(Char *pOut, Int32 nOut);
 void MainLoopStateMigrateLegacyStates();
+Bool MainLoopStatePrepareBrowsePath(const Char *pPath);
 const Char *MainLoopStateGetAvailability();
 const Char *MainLoopStateGetLastMessage();
 Int32 MainLoopStateGetUnformattedCard();
