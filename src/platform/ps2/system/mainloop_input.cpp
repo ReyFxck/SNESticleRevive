@@ -214,7 +214,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 	if (_bMenu &&
 	    _MainLoop_pScreen == (CScreen *)_MainLoop_pStateDeviceScreen)
 	{
-		if (trigger & PAD_CROSS)
+		if (trigger & (PAD_CIRCLE | PAD_TRIANGLE))
 		{
 			_MainLoopStateDevicePromptCancel();
 		}
@@ -229,7 +229,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 	    _MainLoop_pScreen ==
 	            (CScreen *)_MainLoop_pMemCardFormatScreen)
 	{
-		if (trigger & PAD_CROSS)
+		if (trigger & (PAD_CIRCLE | PAD_TRIANGLE))
 		{
 			_MainLoopMemCardFormatPromptCancel();
 		}
