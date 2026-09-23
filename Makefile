@@ -438,6 +438,7 @@ SRCS := \
 	src/platform/ps2/system/titleman.c \
 	src/platform/ps2/ui/uiBrowser.cpp \
 	src/platform/ps2/ui/uiCover.cpp \
+	src/platform/ps2/ui/uiIcons.cpp \
 	src/platform/ps2/ui/uiLog.cpp \
 	src/platform/ps2/ui/uiMenu.cpp \
 	src/platform/ps2/ui/uiNetwork.cpp \
@@ -568,6 +569,9 @@ endif
 
 EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 
+UI_ICONS_IIF_PATH := $(CURDIR)/src/platform/ps2/ui/assets/ui_icons.iif
+UI_ICONS_HEADER   := $(EMBED_DIR)/ui_icons_iif.h
+
 AUDSRV_IRX_PATH  ?= $(PS2SDK)/iop/irx/audsrv.irx
 FREESD_IRX_PATH  ?= $(PS2SDK)/iop/irx/freesd.irx
 PS2DEV9_IRX_PATH ?= $(PS2SDK)/iop/irx/ps2dev9.irx
@@ -687,6 +691,9 @@ $(EMBED_DIR)/mmceman_irx.h: $(MMCEMAN_IRX_PATH) | $(EMBED_DIR)
 $(EMBED_DIR)/mx4sio_bd_irx.h: $(MX4SIO_BD_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,mx4sio_bd_irx)
 
+$(UI_ICONS_HEADER): $(UI_ICONS_IIF_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,ui_icons_iif)
+
 # embedded_irx.cpp #includes the generated headers, so make sure they
 # exist before that file is compiled.
 
@@ -772,6 +779,7 @@ define RUN_COMPILE
 	fi
 endef
 $(OBJ_DIR)/platform/ps2/system/embedded_irx.o: $(EMBED_HEADERS)
+$(OBJ_DIR)/platform/ps2/ui/uiIcons.o: $(UI_ICONS_HEADER)
 
 $(OBJS): $(BUILD_CONFIG_FILE)
 
