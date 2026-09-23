@@ -85,10 +85,102 @@ void CMenuScreen::Draw()
 	Int32 iLine;
 	Int32 vx = 48;
 	Int32 vy = 38;
-	Bool shoulders = !strcmp(m_strTitle, "Save States") ? TRUE : FALSE;
+	Bool bStateManager = !strcmp(m_strTitle, "Save States") ? TRUE : FALSE;
+	Bool shoulders = bStateManager;
 
 	FontSelect(0);
 	UiChromeHeader(m_strTitle, shoulders);
+
+	if (bStateManager)
+	{
+		/* Save States deserves its own layout: the old generic menu dumped
+		   four help sentences into the middle of the screen and looked much
+		   denser than the rest of the refreshed frontend. */
+		UiChromeSection(34, "State Files");
+
+		/* Browse is the single file-management action. */
+		if (m_nItems > 0 && m_pEntries[0])
+		{
+			if (m_iSelect == 0)
+			{
+				PolyTexture(NULL);
+				PolyBlend(TRUE);
+				PolyColor4f(0.0f, 0.50f, 0.0f, 0.50f);
+				PolyRect(44, 47, 168, FontGetHeight() + 2);
+			}
+			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+			FontPuts(52, 48, m_pEntries[0]);
+		}
+
+		UiChromeSection(69, "Quick Save");
+
+		/* Storage and slot are rendered as label/value pairs so the changing
+		   value stays aligned like Configurations instead of moving the row. */
+		for (iLine = 1; iLine <= 2 && iLine < m_nItems; iLine++)
+		{
+			Char label[32];
+			const Char *pValue = "";
+			const Char *pColon;
+			Int32 rowY = (iLine == 1) ? 84 : 98;
+			Int32 labelLen;
+
+			pColon = strchr(m_pEntries[iLine], ':');
+			labelLen = pColon ? (Int32)(pColon - m_pEntries[iLine]) :
+			                   (Int32)strlen(m_pEntries[iLine]);
+			if (labelLen >= (Int32)sizeof(label)) labelLen = sizeof(label) - 1;
+			memcpy(label, m_pEntries[iLine], labelLen);
+			label[labelLen] = 0;
+			if (pColon)
+			{
+				pValue = pColon + 1;
+				while (*pValue == ' ') pValue++;
+			}
+
+			if (m_iSelect == iLine)
+			{
+				PolyTexture(NULL);
+				PolyBlend(TRUE);
+				PolyColor4f(0.0f, 0.50f, 0.0f, 0.50f);
+				PolyRect(44, rowY - 1, 168, FontGetHeight() + 2);
+			}
+			FontColor4f(0.62f, 0.62f, 0.62f, 1.0f);
+			FontPuts(52, rowY, label);
+			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+			FontPuts(137, rowY, pValue);
+		}
+
+		if (m_nItems > 3 && m_pEntries[3])
+		{
+			if (m_iSelect == 3)
+			{
+				PolyTexture(NULL);
+				PolyBlend(TRUE);
+				PolyColor4f(0.0f, 0.50f, 0.0f, 0.50f);
+				PolyRect(44, 112, 168, FontGetHeight() + 2);
+			}
+			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+			FontPuts(52, 113, "Choose Save Location Again");
+		}
+
+		UiChromeSection(137, "Current Target");
+		if (m_strText[0][0])
+		{
+			const Char *p = strchr(m_strText[0], ':');
+			if (p) p++; else p = m_strText[0];
+			while (*p == ' ') p++;
+			FontColor4f(0.78f, 0.78f, 0.78f, 1.0f);
+			_MenuPrintAlignCenter(128, 151, p);
+		}
+
+		/* Keep only the one useful state-browser warning here. The file-menu
+		   controls are shown by the browser itself once it is opened. */
+		FontColor4f(0.48f, 0.48f, 0.48f, 1.0f);
+		_MenuPrintAlignCenter(128, 171, "Deleting a state removes both banks");
+
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 55, 198, "Select");
+		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 151, 198, "Choose");
+		return;
+	}
 
 	for (iLine = 0; iLine < m_nItems; iLine++)
 	{
@@ -108,8 +200,6 @@ void CMenuScreen::Draw()
 		vy += FontGetHeight() + 2;
 	}
 
-	/* Existing context/help strings remain available, but use the same
-	   orange section language as the configuration screen. */
 	{
 		Bool anyText = FALSE;
 		for (iLine = 0; iLine < 4; iLine++)
