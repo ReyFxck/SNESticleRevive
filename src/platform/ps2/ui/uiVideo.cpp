@@ -554,23 +554,23 @@ void CVideoScreen::Draw()
 	if (scroll < VIDEO_CONTENT_H - (VIDEO_VIEW_BOTTOM - VIDEO_VIEW_TOP))
 		UiIconsDraw(UI_ICON_DOWN, 229, 173, 8);
 
-	/* Compact PS2-style footer. The icon atlas replaces text placeholders so
-	   the controls remain legible without wasting the free center area. */
+	/* One compact PS2-style footer row: navigation and actions share the
+	   same baseline instead of looking like two unrelated rows. */
 	FontColor4f(0.66f, 0.66f, 0.66f, 1.0f);
 
-	UiIconsDraw(UI_ICON_UP, 34, 185, 8);
-	UiIconsDraw(UI_ICON_DOWN, 43, 185, 8);
-	FontPuts(55, 185, "Select");
+	UiIconsDraw(UI_ICON_UP, 12, 198, 8);
+	UiIconsDraw(UI_ICON_DOWN, 21, 198, 8);
+	FontPuts(32, 198, "Select");
 
-	UiIconsDraw(UI_ICON_LEFT, 132, 185, 8);
-	UiIconsDraw(UI_ICON_RIGHT, 141, 185, 8);
-	FontPuts(153, 185, "Change");
+	UiIconsDraw(UI_ICON_LEFT, 75, 198, 8);
+	UiIconsDraw(UI_ICON_RIGHT, 84, 198, 8);
+	FontPuts(95, 198, "Change");
 
-	UiIconsDraw(UI_ICON_SQUARE, 54, 198, 10);
-	FontPuts(68, 198, "Reset");
+	UiIconsDraw(UI_ICON_SQUARE, 139, 197, 10);
+	FontPuts(152, 198, "Reset");
 
-	UiIconsDraw(UI_ICON_CROSS, 145, 198, 10);
-	FontPuts(159, 198, "Save");
+	UiIconsDraw(UI_ICON_CROSS, 190, 197, 10);
+	FontPuts(203, 198, "Save");
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode() ||
 	    MmceNeedsRestart() || Mx4sioNeedsRestart())
