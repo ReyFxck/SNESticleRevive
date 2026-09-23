@@ -18,7 +18,7 @@ extern "C" {
 #include "ui_icons_iif.h"
 
 #define UI_ICONS_W       128
-#define UI_ICONS_H       16
+#define UI_ICONS_H       32
 #define UI_ICONS_CELL    16
 #define UI_ICONS_PSM     GS_PSMCT32
 #define UI_ICONS_BYTES   (UI_ICONS_W * UI_ICONS_H * 4)
@@ -85,10 +85,12 @@ void UiIconsDraw(UiIconE eIcon, Int32 x, Int32 y, Int32 size)
     if (!s_UiIconsReady || eIcon < 0 || eIcon >= UI_ICON_COUNT || size <= 0)
         return;
 
-    u = ((Int32)eIcon) * UI_ICONS_CELL;
-
-    PolyTexture(&s_UiIconsTex);
-    PolyUV(u, 0, UI_ICONS_CELL, UI_ICONS_CELL);
+    u = ((Int32)eIcon % 8) * UI_ICONS_CELL;
+    {
+        Int32 v = ((Int32)eIcon / 8) * UI_ICONS_CELL;
+        PolyTexture(&s_UiIconsTex);
+        PolyUV(u, v, UI_ICONS_CELL, UI_ICONS_CELL);
+    }
     PolyColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     PolyBlend(TRUE);
     PolyRect((Float32)x, (Float32)y, (Float32)size, (Float32)size);
