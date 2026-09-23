@@ -40,13 +40,13 @@ extern "C" {
 
 extern "C" void DLog(const char *fmt, ...);
 
-#if defined(SNES_DIAGNOSTICS) && SNES_DIAGNOSTICS >= 1
+#if defined(SNDBG_LOG) && SNDBG_LOG
 #define HOSTFS_DLOG(...) DLog(__VA_ARGS__)
 #else
 #define HOSTFS_DLOG(...) ((void)0)
 #endif
 
-#if defined(SNES_DIAGNOSTICS) && SNES_DIAGNOSTICS >= 2
+#if defined(SNDBG_DEEP) && SNDBG_DEEP
 #define HOSTFS_DLOG_DEEP(...) DLog(__VA_ARGS__)
 #else
 #define HOSTFS_DLOG_DEEP(...) ((void)0)
@@ -173,9 +173,12 @@ static Bool BrowserResolveHostDirectory(const Char *pParent, const Char *pName,
 		return FALSE;
 	}
 
-	HOSTFS_DLOG_DEEP("[hostfs-entry] unresolved path=%s mode=%08X dopen=%d",
+	HOSTFS_DLOG_DEEP("[hostfs-entry] unresolved-as-file path=%s mode=%08X dopen=%d",
 	                path, (unsigned)uMode, dfd);
-	return FIO_S_ISDIR(uMode) ? TRUE : FALSE;
+	/* Never re-trust HostFS' broken DIR bit here. A directory that cannot
+	   actually be opened is not useful to the browser; defaulting to file
+	   avoids recreating the original "every file is a folder" failure. */
+	return FALSE;
 }
 
 /* Resolve the rare DT_UNKNOWN equivalent without slowing down normal ROM
