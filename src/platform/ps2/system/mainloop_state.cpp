@@ -1743,6 +1743,46 @@ void MainLoopStateMigrateLegacyStates()
         _MainLoopStateMigrateLegacyRoot(&Roots[i]);
 }
 
+Bool MainLoopStatePrepareBrowsePath(const Char *pPath)
+{
+    MainLoopStateRootT Root;
+    const Char *pColon;
+    Int32 nRootBytes;
+
+    if (!pPath || !pPath[0])
+        return FALSE;
+
+    /* hdd0: is only the APA partition selector. There is no filesystem root
+       to prepare until the user enters a partition and it becomes pfs0:. */
+    if (!strncmp(pPath, "hdd0:", 5))
+        return TRUE;
+
+    pColon = strchr(pPath, ':');
+    if (!pColon)
+        return FALSE;
+
+    nRootBytes = (Int32)(pColon - pPath) + 1;
+    if (nRootBytes <= 1 || nRootBytes >= (Int32)sizeof(Root.Root))
+        return FALSE;
+
+    memset(&Root, 0, sizeof(Root));
+    memcpy(Root.Root, pPath, nRootBytes);
+    Root.Root[nRootBytes] = 0;
+    snprintf(Root.DeviceName, sizeof(Root.DeviceName), "%s", Root.Root);
+    Root.bMemCard =
+        (!strncmp(Root.Root, "mc", 2) ||
+         !strncmp(Root.Root, "mmce", 4)) ? TRUE : FALSE;
+
+    /* Prepare exactly the storage being browsed, even if the user has not
+       selected a quick-save target yet. This makes legacy states visible in
+       NES/SNES immediately from State Files. Migration is copy-only. */
+    if (!_MainLoopStateEnsureRoot(&Root))
+        return FALSE;
+
+    _MainLoopStateMigrateLegacyRoot(&Root);
+    return TRUE;
+}
+
 static Bool _MainLoopStateEnsureOneDir(const Char *pPath)
 {
     struct stat Status;
