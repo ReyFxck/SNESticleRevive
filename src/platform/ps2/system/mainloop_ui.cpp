@@ -22,7 +22,7 @@ void MainLoopModalPrintf(Int32 Time, const Char *pFormat, ...)
 {
 	va_list argptr;
 	va_start(argptr,pFormat);
-	vsprintf(_MainLoop_ModalStr, pFormat, argptr);
+	vsnprintf(_MainLoop_ModalStr, sizeof(_MainLoop_ModalStr), pFormat, argptr);
 	va_end(argptr);
 
 	_MainLoop_ModalCount = Time;
@@ -39,7 +39,7 @@ void MainLoopStatusPrintf(Int32 Time, const Char *pFormat, ...)
 {
 	va_list argptr;
 	va_start(argptr,pFormat);
-	vsprintf(_MainLoop_StatusStr, pFormat, argptr);
+	vsnprintf(_MainLoop_StatusStr, sizeof(_MainLoop_StatusStr), pFormat, argptr);
 	va_end(argptr);
 
 	_MainLoop_StatusCount = Time;
@@ -51,7 +51,7 @@ extern "C" void ScrPrintf(const Char *pFormat, ...)
 	char str[256];
 
 	va_start(argptr,pFormat);
-	vsprintf(str, pFormat, argptr);
+	vsnprintf(str, sizeof(str), pFormat, argptr);
 	va_end(argptr);
 
 	if (_MainLoop_pLogScreen)
