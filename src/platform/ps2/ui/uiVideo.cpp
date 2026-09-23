@@ -15,6 +15,7 @@
 #include "font.h"
 #include "poly.h"
 #include "texture.h"
+#include "uiIcons.h"
 #include "uiVideo.h"
 
 extern "C" {
@@ -335,24 +336,6 @@ void CVideoScreen::Process()
 {
 }
 
-static void _VideoScrollTriangle(int x, int y, Bool down)
-{
-	Int32 row;
-	PolyTexture(NULL);
-	PolyBlend(TRUE);
-	PolyColor4f(0.72f, 0.72f, 0.72f, 1.0f);
-
-	/* 7/5/3/1-pixel rows make a real triangle without depending on a
-	   particular font glyph being present. */
-	for (row = 0; row < 4; ++row)
-	{
-		Int32 w = down ? (7 - row * 2) : (1 + row * 2);
-		Int32 yy = y + row;
-		PolyRect((Float32)(x + (7 - w) / 2), (Float32)yy,
-		         (Float32)w, 1.0f);
-	}
-}
-
 static void _VideoCenter(int x, int y, const char *pStr)
 {
 	FontPuts(x - FontGetStrWidth(pStr) / 2, y, pStr);
@@ -565,17 +548,29 @@ void CVideoScreen::Draw()
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
 	          "SMB (Network)", SmbGetStatusText());
 
-	/* Real primitive arrows instead of font '^'/'v' placeholders. */
+	/* Scroll arrows come from the same tiny IIF1 atlas as the footer icons. */
 	if (scroll > 0)
-		_VideoScrollTriangle(230, 37, FALSE);
+		UiIconsDraw(UI_ICON_UP, 229, 36, 8);
 	if (scroll < VIDEO_CONTENT_H - (VIDEO_VIEW_BOTTOM - VIDEO_VIEW_TOP))
-		_VideoScrollTriangle(230, 174, TRUE);
+		UiIconsDraw(UI_ICON_DOWN, 229, 173, 8);
 
-	/* Keep both hint rows safely above the persistent GCC/version bar.
-	   Centering them uses the otherwise empty space and keeps X Save visible. */
-	FontColor4f(0.58f, 0.58f, 0.58f, 1.0f);
-	_VideoCenter(128, 188, "Up/Dn Select      L/R Change");
-	_VideoCenter(128, 200, "Square Reset      X Save");
+	/* Compact PS2-style footer. The icon atlas replaces text placeholders so
+	   the controls remain legible without wasting the free center area. */
+	FontColor4f(0.66f, 0.66f, 0.66f, 1.0f);
+
+	UiIconsDraw(UI_ICON_UP, 34, 185, 8);
+	UiIconsDraw(UI_ICON_DOWN, 43, 185, 8);
+	FontPuts(55, 185, "Select");
+
+	UiIconsDraw(UI_ICON_LEFT, 132, 185, 8);
+	UiIconsDraw(UI_ICON_RIGHT, 141, 185, 8);
+	FontPuts(153, 185, "Change");
+
+	UiIconsDraw(UI_ICON_SQUARE, 54, 198, 10);
+	FontPuts(68, 198, "Reset");
+
+	UiIconsDraw(UI_ICON_CROSS, 145, 198, 10);
+	FontPuts(159, 198, "Save");
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode() ||
 	    MmceNeedsRestart() || Mx4sioNeedsRestart())
