@@ -88,8 +88,9 @@ static Int32 _MainLoopWrapModalText(
                 }
                 else if (len > 1)
                 {
+                    /* Keep 'next' on the character that did not fit so the
+                       following line consumes it exactly once. */
                     len--;
-                    next--;
                 }
                 break;
             }
