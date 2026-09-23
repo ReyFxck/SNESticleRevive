@@ -438,6 +438,7 @@ SRCS := \
 	src/platform/ps2/system/titleman.c \
 	src/platform/ps2/ui/uiBrowser.cpp \
 	src/platform/ps2/ui/uiCover.cpp \
+	src/platform/ps2/ui/uiChrome.cpp \
 	src/platform/ps2/ui/uiIcons.cpp \
 	src/platform/ps2/ui/uiLog.cpp \
 	src/platform/ps2/ui/uiMenu.cpp \
