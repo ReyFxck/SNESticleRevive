@@ -267,19 +267,20 @@ static MainLoopStateDeviceE _MainLoopStateManagerStorageDevice(Int32 iStorage)
         }
 }
 
-static void _MainLoopStateManagerApplyStorageTarget()
+static void _MainLoopStateManagerCommitStorageTarget()
 {
         const MainLoopStateManagerStorageT *pStorage =
                 &_MainLoop_StateManagerStorage[
                         _MainLoop_StateManagerStorageIndex
                 ];
 
+        /* L/R only previews the candidate. Nothing persistent is written
+           until Cross explicitly confirms the selected storage. */
         MainLoopStateSetDevice(
                 _MainLoopStateManagerStorageDevice(
                         _MainLoop_StateManagerStorageIndex));
         MainLoopStateSetPreferredRoot(pStorage->pPath);
         MainLoopStateSettingsSave();
-        MainLoopStatePrepareBrowsePath(pStorage->pPath);
         MainLoopStateMigrateLegacyStates();
 }
 
@@ -336,9 +337,19 @@ void _MainLoopStateMenuRefresh()
         }
 
         _MainLoopStateManagerNormalizeStorage();
-        pQuickTarget = MainLoopStateHasDeviceChoice()
-                ? MainLoopStateGetDeviceName()
-                : "Not chosen";
+        {
+                static Char QuickRoot[32];
+                if (MainLoopStateHasDeviceChoice() &&
+                    MainLoopStateGetPreferredRoot(
+                        QuickRoot, sizeof(QuickRoot)))
+                {
+                        pQuickTarget = QuickRoot;
+                }
+                else
+                {
+                        pQuickTarget = "Not chosen";
+                }
+        }
 
         snprintf(
                 _MainLoop_StateManagerStorageEntry,
@@ -393,7 +404,6 @@ int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                 if (Parm1 == 1)
                 {
                         _MainLoopStateManagerCycleStorage(iDirection);
-                        _MainLoopStateManagerApplyStorageTarget();
                         _MainLoopStateMenuRefresh();
                 }
                 else if (Parm1 == 2)
@@ -410,8 +420,6 @@ int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                 MainLoopStateCycleSlot();
                         }
 
-                        if (MainLoopStateHasDeviceChoice())
-                                MainLoopStateSettingsSave();
                         _MainLoopStateMenuRefresh();
                 }
                 return 1;
@@ -462,24 +470,41 @@ int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                         break;
 
                 case 1:
-                        _MainLoopStateManagerCycleStorage(1);
-                        _MainLoopStateManagerApplyStorageTarget();
+                        _MainLoopStateManagerCommitStorageTarget();
                         _MainLoopStateMenuRefresh();
+                        MainLoopModalPrintf(
+                                45,
+                                "Save storage selected."
+                        );
                         break;
 
                 case 2:
-                        MainLoopStateCycleSlot();
+                        /* Slot changes are also staged with L/R. Persist only
+                           on an explicit Cross confirmation. */
                         if (MainLoopStateHasDeviceChoice())
+                        {
                                 MainLoopStateSettingsSave();
+                                MainLoopModalPrintf(45, "Quick slot selected.");
+                        }
+                        else
+                        {
+                                MainLoopModalPrintf(
+                                        45,
+                                        "Choose Storage and press X first."
+                                );
+                        }
                         _MainLoopStateMenuRefresh();
                         break;
 
                 case 3:
+                        /* This row is an action, not an info-only status:
+                           clear the saved target and return Storage to a
+                           pending choice without writing another target. */
                         MainLoopStateForgetDeviceChoice();
                         _MainLoopStateMenuRefresh();
                         MainLoopModalPrintf(
                                 45,
-                                "Save location reset. Choose Storage with L/R."
+                                "Save location cleared. Select Storage, then X."
                         );
                         break;
         }
