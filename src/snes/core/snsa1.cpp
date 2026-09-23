@@ -1480,7 +1480,10 @@ Bool SNSA1::ExecuteCpuFast()
 	SNCPUSA1BusSetExecCpu(&m_Cpu);
 	SNCPUExecute_ASM(&m_Cpu);
 	SNCPUSA1BusSetExecCpu(NULL);
-	SNCPUSA1BusSetIRAM(NULL);
+	/* Keep the I-RAM sidecar live between slices. SA-1 fast paths are gated by
+	   g_SNCPU_SA1ExecCpu, so the host S-CPU cannot accidentally use it. The
+	   pointer/config is refreshed on every architectural mutation instead of
+	   being torn down and rebuilt for each micro-slice. */
 	m_Cpu.bRunning = FALSE;
 	if (m_Cpu.nAbortCycles != 0)
 	{
