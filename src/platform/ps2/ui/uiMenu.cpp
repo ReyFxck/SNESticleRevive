@@ -14,6 +14,7 @@
 #include "font.h"
 #include "poly.h"
 #include "uiMenu.h"
+#include "uiChrome.h"
 
 void CMenuScreen::SetEntries(char **ppStrings)
 {
@@ -82,52 +83,56 @@ static void _MenuHeader(int vy, const char *str)
 void CMenuScreen::Draw()
 {
 	Int32 iLine;
-	Int32 vx=128, vy = 40;
+	Int32 vx = 48;
+	Int32 vy = 38;
+	Bool shoulders = !strcmp(m_strTitle, "Save States") ? TRUE : FALSE;
 
 	FontSelect(0);
-	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
+	UiChromeHeader(m_strTitle, shoulders);
 
-	vx -= 80;
-
-	/* The title may move independently, while entries and help text retain
-	   the established layout shared by the other menu screens. */
-	_MenuHeader(m_iTop, m_strTitle);
-	vy+=FontGetHeight() * 2;
-
-	FontColor4f(1.0, 1.0f, 1.0f, 1.0f);
-
-	for (iLine=0; iLine < m_nItems; iLine++)
+	for (iLine = 0; iLine < m_nItems; iLine++)
 	{
 		Char *pStr = m_pEntries[iLine];
-		Int32 iWidth;;
-
-		iWidth = FontGetStrWidth(pStr);
-
 		if (pStr)
 		{
-			FontPuts(vx, vy, pStr);
-
 			if (iLine == m_iSelect)
 			{
-				PolyColor4f(0.0f, 1.0f, 0.0f, 0.5f);
-				PolyRect(vx-1, vy-1, iWidth + 2, FontGetHeight() + 2);
+				PolyTexture(NULL);
+				PolyBlend(TRUE);
+				PolyColor4f(0.0f, 0.50f, 0.0f, 0.50f);
+				PolyRect(vx - 4, vy - 1, 164, FontGetHeight() + 2);
 			}
+			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+			FontPuts(vx, vy, pStr);
 		}
-
 		vy += FontGetHeight() + 2;
 	}
 
-	vy+=FontGetHeight();
-
-	_MenuHeader(vy, "");
-	vy+=FontGetHeight() * 2;
-
-	for (int i=0; i < 4; i++)
+	/* Existing context/help strings remain available, but use the same
+	   orange section language as the configuration screen. */
 	{
-		FontColor4f(0.8, 0.8f, 0.8f, 1.0f);
-		_MenuPrintAlignCenter(128, vy,  m_strText[i]);
-		vy+=FontGetHeight() + 2;
+		Bool anyText = FALSE;
+		for (iLine = 0; iLine < 4; iLine++)
+			if (m_strText[iLine][0]) anyText = TRUE;
+		if (anyText && vy < 164)
+		{
+			vy += 4;
+			UiChromeSection(vy, "Info");
+			vy += 12;
+			for (iLine = 0; iLine < 4 && vy < 190; iLine++)
+			{
+				if (m_strText[iLine][0])
+				{
+					FontColor4f(0.70f, 0.70f, 0.70f, 1.0f);
+					_MenuPrintAlignCenter(128, vy, m_strText[iLine]);
+					vy += FontGetHeight() + 2;
+				}
+			}
+		}
 	}
+
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 55, 198, "Select");
+	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 151, 198, "Choose");
 }
 
 void CMenuScreen::Process()
