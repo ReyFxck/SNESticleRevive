@@ -64,9 +64,10 @@ int _MainLoopBrowserEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                                         pLeaf = pScan + 1;
                                         }
                                         MainLoopModalPrintf(
-                                                60 * 2,
-                                                "Could not load ROM\n%s",
-                                                pLeaf[0] ? pLeaf : str
+                                                60 * 3,
+                                                "%s\n%s",
+                                                pLeaf[0] ? pLeaf : str,
+                                                MainLoopGetLastLoadError()
                                         );
                                 }
                         }
