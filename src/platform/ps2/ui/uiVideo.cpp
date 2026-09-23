@@ -16,6 +16,7 @@
 #include "poly.h"
 #include "texture.h"
 #include "uiIcons.h"
+#include "uiChrome.h"
 #include "uiVideo.h"
 
 extern "C" {
@@ -346,23 +347,6 @@ static void _VideoRight(int x, int y, const char *pStr)
 	FontPuts(x - FontGetStrWidth(pStr), y, pStr);
 }
 
-static void _VideoTitle(int vy, const char *pStr)
-{
-	PolyColor4f(0.0f, 0.20f, 0.20f, 0.72f);
-	PolyRect(28, vy - 2, 200, FontGetHeight() + 4);
-	FontColor4f(0.0f, 0.88f, 0.88f, 1.0f);
-	_VideoCenter(128, vy, pStr);
-}
-
-static void _VideoSection(int vy, const char *pStr)
-{
-	if (vy < 34 || vy > 181)
-		return;
-	/* Category labels deliberately have no background rectangle. */
-	FontColor4f(1.0f, 0.62f, 0.16f, 1.0f);
-	_VideoCenter(128, vy, pStr);
-}
-
 static void _VideoRow(int vy, int idx, int sel, const char *pLabel, const char *pValue)
 {
 	if (vy < 34 || vy > 181)
@@ -479,14 +463,10 @@ void CVideoScreen::Draw()
 		? "Composite" : "Original";
 
 	FontSelect(0);
-	_VideoTitle(11, "CONFIGURATIONS");
-	/* L1/R1 are real menu-ring navigation, so advertise them beside the
-	   title instead of treating them as decorative controller art. */
-	UiIconsDraw(UI_ICON_L1, 35, 9, 14);
-	UiIconsDraw(UI_ICON_R1, 207, 9, 14);
+	UiChromeHeader("CONFIGURATIONS", TRUE);
 
 	/* Screen */
-	_VideoSection(VIDEO_VIEW_TOP + 0 - scroll, "Screen");
+	UiChromeSection(VIDEO_VIEW_TOP + 0 - scroll, "Screen");
 	y = VIDEO_VIEW_TOP + _VideoItemY[0] - scroll;
 	_VideoRow(y, 0, m_iSelect, "Video Mode", pMode);
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[1] - scroll, 1, m_iSelect,
@@ -508,12 +488,12 @@ void CVideoScreen::Draw()
 	          "Offset Y", buf);
 
 	/* Interface */
-	_VideoSection(VIDEO_VIEW_TOP + 114 - scroll, "Interface");
+	UiChromeSection(VIDEO_VIEW_TOP + 114 - scroll, "Interface");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[8] - scroll, 8, m_iSelect,
 	          "Cover Art", CoverIsEnabled() ? "On" : "Off");
 
 	/* Audio */
-	_VideoSection(VIDEO_VIEW_TOP + 144 - scroll, "Audio");
+	UiChromeSection(VIDEO_VIEW_TOP + 144 - scroll, "Audio");
 	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[9] - scroll, 9, m_iSelect,
 	          "Game Volume", buf);
@@ -533,12 +513,12 @@ void CVideoScreen::Draw()
 	          "Frequency", buf);
 
 	/* Performance */
-	_VideoSection(VIDEO_VIEW_TOP + 198 - scroll, "Performance");
+	UiChromeSection(VIDEO_VIEW_TOP + 198 - scroll, "Performance");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[12] - scroll, 12, m_iSelect,
 	          "Frameskip", MainLoopSafeFrameskipIsEnabled() ? "On" : "Off");
 
 	/* Storage */
-	_VideoSection(VIDEO_VIEW_TOP + 228 - scroll, "Storage / Devices");
+	UiChromeSection(VIDEO_VIEW_TOP + 228 - scroll, "Storage / Devices");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[13] - scroll, 13, m_iSelect,
 	          "Mass / USB", MassStorageIsEnabled() ? "On" : "Off");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[14] - scroll, 14, m_iSelect,
@@ -552,29 +532,13 @@ void CVideoScreen::Draw()
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
 	          "SMB (Network)", SmbGetStatusText());
 
-	/* Scroll arrows come from the same tiny IIF1 atlas as the footer icons. */
-	if (scroll > 0)
-		UiIconsDraw(UI_ICON_UP, 229, 36, 8);
-	if (scroll < VIDEO_CONTENT_H - (VIDEO_VIEW_BOTTOM - VIDEO_VIEW_TOP))
-		UiIconsDraw(UI_ICON_DOWN, 229, 173, 8);
-
-	/* One compact PS2-style footer row: navigation and actions share the
-	   same baseline instead of looking like two unrelated rows. */
-	FontColor4f(0.66f, 0.66f, 0.66f, 1.0f);
-
-	UiIconsDraw(UI_ICON_UP, 12, 198, 8);
-	UiIconsDraw(UI_ICON_DOWN, 21, 198, 8);
-	FontPuts(32, 198, "Select");
-
-	UiIconsDraw(UI_ICON_LEFT, 75, 198, 8);
-	UiIconsDraw(UI_ICON_RIGHT, 84, 198, 8);
-	FontPuts(95, 198, "Change");
-
-	UiIconsDraw(UI_ICON_SQUARE, 139, 197, 10);
-	FontPuts(152, 198, "Reset");
-
-	UiIconsDraw(UI_ICON_CROSS, 190, 197, 10);
-	FontPuts(203, 198, "Save");
+	UiChromeScroll(scroll > 0,
+	               scroll < VIDEO_CONTENT_H - (VIDEO_VIEW_BOTTOM - VIDEO_VIEW_TOP),
+	               229, 36, 173);
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 12, 198, "Select");
+	UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 75, 198, "Change");
+	UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 139, 198, "Reset");
+	UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 190, 198, "Save");
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode() ||
 	    MmceNeedsRestart() || Mx4sioNeedsRestart())
@@ -582,6 +546,47 @@ void CVideoScreen::Draw()
 		FontColor4f(1.0f, 0.86f, 0.35f, 1.0f);
 		_VideoRight(238, 211, "Restart required");
 	}
+}
+
+static void _VideoResetDefaults()
+{
+#ifndef BGM_RATE
+#define BGM_RATE 24000
+#endif
+	/* Match the runtime's actual boot defaults, not merely the visible
+	   offsets. Square is therefore a complete configuration reset. */
+	g_GskVideoMode = GSK_VIDMODE_480I;
+	g_GskWidescreen = 0;
+	g_GskOverscan = 0;
+	g_GskDispOffX = 0;
+	g_GskDispOffY = 0;
+	g_GskTextureFilter = 0;
+	g_GskScanlines = 0;
+
+	GSK_SetWidescreen(0);
+	GSK_SetOverscan(0);
+	GSK_SetDisplayOffset(0, 0);
+	TextureSetFilter(&_OutTex, 0);
+	SNPPUColorSetProfile(SNPPU_COLOR_PROFILE_ORIGINAL);
+
+	CoverSetEnabled(FALSE);
+	AudMixGameSetVolume(100);
+	BgmSetVolume(100);
+	BgmSetRate(BGM_RATE);
+	MainLoopSafeFrameskipSetEnabled(FALSE);
+
+	MassStorageSetEnabled(1);
+	HddSupportSetEnabled(0);
+	MmceSupportSetEnabled(0);
+	Mx4sioSetEnabled(0);
+	HostFsSupportSetEnabled(0);
+	if (SmbSupportIsEnabled())
+	{
+		BgmIOBegin();
+		SmbDisconnect();
+		BgmIOEnd();
+	}
+	SmbSupportSetEnabled(0);
 }
 
 void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
@@ -722,11 +727,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 	}
 
 	if (trigger & PAD_SQUARE)
-	{
-		g_GskDispOffX = 0;
-		g_GskDispOffY = 0;
-		GSK_SetDisplayOffset(0, 0);
-	}
+		_VideoResetDefaults();
 
 	if (trigger & (PAD_CROSS | PAD_START))
 		VideoSettingsSave();
