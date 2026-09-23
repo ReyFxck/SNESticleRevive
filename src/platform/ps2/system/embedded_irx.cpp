@@ -735,7 +735,7 @@ extern "C" int  HostFsSupportIsEnabled(void)  { return s_hostfs_enabled; }
 extern "C" void HostFsSupportSetEnabled(int e)
 {
     int next = e ? 1 : 0;
-#if defined(SNES_DIAGNOSTICS) && SNES_DIAGNOSTICS >= 1
+#if defined(SNDBG_LOG) && SNDBG_LOG
     if (next != s_hostfs_enabled)
         DLog("[hostfs] setting enabled=%d", next);
 #endif
