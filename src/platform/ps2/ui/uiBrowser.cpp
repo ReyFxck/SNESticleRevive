@@ -1930,11 +1930,9 @@ void CBrowserScreen::Chdir(const Char *pSubDir)
 			dir[n++] = '/';
 			dir[n] = '\0';
 		}
-		else if (n > 0 && dir[n - 1] == ':' && n + 1 < sizeof(dir))
-		{
-			dir[n++] = '/';
-			dir[n] = '\0';
-		}
+		/* Keep a device root such as host: exactly as-is. HostFS implementations
+		   commonly treat the text after ':' as a path relative to their already
+		   configured root; forcing host:/ is unnecessary and less portable. */
 		HOSTFS_DLOG("[hostfs] enter bootdir=%s", dir);
 		SetDir(dir);
 		return;
