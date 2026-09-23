@@ -19,6 +19,14 @@
 extern "C" {
 #endif
 
+/* Detailed negative results used by the UI to explain archive failures. */
+#define MINIZ_READ_BAD_ARCHIVE   (-1001)
+#define MINIZ_READ_NO_MATCH      (-1002)
+#define MINIZ_READ_TOO_LARGE     (-1003)
+#define MINIZ_READ_EXTRACT_FAIL  (-1004)
+#define MINIZ_READ_IO_FAIL       (-1005)
+#define MINIZ_READ_NO_MEMORY     (-1006)
+
 /* Reads a `.gz` file at `path`, decompresses the deflate stream into
    `out_buf`, returning the number of decompressed bytes (>0) or -1
    on any failure (open / parse / decompress). At most `out_max`
