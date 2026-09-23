@@ -27,7 +27,8 @@ extern "C" {
 #include "audio.h"
 }
 
-#define MENU_REPEAT (25)
+#define MENU_REPEAT_DELAY (25)
+#define MENU_REPEAT_RATE  (2)
 
 //#define MENU_REPEATBUTTONS (PAD_UP|PAD_DOWN|PAD_SQUARE|PAD_CIRCLE)
 #define MENU_REPEATBUTTONS (PAD_UP|PAD_DOWN|PAD_SQUARE|PAD_CIRCLE|PAD_CROSS|PAD_TRIANGLE|PAD_LEFT|PAD_RIGHT)
@@ -133,6 +134,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 {
 	static Uint32 lastbuttons= ~0;
 	static Uint32 repeat=0;
+	static Uint32 repeatRate=0;
 	static int _MenuTriggerTimeout[2] = {0,0};
 	static Bool bStateHotkeyHeld = FALSE;
 	Uint32 trigger;
@@ -144,16 +146,23 @@ void _MainLoopInputProcess(Uint32 buttons)
 		_MainLoop_bSuppressGameInputUntilRelease = FALSE;
 	}
 
-	if (!(buttons& MENU_REPEATBUTTONS))
+	if (!(buttons & MENU_REPEATBUTTONS))
 	{
-		repeat=0;
+		repeat = 0;
+		repeatRate = 0;
 	}
-
-	repeat++;
-	if (repeat > MENU_REPEAT)
+	else
 	{
-		repeat -= 1;
-		lastbuttons &= ~MENU_REPEATBUTTONS;
+		repeat++;
+		if (repeat > MENU_REPEAT_DELAY)
+		{
+			repeatRate++;
+			if (repeatRate >= MENU_REPEAT_RATE)
+			{
+				repeatRate = 0;
+				lastbuttons &= ~MENU_REPEATBUTTONS;
+			}
+		}
 	}
 
 	trigger = ((buttons ^ lastbuttons) & buttons);
