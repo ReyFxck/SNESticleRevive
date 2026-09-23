@@ -26,6 +26,7 @@
 #include "poly.h"
 #include "uiBrowser.h"
 #include "uiCover.h"
+#include "uiChrome.h"
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
 #include "mainloop_ui.h"
@@ -74,6 +75,18 @@ static Bool BrowserIsStateBankName(const Char *pName)
 	        pName[nLength - 1] == 'b');
 }
 
+static Bool BrowserIsSramName(const Char *pName)
+{
+	size_t nLength = pName ? strlen(pName) : 0;
+	return nLength >= 4 &&
+	       !strcasecmp(pName + nLength - 4, ".srm");
+}
+
+static Bool BrowserIsStateManagerFileName(const Char *pName)
+{
+	return BrowserIsStateBankName(pName) || BrowserIsSramName(pName);
+}
+
 /* Artwork directories and their generated index belong to the cover system,
    not to the game hierarchy. Keep them usable by uiCover while hiding them
    from the ROM browser on every device, including CDFS. */
@@ -88,10 +101,15 @@ static Bool BrowserIsCoverMetadataName(const Char *pName)
 	        !strcasecmp(pName, "COVERS.IDX")) ? TRUE : FALSE;
 }
 
-static Bool BrowserIsSramDirectoryName(const Char *pName)
+static Bool BrowserIsStateManagerBasePath(const Char *pPath)
 {
-	return pName &&
-	       (!strcasecmp(pName, "SNES") || !strcasecmp(pName, "NES"));
+	size_t n;
+	if (!pPath) return FALSE;
+	n = strlen(pPath);
+	while (n > 0 && (pPath[n - 1] == '/' || pPath[n - 1] == '\\'))
+		n--;
+	return n >= 10 &&
+	       !strncasecmp(pPath + n - 10, "/SNESticle", 10);
 }
 
 static Bool BrowserIsSmbPath(const Char *pPath)
@@ -364,7 +382,7 @@ static int BrowserOpenDirectory(const Char *pPath)
    the original font's metrics; the current 9px UI font advances 11px
    per row, so it allowed rows to collide with the green footer text. */
 #define BROWSER_LIST_TOP        (32)
-#define BROWSER_FOOTER_TOP      (211)
+#define BROWSER_FOOTER_TOP      (195)
 #define BROWSER_ROW_ADVANCE     (11)
 #define BROWSER_VISIBLE_LINES   ((BROWSER_FOOTER_TOP - BROWSER_LIST_TOP) / BROWSER_ROW_ADVANCE)
 
@@ -1233,14 +1251,15 @@ void CBrowserScreen::Draw()
 	_StarfieldDraw();
 
 	PolyTexture(NULL);
-    PolyBlend(TRUE);
+	PolyBlend(TRUE);
 
-    PolyColor4f(0.0f, 0.2f, 0.2f, 0.9f);
-	PolyRect(0, vy, 256, 9);
-
-	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
-    FontPrintf(vx, vy, "%s", m_Dir);
-    vy+=12;
+	UiChromeHeader(m_bStateManager ? "STATE FILES" : "BROWSER", TRUE);
+	{
+		Char dirView[128];
+		BrowserCopyEllipsis(dirView, sizeof(dirView), m_Dir, 220);
+		UiChromeSection(24, dirView);
+	}
+	vy = BROWSER_LIST_TOP;
 
 	/* Detect selection / directory change before the per-row loop so
 	   the marquee state reset happens exactly once per frame. */
@@ -1555,6 +1574,16 @@ void CBrowserScreen::Draw()
 		   "sem capa" flash that would resolve into a real cover) */
 	}
 
+	UiChromeScroll(m_iScroll > 0,
+	               (m_iScroll + m_MaxLines) < m_nEntries,
+	               232, 36, 184);
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 4, 198, "Select");
+	UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 62, 198, "Open");
+	UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 101, 198, "Back");
+	UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 140, 198,
+	             CoverIsEnabled() ? "Cover" : "PgUp");
+	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 186, 198, "PgDn");
+
 	FontSelect(0);
 
 	if (m_bSubMenu)
@@ -1807,8 +1836,6 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					                  de.name, pEntryName);
 				if (!pEntryName[0] || !strcmp(pEntryName, ".") || !strcmp(pEntryName, ".."))
 					continue;
-				if (m_bStateManager && BrowserIsSramDirectoryName(pEntryName))
-					continue;
 				if (BrowserIsCoverMetadataName(pEntryName))
 					continue;
 
@@ -1847,7 +1874,13 @@ void CBrowserScreen::SetDir(const Char *pDir)
 					   SRAM, state.cfg, icons, or unrelated files that share
 					   mc0:/SNESticle with memory-card state banks. */
 						if (m_bStateManager &&
-						    !BrowserIsStateBankName(pEntryName))
+						    !BrowserIsStateManagerFileName(pEntryName))
+							continue;
+						/* Legacy banks copied from old releases stay on disk as a
+						   rollback backup, but the refreshed manager shows the clean
+						   SNES/NES folders instead of duplicate root files. */
+						if (m_bStateManager &&
+						    BrowserIsStateManagerBasePath(openPath))
 							continue;
 						eType = BROWSER_ENTRYTYPE_OTHER;
 					}
@@ -1932,6 +1965,30 @@ void CBrowserScreen::SetDir(const Char *pDir)
 	SortEntries();
 	BgmIOEnd();
 
+}
+
+Bool CBrowserScreen::IsStateManagerTop() const
+{
+	Char path[sizeof(m_Dir)];
+	size_t n;
+
+	if (!m_bStateManager)
+		return FALSE;
+
+	snprintf(path, sizeof(path), "%s", m_Dir);
+	n = strlen(path);
+	while (n > 0 && (path[n - 1] == '/' || path[n - 1] == '\\'))
+		path[--n] = 0;
+
+	/* State Manager is entered at <device>:/SNESticle/.  HDD may briefly
+	   use hdd0: while selecting a partition; that is also a top level. */
+	if (!strcasecmp(path, "hdd0:"))
+		return TRUE;
+
+	n = strlen(path);
+	return n >= 10 &&
+	       !strncasecmp(path + n - 10, "/SNESticle", 10)
+		? TRUE : FALSE;
 }
 
 void CBrowserScreen::Chdir(const Char *pSubDir)

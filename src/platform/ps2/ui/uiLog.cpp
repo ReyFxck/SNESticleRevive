@@ -14,12 +14,13 @@
 #include "font.h"
 #include "poly.h"
 #include "uiLog.h"
+#include "uiChrome.h"
 
 CLogScreen::CLogScreen()
 {
 	m_nMessages = 0;
 	m_iScroll = 0;
-	m_nDisplayLines = 16;
+	m_nDisplayLines = 15;
 	/*
 	AddMessage("Test");
 	AddMessage("Test2");
@@ -62,14 +63,10 @@ void CLogScreen::Draw()
 {
 	Int32 iMsg;
 	Int32 nLines;
-	Int32 vx=128, vy = 20;
+	Int32 vx=10, vy = 31;
 
 	FontSelect(0);
-	FontColor4f(0.0, 0.8f, 0.8f, 1.0f);
-
-	vx = 10;
-	_MenuHeader(vy, "Message Log");
-	vy+=FontGetHeight() * 2;
+	UiChromeHeader("MESSAGE LOG", TRUE);
 
 	FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);   // -> amber via FontColor4f remap
 
@@ -95,7 +92,10 @@ void CLogScreen::Draw()
 		nLines--;
 	}
 
-	_MenuHeader(vy, "");
+	UiChromeScroll(m_iScroll > 0,
+	               (m_iScroll + m_nDisplayLines) < m_nMessages,
+	               232, 36, 184);
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 92, 198, "Scroll");
 }
 
 void CLogScreen::Process()

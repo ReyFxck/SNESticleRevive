@@ -87,6 +87,7 @@ public:
 	Char *GetEntryName();
 	BrowserEntryTypeE GetEntryType();
 	Bool IsRoot() const { return m_Dir[0] == 0 ? TRUE : FALSE; }
+	Bool IsStateManagerTop() const;
 
 	void SetDir(const Char *pDir);
 	void Chdir(const Char *pSubDir);

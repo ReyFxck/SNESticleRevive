@@ -23,6 +23,7 @@ int _MainLoopStateBrowserEvent(Uint32 Type, Uint32 Parm1, void *Parm2);
 int _MainLoopStateDeviceMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2);
 int _MainLoopMemCardFormatMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2);
 void _MainLoopStateMenuRefresh();
+void _MainLoopStateMenuSyncStorage();
 void _MainLoopStateDevicePromptOpen();
 void _MainLoopStateDevicePromptCancel();
 void _MainLoopMemCardFormatPromptOpen(

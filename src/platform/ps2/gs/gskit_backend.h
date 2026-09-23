@@ -45,6 +45,8 @@ extern int g_GskDispOffX;     /* horizontal display offset (0 = centred) */
 extern int g_GskDispOffY;     /* vertical display offset   (0 = centred) */
 extern int g_GskOverscan;     /* 0..100 shrink of the display area (0 = none) */
 extern int g_GskWidescreen;   /* 0 = 4:3, 1 = safe mode-specific 16:9           */
+extern int g_GskTextureFilter;/* 0 = nearest/sharp, 1 = linear/smooth           */
+extern int g_GskScanlines;    /* 0 = off, 1 = translucent scanline overlay      */
 
 /* Set the display offset live (no VRAM realloc) and remember it for the
    next GSK_Init. X is in VCK units, matching FCEUmm-PS2. */

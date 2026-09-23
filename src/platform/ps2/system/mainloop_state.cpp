@@ -11,6 +11,13 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <unistd.h>
+
+#define NEWLIB_PORT_AWARE
+#include <io_common.h>
+#include <fileXio.h>
+#include <fileXio_rpc.h>
+#undef NEWLIB_PORT_AWARE
 
 #include "types.h"
 #include "console.h"
@@ -22,6 +29,7 @@
 #include "mainloop_bgm.h"
 #include "embedded_irx.h"
 #include "mainloop_iop.h"
+#include "mainloop_install.h"
 
 extern "C" {
 int MCSave_Write(char *pPath, char *pData, int nBytes);
@@ -461,7 +469,7 @@ Bool _MainLoopCheckSRAM()
 #define MAINLOOP_STATE_FORMAT_VERSION 1
 #define MAINLOOP_STATE_HEADER_BYTES   64
 #define MAINLOOP_STATE_MAX_ROOTS      8
-#define MAINLOOP_STATE_MAX_CANDIDATES (MAINLOOP_STATE_MAX_ROOTS * MAINLOOP_STATE_BANK_NUM)
+#define MAINLOOP_STATE_MAX_CANDIDATES (MAINLOOP_STATE_MAX_ROOTS * MAINLOOP_STATE_BANK_NUM * 2)
 #define MAINLOOP_STATE_PAYLOAD_RAW     0
 #define MAINLOOP_STATE_PAYLOAD_DEFLATE 1
 #define MAINLOOP_STATE_SYSTEM_SNES      0
@@ -535,8 +543,24 @@ static const Uint8 _MainLoop_StateConfigMagic[8] =
     'S', 'N', 'R', 'S', 'C', 'F', 'G', '1'
 };
 
+enum MainLoopStateRootHintE
+{
+    MAINLOOP_STATE_ROOT_HINT_NONE = 0,
+    MAINLOOP_STATE_ROOT_HINT_MASS0,
+    MAINLOOP_STATE_ROOT_HINT_MASS1,
+    MAINLOOP_STATE_ROOT_HINT_MASS,
+    MAINLOOP_STATE_ROOT_HINT_MC0,
+    MAINLOOP_STATE_ROOT_HINT_MC1,
+    MAINLOOP_STATE_ROOT_HINT_MMCE0,
+    MAINLOOP_STATE_ROOT_HINT_MMCE1,
+    MAINLOOP_STATE_ROOT_HINT_HDD,
+
+    MAINLOOP_STATE_ROOT_HINT_NUM
+};
+
 static MainLoopStateDeviceE _MainLoop_StateDevice = MAINLOOP_STATEDEVICE_AUTO;
 static Int32 _MainLoop_StateSlot = 0;
+static Uint32 _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
 static Bool _MainLoop_StateDeviceChosen = FALSE;
 static Char _MainLoop_StateLastMessage[192] = "No save-state operation yet.";
 static Char _MainLoop_StateAvailability[192];
@@ -549,6 +573,12 @@ static Int32 _MainLoop_StateUnformattedCard = -1;
 static Char _MainLoop_StateConfigPath[1024] = "";
 
 static Bool _MainLoopStateEnsureOneDir(const Char *pPath);
+static Bool _MainLoopStateEnsureRoot(const MainLoopStateRootT *pRoot);
+static void _MainLoopStateBuildDirectory(
+    const MainLoopStateRootT *pRoot,
+    Bool bLegacy,
+    Char *pDirectory,
+    Int32 nDirectoryBytes);
 static void _MainLoopStateDeleteSettings();
 static void _MainLoopStateLoadSettingsFromRomDevice();
 
@@ -644,6 +674,7 @@ void MainLoopStateForgetDeviceChoice()
 {
     _MainLoop_StateDevice = MAINLOOP_STATEDEVICE_AUTO;
     _MainLoop_StateSlot = 0;
+    _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
     _MainLoop_StateDeviceChosen = FALSE;
     _MainLoopStateDeleteSettings();
 }
@@ -654,11 +685,32 @@ void MainLoopStateSetDevice(MainLoopStateDeviceE eDevice)
         eDevice < MAINLOOP_STATEDEVICE_NUM)
     {
         _MainLoop_StateDevice = eDevice;
+        _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
         if (eDevice == MAINLOOP_STATEDEVICE_AUTO)
         {
             _MainLoop_StateSlot = 0;
         }
     }
+}
+
+void MainLoopStateSetPreferredRoot(const Char *pRoot)
+{
+    Uint32 Hint = MAINLOOP_STATE_ROOT_HINT_NONE;
+
+    if (pRoot)
+    {
+        if (!strncmp(pRoot, "mass0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS0;
+        else if (!strncmp(pRoot, "mass1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS1;
+        else if (!strncmp(pRoot, "mass:", 5)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS;
+        else if (!strncmp(pRoot, "mc0:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC0;
+        else if (!strncmp(pRoot, "mc1:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC1;
+        else if (!strncmp(pRoot, "mmce0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE0;
+        else if (!strncmp(pRoot, "mmce1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE1;
+        else if (!strncmp(pRoot, "hdd0:", 5) || !strncmp(pRoot, "pfs0:", 5))
+            Hint = MAINLOOP_STATE_ROOT_HINT_HDD;
+    }
+
+    _MainLoop_StateRootHint = Hint;
 }
 
 Bool MainLoopStateDeviceAvailable(MainLoopStateDeviceE eDevice)
@@ -707,6 +759,7 @@ void MainLoopStateCycleSlot()
 
 void MainLoopStateCycleDevice()
 {
+    _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
     _MainLoop_StateDevice = (MainLoopStateDeviceE)(_MainLoop_StateDevice + 1);
     if (_MainLoop_StateDevice >= MAINLOOP_STATEDEVICE_NUM)
     {
@@ -911,6 +964,10 @@ static Bool _MainLoopStateConfigApply(const MainLoopStateConfigT *pConfig)
 
     _MainLoop_StateDevice = (MainLoopStateDeviceE)pConfig->eDevice;
     _MainLoop_StateSlot = (Int32)pConfig->iSlot;
+    _MainLoop_StateRootHint =
+        pConfig->Reserved[0] < MAINLOOP_STATE_ROOT_HINT_NUM
+            ? pConfig->Reserved[0]
+            : MAINLOOP_STATE_ROOT_HINT_NONE;
     if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_AUTO)
     {
         _MainLoop_StateSlot = 0;
@@ -1009,6 +1066,7 @@ void MainLoopStateSettingsLoad()
 
     _MainLoop_StateDevice = MAINLOOP_STATEDEVICE_AUTO;
     _MainLoop_StateSlot = 0;
+    _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
     _MainLoop_StateDeviceChosen = FALSE;
     _MainLoop_StateConfigPath[0] = 0;
 
@@ -1103,6 +1161,7 @@ Bool MainLoopStateSettingsSave()
     Config.nConfigBytes = sizeof(Config);
     Config.eDevice = (Uint32)_MainLoop_StateDevice;
     Config.iSlot = (Uint32)_MainLoop_StateSlot;
+    Config.Reserved[0] = _MainLoop_StateRootHint;
     _MainLoop_StateDeviceChosen = TRUE;
 
     /* Update the location that supplied the config first. If none exists,
@@ -1529,6 +1588,49 @@ static Int32 _MainLoopStateBuildRoots(
         iMMCESlots = MmceProbeAvailableSlots();
     }
 
+    /* A Storage choice made in Save States is an exact root preference.
+       Put it first while preserving the normal fallback roots afterwards. */
+    switch (_MainLoop_StateRootHint)
+    {
+        case MAINLOOP_STATE_ROOT_HINT_MASS0:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mass0:", "mass0:", FALSE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MASS1:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mass1:", "mass1:", FALSE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MASS:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mass:", "mass:", FALSE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MC0:
+            if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mc0:", "mc0:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MC1:
+            if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mc1:", "mc1:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MMCE0:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_MMCE) && (iMMCESlots & 1))
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mmce0:", "mmce0:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MMCE1:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_MMCE) && (iMMCESlots & 2))
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mmce1:", "mmce1:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_HDD:
+            if (bAuto || eDevice == MAINLOOP_STATEDEVICE_HDD)
+            {
+                if (_MainLoopStateGetHddRoot(Root, sizeof(Root)))
+                    _MainLoopStateAddRoot(pRoots, &nRoots, Root, "Internal HDD", FALSE);
+            }
+            break;
+        default:
+            break;
+    }
+
     /* Auto starts with the ROM's own device.  This also covers mass2+,
        mc2+ and future MMCE unit numbers without hard-coding them. */
     if (bAuto)
@@ -1611,6 +1713,164 @@ static Int32 _MainLoopStateBuildRoots(
     return nRoots;
 }
 
+Bool MainLoopStateGetPreferredRoot(Char *pOut, Int32 nOut)
+{
+    MainLoopStateRootT Roots[MAINLOOP_STATE_MAX_ROOTS];
+    Int32 nRoots;
+
+    if (!pOut || nOut <= 0)
+        return FALSE;
+
+    pOut[0] = 0;
+    nRoots = _MainLoopStateBuildRoots(_MainLoop_StateDevice, Roots);
+    if (nRoots <= 0)
+        return FALSE;
+
+    return snprintf(pOut, nOut, "%s", Roots[0].Root) < nOut;
+}
+
+static Bool _MainLoopStateLegacyBankName(
+    const Char *pName,
+    const Char **ppSystem)
+{
+    size_t n;
+
+    if (!pName)
+        return FALSE;
+    n = strlen(pName);
+    if (n < 4 ||
+        pName[n - 4] != '.' ||
+        (pName[n - 3] != 's' && pName[n - 3] != 'n') ||
+        pName[n - 2] < '1' || pName[n - 2] > '5' ||
+        (pName[n - 1] != 'a' && pName[n - 1] != 'b'))
+    {
+        return FALSE;
+    }
+
+    if (ppSystem)
+        *ppSystem = pName[n - 3] == 'n' ? "NES" : "SNES";
+    return TRUE;
+}
+
+static void _MainLoopStateMigrateLegacyRoot(
+    const MainLoopStateRootT *pRoot)
+{
+    Char LegacyDir[512];
+    int dfd;
+
+    if (!_MainLoopStateEnsureRoot(pRoot))
+        return;
+
+    _MainLoopStateBuildDirectory(
+        pRoot,
+        TRUE,
+        LegacyDir,
+        sizeof(LegacyDir)
+    );
+
+    dfd = fileXioDopen(LegacyDir);
+    if (dfd < 0)
+        return;
+
+    for (;;)
+    {
+        iox_dirent_t Entry;
+        const Char *pSystem;
+        Char Src[1024];
+        Char Dst[1024];
+        FILE *pExisting;
+        int Result = fileXioDread(dfd, &Entry);
+
+        if (Result <= 0)
+            break;
+        Entry.name[sizeof(Entry.name) - 1] = 0;
+
+        if (!_MainLoopStateLegacyBankName(Entry.name, &pSystem))
+            continue;
+
+        snprintf(Src, sizeof(Src), "%s/%s", LegacyDir, Entry.name);
+        snprintf(
+            Dst,
+            sizeof(Dst),
+            "%s/SNESticle/%s/%s",
+            pRoot->Root,
+            pSystem,
+            Entry.name
+        );
+
+        /* Never overwrite a newer-layout state. Copying (not moving) keeps
+           the old release layout as a rollback backup for users who switch
+           builds after updating. */
+        pExisting = fopen(Dst, "rb");
+        if (pExisting)
+        {
+            fclose(pExisting);
+            continue;
+        }
+
+        if (CopyFile(Dst, Src, NULL) == 0)
+        {
+            printf("[state] migrated legacy copy %s -> %s\n", Src, Dst);
+        }
+    }
+
+    fileXioDclose(dfd);
+}
+
+void MainLoopStateMigrateLegacyStates()
+{
+    MainLoopStateRootT Roots[MAINLOOP_STATE_MAX_ROOTS];
+    Int32 nRoots;
+    Int32 i;
+
+    nRoots = _MainLoopStateBuildRoots(
+        _MainLoop_StateDevice,
+        Roots
+    );
+    for (i = 0; i < nRoots; i++)
+        _MainLoopStateMigrateLegacyRoot(&Roots[i]);
+}
+
+Bool MainLoopStatePrepareBrowsePath(const Char *pPath)
+{
+    MainLoopStateRootT Root;
+    const Char *pColon;
+    Int32 nRootBytes;
+
+    if (!pPath || !pPath[0])
+        return FALSE;
+
+    /* hdd0: is only the APA partition selector. There is no filesystem root
+       to prepare until the user enters a partition and it becomes pfs0:. */
+    if (!strncmp(pPath, "hdd0:", 5))
+        return TRUE;
+
+    pColon = strchr(pPath, ':');
+    if (!pColon)
+        return FALSE;
+
+    nRootBytes = (Int32)(pColon - pPath) + 1;
+    if (nRootBytes <= 1 || nRootBytes >= (Int32)sizeof(Root.Root))
+        return FALSE;
+
+    memset(&Root, 0, sizeof(Root));
+    memcpy(Root.Root, pPath, nRootBytes);
+    Root.Root[nRootBytes] = 0;
+    snprintf(Root.DeviceName, sizeof(Root.DeviceName), "%s", Root.Root);
+    Root.bMemCard =
+        (!strncmp(Root.Root, "mc", 2) ||
+         !strncmp(Root.Root, "mmce", 4)) ? TRUE : FALSE;
+
+    /* Prepare exactly the storage being browsed, even if the user has not
+       selected a quick-save target yet. This makes legacy states visible in
+       NES/SNES immediately from State Files. Migration is copy-only. */
+    if (!_MainLoopStateEnsureRoot(&Root))
+        return FALSE;
+
+    _MainLoopStateMigrateLegacyRoot(&Root);
+    return TRUE;
+}
+
 static Bool _MainLoopStateEnsureOneDir(const Char *pPath)
 {
     struct stat Status;
@@ -1641,53 +1901,69 @@ static Bool _MainLoopStateEnsureRoot(const MainLoopStateRootT *pRoot)
         if (eStatus == MEMCARD_STATUS_UNFORMATTED)
         {
             if (_MainLoop_StateUnformattedCard < 0)
-            {
                 _MainLoop_StateUnformattedCard = iPort;
-            }
             return FALSE;
         }
-        /* For READY, absent and unknown results, retain the established
-           mkdir/stat write probe below. It is the compatibility fallback
-           for unusual drivers that support stdio but not GetStat on "/". */
     }
 
     snprintf(Path, sizeof(Path), "%s/SNESticle", pRoot->Root);
     if (!_MainLoopStateEnsureOneDir(Path))
-    {
         return FALSE;
-    }
 
-    if (!pRoot->bMemCard)
-    {
-        snprintf(Path, sizeof(Path), "%s/SNESticle/states", pRoot->Root);
-        if (!_MainLoopStateEnsureOneDir(Path))
-        {
-            return FALSE;
-        }
-    }
+    /* Save states now share the same system separation already used by SRAM.
+       Create both folders so State Files can present NES/SNES immediately. */
+    snprintf(Path, sizeof(Path), "%s/SNESticle/SNES", pRoot->Root);
+    if (!_MainLoopStateEnsureOneDir(Path))
+        return FALSE;
+    snprintf(Path, sizeof(Path), "%s/SNESticle/NES", pRoot->Root);
+    if (!_MainLoopStateEnsureOneDir(Path))
+        return FALSE;
 
     return TRUE;
 }
 
-static void _MainLoopStateBuildBankPath(
+static void _MainLoopStateBuildDirectory(
+    const MainLoopStateRootT *pRoot,
+    Bool bLegacy,
+    Char *pDirectory,
+    Int32 nDirectoryBytes)
+{
+    if (bLegacy)
+    {
+        if (pRoot->bMemCard)
+            snprintf(pDirectory, nDirectoryBytes, "%s/SNESticle", pRoot->Root);
+        else
+            snprintf(pDirectory, nDirectoryBytes, "%s/SNESticle/states", pRoot->Root);
+        return;
+    }
+
+    snprintf(
+        pDirectory,
+        nDirectoryBytes,
+        "%s/SNESticle/%s",
+        pRoot->Root,
+        _MainLoopSramGetSystemDirectoryName()
+    );
+}
+
+static void _MainLoopStateBuildBankPathEx(
     const MainLoopStateRootT *pRoot,
     Int32 iSlot,
     Int32 iBank,
+    Bool bLegacy,
     Char *pPath,
     Int32 nPathBytes)
 {
     Char SaveName[256];
-    Char Directory[256];
+    Char Directory[512];
     Int32 nMaxName;
 
-    if (pRoot->bMemCard)
-    {
-        snprintf(Directory, sizeof(Directory), "%s/SNESticle", pRoot->Root);
-    }
-    else
-    {
-        snprintf(Directory, sizeof(Directory), "%s/SNESticle/states", pRoot->Root);
-    }
+    _MainLoopStateBuildDirectory(
+        pRoot,
+        bLegacy,
+        Directory,
+        sizeof(Directory)
+    );
 
     nMaxName = PathGetMaxFileNameLength(Directory) - 4;
     PathTruncFileName(SaveName, _RomName, nMaxName);
@@ -1701,6 +1977,17 @@ static void _MainLoopStateBuildBankPath(
         iSlot + 1,
         iBank ? 'b' : 'a'
     );
+}
+
+static void _MainLoopStateBuildBankPath(
+    const MainLoopStateRootT *pRoot,
+    Int32 iSlot,
+    Int32 iBank,
+    Char *pPath,
+    Int32 nPathBytes)
+{
+    _MainLoopStateBuildBankPathEx(
+        pRoot, iSlot, iBank, FALSE, pPath, nPathBytes);
 }
 
 /* Header result: 1 = valid/current ROM, 0 = missing,
@@ -1869,6 +2156,50 @@ static Bool _MainLoopStateGenerationNewer(Uint32 uA, Uint32 uB)
     return (Int32)(uA - uB) > 0;
 }
 
+static void _MainLoopStateAddCandidateResult(
+    const MainLoopStateRootT *pRoot,
+    const Char *pPath,
+    Int32 iSlot,
+    Uint32 uRomCRC,
+    Uint32 nRomBytes,
+    Uint32 uRomFlags,
+    Bool *pbWrongRom,
+    Bool *pbCorrupt,
+    Int32 *pnCandidates)
+{
+    MainLoopStateFileHeaderT Header;
+    Int32 Result = _MainLoopStateReadHeader(
+        pPath,
+        iSlot,
+        uRomCRC,
+        nRomBytes,
+        uRomFlags,
+        &Header
+    );
+
+    if (Result == 1 && *pnCandidates < MAINLOOP_STATE_MAX_CANDIDATES)
+    {
+        MainLoopStateCandidateT *pCandidate =
+            &_MainLoop_StateCandidates[(*pnCandidates)++];
+        snprintf(pCandidate->Path, sizeof(pCandidate->Path), "%s", pPath);
+        snprintf(
+            pCandidate->DeviceName,
+            sizeof(pCandidate->DeviceName),
+            "%s",
+            pRoot->DeviceName
+        );
+        pCandidate->Header = Header;
+    }
+    else if (Result == -2)
+    {
+        *pbWrongRom = TRUE;
+    }
+    else if (Result == -1)
+    {
+        *pbCorrupt = TRUE;
+    }
+}
+
 static Int32 _MainLoopStateScanCandidates(
     MainLoopStateDeviceE eDevice,
     Int32 iSlot,
@@ -1889,47 +2220,51 @@ static Int32 _MainLoopStateScanCandidates(
     {
         for (iBank = 0; iBank < MAINLOOP_STATE_BANK_NUM; iBank++)
         {
-            MainLoopStateFileHeaderT Header;
             Char Path[1024];
-            Int32 Result;
 
-            _MainLoopStateBuildBankPath(
+            /* Prefer the new system-specific layout. */
+            _MainLoopStateBuildBankPathEx(
                 &Roots[iRoot],
                 iSlot,
                 iBank,
+                FALSE,
                 Path,
                 sizeof(Path)
             );
-            Result = _MainLoopStateReadHeader(
+            _MainLoopStateAddCandidateResult(
+                &Roots[iRoot],
                 Path,
                 iSlot,
                 uRomCRC,
                 nRomBytes,
                 uRomFlags,
-                &Header
+                pbWrongRom,
+                pbCorrupt,
+                &nCandidates
             );
 
-            if (Result == 1 && nCandidates < MAINLOOP_STATE_MAX_CANDIDATES)
-            {
-                MainLoopStateCandidateT *pCandidate =
-                    &_MainLoop_StateCandidates[nCandidates++];
-                snprintf(pCandidate->Path, sizeof(pCandidate->Path), "%s", Path);
-                snprintf(
-                    pCandidate->DeviceName,
-                    sizeof(pCandidate->DeviceName),
-                    "%s",
-                    Roots[iRoot].DeviceName
-                );
-                pCandidate->Header = Header;
-            }
-            else if (Result == -2)
-            {
-                *pbWrongRom = TRUE;
-            }
-            else if (Result == -1)
-            {
-                *pbCorrupt = TRUE;
-            }
+            /* Compatibility fallback for every pre-migration release.
+               Keeping this reader means a failed copy can never make a user's
+               existing state suddenly disappear after an update. */
+            _MainLoopStateBuildBankPathEx(
+                &Roots[iRoot],
+                iSlot,
+                iBank,
+                TRUE,
+                Path,
+                sizeof(Path)
+            );
+            _MainLoopStateAddCandidateResult(
+                &Roots[iRoot],
+                Path,
+                iSlot,
+                uRomCRC,
+                nRomBytes,
+                uRomFlags,
+                pbWrongRom,
+                pbCorrupt,
+                &nCandidates
+            );
         }
     }
 

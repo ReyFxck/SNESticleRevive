@@ -217,6 +217,7 @@ Bool MainLoopProcess()
                 {
                     TextureNew(&_OutTex, 256, 256, GS_PSMCT32);
                     TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
+                    TextureSetFilter(&_OutTex, g_GskTextureFilter);
                 }
                 PROF_ENTER("NesExecuteFrame");
                 _pNes->ExecuteFrame(&Input, pSurface, pMixBuffer, eMode);
@@ -233,6 +234,7 @@ Bool MainLoopProcess()
                 {
                     TextureNew(&_OutTex, 512, 256, GS_PSMCT16);
                     TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
+                    TextureSetFilter(&_OutTex, g_GskTextureFilter);
                 }
 #if SNDBG_LOG
 				g_DbgHostRefreshHz = (Uint32)GSK_GetRefreshHz();

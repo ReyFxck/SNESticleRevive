@@ -340,6 +340,18 @@ PolyRect(0.0f, 5.0f, 256.0f, 240.0f);
 PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
         }
 
+        /* Optional CRT-style scanline overlay. Kept disabled by default and
+           hidden while menus are open so configuration text stays clean. */
+        if (g_GskScanlines && !_bMenu)
+        {
+            Int32 y;
+            PolyTexture(NULL);
+            PolyBlend(TRUE);
+            PolyColor4f(0.0f, 0.0f, 0.0f, 0.32f);
+            for (y = 0; y < 120; ++y)
+                PolyRect(0.0f, 7.0f + (Float32)(y * 2), 256.0f, 1.0f);
+        }
+
         PolyBlend(TRUE);
     }
 
