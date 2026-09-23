@@ -543,8 +543,24 @@ static const Uint8 _MainLoop_StateConfigMagic[8] =
     'S', 'N', 'R', 'S', 'C', 'F', 'G', '1'
 };
 
+enum MainLoopStateRootHintE
+{
+    MAINLOOP_STATE_ROOT_HINT_NONE = 0,
+    MAINLOOP_STATE_ROOT_HINT_MASS0,
+    MAINLOOP_STATE_ROOT_HINT_MASS1,
+    MAINLOOP_STATE_ROOT_HINT_MASS,
+    MAINLOOP_STATE_ROOT_HINT_MC0,
+    MAINLOOP_STATE_ROOT_HINT_MC1,
+    MAINLOOP_STATE_ROOT_HINT_MMCE0,
+    MAINLOOP_STATE_ROOT_HINT_MMCE1,
+    MAINLOOP_STATE_ROOT_HINT_HDD,
+
+    MAINLOOP_STATE_ROOT_HINT_NUM
+};
+
 static MainLoopStateDeviceE _MainLoop_StateDevice = MAINLOOP_STATEDEVICE_AUTO;
 static Int32 _MainLoop_StateSlot = 0;
+static Uint32 _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
 static Bool _MainLoop_StateDeviceChosen = FALSE;
 static Char _MainLoop_StateLastMessage[192] = "No save-state operation yet.";
 static Char _MainLoop_StateAvailability[192];
@@ -658,6 +674,7 @@ void MainLoopStateForgetDeviceChoice()
 {
     _MainLoop_StateDevice = MAINLOOP_STATEDEVICE_AUTO;
     _MainLoop_StateSlot = 0;
+    _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
     _MainLoop_StateDeviceChosen = FALSE;
     _MainLoopStateDeleteSettings();
 }
@@ -668,11 +685,32 @@ void MainLoopStateSetDevice(MainLoopStateDeviceE eDevice)
         eDevice < MAINLOOP_STATEDEVICE_NUM)
     {
         _MainLoop_StateDevice = eDevice;
+        _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
         if (eDevice == MAINLOOP_STATEDEVICE_AUTO)
         {
             _MainLoop_StateSlot = 0;
         }
     }
+}
+
+void MainLoopStateSetPreferredRoot(const Char *pRoot)
+{
+    Uint32 Hint = MAINLOOP_STATE_ROOT_HINT_NONE;
+
+    if (pRoot)
+    {
+        if (!strncmp(pRoot, "mass0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS0;
+        else if (!strncmp(pRoot, "mass1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS1;
+        else if (!strncmp(pRoot, "mass:", 5)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS;
+        else if (!strncmp(pRoot, "mc0:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC0;
+        else if (!strncmp(pRoot, "mc1:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC1;
+        else if (!strncmp(pRoot, "mmce0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE0;
+        else if (!strncmp(pRoot, "mmce1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE1;
+        else if (!strncmp(pRoot, "hdd0:", 5) || !strncmp(pRoot, "pfs0:", 5))
+            Hint = MAINLOOP_STATE_ROOT_HINT_HDD;
+    }
+
+    _MainLoop_StateRootHint = Hint;
 }
 
 Bool MainLoopStateDeviceAvailable(MainLoopStateDeviceE eDevice)
@@ -721,6 +759,7 @@ void MainLoopStateCycleSlot()
 
 void MainLoopStateCycleDevice()
 {
+    _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
     _MainLoop_StateDevice = (MainLoopStateDeviceE)(_MainLoop_StateDevice + 1);
     if (_MainLoop_StateDevice >= MAINLOOP_STATEDEVICE_NUM)
     {
@@ -925,6 +964,10 @@ static Bool _MainLoopStateConfigApply(const MainLoopStateConfigT *pConfig)
 
     _MainLoop_StateDevice = (MainLoopStateDeviceE)pConfig->eDevice;
     _MainLoop_StateSlot = (Int32)pConfig->iSlot;
+    _MainLoop_StateRootHint =
+        pConfig->Reserved[0] < MAINLOOP_STATE_ROOT_HINT_NUM
+            ? pConfig->Reserved[0]
+            : MAINLOOP_STATE_ROOT_HINT_NONE;
     if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_AUTO)
     {
         _MainLoop_StateSlot = 0;
@@ -1023,6 +1066,7 @@ void MainLoopStateSettingsLoad()
 
     _MainLoop_StateDevice = MAINLOOP_STATEDEVICE_AUTO;
     _MainLoop_StateSlot = 0;
+    _MainLoop_StateRootHint = MAINLOOP_STATE_ROOT_HINT_NONE;
     _MainLoop_StateDeviceChosen = FALSE;
     _MainLoop_StateConfigPath[0] = 0;
 
@@ -1117,6 +1161,7 @@ Bool MainLoopStateSettingsSave()
     Config.nConfigBytes = sizeof(Config);
     Config.eDevice = (Uint32)_MainLoop_StateDevice;
     Config.iSlot = (Uint32)_MainLoop_StateSlot;
+    Config.Reserved[0] = _MainLoop_StateRootHint;
     _MainLoop_StateDeviceChosen = TRUE;
 
     /* Update the location that supplied the config first. If none exists,
@@ -1541,6 +1586,49 @@ static Int32 _MainLoopStateBuildRoots(
         MmceSupportIsEnabled())
     {
         iMMCESlots = MmceProbeAvailableSlots();
+    }
+
+    /* A Storage choice made in Save States is an exact root preference.
+       Put it first while preserving the normal fallback roots afterwards. */
+    switch (_MainLoop_StateRootHint)
+    {
+        case MAINLOOP_STATE_ROOT_HINT_MASS0:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mass0:", "mass0:", FALSE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MASS1:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mass1:", "mass1:", FALSE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MASS:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mass:", "mass:", FALSE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MC0:
+            if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mc0:", "mc0:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MC1:
+            if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD)
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mc1:", "mc1:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MMCE0:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_MMCE) && (iMMCESlots & 1))
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mmce0:", "mmce0:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_MMCE1:
+            if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_MMCE) && (iMMCESlots & 2))
+                _MainLoopStateAddRoot(pRoots, &nRoots, "mmce1:", "mmce1:", TRUE);
+            break;
+        case MAINLOOP_STATE_ROOT_HINT_HDD:
+            if (bAuto || eDevice == MAINLOOP_STATEDEVICE_HDD)
+            {
+                if (_MainLoopStateGetHddRoot(Root, sizeof(Root)))
+                    _MainLoopStateAddRoot(pRoots, &nRoots, Root, "Internal HDD", FALSE);
+            }
+            break;
+        default:
+            break;
     }
 
     /* Auto starts with the ROM's own device.  This also covers mass2+,
