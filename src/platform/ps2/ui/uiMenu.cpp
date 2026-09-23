@@ -211,8 +211,15 @@ void CMenuScreen::Draw()
 		FontColor4f(0.48f, 0.48f, 0.48f, 1.0f);
 		_MenuPrintAlignCenter(128, 171, "Deleting a state removes both banks");
 
-		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 62, 198, "Select");
-		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 157, 198, "Choose");
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 39, 198, "Select");
+		if (m_iSelect == 1 || m_iSelect == 2)
+		{
+			UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 132, 198, "Change");
+		}
+		else
+		{
+			UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 157, 198, "Choose");
+		}
 		return;
 	}
 
@@ -286,9 +293,17 @@ void CMenuScreen::Input(Uint32 buttons, Uint32 trigger)
 	if (m_iSelect < 0) m_iSelect = 0;
 	if (m_iSelect > (m_nItems - 1)) m_iSelect = (m_nItems - 1);
 
-	if (!strcmp(m_strTitle, "Save States") ||
-	    !strcmp(m_strTitle, "Save State Location") ||
-	    !strcmp(m_strTitle, "Memory Card"))
+	if (!strcmp(m_strTitle, "Save States"))
+	{
+		if (trigger & PAD_LEFT)
+			SendMessage(2, m_iSelect, m_pUserData);
+		if (trigger & PAD_RIGHT)
+			SendMessage(3, m_iSelect, m_pUserData);
+		if (trigger & (PAD_CROSS | PAD_START))
+			SendMessage(1, m_iSelect, m_pUserData);
+	}
+	else if (!strcmp(m_strTitle, "Save State Location") ||
+	         !strcmp(m_strTitle, "Memory Card"))
 	{
 		if (trigger & (PAD_CROSS | PAD_START))
 			SendMessage(1, m_iSelect, m_pUserData);
