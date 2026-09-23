@@ -169,13 +169,10 @@ static void _MainLoopDrawModal(void)
     PolyColor4f(0.0f, 0.0f, 0.0f, 0.82f);
     PolyRect((Float32)boxX, (Float32)boxY, (Float32)boxW, (Float32)boxH);
 
-    /* Dark teal title strip keeps the existing SNESticle UI language. */
-    PolyColor4f(0.0f, 0.20f, 0.20f, 0.92f);
-    PolyRect((Float32)boxX, (Float32)boxY, (Float32)boxW, 14.0f);
-
-    FontColor4f(0.0f, 0.8f, 0.8f, 1.0f);
+    /* Entire modal is one semi-transparent black panel: no colored header. */
+    FontColor4f(1.0f, 0.35f, 0.35f, 1.0f);
     {
-        static const Char *title = "Message";
+        static const Char *title = "ERROR..";
         FontPrintf(
                 boxX + (boxW - FontGetStrWidth(title)) / 2,
                 boxY + 2,
