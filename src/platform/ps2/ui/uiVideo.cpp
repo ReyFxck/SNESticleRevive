@@ -30,17 +30,18 @@ extern "C" {
 #include "audmixbuffer.h"
 #include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
 #include "snppucolor.h"
+#include "i18n.h"
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
 extern TextureT _OutTex;
 
-#define VIDEO_ITEM_COUNT 19
+#define VIDEO_ITEM_COUNT 20
 
 /* Persistence                                                         */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 20
+#define VIDEOCFG_VERSION 21
 
 typedef struct
 {
@@ -65,7 +66,34 @@ typedef struct
 	Int32  hostenable;   /* emulator/ps2link HostFS (host:): 0=off,1=on */
 	Int32  texturefilter;/* 0=Sharp/nearest, 1=Smooth/linear            */
 	Int32  scanlines;    /* 0=off, 1=CRT-style overlay                  */
+	Int32  language;     /* I18nLanguageE                                */
 } VideoCfgT;
+
+/* v20 is the exact prefix before UI language selection was added. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  frameskip;
+	Int32  hostenable;
+	Int32  texturefilter;
+	Int32  scanlines;
+} VideoCfgV20T;
 
 /* v19 added HostFS as its own setting. */
 typedef struct
@@ -197,6 +225,7 @@ void VideoSettingsSave(void)
 	cfg.hostenable = HostFsSupportIsEnabled() ? 1 : 0;
 	cfg.texturefilter = g_GskTextureFilter ? 1 : 0;
 	cfg.scanlines = g_GskScanlines ? 1 : 0;
+	cfg.language = I18nGetLanguage();
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
@@ -207,6 +236,7 @@ void VideoSettingsSave(void)
 void VideoSettingsLoad(void)
 {
 	VideoCfgT cfg;
+	VideoCfgV20T oldcfg20;
 	VideoCfgV19T oldcfg19;
 	VideoCfgV18T oldcfg18;
 	VideoCfgV17T oldcfg17;
@@ -225,6 +255,17 @@ void VideoSettingsLoad(void)
 		if (header.version == VIDEOCFG_VERSION)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
+		}
+		else if (header.version == 20)
+		{
+			memset(&oldcfg20, 0, sizeof(oldcfg20));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg20, sizeof(oldcfg20)))
+			{
+				memcpy(&cfg, &oldcfg20, sizeof(oldcfg20));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.language = I18N_ENGLISH;
+				loaded = TRUE;
+			}
 		}
 		else if (header.version == 19)
 		{
@@ -323,6 +364,8 @@ void VideoSettingsLoad(void)
 			g_GskTextureFilter = cfg.texturefilter;
 		if (cfg.scanlines == 0 || cfg.scanlines == 1)
 			g_GskScanlines = cfg.scanlines;
+		if (cfg.language >= 0 && cfg.language < I18N_LANGUAGE_COUNT)
+			I18nSetLanguage(cfg.language);
 	}
 }
 
@@ -378,15 +421,15 @@ static void _VideoRow(int vy, int idx, int sel, const char *pLabel, const char *
 static const Int32 _VideoItemY[] =
 {
 	14, 26, 38, 50, 62, 74, 86, 98,       /* Screen */
-	128,                                    /* Interface */
-	158, 170, 182,                          /* Audio */
-	212,                                    /* Performance */
-	242, 254, 266, 278, 290, 302           /* Storage */
+	128, 140,                               /* Interface */
+	170, 182, 194,                          /* Audio */
+	224,                                    /* Performance */
+	254, 266, 278, 290, 302, 314           /* Storage */
 };
 
 #define VIDEO_VIEW_TOP   34
 #define VIDEO_VIEW_BOTTOM 181
-#define VIDEO_CONTENT_H 314
+#define VIDEO_CONTENT_H 326
 
 static Int32 _VideoScrollForSelection(Int32 sel)
 {
@@ -501,9 +544,11 @@ void CVideoScreen::Draw()
 	_VideoSection(VIDEO_VIEW_TOP + 114 - scroll, "Interface");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[8] - scroll, 8, m_iSelect,
 	          "Cover Art", CoverIsEnabled() ? "On" : "Off");
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[9] - scroll, 9, m_iSelect,
+	          "Language", I18nGetLanguageName());
 
 	/* Audio */
-	_VideoSection(VIDEO_VIEW_TOP + 144 - scroll, "Audio");
+	_VideoSection(VIDEO_VIEW_TOP + 156 - scroll, "Audio");
 	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[9] - scroll, 9, m_iSelect,
 	          "Game Volume", buf);
