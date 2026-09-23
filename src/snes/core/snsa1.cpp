@@ -1472,7 +1472,11 @@ Bool SNSA1::ExecuteCpuFast()
 #if defined(__mips__)
 	m_Cpu.nAbortCycles = 0;
 	m_Cpu.bRunning = TRUE;
-	UpdateFastMemorySidecars();
+	/* The fast-memory sidecars are refreshed at every architectural mutation
+	   (register writes, memory install, reset and restore). Rebuilding them on
+	   every tiny S-CPU/SA-1 synchronization slice is redundant and extremely
+	   expensive in games which exchange shared memory thousands of times per
+	   frame. */
 	SNCPUSA1BusSetExecCpu(&m_Cpu);
 	SNCPUExecute_ASM(&m_Cpu);
 	SNCPUSA1BusSetExecCpu(NULL);
