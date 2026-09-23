@@ -14,9 +14,9 @@
 #include <stdint.h>
 #include <limits.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 #define NEWLIB_PORT_AWARE          /* libera fileXio no port newlib (igual main.cpp) */
+#include <io_common.h>
 #include <fileXio.h>
 #include <fileXio_rpc.h>   /* HDD APA: fileXioDopen/Dread (listar particoes) */
 #include <libhdd.h>        /* ATTR_MAIN_PARTITION / FS_TYPE_PFS */
@@ -142,7 +142,7 @@ static Bool BrowserResolveHostDirectory(const Char *pParent, const Char *pName,
 	             pName) >= (int)sizeof(path))
 		return FALSE;
 
-	fd = fileXioOpen(path, O_RDONLY, 0);
+	fd = fileXioOpen(path, FIO_O_RDONLY, 0);
 	if (fd >= 0)
 	{
 		readResult = fileXioRead(fd, &probe, 1);
