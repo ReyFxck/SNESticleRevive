@@ -1611,6 +1611,22 @@ static Int32 _MainLoopStateBuildRoots(
     return nRoots;
 }
 
+Bool MainLoopStateGetPreferredRoot(Char *pOut, Int32 nOut)
+{
+    MainLoopStateRootT Roots[MAINLOOP_STATE_MAX_ROOTS];
+    Int32 nRoots;
+
+    if (!pOut || nOut <= 0)
+        return FALSE;
+
+    pOut[0] = 0;
+    nRoots = _MainLoopStateBuildRoots(_MainLoop_StateDevice, Roots);
+    if (nRoots <= 0)
+        return FALSE;
+
+    return snprintf(pOut, nOut, "%s", Roots[0].Root) < nOut;
+}
+
 static Bool _MainLoopStateEnsureOneDir(const Char *pPath)
 {
     struct stat Status;
