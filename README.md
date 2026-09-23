@@ -396,7 +396,7 @@ PNG next to the ROM → box art → title screen → gameplay snap → logo → 
 > the exact base name of your ROM. The automatic downloader described below
 > handles this conversion for you.
 
-### 3. USB, MX4SIO, MMCE, HDD, memory cards, SMB and CDFS
+### 3. USB, MX4SIO, MMCE, HDD, memory cards, HostFS, SMB and CDFS
 
 The directory layout is identical on every device; only the path prefix
 changes:
@@ -407,14 +407,18 @@ changes:
 | Standard memory card | `mc0:/ROMS/` or `mc1:/ROMS/` |
 | MemCard PRO 2 / SD2PSX (MMCE) | `mmce0:/ROMS/` or `mmce1:/ROMS/` |
 | Internal APA/PFS HDD | `hdd0:/PARTITION/ROMS/` |
+| Emulator / ps2link HostFS | `host:/` (selecting it prefers the ELF launch directory) |
 | Read-only network share | `smb:/ROMS/` |
 | Disc or ISO | `cdfs:/ROMS/` |
 
 For USB, HDD, MMCE, memory cards or SMB, copy the ROM and the `Named_*`
-directories to the device/share using the layout shown above. The browser
-indexes the PNG files when entering the directory, avoiding a slow storage
-scan on every selection change. See [SMB ROM loading](#smb-rom-loading-replaces-host)
-for the required `SMB.CNF` and server settings.
+directories to the device/share using the layout shown above. With HostFS,
+the development workflow is simpler: place ROMs beside the ELF (or below that
+directory), enable **HostFS (Emu)** in Video Config, and select `host:`.
+The browser indexes PNG files when entering the directory, avoiding a slow
+storage scan on every selection change. See
+[HostFS and SMB ROM loading](#hostfs-and-smb-rom-loading) for HostFS behavior
+and the required `SMB.CNF` / server settings for SMB.
 
 `make covers` and `COVER=y` also generate a small `COVERS.IDX` beside the
 ROMs. It lets CDFS and other slow devices load one sequential index instead of
@@ -603,6 +607,7 @@ cannot stall normal boot.
 | `mc0:` / `mc1:` | **Memory cards** — including the original **MemCard PRO** (gen 1), which behaves as a normal card. |
 | `mmce0:` / `mmce1:` | **MMCE** carts (**MemCard PRO 2**, **SD2PSX**) via `mmceman`. |
 | `cdfs:` | The game/data disc (or the ISO this ELF was burned into). |
+| `host:` | Optional **emulator / ps2link HostFS** development source. When the ELF itself was launched from HostFS, selecting this entry opens that launch directory. |
 | `smb:` | One configured **read-only SMB network share** used for browsing and loading ROMs. |
 
 **Filesystems / partitions:** the bundled **BDM** stack (`bdm` + `bdmfs_fatfs` +
@@ -610,19 +615,29 @@ cannot stall normal boot.
 tables (so drives larger than 2 TB work), mirroring modern OPL. The internal
 HDD additionally uses `ps2atad` + `ps2hdd` for the APA `hdd0:` device.
 
-### SMB ROM loading (replaces `host:`)
+### HostFS and SMB ROM loading
 
-The original iaddis `host:` entry was a development bridge for
-**ps2link/ps2client HostFS**. It let the author load ROMs and IRX files from a
-PC while developing, but it was never a normal network share. Its behaviour
-depends on the launcher or emulator supplying HostFS; some implementations
-return unreliable type metadata and make regular files appear as directories.
-For that reason `host:` is no longer shown in the user ROM browser. The
-internal direct-ELF/ps2link boot fallback remains available for developers.
+The original iaddis `host:` entry is a development bridge for
+**ps2link/ps2client HostFS** and emulator implementations of the same device.
+It is not a normal network share and depends on the launcher or emulator
+supplying HostFS. Enable **HostFS (Emu)** on Video Config page 2 to expose it in
+the ROM browser. When the ELF itself was launched from a `host:` path,
+selecting `host:` jumps directly to that ELF launch directory, so ROMs can be
+kept beside the ELF and tested without rebuilding an ISO.
 
-SNESticle now embeds PS2SDK's `smbman` and exposes one configured share as
-`smb:`. Network modules, DHCP and login start only when you explicitly connect
-or select `smb:`; merely booting or opening the setup tab does not touch DEV9.
+Some HostFS implementations return unreliable type metadata and mark regular
+files as directories. SNESticleRevive therefore does **not** copy that
+directory bit into the UI. Known ROM extensions remain files immediately; for
+other HostFS entries the browser probes actual file I/O first and only treats
+the entry as a directory when a real directory open succeeds. With
+`SNES_DIAGNOSTICS=1`, `[hostfs]` open/scan summaries are written through
+`DLog()`; level 2 adds per-entry `[hostfs-entry]` decisions to the emulator
+TXT log / `emulog.txt`.
+
+SMB remains a separate read-only network source. SNESticle embeds PS2SDK's
+`smbman` and exposes one configured share as `smb:`. Network modules, DHCP
+and login start only when you explicitly connect or select `smb:`; merely
+booting or opening the setup tab does not touch DEV9.
 
 #### NetherSX2 2.2n+ DEV9 setup
 
@@ -867,9 +882,11 @@ Release notes are published directly on the [GitHub Releases](https://github.com
   MX4SIO all appear as `mass0:`/`mass1:`, reading FAT16/FAT32/exFAT with
   MBR/GPT. Slow USB media receives a bounded mount retry. Added the internal
   HDD (`hdd0:`, APA) and MMCE carts (`mmce0:`/`mmce1:`, MemCard PRO 2 / SD2PSX).
-  The unreliable user-facing `host:` device was replaced by a lazy, read-only
-  `smb:` ROM share with bounded DHCP/login errors and correct file types.
-  See [Storage & devices](#storage--devices).
+  Optional emulator/ps2link `host:` browsing is available again behind the
+  **HostFS (Emu)** setting, with file-vs-directory classification verified by
+  actual I/O instead of trusting broken HostFS mode bits. A separate lazy,
+  read-only `smb:` ROM share provides bounded DHCP/login errors for real
+  network storage. See [Storage & devices](#storage--devices).
 - **Boot / input**: controller and IRX bring‑up reworked to behave on real
   hardware, not just emulators. Direct ELF boot also tolerates launchers that
   omit the executable path instead of crashing before video initialization.
