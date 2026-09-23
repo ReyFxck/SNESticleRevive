@@ -93,6 +93,18 @@ void UiIconsDraw(UiIconE eIcon, Int32 x, Int32 y, Int32 size)
     }
     PolyColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     PolyBlend(TRUE);
-    PolyRect((Float32)x, (Float32)y, (Float32)size, (Float32)size);
+
+    /* Circle is intentionally a little smaller than the other face-button
+       hints. Do not mutate the shared IIF artwork for Triangle/L1/R1 just to
+       tune Circle's visual weight. */
+    if (eIcon == UI_ICON_CIRCLE && size >= 4)
+    {
+        PolyRect((Float32)(x + 1), (Float32)(y + 1),
+                 (Float32)(size - 2), (Float32)(size - 2));
+    }
+    else
+    {
+        PolyRect((Float32)x, (Float32)y, (Float32)size, (Float32)size);
+    }
     PolyTexture(NULL);
 }
