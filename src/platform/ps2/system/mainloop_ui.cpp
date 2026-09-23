@@ -150,6 +150,7 @@ void _UICycle(int dir)
         {
             if (scr == (CScreen*)_MainLoop_pStateScreen)
             {
+                _MainLoopStateMenuSyncStorage();
                 _MainLoopStateMenuRefresh();
             }
             else if (scr == (CScreen*)_MainLoop_pBrowserScreen)
@@ -199,6 +200,7 @@ void _MainLoopCycleScreen(int dir)
         {
             if (scr == (CScreen*)_MainLoop_pStateScreen)
             {
+                _MainLoopStateMenuSyncStorage();
                 _MainLoopStateMenuRefresh();
             }
             else if (scr == (CScreen*)_MainLoop_pBrowserScreen)
