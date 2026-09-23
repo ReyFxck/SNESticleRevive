@@ -20,6 +20,8 @@
 
 #include "miniz.h"
 
+extern int MainBuildHostIOPath(const char *pGuestPath, char *pOut, int nOut);
+
 /* All ROM-source paths reachable by the project are exposed by iomanX.
    Slurp the compressed file once and hand it to miniz's memory reader, but
    use direct fileXio calls: one large EE->IOP read avoids the repeated small
@@ -38,26 +40,35 @@ static int read_file_to_alloc(const char *path, void **out_buf, int *out_size)
         /* Direct fileXio calls use IOP flags, not newlib/POSIX flags.
            FIO_O_RDONLY is 1 while newlib O_RDONLY is 0. */
         fd = fileXioOpen(path, FIO_O_RDONLY, 0);
+        if (fd < 0 && strncmp(path, "host:", 5) == 0)
+        {
+                char uri_path[1024];
+                if (MainBuildHostIOPath(path, uri_path, (int)sizeof(uri_path)))
+                {
+                        printf("[hostfs-open] retry URI: %s\n", uri_path);
+                        fd = fileXioOpen(uri_path, FIO_O_RDONLY, 0);
+                }
+        }
         if (fd < 0)
-                return -1;
+                return fd;
 
         size = fileXioLseek(fd, 0, FIO_SEEK_END);
         if (size <= 0)
         {
                 fileXioClose(fd);
-                return -1;
+                return MINIZ_READ_IO_FAIL;
         }
         if (fileXioLseek(fd, 0, FIO_SEEK_SET) < 0)
         {
                 fileXioClose(fd);
-                return -1;
+                return MINIZ_READ_IO_FAIL;
         }
 
         buf = malloc((size_t)size);
         if (!buf)
         {
                 fileXioClose(fd);
-                return -1;
+                return MINIZ_READ_NO_MEMORY;
         }
 
         n = fileXioRead(fd, buf, size);
@@ -66,7 +77,7 @@ static int read_file_to_alloc(const char *path, void **out_buf, int *out_size)
         if (n != size)
         {
                 free(buf);
-                return -1;
+                return MINIZ_READ_IO_FAIL;
         }
 
         *out_buf = buf;
@@ -169,19 +180,23 @@ int MinizReadZipFirstMatch(const char *path,
         mz_zip_archive zip;
         mz_uint num_files;
         mz_uint i;
-        int result = -1;
+        int result = MINIZ_READ_NO_MATCH;
+        int read_result;
+        int saw_match = 0;
+        int saw_too_large = 0;
 
         if (!out_buf || out_max <= 0)
                 return -1;
 
-        if (read_file_to_alloc(path, &zip_data, &zip_size) <= 0)
-                return -1;
+        read_result = read_file_to_alloc(path, &zip_data, &zip_size);
+        if (read_result <= 0)
+                return read_result;
 
         memset(&zip, 0, sizeof(zip));
         if (!mz_zip_reader_init_mem(&zip, zip_data, (size_t)zip_size, 0))
         {
                 free(zip_data);
-                return -1;
+                return MINIZ_READ_BAD_ARCHIVE;
         }
 
         num_files = mz_zip_reader_get_num_files(&zip);
@@ -194,10 +209,14 @@ int MinizReadZipFirstMatch(const char *path,
                         continue;
                 if (st.m_uncomp_size == 0)
                         continue;
-                if (st.m_uncomp_size > (mz_uint64)out_max)
-                        continue;
                 if (name_filter && !name_filter(st.m_filename))
                         continue;
+                saw_match = 1;
+                if (st.m_uncomp_size > (mz_uint64)out_max)
+                {
+                        saw_too_large = 1;
+                        continue;
+                }
 
                 if (mz_zip_reader_extract_to_mem(
                                 &zip, i, out_buf,
@@ -211,6 +230,18 @@ int MinizReadZipFirstMatch(const char *path,
                         }
                         break;
                 }
+                else
+                {
+                        result = MINIZ_READ_EXTRACT_FAIL;
+                }
+        }
+
+        if (result <= 0)
+        {
+                if (!saw_match)
+                        result = MINIZ_READ_NO_MATCH;
+                else if (saw_too_large)
+                        result = MINIZ_READ_TOO_LARGE;
         }
 
         mz_zip_reader_end(&zip);
