@@ -550,7 +550,7 @@ void CVideoScreen::Draw()
 	/* Audio */
 	_VideoSection(VIDEO_VIEW_TOP + 156 - scroll, "Audio");
 	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[9] - scroll, 9, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[10] - scroll, 10, m_iSelect,
 	          "Game Volume", buf);
 	{
 		int bv = BgmGetVolume();
@@ -561,30 +561,30 @@ void CVideoScreen::Draw()
 		else
 			snprintf(buf, sizeof(buf), "%d", bv);
 	}
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[10] - scroll, 10, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[11] - scroll, 11, m_iSelect,
 	          "Menu Music", buf);
 	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[11] - scroll, 11, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[12] - scroll, 12, m_iSelect,
 	          "Frequency", buf);
 
 	/* Performance */
-	_VideoSection(VIDEO_VIEW_TOP + 198 - scroll, "Performance");
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[12] - scroll, 12, m_iSelect,
+	_VideoSection(VIDEO_VIEW_TOP + 210 - scroll, "Performance");
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[13] - scroll, 13, m_iSelect,
 	          "Frameskip", MainLoopSafeFrameskipIsEnabled() ? "On" : "Off");
 
 	/* Storage */
-	_VideoSection(VIDEO_VIEW_TOP + 228 - scroll, "Storage / Devices");
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[13] - scroll, 13, m_iSelect,
-	          "Mass / USB", MassStorageIsEnabled() ? "On" : "Off");
+	_VideoSection(VIDEO_VIEW_TOP + 240 - scroll, "Storage / Devices");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[14] - scroll, 14, m_iSelect,
-	          "HDD Support", HddSupportIsEnabled() ? "On" : "Off");
+	          "Mass / USB", MassStorageIsEnabled() ? "On" : "Off");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[15] - scroll, 15, m_iSelect,
-	          "MMCE Cards", _VideoMmceStatus());
+	          "HDD Support", HddSupportIsEnabled() ? "On" : "Off");
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
-	          "MX4SIO (SD)", _VideoMx4sioStatus());
+	          "MMCE Cards", _VideoMmceStatus());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll, 17, m_iSelect,
-	          "HostFS (Emu)", HostFsSupportIsEnabled() ? "On" : "Off");
+	          "MX4SIO (SD)", _VideoMx4sioStatus());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
+	          "HostFS (Emu)", HostFsSupportIsEnabled() ? "On" : "Off");
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[19] - scroll, 19, m_iSelect,
 	          "SMB (Network)", SmbGetStatusText());
 
 	UiChromeScroll(scroll > 0,
@@ -625,6 +625,7 @@ static void _VideoResetDefaults()
 	SNPPUColorSetProfile(SNPPU_COLOR_PROFILE_ORIGINAL);
 
 	CoverSetEnabled(FALSE);
+	I18nSetLanguage(I18N_ENGLISH);
 	AudMixGameSetVolume(100);
 	BgmSetVolume(100);
 	BgmSetRate(BGM_RATE);
@@ -716,6 +717,9 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			CoverToggle();
 			break;
 		case 9:
+			I18nCycleLanguage(dir);
+			break;
+		case 10:
 			{
 				int v = AudMixGameGetVolume() + dir;
 				if (v < 0) v = 0;
@@ -723,7 +727,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				AudMixGameSetVolume(v);
 			}
 			break;
-		case 10:
+		case 11:
 			{
 				int v = BgmGetVolume() + dir;
 				if (v < 0) v = 0;
@@ -731,20 +735,20 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmSetVolume(v);
 			}
 			break;
-		case 11:
+		case 12:
 			BgmCycleRate(dir);
 			break;
-		case 12:
+		case 13:
 			MainLoopSafeFrameskipSetEnabled(
 				MainLoopSafeFrameskipIsEnabled() ? FALSE : TRUE);
 			break;
-		case 13:
+		case 14:
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
-		case 14:
+		case 15:
 			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
-		case 15:
+		case 16:
 			MmceSupportSetEnabled(!MmceSupportIsEnabled());
 			if (MmceSupportIsEnabled())
 			{
@@ -753,7 +757,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 16:
+		case 17:
 			Mx4sioSetEnabled(!Mx4sioIsEnabled());
 			if (Mx4sioIsEnabled())
 			{
@@ -762,10 +766,10 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 17:
+		case 18:
 			HostFsSupportSetEnabled(!HostFsSupportIsEnabled());
 			break;
-		case 18:
+		case 19:
 			if (SmbSupportIsEnabled())
 			{
 				BgmIOBegin();
