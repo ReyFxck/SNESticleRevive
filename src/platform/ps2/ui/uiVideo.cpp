@@ -33,6 +33,8 @@ extern "C" {
 extern Char _SramPath[256];
 extern TextureT _OutTex;
 
+#define VIDEO_ITEM_COUNT 19
+
 /* Persistence                                                         */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
@@ -416,7 +418,6 @@ static const Int32 _VideoItemY[] =
 	242, 254, 266, 278, 290, 302           /* Storage */
 };
 
-#define VIDEO_ITEM_COUNT ((Int32)(sizeof(_VideoItemY) / sizeof(_VideoItemY[0])))
 #define VIDEO_VIEW_TOP   34
 #define VIDEO_VIEW_BOTTOM 181
 #define VIDEO_CONTENT_H 314
