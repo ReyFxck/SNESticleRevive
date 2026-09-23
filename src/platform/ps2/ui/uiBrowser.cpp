@@ -1236,7 +1236,7 @@ void CBrowserScreen::Draw()
 	PolyTexture(NULL);
 	PolyBlend(TRUE);
 
-	UiChromeHeader("BROWSER", TRUE);
+	UiChromeHeader(m_bStateManager ? "STATE FILES" : "BROWSER", TRUE);
 	{
 		Char dirView[128];
 		BrowserCopyEllipsis(dirView, sizeof(dirView), m_Dir, 220);
