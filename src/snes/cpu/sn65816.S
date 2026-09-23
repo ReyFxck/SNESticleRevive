@@ -611,6 +611,55 @@
 		jal		_SNCPU_Write8		;  \
 		move	R_Data, _data		   \
 
+/* SA-1 direct-page hot path.  This is intentionally limited to DP=0,
+   where an 8-bit direct-page operand is guaranteed to address I-RAM $0000-$00FF.
+   Every other CPU/address case falls back to the canonical memory helper. */
+#define SNCPU_SA1_DP_READ8(_addr,_data) \
+		lw		t0,SP_SA1Exec			;\
+		beq		t0,zr,93f			;\
+		nop					;\
+		bne		R_DP,zr,93f			;\
+		nop					;\
+		lui		t0,%hi(g_SNCPU_SA1IRAM)		;\
+		lw		t0,%lo(g_SNCPU_SA1IRAM)(t0)	;\
+		beq		t0,zr,93f			;\
+		nop					;\
+		addu		t0,t0,_addr			;\
+		lbu		_data,0(t0)			;\
+		addiu		t2,zr,SNCPU_CYCLE_FAST		;\
+		subu		R_Cycles,R_Cycles,t2		;\
+		SNCPU_SA1_IRAM_PENALTY()		;\
+		b		94f				;\
+		nop					;\
+93:		SNCPU_READ8(_addr,_data)		;\
+94:
+
+#define SNCPU_SA1_DP_WRITE8(_addr,_data) \
+		lw		t0,SP_SA1Exec			;\
+		beq		t0,zr,95f			;\
+		nop					;\
+		bne		R_DP,zr,95f			;\
+		nop					;\
+		/* DP=0 means this access is on I-RAM page 0; CIWP bit 0 gates it. */ \
+		lui		t0,%hi(g_SNCPU_SA1CIWP)		;\
+		lbu		t0,%lo(g_SNCPU_SA1CIWP)(t0)	;\
+		andi		t0,t0,1			;\
+		beq		t0,zr,96f			;\
+		nop					;\
+		lui		t0,%hi(g_SNCPU_SA1IRAM)		;\
+		lw		t0,%lo(g_SNCPU_SA1IRAM)(t0)	;\
+		beq		t0,zr,95f			;\
+		nop					;\
+		addu		t0,t0,_addr			;\
+		sb		_data,0(t0)			;\
+96:		addiu		t2,zr,SNCPU_CYCLE_FAST		;\
+		subu		R_Cycles,R_Cycles,t2		;\
+		SNCPU_SA1_IRAM_PENALTY()		;\
+		b		97f				;\
+		nop					;\
+95:		SNCPU_WRITE8(_addr,_data)		;\
+97:
+
 #define SNCPU_WRITE16(_addr,_data)     \
 		move	R_Addr, _addr		;  \
 		jal		_SNCPU_Write16		;  \
