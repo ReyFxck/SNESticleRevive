@@ -475,6 +475,6 @@ void CNetworkScreen::Draw()
         }
         FontSelect(2);
         FontColor4f(0.35f, 0.65f, 0.65f, 1.0f);
-        FontPuts(8, 207, pathDisplay);
+        FontPuts(8, 185, pathDisplay);
     }
 }
