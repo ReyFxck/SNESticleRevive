@@ -480,6 +480,10 @@ void CVideoScreen::Draw()
 
 	FontSelect(0);
 	_VideoTitle(11, "CONFIGURATIONS");
+	/* L1/R1 are real menu-ring navigation, so advertise them beside the
+	   title instead of treating them as decorative controller art. */
+	UiIconsDraw(UI_ICON_L1, 35, 9, 14);
+	UiIconsDraw(UI_ICON_R1, 207, 9, 14);
 
 	/* Screen */
 	_VideoSection(VIDEO_VIEW_TOP + 0 - scroll, "Screen");
