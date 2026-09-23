@@ -55,8 +55,19 @@ int _MainLoopBrowserEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                 }
                                 else
                                 {
+                                        const Char *pLeaf = str;
+                                        const Char *pScan;
                                         if (Aud_IsInitialized()) Aud_Setvol(0x3FFF);
-                                        MainLoopModalPrintf(60*1, "ERROR: %s\n", str);
+                                        for (pScan = str; *pScan; pScan++)
+                                        {
+                                                if (*pScan == '/' || *pScan == '\\' || *pScan == ':')
+                                                        pLeaf = pScan + 1;
+                                        }
+                                        MainLoopModalPrintf(
+                                                60 * 2,
+                                                "Could not load ROM\n%s",
+                                                pLeaf[0] ? pLeaf : str
+                                        );
                                 }
                         }
                         return 1;
