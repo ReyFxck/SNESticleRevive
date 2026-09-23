@@ -327,10 +327,39 @@ void VideoSettingsLoad(void)
 CVideoScreen::CVideoScreen()
 {
 	m_iSelect = 0;
+	m_iNavHeld = 0;
+	m_iNavDelay = 0;
 }
 
 void CVideoScreen::Process()
 {
+}
+
+void CVideoScreen::MoveSelection(int delta)
+{
+	m_iSelect += delta;
+	if (m_iSelect < 0)
+		m_iSelect = VIDEO_ITEM_COUNT - 1;
+	else if (m_iSelect >= VIDEO_ITEM_COUNT)
+		m_iSelect = 0;
+}
+
+static void _VideoScrollTriangle(int x, int y, Bool down)
+{
+	Int32 row;
+	PolyTexture(NULL);
+	PolyBlend(TRUE);
+	PolyColor4f(0.72f, 0.72f, 0.72f, 1.0f);
+
+	/* 7/5/3/1-pixel rows make a real triangle without depending on a
+	   particular font glyph being present. */
+	for (row = 0; row < 4; ++row)
+	{
+		Int32 w = down ? (7 - row * 2) : (1 + row * 2);
+		Int32 yy = y + row;
+		PolyRect((Float32)(x + (7 - w) / 2), (Float32)yy,
+		         (Float32)w, 1.0f);
+	}
 }
 
 static void _VideoCenter(int x, int y, const char *pStr)
@@ -546,24 +575,23 @@ void CVideoScreen::Draw()
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
 	          "SMB (Network)", SmbGetStatusText());
 
-	/* Minimal scroll affordance; categories themselves stay uncluttered. */
-	FontColor4f(0.72f, 0.72f, 0.72f, 1.0f);
-	if (scroll > 0) FontPuts(232, 37, "^");
+	/* Real primitive arrows instead of font '^'/'v' placeholders. */
+	if (scroll > 0)
+		_VideoScrollTriangle(230, 37, FALSE);
 	if (scroll < VIDEO_CONTENT_H - (VIDEO_VIEW_BOTTOM - VIDEO_VIEW_TOP))
-		FontPuts(232, 174, "v");
+		_VideoScrollTriangle(230, 174, TRUE);
 
-	/* Fixed footer: navigation left, actions aligned to the right. */
+	/* Keep both hint rows safely above the persistent GCC/version bar.
+	   Centering them uses the otherwise empty space and keeps X Save visible. */
 	FontColor4f(0.58f, 0.58f, 0.58f, 1.0f);
-	FontPuts(18, 199, "Up/Dn Select");
-	_VideoRight(238, 199, "L/R Change");
-	FontPuts(18, 211, "Square Reset");
-	_VideoRight(238, 211, "X Save");
+	_VideoCenter(128, 188, "Up/Dn Select      L/R Change");
+	_VideoCenter(128, 200, "Square Reset      X Save");
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode() ||
 	    MmceNeedsRestart() || Mx4sioNeedsRestart())
 	{
 		FontColor4f(1.0f, 0.86f, 0.35f, 1.0f);
-		_VideoRight(238, 223, "Restart required");
+		_VideoRight(238, 211, "Restart required");
 	}
 }
 
@@ -571,17 +599,36 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	/* One continuous list: Up/Down walks every setting and Draw() scrolls
-	   automatically. Circle no longer hides another page of options. */
-	if (trigger & PAD_UP)
+	/* Up/Down repeat is local to this screen. The global menu trigger starts
+	   repeating every frame after its initial delay, which is too fast for a
+	   long settings list. Here the first move is immediate, then we wait
+	   ~250 ms and advance roughly every 4 frames (~67 ms at 60 Hz). The
+	   analog stick is already synthesized into PAD_UP/PAD_DOWN upstream. */
 	{
-		m_iSelect--;
-		if (m_iSelect < 0) m_iSelect = VIDEO_ITEM_COUNT - 1;
-	}
-	if (trigger & PAD_DOWN)
-	{
-		m_iSelect++;
-		if (m_iSelect >= VIDEO_ITEM_COUNT) m_iSelect = 0;
+		int nav = 0;
+		if ((buttons & PAD_UP) && !(buttons & PAD_DOWN)) nav = -1;
+		if ((buttons & PAD_DOWN) && !(buttons & PAD_UP)) nav = +1;
+
+		if (nav == 0)
+		{
+			m_iNavHeld = 0;
+			m_iNavDelay = 0;
+		}
+		else if (nav != m_iNavHeld)
+		{
+			m_iNavHeld = nav;
+			m_iNavDelay = 15;
+			MoveSelection(nav);
+		}
+		else if (m_iNavDelay > 0)
+		{
+			m_iNavDelay--;
+		}
+		else
+		{
+			MoveSelection(nav);
+			m_iNavDelay = 3;
+		}
 	}
 
 	if (trigger & PAD_LEFT)  dir = -1;
