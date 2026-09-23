@@ -213,17 +213,25 @@ static void _MainLoopStateManagerNormalizeStorage()
         }
 }
 
-static void _MainLoopStateManagerCycleStorage()
+static void _MainLoopStateManagerCycleStorage(Int32 iDirection)
 {
         Int32 i;
 
+        if (iDirection == 0)
+                iDirection = 1;
+
         for (i = 0; i < MAINLOOP_STATEMANAGER_STORAGE_NUM; i++)
         {
-                _MainLoop_StateManagerStorageIndex++;
+                _MainLoop_StateManagerStorageIndex += iDirection > 0 ? 1 : -1;
                 if (_MainLoop_StateManagerStorageIndex >=
                     MAINLOOP_STATEMANAGER_STORAGE_NUM)
                 {
                         _MainLoop_StateManagerStorageIndex = 0;
+                }
+                else if (_MainLoop_StateManagerStorageIndex < 0)
+                {
+                        _MainLoop_StateManagerStorageIndex =
+                                MAINLOOP_STATEMANAGER_STORAGE_NUM - 1;
                 }
 
                 if (_MainLoopStateManagerStorageAvailable(
@@ -232,6 +240,47 @@ static void _MainLoopStateManagerCycleStorage()
                         return;
                 }
         }
+}
+
+static MainLoopStateDeviceE _MainLoopStateManagerStorageDevice(Int32 iStorage)
+{
+        switch (iStorage)
+        {
+                case MAINLOOP_STATEMANAGER_MASS0:
+                case MAINLOOP_STATEMANAGER_MASS1:
+                case MAINLOOP_STATEMANAGER_MASS:
+                        return MAINLOOP_STATEDEVICE_USB;
+
+                case MAINLOOP_STATEMANAGER_MC0:
+                case MAINLOOP_STATEMANAGER_MC1:
+                        return MAINLOOP_STATEDEVICE_MEMCARD;
+
+                case MAINLOOP_STATEMANAGER_MMCE0:
+                case MAINLOOP_STATEMANAGER_MMCE1:
+                        return MAINLOOP_STATEDEVICE_MMCE;
+
+                case MAINLOOP_STATEMANAGER_HDD:
+                        return MAINLOOP_STATEDEVICE_HDD;
+
+                default:
+                        return MAINLOOP_STATEDEVICE_AUTO;
+        }
+}
+
+static void _MainLoopStateManagerApplyStorageTarget()
+{
+        const MainLoopStateManagerStorageT *pStorage =
+                &_MainLoop_StateManagerStorage[
+                        _MainLoop_StateManagerStorageIndex
+                ];
+
+        MainLoopStateSetDevice(
+                _MainLoopStateManagerStorageDevice(
+                        _MainLoop_StateManagerStorageIndex));
+        MainLoopStateSetPreferredRoot(pStorage->pPath);
+        MainLoopStateSettingsSave();
+        MainLoopStatePrepareBrowsePath(pStorage->pPath);
+        MainLoopStateMigrateLegacyStates();
 }
 
 void _MainLoopStateMenuSyncStorage()
@@ -331,55 +380,97 @@ void _MainLoopStateMenuRefresh()
 
 int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 {
+        Int32 iDirection = 0;
+
         (void)Parm2;
-        if (Type != 1)
+
+        /* Type 2/3 are left/right adjustments from the refreshed Save States
+           screen. Type 1 remains Cross/Start activation. */
+        if (Type == 2 || Type == 3)
         {
-                return 0;
+                iDirection = Type == 2 ? -1 : 1;
+
+                if (Parm1 == 1)
+                {
+                        _MainLoopStateManagerCycleStorage(iDirection);
+                        _MainLoopStateManagerApplyStorageTarget();
+                        _MainLoopStateMenuRefresh();
+                }
+                else if (Parm1 == 2)
+                {
+                        if (iDirection < 0 &&
+                            MainLoopStateGetDevice() != MAINLOOP_STATEDEVICE_AUTO)
+                        {
+                                Int32 i;
+                                for (i = 0; i < 4; i++)
+                                        MainLoopStateCycleSlot();
+                        }
+                        else
+                        {
+                                MainLoopStateCycleSlot();
+                        }
+
+                        if (MainLoopStateHasDeviceChoice())
+                                MainLoopStateSettingsSave();
+                        _MainLoopStateMenuRefresh();
+                }
+                return 1;
         }
+
+        if (Type != 1)
+                return 0;
 
         switch (Parm1)
         {
                 case 0:
-                        if ((_MainLoop_StateManagerStorageIndex ==
-                             MAINLOOP_STATEMANAGER_MC0 ||
-                             _MainLoop_StateManagerStorageIndex ==
-                             MAINLOOP_STATEMANAGER_MC1))
                         {
-                                Int32 iPort =
-                                        _MainLoop_StateManagerStorageIndex ==
-                                        MAINLOOP_STATEMANAGER_MC0 ? 0 : 1;
+                                const MainLoopStateManagerStorageT *pStorage =
+                                        &_MainLoop_StateManagerStorage[
+                                                _MainLoop_StateManagerStorageIndex
+                                        ];
 
-                                if (MemCardGetStatus(iPort) ==
-                                    MEMCARD_STATUS_UNFORMATTED)
+                                if ((_MainLoop_StateManagerStorageIndex ==
+                                     MAINLOOP_STATEMANAGER_MC0 ||
+                                     _MainLoop_StateManagerStorageIndex ==
+                                     MAINLOOP_STATEMANAGER_MC1))
                                 {
-                                        _MainLoopMemCardFormatPromptOpen(
-                                                iPort,
-                                                MAINLOOP_MEMCARDFORMAT_BROWSE
-                                        );
-                                        break;
+                                        Int32 iPort =
+                                                _MainLoop_StateManagerStorageIndex ==
+                                                MAINLOOP_STATEMANAGER_MC0 ? 0 : 1;
+
+                                        if (MemCardGetStatus(iPort) ==
+                                            MEMCARD_STATUS_UNFORMATTED)
+                                        {
+                                                _MainLoopMemCardFormatPromptOpen(
+                                                        iPort,
+                                                        MAINLOOP_MEMCARDFORMAT_BROWSE
+                                                );
+                                                break;
+                                        }
                                 }
+
+                                /* Prepare/migrate exactly the storage being browsed,
+                                   even before a quick-save target has been chosen. */
+                                MainLoopStatePrepareBrowsePath(pStorage->pPath);
+                                _MainLoopSetScreen(
+                                        (CScreen *)_MainLoop_pStateBrowserScreen
+                                );
+                                _MainLoop_pStateBrowserScreen->SetDir(
+                                        pStorage->pPath
+                                );
                         }
-                        _MainLoopSetScreen(
-                                (CScreen *)_MainLoop_pStateBrowserScreen
-                        );
-                        _MainLoop_pStateBrowserScreen->SetDir(
-                                _MainLoop_StateManagerStorage[
-                                        _MainLoop_StateManagerStorageIndex
-                                ].pPath
-                        );
                         break;
 
                 case 1:
-                        _MainLoopStateManagerCycleStorage();
+                        _MainLoopStateManagerCycleStorage(1);
+                        _MainLoopStateManagerApplyStorageTarget();
                         _MainLoopStateMenuRefresh();
                         break;
 
                 case 2:
                         MainLoopStateCycleSlot();
                         if (MainLoopStateHasDeviceChoice())
-                        {
                                 MainLoopStateSettingsSave();
-                        }
                         _MainLoopStateMenuRefresh();
                         break;
 
@@ -388,7 +479,7 @@ int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                         _MainLoopStateMenuRefresh();
                         MainLoopModalPrintf(
                                 45,
-                                "Next L2+X will ask the save location."
+                                "Save location reset. Choose Storage with L/R."
                         );
                         break;
         }
