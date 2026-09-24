@@ -1012,6 +1012,7 @@ tools/         host‑side test harnesses (chip + OBJ verification)
 - **[upng](https://github.com/elanthis/upng)** — Sean Middleditch & Lode Vandevenne; the bundled single‑file PNG decoder used for cover art (zlib license). Extended in this repo with palette/indexed support.
 - **[libxmp-lite](https://github.com/libxmp/libxmp)** — Claudio Matsuoka and Hipolito Carraro Jr; official 4.7.2 embedded MOD/XM replay source used for tracker effects, timing and loops (MIT). The earlier PS2 integration by tatokis was the original porting reference.
 - **[hugorsgarcia/PS2SNESticle](https://github.com/hugorsgarcia/PS2SNESticle)** — **Hugo Garcia**, whose PS2 work was the reference for the controller / memory‑card / IRX bring‑up and the netplay module.
+- **[1247847495/SNESticleRevive](https://github.com/1247847495/SNESticleRevive)** — Chinese localization work credited there to **anyi**; reference for the UTF-8/CJK HZK16 rendering path adapted by Revive's runtime language system.
 - **Open‑PS2‑Loader**, **picodrive‑PS2** and **uLaunchELF** — references for correct PS2 boot, IOP and video behavior.
 - **ReyFxck** — this revival/fork and ongoing development.
 - **Adriano Oliveira** — real‑hardware testing.
