@@ -190,7 +190,46 @@ static const I18nPhraseT s_Phrases[] =
     { "Ready: base SNES hardware.", "Pronto: hardware SNES base.", "Listo: hardware SNES base.", "就绪: 基础 SNES 硬件。" },
     { "Cannot identify the loaded ROM.", "Nao foi possivel identificar a ROM.", "No se pudo identificar la ROM.", "无法识别已加载的 ROM。" },
     { "Could not snapshot the NES mapper state.", "Falha ao capturar o estado do mapper NES.", "No se pudo capturar el mapper NES.", "无法保存 NES Mapper 状态。" },
-    { "No Covers", "Sem Capas", "Sin Caratulas", "无封面" }
+    { "No Covers", "Sem Capas", "Sin Caratulas", "无封面" },
+    { "Copy File", "Copiar Arquivo", "Copiar Archivo", "复制文件" },
+    { "Paste File", "Colar Arquivo", "Pegar Archivo", "粘贴文件" },
+    { "Delete file", "Excluir Arquivo", "Eliminar Archivo", "删除文件" },
+    { "Select=Network", "Select=Rede", "Select=Red", "Select=网络" },
+    { "Reset", "Padrao", "Restablecer", "重置" },
+    { "Save", "Salvar", "Guardar", "保存" },
+    { "Internal HDD", "HDD Interno", "HDD Interno", "内部 HDD" },
+    { "Auto", "Automatico", "Automatico", "自动" },
+    { "Formatting mc%d:...", "Formatando mc%d:...", "Formateando mc%d:...", "正在格式化 mc%d:..." },
+    { "Could not format mc%d:.", "Nao foi possivel formatar mc%d:.", "No se pudo formatear mc%d:.", "无法格式化 mc%d:。" },
+    { "Format failed - Circle: cancel", "Falha ao formatar - Circulo: cancelar", "Fallo al formatear - Circulo: cancelar", "格式化失败 - 圆圈: 取消" },
+    { "%s state is not serialized yet.", "Estado %s ainda nao foi serializado.", "El estado %s aun no esta serializado.", "%s 状态尚未序列化。" },
+    { "USB driver failed (%d).", "Driver USB falhou (%d).", "Fallo el driver USB (%d).", "USB 驱动失败 (%d)。" },
+    { "Loaded slot %d from %s.", "Slot %d carregado de %s.", "Ranura %d cargada desde %s.", "已从 %s 载入槽 %d。" },
+    { "State load ok: %s", "Estado carregado: %s", "Estado cargado: %s", "状态载入成功: %s" },
+    { "Slot %d is incomplete or corrupt.", "Slot %d incompleto ou corrompido.", "Ranura %d incompleta o corrupta.", "槽 %d 不完整或已损坏。" },
+    { "Slot %d belongs to another ROM.", "Slot %d pertence a outra ROM.", "Ranura %d pertenece a otra ROM.", "槽 %d 属于另一 ROM。" },
+    { "No state found in slot %d.", "Nenhum estado encontrado no slot %d.", "No hay estado en la ranura %d.", "槽 %d 中没有存档。" },
+    { "State load failed: %s", "Falha ao carregar estado: %s", "Fallo al cargar estado: %s", "状态载入失败: %s" },
+    { "State payload: raw=%u stored=%u encoding=%s", "Dados do estado: bruto=%u salvo=%u formato=%s", "Datos del estado: bruto=%u guardado=%u formato=%s", "存档数据: 原始=%u 保存=%u 编码=%s" },
+    { "Saved slot %d to %s.", "Slot %d salvo em %s.", "Ranura %d guardada en %s.", "槽 %d 已保存到 %s。" },
+    { "State save ok: %s", "Estado salvo: %s", "Estado guardado: %s", "状态保存成功: %s" },
+    { "State save failed: %s", "Falha ao salvar estado: %s", "Fallo al guardar estado: %s", "状态保存失败: %s" },
+    { "mc%d: is not formatted.", "mc%d: nao esta formatado.", "mc%d: no esta formateada.", "mc%d: 未格式化。" },
+    { "Could not save slot %d to %s.", "Nao foi possivel salvar slot %d em %s.", "No se pudo guardar ranura %d en %s.", "无法将槽 %d 保存到 %s。" },
+    { "USB: Driver failed (%d)", "USB: driver falhou (%d)", "USB: fallo del driver (%d)", "USB: 驱动失败 (%d)" },
+    { "SMB: %s (error %d)", "SMB: %s (erro %d)", "SMB: %s (error %d)", "SMB: %s (错误 %d)" },
+    { "SMB: Connected\n%s", "SMB: Conectado\n%s", "SMB: Conectado\n%s", "SMB: 已连接\n%s" },
+    { "CD/DVD: Starting driver...", "CD/DVD: iniciando driver...", "CD/DVD: iniciando driver...", "CD/DVD: 正在启动驱动..." },
+    { "CD/DVD driver failed (%d).", "Driver CD/DVD falhou (%d).", "Fallo el driver CD/DVD (%d).", "CD/DVD 驱动失败 (%d)。" },
+    { "ERROR: Cannot load disksys.rom", "ERRO: Nao foi possivel carregar disksys.rom", "ERROR: No se pudo cargar disksys.rom", "错误: 无法加载 disksys.rom" },
+    { "Copy host: -> mc0:", "Copiar host: -> mc0:", "Copiar host: -> mc0:", "复制 host: -> mc0:" },
+    { "Copy mc0: -> mc1:", "Copiar mc0: -> mc1:", "Copiar mc0: -> mc1:", "复制 mc0: -> mc1:" },
+    { "Copy mc1: -> mc0:", "Copiar mc1: -> mc0:", "Copiar mc1: -> mc0:", "复制 mc1: -> mc0:" },
+    { "Copy mc0: -> host:", "Copiar mc0: -> host:", "Copiar mc0: -> host:", "复制 mc0: -> host:" },
+    { "Dump memory -> host:", "Exportar memoria -> host:", "Volcar memoria -> host:", "导出内存 -> host:" },
+    { "Add PSX CD to mc0:title.db", "Adicionar CD PSX ao mc0:title.db", "Agregar CD PSX a mc0:title.db", "添加 PSX CD 到 mc0:title.db" },
+    { "Dump mc0:title.db -> tty0:", "Exportar mc0:title.db -> tty0:", "Volcar mc0:title.db -> tty0:", "导出 mc0:title.db -> tty0:" },
+    { "Copy rom0:libsd -> host:", "Copiar rom0:libsd -> host:", "Copiar rom0:libsd -> host:", "复制 rom0:libsd -> host:" }
 };
 
 static const Char *_PhraseFor(const I18nPhraseT *p)
@@ -261,6 +300,9 @@ const Char *I18nTranslate(const Char *english)
     PREFIX("Quick target: ", "Destino rapido: ", "Destino rapido: ", "快速目标: ")
     PREFIX("Current Target ", "Destino Atual ", "Destino Actual ", "当前目标 ")
     PREFIX("SMB: ", "SMB: ", "SMB: ", "SMB: ")
+    PREFIX("YES - Format mc", "SIM - Formatar mc", "SI - Formatear mc", "是 - 格式化 mc")
+    PREFIX("Formatting mc", "Formatando mc", "Formateando mc", "正在格式化 mc")
+    PREFIX("Could not format mc", "Nao foi possivel formatar mc", "No se pudo formatear mc", "无法格式化 mc")
 #undef PREFIX
 
     return english;
