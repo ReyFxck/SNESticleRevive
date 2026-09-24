@@ -49,13 +49,19 @@ static SnesPPUChrCacheT _SnesPPU_ChrCache _ALIGN(64);
 struct SnesPPUBGLineCacheEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
+	Uint8 uKeyPad[24];
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uSub[SNPPU_BG_LINE_PIXELS];
-	SNMaskT MainOpaque;
-	SNMaskT MainPriority;
-	SNMaskT SubOpaque;
-	SNMaskT SubPriority;
+	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES];
+	Uint8 uMainPriority[SNPPU_BG_LINE_MASK_BYTES];
+	Uint8 uSubOpaque[SNPPU_BG_LINE_MASK_BYTES];
+	Uint8 uSubPriority[SNPPU_BG_LINE_MASK_BYTES];
+	Uint32 uReady;
+	Uint8 uAdmissionPad[12];
 };
+
+typedef char SnesPPUBGLineEntrySizeCheck[
+	(sizeof(SnesPPUBGLineCacheEntryT) == 12 * 64) ? 1 : -1];
 
 /* Four BGs by visible scanline.  Entries are accepted only after every
    renderer input in Key matches and no VRAM write has advanced Generation.
@@ -67,61 +73,56 @@ static Uint32 _SnesPPU_BGLineGeneration = 1;
 
 static _INLINE Bool _SnesPPURestoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
-	const SnesBGInfoT *pInfo, Uint32 uMode, Uint32 iBG, Uint32 iLine,
-	Bool bHiresPair)
+	Uint32 iBG, Uint32 uFineScrollX, Bool bHiresPair)
 {
 	Uint32 iSubPlane = iBG + 2u;
 
-	if (!SnesPPUBGLineCacheKeyMatches(&pEntry->Key,
-		_SnesPPU_BGLineGeneration, pRenderInfo->uBGVramAddr[iBG],
-		iLine, iBG, uMode, pInfo))
-		return FALSE;
-
 	memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
 		SNPPU_BG_LINE_PIXELS);
-	SNMaskCopy(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
-		&pEntry->MainOpaque);
-	SNMaskCopy(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
-		&pEntry->MainPriority);
+	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+		pEntry->uMainOpaque, uFineScrollX);
+	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+		pEntry->uMainPriority, uFineScrollX);
 	if (bHiresPair)
 	{
 		memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
 			SNPPU_BG_LINE_PIXELS);
-		SNMaskCopy(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
-			&pEntry->SubOpaque);
-		SNMaskCopy(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
-			&pEntry->SubPriority);
+		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+			pEntry->uSubOpaque, uFineScrollX);
+		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+			pEntry->uSubPriority, uFineScrollX);
 	}
 	return TRUE;
 }
 
+static _INLINE void _SnesPPUStoreBGMask(Uint8 *pDest, const Uint8 *pSrc)
+{
+	memcpy(pDest, pSrc, SNPPU_BG_LINE_MASK_DATA_BYTES);
+	memset(pDest + SNPPU_BG_LINE_MASK_DATA_BYTES, 0,
+		SNPPU_BG_LINE_MASK_BYTES - SNPPU_BG_LINE_MASK_DATA_BYTES);
+}
+
 static _INLINE void _SnesPPUStoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
-	const SnesBGInfoT *pInfo, Uint32 uMode, Uint32 iBG, Uint32 iLine,
-	Bool bHiresPair)
+	Uint32 iBG, const Uint8 *pMainOpaque, const Uint8 *pMainPriority,
+	const Uint8 *pSubOpaque, const Uint8 *pSubPriority, Bool bHiresPair)
 {
 	Uint32 iSubPlane = iBG + 2u;
 
 	memcpy(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG],
 		SNPPU_BG_LINE_PIXELS);
-	SNMaskCopy(&pEntry->MainOpaque,
-		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE]);
-	SNMaskCopy(&pEntry->MainPriority,
-		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI]);
+	_SnesPPUStoreBGMask(pEntry->uMainOpaque, pMainOpaque);
+	_SnesPPUStoreBGMask(pEntry->uMainPriority, pMainPriority);
 	if (bHiresPair)
 	{
 		memcpy(pEntry->uSub, (Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
 			SNPPU_BG_LINE_PIXELS);
-		SNMaskCopy(&pEntry->SubOpaque,
-			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE]);
-		SNMaskCopy(&pEntry->SubPriority,
-			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI]);
+		_SnesPPUStoreBGMask(pEntry->uSubOpaque, pSubOpaque);
+		_SnesPPUStoreBGMask(pEntry->uSubPriority, pSubPriority);
 	}
 
-	/* Publish the exact key last so a partially filled entry is never a hit. */
-	SnesPPUBGLineCacheSetKey(&pEntry->Key,
-		_SnesPPU_BGLineGeneration, pRenderInfo->uBGVramAddr[iBG],
-		iLine, iBG, uMode, pInfo);
+	/* The candidate key was published while uReady was false. */
+	pEntry->uReady = TRUE;
 }
 #endif
 
@@ -2023,30 +2024,40 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			if (uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR)
 			{
 				const Bool bHiresPair =
-					(uBGMode == 5 && iBG < 2 &&
+					((uBGMode == 5 || uBGMode == 6) && iBG < 2 &&
 					 BGInfo[iBG].uBitDepth != 0);
 				Uint8 TempMask[2][SNPPU_BGPLANE_SIZE];
+				Uint8 SubMask[2][SNPPU_BGPLANE_SIZE];
 #if SNPPU_BG_CACHE && SNPPURENDER_CHR64
 				SnesPPUBGLineCacheEntryT *pLineCache = NULL;
-				/* Trials of Mana's slow maps are stable Mode 1 and Mode 5
-				   scanlines.  Cache only those well-defined non-OPT,
-				   non-mosaic paths; Mode 2/4/6 and every unusual path keep
-				   using the established decoder. */
-				if ((uBGMode == 1 || uBGMode == 5) &&
-				    !(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET) &&
+				Bool bLineCachePromote = FALSE;
+				/* Every non-Mode-7 layer reaches this same decoder. Offset-per-
+				   tile and mosaic remain on the established path; ordinary rows
+				   can be reused across screen-line translation and fine-X scroll. */
+				if (!(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET) &&
 				    BGInfo[iBG].uMosaic == 0 &&
 				    iLine >= 0 &&
 				    (Uint32)iLine < SNPPU_BG_LINE_CACHE_LINES)
 				{
-					pLineCache = &_SnesPPU_BGLineCache[iBG][iLine];
-					if (_SnesPPURestoreBGLine(pLineCache, pRenderInfo,
-						&BGInfo[iBG], uBGMode, iBG, iLine, bHiresPair))
+					Bool bSameState;
+
+					pLineCache = &_SnesPPU_BGLineCache[iBG]
+						[SnesPPUBGLineCacheIndex(&BGInfo[iBG], iLine)];
+					bSameState = SnesPPUBGLineCacheKeyMatches(
+						&pLineCache->Key, _SnesPPU_BGLineGeneration,
+						pRenderInfo->uBGVramAddr[iBG], iLine, iBG,
+						uBGMode, &BGInfo[iBG]);
+					if (pLineCache->uReady && bSameState)
 					{
+						_SnesPPURestoreBGLine(pLineCache, pRenderInfo,
+							iBG, BGInfo[iBG].uScrollX & 7u, bHiresPair);
 #if SNDBG_LOG
 						g_DbgBGLineCacheHits++;
 #endif
 						continue;
 					}
+					bLineCachePromote = bSameState;
+					pLineCache->uReady = FALSE;
 #if SNDBG_LOG
 					g_DbgBGLineCacheMisses++;
 #endif
@@ -2073,7 +2084,6 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				    BGInfo[iBG].uBitDepth != 0)
 				{
 					const Int32 iSubPlane = iBG + 2;
-					Uint8 SubMask[2][SNPPU_BGPLANE_SIZE];
 
 					_FetchCHRHiresPair_64(
 						(Uint8 *)pRenderInfo->BGPlanes[iBG],
@@ -2133,8 +2143,23 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 
 #if SNPPU_BG_CACHE && SNPPURENDER_CHR64
 				if (pLineCache)
-					_SnesPPUStoreBGLine(pLineCache, pRenderInfo,
-						&BGInfo[iBG], uBGMode, iBG, iLine, bHiresPair);
+				{
+					if (bLineCachePromote)
+					{
+						_SnesPPUStoreBGLine(pLineCache, pRenderInfo,
+							iBG, TempMask[0], TempMask[1],
+							SubMask[0], SubMask[1], bHiresPair);
+					} else
+					{
+						/* A first miss records only the exact candidate key.
+						   Changing lines no longer copy a large payload that
+						   will be replaced on the next frame. */
+						SnesPPUBGLineCacheSetKey(&pLineCache->Key,
+							_SnesPPU_BGLineGeneration,
+							pRenderInfo->uBGVramAddr[iBG], iLine, iBG,
+							uBGMode, &BGInfo[iBG]);
+					}
+				}
 #endif
 			}
 		}

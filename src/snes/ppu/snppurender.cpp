@@ -76,6 +76,11 @@ Uint8 _tsw = 0x3F;
 struct SnesPPUHiresLineCacheEntryT
 {
 	SnesPPUHiresLineCacheKeyT Key;
+	/* A changing scene must not copy 1 KiB into a cache entry on every miss.
+	   One complete cache line of metadata keeps pixels 64-byte aligned and
+	   admits the large payload only after the exact key repeats. */
+	Uint32 uReady;
+	Uint8 uAdmissionPad[60];
 	Uint16 uPixels[SNPPU_HIRES_LINE_PIXELS];
 };
 
@@ -84,7 +89,7 @@ static SnesPPUHiresLineCacheEntryT
 static Uint32 _SnesPPU_OutputGeneration = 1;
 
 typedef char SnesPPUHiresLineEntrySizeCheck[
-	(sizeof(SnesPPUHiresLineCacheEntryT) == 17 * 64) ? 1 : -1];
+	(sizeof(SnesPPUHiresLineCacheEntryT) == 18 * 64) ? 1 : -1];
 
 static _INLINE void _SnesPPUBuildHiresLineState(
 	SnesPPUHiresLineStateT *pState, const SnesPPURegsT *pRegs)
@@ -374,6 +379,7 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 #if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE
 	SnesPPUHiresLineCacheEntryT *pHiresLineCache = NULL;
 	SnesPPUHiresLineStateT HiresLineState;
+	Bool bHiresLineCachePromote = FALSE;
 #endif
 
 #if SNDBG_LOG
@@ -418,10 +424,14 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 	    !(pRegs->inidisp & 0x80u) && pRegs->mosaic == 0 &&
 	    iLine >= 0 && (Uint32)iLine < SNPPU_HIRES_LINE_CACHE_LINES)
 	{
+		Bool bSameState;
+
 		_SnesPPUBuildHiresLineState(&HiresLineState, pRegs);
 		pHiresLineCache = &_SnesPPU_HiresLineCache[iLine];
-		if (SnesPPUHiresLineCacheKeyMatches(&pHiresLineCache->Key,
-			_SnesPPU_OutputGeneration, iLine, &HiresLineState))
+		bSameState = SnesPPUHiresLineCacheKeyMatches(
+			&pHiresLineCache->Key, _SnesPPU_OutputGeneration,
+			iLine, &HiresLineState);
+		if (pHiresLineCache->uReady && bSameState)
 		{
 #if SNDBG_LOG
 			g_DbgHiresLineCacheHits++;
@@ -429,6 +439,11 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 			m_pBlend->ExecHires512(pHiresLineCache->uPixels, iLine);
 			return;
 		}
+		/* Two consecutive observations are required before paying the 1 KiB
+		   store.  Animation and scrolling therefore miss without thrashing
+		   EE memory, while a stable third frame takes the fast path. */
+		bHiresLineCachePromote = bSameState;
+		pHiresLineCache->uReady = FALSE;
 #if SNDBG_LOG
 		g_DbgHiresLineCacheMisses++;
 #endif
@@ -612,11 +627,19 @@ static Bool bPrint = TRUE;
 #if SNPPU_BG_CACHE
 			if (pHiresLineCache)
 			{
-				memcpy(pHiresLineCache->uPixels, HiresLine,
-					sizeof(pHiresLineCache->uPixels));
-				/* Publish the exact state only after all 512 pixels exist. */
-				SnesPPUHiresLineCacheSetKey(&pHiresLineCache->Key,
-					_SnesPPU_OutputGeneration, iLine, &HiresLineState);
+				if (bHiresLineCachePromote)
+				{
+					memcpy(pHiresLineCache->uPixels, HiresLine,
+						sizeof(pHiresLineCache->uPixels));
+					/* Publish readiness only after all 512 pixels exist. */
+					pHiresLineCache->uReady = TRUE;
+				} else
+				{
+					/* Remember only the cheap candidate key on a first miss. */
+					SnesPPUHiresLineCacheSetKey(&pHiresLineCache->Key,
+						_SnesPPU_OutputGeneration, iLine,
+						&HiresLineState);
+				}
 			}
 #endif
 #else

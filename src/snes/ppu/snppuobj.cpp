@@ -32,6 +32,50 @@ static const Uint8 _SnesPPU_OAMHeight[8][2]=
 	{16, 64}, {32, 64}, {32, 64}, {32, 32}
 };
 
+/* Expand four visibility bits to four byte masks.  The hot OBJ compositor
+   can then merge eight pixels with two word operations instead of eight
+   data-dependent branches, which are particularly expensive on the R5900. */
+static const Uint32 _SnesPPU_OBJByteMask4[16] =
+{
+	0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
+	0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
+	0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
+	0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu
+};
+
+static _INLINE void _SnesPPUOBJMerge8(Uint8 *pDest, const Uint8 *pSrc,
+	Uint32 uVisible)
+{
+	Uint32 uSrc0;
+	Uint32 uSrc1;
+
+	if (uVisible == 0xFFu)
+	{
+		memcpy(pDest, pSrc, 8);
+		return;
+	}
+
+	if (uVisible)
+	{
+		Uint32 uDest0;
+		Uint32 uDest1;
+		Uint32 uMask0 = _SnesPPU_OBJByteMask4[uVisible & 0x0Fu];
+		Uint32 uMask1 = _SnesPPU_OBJByteMask4[uVisible >> 4];
+
+		/* pDest follows the sprite X coordinate and is normally unaligned.
+		   Constant-size memcpy lets GCC emit the EE's safe unaligned word
+		   loads/stores without forming an invalid Uint32 pointer. */
+		memcpy(&uSrc0, pSrc + 0, 4);
+		memcpy(&uSrc1, pSrc + 4, 4);
+		memcpy(&uDest0, pDest + 0, 4);
+		memcpy(&uDest1, pDest + 4, 4);
+		uDest0 = (uDest0 & ~uMask0) | (uSrc0 & uMask0);
+		uDest1 = (uDest1 & ~uMask1) | (uSrc1 & uMask1);
+		memcpy(pDest + 0, &uDest0, 4);
+		memcpy(pDest + 4, &uDest1, 4);
+	}
+}
+
 Bool _SnesPPUOBJVisibleX(Uint16 uPosX, Uint8 uWidth)
 {
 	uPosX &= 0x1FF;
@@ -173,14 +217,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 #if SNDBG_DEEP
 			g_DbgObjDrawnPixels += _ObjCountBits8(uVisible);
 #endif
-			if (uVisible & 0x01) pDest8[0] = pObj->uData[0];
-			if (uVisible & 0x02) pDest8[1] = pObj->uData[1];
-			if (uVisible & 0x04) pDest8[2] = pObj->uData[2];
-			if (uVisible & 0x08) pDest8[3] = pObj->uData[3];
-			if (uVisible & 0x10) pDest8[4] = pObj->uData[4];
-			if (uVisible & 0x20) pDest8[5] = pObj->uData[5];
-			if (uVisible & 0x40) pDest8[6] = pObj->uData[6];
-			if (uVisible & 0x80) pDest8[7] = pObj->uData[7];
+			_SnesPPUOBJMerge8(pDest8, pObj->uData, uVisible);
 		} else
 		{
 			const SNMaskT *pPriorityMask = &PriorityMask[pObj->uPri];
