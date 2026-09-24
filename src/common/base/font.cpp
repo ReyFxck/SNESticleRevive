@@ -62,12 +62,12 @@ extern const int           _Font_ui_maxw;
 /* Compact Simplified-Chinese atlas.  The renderer follows the CJK path from
  * 1247847495/SNESticleRevive (Chinese localization credited there to anyi),
  * but keeps only the glyphs used by our runtime UI catalog. */
-#define CJK_ATLAS_W       256
+#define CJK_ATLAS_W       512
 #define CJK_ATLAS_H       256
-#define CJK_ATLAS_LOG2_W  8
+#define CJK_ATLAS_LOG2_W  9
 #define CJK_ATLAS_LOG2_H  8
 #define CJK_GLYPH_SIZE    16
-#define CJK_CELLS_ROW     16
+#define CJK_CELLS_ROW     32
 #define CJK_ATLAS_SRC_BYTES (CJK_ATLAS_W * CJK_ATLAS_H)
 #define CJK_ATLAS_BYTES     (CJK_ATLAS_SRC_BYTES * 4)
 #define CJK_TEX_TBP_OFFSET  (_FontTex_ui_w * _FontTex_ui_h * 4 / 256)
