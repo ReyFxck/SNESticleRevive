@@ -68,5 +68,6 @@ Int32 I18nGetLanguage();
 void I18nCycleLanguage(Int32 direction);
 const Char *I18nGetLanguageName();
 const Char *I18nGetText(I18nTextE text);
+const Char *I18nTranslate(const Char *english);
 
 #endif
