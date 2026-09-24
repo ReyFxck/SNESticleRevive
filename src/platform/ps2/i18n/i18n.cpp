@@ -287,10 +287,20 @@ static const Char *_PhraseFor(const I18nPhraseT *p)
     }
 }
 
+/*
+ * Chinese stays in the catalog while its renderer is being ported faithfully
+ * from the anyi fork, but it is not selectable in this stabilization build.
+ * A previously-saved zh-CN value falls back to English instead of entering
+ * the unstable CJK path during boot.
+ */
+#define I18N_STABLE_LANGUAGE_COUNT 3
+
 void I18nSetLanguage(Int32 language)
 {
-    if (language >= 0 && language < I18N_LANGUAGE_COUNT)
+    if (language >= 0 && language < I18N_STABLE_LANGUAGE_COUNT)
         s_I18nLanguage = language;
+    else
+        s_I18nLanguage = I18N_ENGLISH;
 }
 
 Int32 I18nGetLanguage()
@@ -301,8 +311,8 @@ Int32 I18nGetLanguage()
 void I18nCycleLanguage(Int32 direction)
 {
     s_I18nLanguage += direction < 0 ? -1 : 1;
-    if (s_I18nLanguage < 0) s_I18nLanguage = I18N_LANGUAGE_COUNT - 1;
-    if (s_I18nLanguage >= I18N_LANGUAGE_COUNT) s_I18nLanguage = 0;
+    if (s_I18nLanguage < 0) s_I18nLanguage = I18N_STABLE_LANGUAGE_COUNT - 1;
+    if (s_I18nLanguage >= I18N_STABLE_LANGUAGE_COUNT) s_I18nLanguage = 0;
 }
 
 const Char *I18nGetLanguageName()
