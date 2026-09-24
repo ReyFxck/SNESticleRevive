@@ -8,12 +8,13 @@ identity is printed only to explain which mapper and coprocessor were active.
 
 ```bash
 make SNES_DIAGNOSTICS=1   # rolling low-overhead report
-make SNES_DIAGNOSTICS=2   # report plus event-triggered deep capture
+make SNES_DIAGNOSTICS=2   # report plus automatic deep capture
 ```
 
 `SNES_DIAGNOSTICS=0` is the release default. The preprocessor removes the
-counters and capture code from that build. Level 2 is intentionally more
-intrusive and should be used for short reproductions.
+counters and capture code from that build. Level 2 enables the complete deep
+capture automatically; manual and anomaly triggers remain available as reason
+markers. It is intentionally more intrusive and should be used for diagnostics.
 
 All records go through `DLog()`, so Android emulator builds place them in their
 normal TXT log. HostFS follows the same rule: level 1 writes `[hostfs]` toggle,

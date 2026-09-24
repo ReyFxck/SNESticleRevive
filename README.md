@@ -815,7 +815,7 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 | `VERBOSE=1` | Show the **full** warning/error text (no truncation). |
 | `PROFILE=1` | Compile the on‑screen profiler in — press **R3** in‑game to capture one frame's per‑section timing. |
 | `SNES_DIAGNOSTICS=1` | Enable the universal rolling `snesdiag-v1` CPU/PPU/APU/DMA/chip report. |
-| `SNES_DIAGNOSTICS=2` | Add bounded deep capture triggered by anomalies or **R3** / **L2+R2**. See [SNES diagnostics](docs/SNES_DIAGNOSTICS.md). |
+| `SNES_DIAGNOSTICS=2` | Enable the complete deep diagnostic automatically; anomaly and **R3** / **L2+R2** triggers remain as reason markers. See [SNES diagnostics](docs/SNES_DIAGNOSTICS.md). |
 | `SNES_OBJ_CACHE=0` | Disable the OBJ-only 4-bpp CHR cache for controlled A/B tests. |
 | `OUT=/path` | Copy the final ELF/ISO to this folder. |
 | `ROMS=/path` | ROM folder to embed when building an ISO. |

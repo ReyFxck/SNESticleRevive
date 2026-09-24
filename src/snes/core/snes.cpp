@@ -1974,19 +1974,21 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 	#if SNDBG_DEEP
 	g_DbgCaptureFrameNo = g_TmgFrameNo + 1;
-	g_DbgCaptureActive = FALSE;
+	/* SNES_DIAGNOSTICS=2 means deep diagnostics are active automatically.
+	   Manual/anomaly triggers are still collected as reason bits, but they
+	   are no longer required to enable the capture. */
+	g_DbgCaptureActive = TRUE;
 	g_DbgCaptureReasons = 0;
 	if (g_DbgCaptureCooldown)
 		g_DbgCaptureCooldown--;
 	{
 		Uint32 uReasons = g_DbgCapturePendingReasons;
 		g_DbgCapturePendingReasons = 0;
-		if (uReasons &&
-		    (!g_DbgCaptureCooldown || (uReasons & SNDBG_CAPTURE_MANUAL)))
+		if (uReasons)
 		{
-			g_DbgCaptureActive = TRUE;
-			g_DbgCaptureReasons = uReasons;
-			g_DbgCaptureCooldown = SNDBG_CAPTURE_COOLDOWN;
+			g_DbgCaptureReasons |= uReasons;
+			if (!g_DbgCaptureCooldown || (uReasons & SNDBG_CAPTURE_MANUAL))
+				g_DbgCaptureCooldown = SNDBG_CAPTURE_COOLDOWN;
 		}
 	}
 	if (g_DbgCaptureActive)
