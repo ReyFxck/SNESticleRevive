@@ -1,4 +1,9 @@
-/* Auto-generated compact CJK UI atlas.\n * Glyph source/approach adapted from 1247847495/SNESticleRevive (anyi).\n * Contains every non-ASCII glyph used by the runtime UI catalog. */\n#include <stdint.h>\n\nextern const int _CjkGlyphCount = 276;
+/* Auto-generated compact CJK UI atlas.
+ * Glyph source/approach adapted from 1247847495/SNESticleRevive (anyi).
+ * Contains every non-ASCII glyph used by the runtime UI catalog. */
+#include <stdint.h>
+
+extern const int _CjkGlyphCount = 276;
 extern const unsigned short _CjkUcs[276] = {
     0x201C,0x201D,0x25A1,0x3000,0x3001,0x3002,0x4E00,0x4E0A,0x4E0B,0x4E0D,0x4E24,0x4E2A,
     0x4E2D,0x4E3A,0x4E4B,0x4E50,0x4E8E,0x4EAB,0x4ECE,0x4EE3,0x4EF6,0x4F1A,0x4F46,0x4F4D,
