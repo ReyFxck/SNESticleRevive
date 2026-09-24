@@ -273,7 +273,13 @@ static const I18nPhraseT s_Phrases[] =
     { "480i (default)", "480i (padrao)", "480i (predeterminado)", "480i (默认)" },
     { "Err %d", "Erro %d", "Error %d", "错误 %d" },
     { "<none>", "<nenhum>", "<ninguno>", "<无>" },
-    { "<unknown>", "<desconhecido>", "<desconocido>", "<未知>" }
+    { "<unknown>", "<desconhecido>", "<desconocido>", "<未知>" },
+    { "CD/DVD: Driver failed (%d)", "CD/DVD: driver falhou (%d)", "CD/DVD: fallo del driver (%d)", "CD/DVD: 驱动失败 (%d)" },
+    { "SMB: %s\nCheck config/network", "SMB: %s\nVerifique configuracao/rede", "SMB: %s\nRevisa configuracion/red", "SMB: %s\n请检查配置/网络" },
+    { "HostFS could not open ZIP (I/O %d)", "HostFS nao conseguiu abrir ZIP (E/S %d)", "HostFS no pudo abrir ZIP (E/S %d)", "HostFS 无法打开 ZIP (I/O %d)" },
+    { "Could not open ZIP (I/O %d)", "Nao foi possivel abrir ZIP (E/S %d)", "No se pudo abrir ZIP (E/S %d)", "无法打开 ZIP (I/O %d)" },
+    { "HostFS could not open ROM (I/O %d)", "HostFS nao conseguiu abrir ROM (E/S %d)", "HostFS no pudo abrir ROM (E/S %d)", "HostFS 无法打开 ROM (I/O %d)" },
+    { "Could not open ROM (I/O %d)", "Nao foi possivel abrir ROM (E/S %d)", "No se pudo abrir ROM (E/S %d)", "无法打开 ROM (I/O %d)" }
 };
 
 static const Char *_PhraseFor(const I18nPhraseT *p)
