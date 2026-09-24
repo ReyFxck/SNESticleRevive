@@ -114,7 +114,7 @@ void CMenuScreen::Draw()
 
 		UiChromeSection(91, I18nTranslate("Warning"));
 		FontColor4f(0.86f, 0.86f, 0.86f, 1.0f);
-		if (m_strText[0][0]) _MenuPrintAlignCenter(128, 107, m_strText[0]);
+		if (m_strText[0][0]) _MenuPrintAlignCenter(128, 107, I18nTranslate(m_strText[0]));
 		FontColor4f(1.0f, 0.48f, 0.48f, 1.0f);
 		_MenuPrintAlignCenter(128, 123, I18nTranslate("Formatting erases the entire card."));
 		FontColor4f(0.62f, 0.62f, 0.62f, 1.0f);
