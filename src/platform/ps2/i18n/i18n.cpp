@@ -141,6 +141,7 @@ static const I18nPhraseT s_Phrases[] =
     { "Memory card formatted.", "Cartao de memoria formatado.", "Tarjeta de memoria formateada.", "记忆卡已格式化。" },
     { "Memory card formatted, but save failed.", "Cartao formatado, mas o save falhou.", "Tarjeta formateada, pero fallo el guardado.", "记忆卡已格式化，但保存失败。" },
     { "Return to PS2 Browser", "Voltar ao Navegador do PS2", "Volver al Navegador de PS2", "返回 PS2 浏览器" },
+    { "Launch mc?:/BOOT/BOOT.ELF", "Iniciar mc?:/BOOT/BOOT.ELF", "Iniciar mc?:/BOOT/BOOT.ELF", "启动 mc?:/BOOT/BOOT.ELF" },
     { "Power Off PS2", "Desligar PS2", "Apagar PS2", "关闭 PS2" },
     { "Status", "Status", "Estado", "状态" },
     { "Server IP", "IP do Servidor", "IP del Servidor", "服务器 IP" },
