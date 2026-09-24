@@ -474,7 +474,7 @@ static const char *_VideoMx4sioStatus()
 	error = Mx4sioGetLastError();
 	if (error < 0)
 	{
-		snprintf(errorText, sizeof(errorText), "Err %d", error);
+		snprintf(errorText, sizeof(errorText), I18nTranslate("Err %d"), error);
 		return errorText;
 	}
 
@@ -509,7 +509,7 @@ void CVideoScreen::Draw()
 	Int32 scroll = _VideoScrollForSelection(m_iSelect);
 	Int32 y;
 	Int32 m = _VideoModeIndex(g_GskVideoMode);
-	const char *pMode = _VideoModes[m].name;
+	const char *pMode = I18nTranslate(_VideoModes[m].name);
 	const char *pWide = g_GskWidescreen ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF);
 	const char *pColor =
 		(SNPPUColorGetProfile() == SNPPU_COLOR_PROFILE_COMPOSITE)
@@ -555,7 +555,7 @@ void CVideoScreen::Draw()
 	{
 		int bv = BgmGetVolume();
 		if (bv <= 0)
-			snprintf(buf, sizeof(buf), "Off");
+			snprintf(buf, sizeof(buf), "%s", I18nGetText(I18N_OFF));
 		else if (BgmTrackCount() <= 0)
 			snprintf(buf, sizeof(buf), "%s", BgmIsSearching() ? I18nGetText(I18N_SEARCHING) : I18nGetText(I18N_NO_TRACK));
 		else
@@ -585,7 +585,7 @@ void CVideoScreen::Draw()
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
 	          I18nGetText(I18N_HOSTFS_EMU), HostFsSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[19] - scroll, 19, m_iSelect,
-	          I18nGetText(I18N_SMB_NETWORK), SmbGetStatusText());
+	          I18nGetText(I18N_SMB_NETWORK), I18nTranslate(SmbGetStatusText()));
 
 	UiChromeScroll(scroll > 0,
 	               scroll < VIDEO_CONTENT_H - (VIDEO_VIEW_BOTTOM - VIDEO_VIEW_TOP),
