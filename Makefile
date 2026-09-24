@@ -255,6 +255,7 @@ INCS := \
 	-I$(CURDIR)/src/platform/ps2/common \
 	-I$(CURDIR)/src/platform/ps2/gs \
 	-I$(CURDIR)/src/platform/ps2/input \
+	-I$(CURDIR)/src/platform/ps2/i18n \
 	-I$(CURDIR)/src/platform/ps2/lowlevel \
 	-I$(CURDIR)/src/platform/ps2/memcard \
 	-I$(CURDIR)/src/platform/ps2/system \
