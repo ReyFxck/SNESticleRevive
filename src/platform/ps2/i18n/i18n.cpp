@@ -57,7 +57,7 @@ static const Char *s_I18nText[I18N_LANGUAGE_COUNT][I18N_TEXT_COUNT] =
         "Salto de Cuadros", "Almacenamiento / Dispositivos", "Mass / USB",
         "Soporte HDD", "Tarjetas MMCE", "MX4SIO (SD)", "HostFS (Emu)",
         "SMB (Red)", "Activado", "Desactivado", "Original", "Compuesto",
-        "Suave", "Nitido", "Seleccionar", "Cambiar", "Restablecer", "Guardar",
+        "Suave", "Nitido", "Elegir", "Cambiar", "Reset", "Guardar",
         "Reinicio necesario", "Reiniciar", "Error de Driver", "Slot 1",
         "Slot 2", "Slots 1+2", "No encontrado", "Habilitado", "Buscando",
         "Sin musica"
@@ -103,7 +103,7 @@ static const I18nPhraseT s_Phrases[] =
     { "Format Card", "Formatar Cartao", "Formatear Tarjeta", "格式化记忆卡" },
     { "Warning", "Aviso", "Aviso", "警告" },
     { "Formatting erases the entire card.", "Formatar apaga todo o cartao.", "Formatear borra toda la tarjeta.", "格式化会清空整张记忆卡。" },
-    { "Select", "Selecionar", "Seleccionar", "选择" },
+    { "Select", "Escolher", "Elegir", "选择" },
     { "Open", "Abrir", "Abrir", "打开" },
     { "Back", "Voltar", "Volver", "返回" },
     { "Cover", "Capa", "Caratula", "封面" },
@@ -156,7 +156,11 @@ static const I18nPhraseT s_Phrases[] =
     { "Char", "Caractere", "Caracter", "字符" },
     { "Delete", "Excluir", "Borrar", "删除" },
     { "Edit", "Editar", "Editar", "编辑" },
+    { "On", "Ligado", "Activado", "开" },
     { "Off", "Desligado", "Desactivado", "关" },
+    { "on", "ligado", "activado", "开" },
+    { "off", "desligado", "desactivado", "关" },
+    { "(none)", "(nenhum)", "(ninguno)", "(无)" },
     { "Connecting", "Conectando", "Conectando", "连接中" },
     { "Connected", "Conectado", "Conectado", "已连接" },
     { "No SMB.CNF", "Sem SMB.CNF", "Sin SMB.CNF", "缺少 SMB.CNF" },
@@ -195,7 +199,7 @@ static const I18nPhraseT s_Phrases[] =
     { "Paste File", "Colar Arquivo", "Pegar Archivo", "粘贴文件" },
     { "Delete file", "Excluir Arquivo", "Eliminar Archivo", "删除文件" },
     { "Select=Network", "Select=Rede", "Select=Red", "Select=网络" },
-    { "Reset", "Padrao", "Restablecer", "重置" },
+    { "Reset", "Padrao", "Reset", "重置" },
     { "Save", "Salvar", "Guardar", "保存" },
     { "Internal HDD", "HDD Interno", "HDD Interno", "内部 HDD" },
     { "Auto", "Automatico", "Automatico", "自动" },
@@ -294,7 +298,8 @@ const Char *I18nTranslate(const Char *english)
         suffix = english + sizeof(en)-1; \
         const Char *prefix = (s_I18nLanguage == I18N_PORTUGUESE_BR) ? pt : \
                              (s_I18nLanguage == I18N_SPANISH) ? es : zh; \
-        snprintf(s_I18nDynamic, sizeof(s_I18nDynamic), "%s%s", prefix, suffix); \
+        const Char *translatedSuffix = I18nTranslate(suffix); \
+        snprintf(s_I18nDynamic, sizeof(s_I18nDynamic), "%s%s", prefix, translatedSuffix); \
         return s_I18nDynamic; \
     }
 
