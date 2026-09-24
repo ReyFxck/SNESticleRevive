@@ -13,6 +13,7 @@
 #include "types.h"
 #include "font.h"
 #include "surface.h"
+#include "i18n.h"
 extern "C" {
 #include "gs.h"
 #include "gpprim.h"
@@ -68,21 +69,18 @@ extern const int           _Font_ui_maxw;
 #define CJK_GLYPH_SIZE    16
 #define CJK_CELLS_ROW     16
 #define CJK_ATLAS_SRC_BYTES (CJK_ATLAS_W * CJK_ATLAS_H)
-#define CJK_ATLAS_BYTES     (CJK_ATLAS_SRC_BYTES / 2)
+#define CJK_ATLAS_BYTES     (CJK_ATLAS_SRC_BYTES * 4)
 #define CJK_TEX_TBP_OFFSET  (_FontTex_ui_w * _FontTex_ui_h * 4 / 256)
-#define CJK_CLUT_TBP_OFFSET (CJK_TEX_TBP_OFFSET + CJK_ATLAS_BYTES / 256)
 
 extern const unsigned short _CjkUcs[];
 extern const unsigned char  _CjkPix[CJK_ATLAS_SRC_BYTES];
-extern const unsigned int   _CjkClut[256];
 extern const int            _CjkGlyphCount;
 
 static TextureT _Font_CjkTex;
 static Uint32   _Font_CjkTBP;
-static Uint32   _Font_CjkClutTBP;
 static Int32    _Font_CjkTofu;
 static Bool     _Font_CjkReady = FALSE;
-static Uint8    s_CjkPack[CJK_ATLAS_BYTES] _ALIGN(16);
+static Uint32   s_CjkRgba[CJK_ATLAS_SRC_BYTES] _ALIGN(16);
 
 static Int32 _CjkFind(Uint32 ucp)
 {
@@ -207,7 +205,7 @@ static void _FontBindCjk(void)
 {
     GPPrimSetTex(_Font_CjkTBP, CJK_ATLAS_W,
                  CJK_ATLAS_LOG2_W, CJK_ATLAS_LOG2_H,
-                 GS_PSMT4, _Font_CjkClutTBP, 0, GS_PSMCT32, 1);
+                 GS_PSMCT32, 0, 0, 0, 0);
 }
 
 static Int32 _FontDrawCharCJK(Int32 iGlyph, float fX, float fY, Uint32 uColor)
@@ -261,6 +259,7 @@ static Int32 _FontDrawCharCJK(Int32 iGlyph, float fX, float fY, Uint32 uColor)
 Int32 FontGetStrWidth(const Char *pStr)
 {
     Int32 iWidth = 0;
+    pStr = I18nTranslate(pStr);
     FontT *pFont = _Font_State.pFont;
     if (!pFont) return 0;
 
@@ -458,6 +457,7 @@ void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
 void FontPuts(Float32 vx, Float32 vy, const Char *pStr)
 {
 	FontT *pFont;
+	pStr = I18nTranslate(pStr);
 	pFont = _Font_State.pFont;
 	if (!pFont) return;
 
@@ -474,6 +474,7 @@ void FontPrintf(Float32 vx, Float32 vy, const Char *pFormat, ...)
 	static char strbuf[1024];
 	va_list args;
 
+	pFormat = I18nTranslate(pFormat);
 	va_start(args, pFormat);
 	vsprintf(strbuf, pFormat, args);
 	va_end(args);
@@ -504,8 +505,7 @@ Int32 FontGetHeight()
 Uint32 FontGetVramSize()
 {
     return (Uint32)_FontTex_ui_w * (Uint32)_FontTex_ui_h * 4U
-         + CJK_ATLAS_BYTES
-         + 8192U;
+         + CJK_ATLAS_BYTES;
 }
 
 void FontInit(Uint32 uVramAddr)
@@ -535,25 +535,22 @@ void FontInit(Uint32 uVramAddr)
 	FontSelect(0);
 	FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
-    _Font_CjkTBP     = uVramAddr + CJK_TEX_TBP_OFFSET;
-    _Font_CjkClutTBP = uVramAddr + CJK_CLUT_TBP_OFFSET;
+    _Font_CjkTBP = uVramAddr + CJK_TEX_TBP_OFFSET;
 
-    TextureNew(&_Font_CjkTex, CJK_ATLAS_W, CJK_ATLAS_H, GS_PSMT4);
+    TextureNew(&_Font_CjkTex, CJK_ATLAS_W, CJK_ATLAS_H, GS_PSMCT32);
     TextureSetAddr(&_Font_CjkTex, _Font_CjkTBP);
 
+    /* The compact CJK atlas is expanded once to RGBA32.  This deliberately
+       avoids the PSMT4/CLUT path that proved fragile on NetherSX2 while
+       costing only 128 KiB of GS VRAM for the 256x128 UI-only atlas. */
     {
         Uint32 i;
-        for (i = 0; i < CJK_ATLAS_BYTES; i++)
-        {
-            s_CjkPack[i] = (Uint8)((_CjkPix[2U * i] & 0x0FU) |
-                                   ((_CjkPix[2U * i + 1U] & 0x0FU) << 4));
-        }
+        for (i = 0; i < CJK_ATLAS_SRC_BYTES; i++)
+            s_CjkRgba[i] = _CjkPix[i] ? 0x80FFFFFFU : 0x00000000U;
     }
 
-    GPPrimUploadTexture(_Font_CjkTBP, CJK_ATLAS_W, 0, 0, GS_PSMT4,
-                        (void *)s_CjkPack, CJK_ATLAS_W, CJK_ATLAS_H);
-    GPPrimUploadTexture(_Font_CjkClutTBP, 256, 0, 0, GS_PSMCT32,
-                        (void *)_CjkClut, 256, 1);
+    GPPrimUploadTexture(_Font_CjkTBP, CJK_ATLAS_W, 0, 0, GS_PSMCT32,
+                        (void *)s_CjkRgba, CJK_ATLAS_W, CJK_ATLAS_H);
 
     _Font_CjkTofu  = _CjkFind(0x25A1);
     _Font_CjkReady = (_Font_CjkTofu >= 0) ? TRUE : FALSE;
