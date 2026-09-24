@@ -63,9 +63,9 @@ extern const int           _Font_ui_maxw;
  * 1247847495/SNESticleRevive (Chinese localization credited there to anyi),
  * but keeps only the glyphs used by our runtime UI catalog. */
 #define CJK_ATLAS_W       512
-#define CJK_ATLAS_H       256
+#define CJK_ATLAS_H       512
 #define CJK_ATLAS_LOG2_W  9
-#define CJK_ATLAS_LOG2_H  8
+#define CJK_ATLAS_LOG2_H  9
 #define CJK_GLYPH_SIZE    16
 #define CJK_CELLS_ROW     32
 #define CJK_ATLAS_SRC_BYTES (CJK_ATLAS_W * CJK_ATLAS_H)
@@ -542,7 +542,7 @@ void FontInit(Uint32 uVramAddr)
 
     /* The compact CJK atlas is expanded once to RGBA32.  This deliberately
        avoids the PSMT4/CLUT path that proved fragile on NetherSX2 while
-       costing only 128 KiB of GS VRAM for the 256x128 UI-only atlas. */
+       costing 512 KiB of GS VRAM for the compact 256x512 UI-only atlas. */
     {
         Uint32 i;
         for (i = 0; i < CJK_ATLAS_SRC_BYTES; i++)
