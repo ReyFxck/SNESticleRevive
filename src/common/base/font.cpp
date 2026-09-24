@@ -13,7 +13,6 @@
 #include "types.h"
 #include "font.h"
 #include "surface.h"
-#include "i18n.h"
 extern "C" {
 #include "gs.h"
 #include "gpprim.h"
@@ -58,80 +57,6 @@ extern const int           _FontTex_ui_h;
 extern const int           _Font_ui_spacew;
 extern const int           _Font_ui_lineh;
 extern const int           _Font_ui_maxw;
-
-/* Compact Simplified-Chinese atlas.  The renderer follows the CJK path from
- * 1247847495/SNESticleRevive (Chinese localization credited there to anyi),
- * but keeps only the glyphs used by our runtime UI catalog. */
-#define CJK_ATLAS_W       512
-#define CJK_ATLAS_H       512
-#define CJK_ATLAS_LOG2_W  9
-#define CJK_ATLAS_LOG2_H  9
-#define CJK_GLYPH_SIZE    16
-#define CJK_CELLS_ROW     32
-#define CJK_ATLAS_SRC_BYTES (CJK_ATLAS_W * CJK_ATLAS_H)
-#define CJK_ATLAS_BYTES     (CJK_ATLAS_SRC_BYTES * 4)
-#define CJK_TEX_TBP_OFFSET  (_FontTex_ui_w * _FontTex_ui_h * 4 / 256)
-
-extern const unsigned short _CjkUcs[];
-extern const unsigned char  _CjkPix[CJK_ATLAS_SRC_BYTES];
-extern const int            _CjkGlyphCount;
-
-static TextureT _Font_CjkTex;
-static Uint32   _Font_CjkTBP;
-static Int32    _Font_CjkTofu;
-static Bool     _Font_CjkReady = FALSE;
-static Uint32   s_CjkRgba[CJK_ATLAS_SRC_BYTES] _ALIGN(16);
-
-static Int32 _CjkFind(Uint32 ucp)
-{
-    Int32 lo = 0;
-    Int32 hi = _CjkGlyphCount - 1;
-    if (ucp > 0xFFFF) return -1;
-
-    while (lo <= hi)
-    {
-        Int32 mid = (lo + hi) >> 1;
-        if (_CjkUcs[mid] == ucp) return mid;
-        if (_CjkUcs[mid] < ucp) lo = mid + 1;
-        else hi = mid - 1;
-    }
-    return -1;
-}
-
-static const Char *_FontNextCode(const Char *pStr, Uint32 *pCp)
-{
-    const unsigned char *p = (const unsigned char *)pStr;
-    unsigned c0 = p[0];
-
-    if (c0 < 0x80)
-    {
-        *pCp = c0;
-        return pStr + 1;
-    }
-    if ((c0 & 0xE0) == 0xC0 && p[1] && (p[1] & 0xC0) == 0x80)
-    {
-        *pCp = ((c0 & 0x1Fu) << 6) | (p[1] & 0x3Fu);
-        return pStr + 2;
-    }
-    if ((c0 & 0xF0) == 0xE0 && p[1] && p[2] &&
-        (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80)
-    {
-        *pCp = ((c0 & 0x0Fu) << 12) | ((p[1] & 0x3Fu) << 6) |
-               (p[2] & 0x3Fu);
-        return pStr + 3;
-    }
-    if ((c0 & 0xF8) == 0xF0 && p[1] && p[2] && p[3] &&
-        (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
-        (p[3] & 0xC0) == 0x80)
-    {
-        *pCp = ((c0 & 0x07u) << 18) | ((p[1] & 0x3Fu) << 12) |
-               ((p[2] & 0x3Fu) << 6) | (p[3] & 0x3Fu);
-        return pStr + 4;
-    }
-
-    *pCp = c0;
-    return pStr + 1;
-}
 
 struct FontStateT
 {
@@ -201,158 +126,57 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
 
 }
 
-static void _FontBindCjk(void)
-{
-    GPPrimSetTex(_Font_CjkTBP, CJK_ATLAS_W,
-                 CJK_ATLAS_LOG2_W, CJK_ATLAS_LOG2_H,
-                 GS_PSMCT32, 0, 0, 0, 0);
-}
-
-static Int32 _FontDrawCharCJK(Int32 iGlyph, float fX, float fY, Uint32 uColor)
-{
-    Uint32 u0, v0, u1, v1;
-    Uint32 x0, y0, x1, y1;
-    float sx, sy, px0, py0, px1, py1;
-    Int32 tu, tv;
-    Int32 disp;
-
-    tu = (iGlyph % CJK_CELLS_ROW) * CJK_GLYPH_SIZE;
-    tv = (iGlyph / CJK_CELLS_ROW) * CJK_GLYPH_SIZE;
-
-    sx = GPPrimGetScaleX(); if (sx <= 0.0f) sx = 1.0f;
-    sy = GPPrimGetScaleY(); if (sy <= 0.0f) sy = 1.0f;
-    px0 = fX * sx + GPPrimGetOffsetX();
-    py0 = fY * sy + GPPrimGetOffsetY();
-
-    px0 = (float)((Int32)(px0 + 0.5f));
-    py0 = (float)((Int32)(py0 + 0.5f));
-    disp = CJK_GLYPH_SIZE * FONT_DRAW_SCALE / 2;
-
-    if (disp == CJK_GLYPH_SIZE)
-    {
-        u0 = (tu << 4);
-        v0 = (tv << 4);
-        u1 = ((tu + CJK_GLYPH_SIZE) << 4) - 15;
-        v1 = ((tv + CJK_GLYPH_SIZE) << 4) - 15;
-        px1 = px0 + (float)CJK_GLYPH_SIZE - 0.9375f;
-        py1 = py0 + (float)CJK_GLYPH_SIZE - 0.9375f;
-    }
-    else
-    {
-        u0 = (tu << 4);
-        v0 = (tv << 4);
-        u1 = ((tu + CJK_GLYPH_SIZE) << 4);
-        v1 = ((tv + CJK_GLYPH_SIZE) << 4);
-        px1 = px0 + (float)disp;
-        py1 = py0 + (float)disp;
-    }
-
-    x0 = ((Uint32)FIXED4(px0)) & 0xFFFF;
-    y0 = ((Uint32)FIXED4(py0)) & 0xFFFF;
-    x1 = ((Uint32)FIXED4(px1)) & 0xFFFF;
-    y1 = ((Uint32)FIXED4(py1)) & 0xFFFF;
-
-    GPPrimTexRectAbs(x0, y0, u0, v0, x1, y1, u1, v1, 10, uColor, 1);
-    return _FontAdvLogical(disp);
-}
-
 Int32 FontGetStrWidth(const Char *pStr)
 {
     Int32 iWidth = 0;
-    pStr = I18nTranslate(pStr);
-    FontT *pFont = _Font_State.pFont;
-    if (!pFont) return 0;
+	FontT *pFont;
+	pFont = _Font_State.pFont;
+	if (!pFont) return 0;
 
     while (*pStr)
     {
-        Uint32 cp;
-        pStr = _FontNextCode(pStr, &cp);
-        if (cp < 128)
+		if (*pStr != ' ')
+		{
+            FontCharT *pFontChar = &pFont->CharMap[(unsigned char)*pStr];
+			iWidth += _FontAdvLogical((pFontChar->u1 - pFontChar->u0) * FONT_DRAW_SCALE + 2);
+		} else
         {
-            if (cp != ' ')
-            {
-                FontCharT *pFontChar = &pFont->CharMap[cp];
-                iWidth += _FontAdvLogical((pFontChar->u1 - pFontChar->u0) *
-                                          FONT_DRAW_SCALE + 2);
-            }
-            else
-            {
-                iWidth += _FontAdvLogical(pFont->uCharX * FONT_DRAW_SCALE);
-            }
+            // space
+		    iWidth += _FontAdvLogical(pFont->uCharX * FONT_DRAW_SCALE);
         }
-        else
-        {
-            Int32 adv = pFont->uFixedWidth
-                ? pFont->uFixedWidth * 2 * FONT_DRAW_SCALE
-                : CJK_GLYPH_SIZE * FONT_DRAW_SCALE / 2;
-            iWidth += _FontAdvLogical(adv);
-        }
+
+        pStr++;
     }
-    return iWidth;
+	return iWidth;
 }
 
-static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz,
-                         const Char *pStr, Uint32 uColor)
+static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const Char *pStr, Uint32 uColor)
 {
     TextureT *pTexture = &pFont->Texture;
-    int bCjkBound = 0;
     if (!pTexture) return;
 
-    GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth,
-                 pTexture->uWidthLog2, pTexture->uHeightLog2,
-                 pTexture->eFormat, 0, 0, 0, 0);
+	// Set texture/clut regs.  NEAREST keeps the m5x7 bitmap crisp.
+	GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth, pTexture->uWidthLog2, pTexture->uHeightLog2, pTexture->eFormat, 0, 0, 0, 0);
 
-    while (*pStr)
-    {
-        Uint32 cp;
-        pStr = _FontNextCode(pStr, &cp);
-
-        if (cp < 128)
-        {
-            if (bCjkBound)
+	while (*pStr)
+	{
+		if (*pStr != ' ')
+		{
             {
-                GPPrimSetTex(pTexture->uVramAddr, pTexture->uWidth,
-                             pTexture->uWidthLog2, pTexture->uHeightLog2,
-                             pTexture->eFormat, 0, 0, 0, 0);
-                bCjkBound = 0;
-            }
-
-            if (cp != ' ')
-            {
-                FontCharT *pFontChar = &pFont->CharMap[cp];
-                Int32 iWidth = _FontDrawChar(pFontChar, vx, vy, vz, uColor,
-                                             (int)cp);
-                if (pFont->uFixedWidth)
-                    iWidth = _FontAdvLogical((Int32)pFont->uFixedWidth *
-                                             FONT_DRAW_SCALE);
-                vx += iWidth;
-            }
-            else
-            {
-                vx += _FontAdvLogical(pFont->uCharX * FONT_DRAW_SCALE);
-            }
-        }
-        else if (_Font_CjkReady)
-        {
-            Int32 iGlyph = _CjkFind(cp);
-            if (iGlyph < 0) iGlyph = _Font_CjkTofu;
-            if (iGlyph >= 0)
-            {
+                FontCharT *pFontChar = &pFont->CharMap[(unsigned char)*pStr];
                 Int32 iWidth;
-                _FontBindCjk();
-                bCjkBound = 1;
-                iWidth = _FontDrawCharCJK(iGlyph, vx, vy, uColor);
-                if (pFont->uFixedWidth)
-                    iWidth = _FontAdvLogical((Int32)pFont->uFixedWidth * 2 *
-                                             FONT_DRAW_SCALE);
-                vx += iWidth;
+
+                iWidth =_FontDrawChar(  pFontChar, vx, vy, vz, uColor,	*pStr);
+
+                if (pFont->uFixedWidth) iWidth = _FontAdvLogical((Int32)pFont->uFixedWidth * FONT_DRAW_SCALE);
+			    vx += iWidth;
             }
-        }
-        else
+		} else
         {
-            vx += _FontAdvLogical(CJK_GLYPH_SIZE * FONT_DRAW_SCALE / 2);
+		    vx += _FontAdvLogical(pFont->uCharX * FONT_DRAW_SCALE);
         }
-    }
+		pStr++;
+	}
 }
 
 static void _FontSetCharMap(FontT *pFont, Uint8 uChar, Uint32 u, Uint32 v, Uint32 w, Uint32 h)
@@ -457,7 +281,6 @@ void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
 void FontPuts(Float32 vx, Float32 vy, const Char *pStr)
 {
 	FontT *pFont;
-	pStr = I18nTranslate(pStr);
 	pFont = _Font_State.pFont;
 	if (!pFont) return;
 
@@ -474,7 +297,6 @@ void FontPrintf(Float32 vx, Float32 vy, const Char *pFormat, ...)
 	static char strbuf[1024];
 	va_list args;
 
-	pFormat = I18nTranslate(pFormat);
 	va_start(args, pFormat);
 	vsprintf(strbuf, pFormat, args);
 	va_end(args);
@@ -504,8 +326,7 @@ Int32 FontGetHeight()
 
 Uint32 FontGetVramSize()
 {
-    return (Uint32)_FontTex_ui_w * (Uint32)_FontTex_ui_h * 4U
-         + CJK_ATLAS_BYTES;
+    return (Uint32)_FontTex_ui_w * (Uint32)_FontTex_ui_h * 4U;
 }
 
 void FontInit(Uint32 uVramAddr)
@@ -534,26 +355,6 @@ void FontInit(Uint32 uVramAddr)
 
 	FontSelect(0);
 	FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-
-    _Font_CjkTBP = uVramAddr + CJK_TEX_TBP_OFFSET;
-
-    TextureNew(&_Font_CjkTex, CJK_ATLAS_W, CJK_ATLAS_H, GS_PSMCT32);
-    TextureSetAddr(&_Font_CjkTex, _Font_CjkTBP);
-
-    /* The compact CJK atlas is expanded once to RGBA32.  This deliberately
-       avoids the PSMT4/CLUT path that proved fragile on NetherSX2 while
-       costing 512 KiB of GS VRAM for the compact 256x512 UI-only atlas. */
-    {
-        Uint32 i;
-        for (i = 0; i < CJK_ATLAS_SRC_BYTES; i++)
-            s_CjkRgba[i] = _CjkPix[i] ? 0x80FFFFFFU : 0x00000000U;
-    }
-
-    GPPrimUploadTexture(_Font_CjkTBP, CJK_ATLAS_W, 0, 0, GS_PSMCT32,
-                        (void *)s_CjkRgba, CJK_ATLAS_W, CJK_ATLAS_H);
-
-    _Font_CjkTofu  = _CjkFind(0x25A1);
-    _Font_CjkReady = (_Font_CjkTofu >= 0) ? TRUE : FALSE;
 }
 
 void FontShutdown()
