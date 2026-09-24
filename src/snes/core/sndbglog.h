@@ -180,6 +180,12 @@ extern Uint32 g_DbgBGChrRows;
 extern Uint32 g_DbgBGChrBlankRows;
 extern Uint32 g_DbgBGChrRepeatRows;
 extern Uint32 g_DbgBGChrRowsByDepth[3];
+extern Uint32 g_DbgBGLineCacheHits;
+extern Uint32 g_DbgBGLineCacheMisses;
+extern Uint32 g_DbgBGLineCacheBypasses;
+extern Uint32 g_DbgHiresLineCacheHits;
+extern Uint32 g_DbgHiresLineCacheMisses;
+extern Uint32 g_DbgHiresLineCacheBypasses;
 
 // Cobertura universal de modos, camadas e recursos PPU por scanline.
 extern Uint32 g_DbgPPUModeLines[8];

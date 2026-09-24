@@ -141,6 +141,12 @@ Uint32 g_DbgBGChrRows = 0;
 Uint32 g_DbgBGChrBlankRows = 0;
 Uint32 g_DbgBGChrRepeatRows = 0;
 Uint32 g_DbgBGChrRowsByDepth[3] = {0,0,0};
+Uint32 g_DbgBGLineCacheHits = 0;
+Uint32 g_DbgBGLineCacheMisses = 0;
+Uint32 g_DbgBGLineCacheBypasses = 0;
+Uint32 g_DbgHiresLineCacheHits = 0;
+Uint32 g_DbgHiresLineCacheMisses = 0;
+Uint32 g_DbgHiresLineCacheBypasses = 0;
 Uint32 g_DbgPPUModeLines[8] = {0,0,0,0,0,0,0,0};
 Uint32 g_DbgPPUModeChanges = 0;
 Uint8  g_DbgPPULastMode = 0xFF;
@@ -298,6 +304,12 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrBlankRows = 0;
 	g_DbgBGChrRepeatRows = 0;
 	memset(g_DbgBGChrRowsByDepth, 0, sizeof(g_DbgBGChrRowsByDepth));
+	g_DbgBGLineCacheHits = 0;
+	g_DbgBGLineCacheMisses = 0;
+	g_DbgBGLineCacheBypasses = 0;
+	g_DbgHiresLineCacheHits = 0;
+	g_DbgHiresLineCacheMisses = 0;
+	g_DbgHiresLineCacheBypasses = 0;
 	memset(g_DbgPPUModeLines, 0, sizeof(g_DbgPPUModeLines));
 	g_DbgPPUModeChanges = 0;
 	memset(g_DbgPPUMainLayerLines, 0, sizeof(g_DbgPPUMainLayerLines));
@@ -2490,6 +2502,14 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGChrRowsByDepth[0],
 				(unsigned)g_DbgBGChrRowsByDepth[1],
 				(unsigned)g_DbgBGChrRowsByDepth[2]);
+			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u",
+				(unsigned)g_DbgBGLineCacheHits,
+				(unsigned)g_DbgBGLineCacheMisses,
+				(unsigned)g_DbgBGLineCacheBypasses);
+			DLog("[snes-hires-line-cache] hit/miss/bypass=%u/%u/%u",
+				(unsigned)g_DbgHiresLineCacheHits,
+				(unsigned)g_DbgHiresLineCacheMisses,
+				(unsigned)g_DbgHiresLineCacheBypasses);
 			DLog("[snes-obj] ports oam=%u vram=%u cgram=%u | lines=%u refs=%u tiles=%u range/time=%u/%u",
 				(unsigned)g_DbgOAMWrites, (unsigned)g_DbgVRAMWrites,
 				(unsigned)g_DbgCGRAMWrites, (unsigned)g_DbgObjEnabledLines,

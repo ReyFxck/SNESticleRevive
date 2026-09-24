@@ -28,6 +28,7 @@ jobs:
           ./tools/pputest/obj_test
           ./tools/pputest/oam_test
           ./tools/pputest/chrcache_test
+          ./tools/pputest/hires_test
           ./tools/pputest/audioschedule_test
           ./tools/pputest/mode7_test
           ./tools/pputest/queue_test

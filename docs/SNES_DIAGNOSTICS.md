@@ -57,6 +57,8 @@ throughput ceiling instead of making the logger itself steal frame time:
 | `[snes-ppu-layers]` | Main-screen, sub-screen and actually fetched BG1-BG4 lines. |
 | `[snes-ppu-features]` | Mosaic, offset, windows, color math, direct color, interlace, overscan, hires and EXTBG usage. |
 | `[snes-bg-depth]` | Decoded BG rows split into 2, 4 and 8 bpp. |
+| `[snes-bg-line-cache]` | Exact Mode 1/5 decoded-line hits, misses and conservative bypasses. |
+| `[snes-hires-line-cache]` | Final Mode 5 512-dot line reuse; a hit requires identical VRAM/OAM/CGRAM generation and visual register state. |
 | `[snes-obj]` / `[snes-obj-cache]` | OAM work, hardware range/time limits, OBJ pixels in deep mode and OBJ-only cache efficiency. |
 | `[snes-sync]` / `[snes-dma]` / `[snes-hdma]` | PPU queue pressure and transfer destinations, modes, size and wrapping. |
 | `[snes-audio]` | Mixer requests, sample range and zero-sample anomalies; this is not an audsrv underrun claim. |
