@@ -39,6 +39,7 @@ int MCSave_WriteSync(int block, int *pResult);
 
 #include "mainloop_shared.h"
 #include "mainloop_state.h"
+#include "i18n.h"
 
 /* The iaddis-era custom MCSAVE.IRX async memory-card writer has been
    retired -- see embedded_irx.cpp.  mainloop_iop.cpp no longer
@@ -607,6 +608,7 @@ static void _MainLoopStateSetMessage(const Char *pFormat, ...)
 {
     va_list Args;
 
+    pFormat = I18nTranslate(pFormat);
     va_start(Args, pFormat);
     vsnprintf(
         _MainLoop_StateLastMessage,
