@@ -15,6 +15,7 @@
 #include "poly.h"
 #include "uiMenu.h"
 #include "uiChrome.h"
+#include "../i18n/i18n.h"
 
 void CMenuScreen::SetEntries(char **ppStrings)
 {
@@ -91,11 +92,11 @@ void CMenuScreen::Draw()
 	Bool shoulders = bStateManager;
 
 	FontSelect(0);
-	UiChromeHeader(m_strTitle, shoulders);
+	UiChromeHeader(I18nTranslate(m_strTitle), shoulders);
 
 	if (bMemCardPrompt)
 	{
-		UiChromeSection(34, "Format Card");
+		UiChromeSection(34, I18nTranslate("Format Card"));
 		for (iLine = 0; iLine < m_nItems; iLine++)
 		{
 			Int32 rowY = 49 + iLine * 16;
@@ -108,20 +109,20 @@ void CMenuScreen::Draw()
 			}
 			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 			if (m_pEntries[iLine])
-				FontPuts(52, rowY, m_pEntries[iLine]);
+				FontPuts(52, rowY, I18nTranslate(m_pEntries[iLine]));
 		}
 
-		UiChromeSection(91, "Warning");
+		UiChromeSection(91, I18nTranslate("Warning"));
 		FontColor4f(0.86f, 0.86f, 0.86f, 1.0f);
 		if (m_strText[0][0]) _MenuPrintAlignCenter(128, 107, m_strText[0]);
 		FontColor4f(1.0f, 0.48f, 0.48f, 1.0f);
-		_MenuPrintAlignCenter(128, 123, "Formatting erases the entire card.");
+		_MenuPrintAlignCenter(128, 123, I18nTranslate("Formatting erases the entire card."));
 		FontColor4f(0.62f, 0.62f, 0.62f, 1.0f);
-		_MenuPrintAlignCenter(128, 143, "No / Cancel is selected by default");
+		_MenuPrintAlignCenter(128, 143, I18nTranslate("No / Cancel is selected by default"));
 
-		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, "Select");
-		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 126, 198, "Choose");
-		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 184, 198, "Cancel");
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, I18nTranslate("Select"));
+		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 126, 198, I18nTranslate("Choose"));
+		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 184, 198, I18nTranslate("Cancel"));
 		return;
 	}
 
@@ -130,7 +131,7 @@ void CMenuScreen::Draw()
 		/* Save States deserves its own layout: the old generic menu dumped
 		   four help sentences into the middle of the screen and looked much
 		   denser than the rest of the refreshed frontend. */
-		UiChromeSection(34, "State Files");
+		UiChromeSection(34, I18nTranslate("State Files"));
 
 		/* Browse is the single file-management action. */
 		if (m_nItems > 0 && m_pEntries[0])
@@ -143,10 +144,10 @@ void CMenuScreen::Draw()
 				PolyRect(44, 47, 168, FontGetHeight() + 2);
 			}
 			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-			FontPuts(52, 48, m_pEntries[0]);
+			FontPuts(52, 48, I18nTranslate(m_pEntries[0]));
 		}
 
-		UiChromeSection(69, "Quick Save");
+		UiChromeSection(69, I18nTranslate("Quick Save"));
 
 		/* Storage and slot are rendered as label/value pairs so the changing
 		   value stays aligned like Configurations instead of moving the row. */
@@ -178,9 +179,9 @@ void CMenuScreen::Draw()
 				PolyRect(44, rowY - 1, 168, FontGetHeight() + 2);
 			}
 			FontColor4f(0.62f, 0.62f, 0.62f, 1.0f);
-			FontPuts(52, rowY, label);
+			FontPuts(52, rowY, I18nTranslate(label));
 			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-			FontPuts(137, rowY, pValue);
+			FontPuts(137, rowY, I18nTranslate(pValue));
 		}
 
 		if (m_nItems > 3 && m_pEntries[3])
@@ -193,35 +194,35 @@ void CMenuScreen::Draw()
 				PolyRect(44, 112, 168, FontGetHeight() + 2);
 			}
 			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-			FontPuts(52, 113, "Choose Save Location Again");
+			FontPuts(52, 113, I18nTranslate("Choose Save Location Again"));
 		}
 
-		UiChromeSection(137, "Current Target");
+		UiChromeSection(137, I18nTranslate("Current Target"));
 		if (m_strText[0][0])
 		{
 			const Char *p = strchr(m_strText[0], ':');
 			if (p) p++; else p = m_strText[0];
 			while (*p == ' ') p++;
 			FontColor4f(0.78f, 0.78f, 0.78f, 1.0f);
-			_MenuPrintAlignCenter(128, 151, p);
+			_MenuPrintAlignCenter(128, 151, I18nTranslate(p));
 		}
 
 		/* Keep only the one useful state-browser warning here. The file-menu
 		   controls are shown by the browser itself once it is opened. */
 		FontColor4f(0.48f, 0.48f, 0.48f, 1.0f);
-		_MenuPrintAlignCenter(128, 171, "Deleting a state removes both banks");
+		_MenuPrintAlignCenter(128, 171, I18nTranslate("Deleting a state removes both banks"));
 
-		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 29, 198, "Select");
+		UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 29, 198, I18nTranslate("Select"));
 		if (m_iSelect == 1 || m_iSelect == 2)
 		{
 			/* L/R previews only. Cross is deliberately still visible because
 			   it is the explicit commit action for Storage/Quick Slot. */
-			UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 105, 198, "Change");
-			UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 181, 198, "Choose");
+			UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 105, 198, I18nTranslate("Change"));
+			UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 181, 198, I18nTranslate("Choose"));
 		}
 		else
 		{
-			UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 157, 198, "Choose");
+			UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 157, 198, I18nTranslate("Choose"));
 		}
 		return;
 	}
@@ -239,7 +240,7 @@ void CMenuScreen::Draw()
 				PolyRect(vx - 4, vy - 1, 164, FontGetHeight() + 2);
 			}
 			FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-			FontPuts(vx, vy, pStr);
+			FontPuts(vx, vy, I18nTranslate(pStr));
 		}
 		vy += FontGetHeight() + 2;
 	}
@@ -251,29 +252,29 @@ void CMenuScreen::Draw()
 		if (anyText && vy < 164)
 		{
 			vy += 4;
-			UiChromeSection(vy, "Info");
+			UiChromeSection(vy, I18nTranslate("Info"));
 			vy += 12;
 			for (iLine = 0; iLine < 4 && vy < 190; iLine++)
 			{
 				if (m_strText[iLine][0])
 				{
 					FontColor4f(0.70f, 0.70f, 0.70f, 1.0f);
-					_MenuPrintAlignCenter(128, vy, m_strText[iLine]);
+					_MenuPrintAlignCenter(128, vy, I18nTranslate(m_strText[iLine]));
 					vy += FontGetHeight() + 2;
 				}
 			}
 		}
 	}
 
-	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, "Select");
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 45, 198, I18nTranslate("Select"));
 	if (bStateLocation)
 	{
-		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 127, 198, "Choose");
-		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 185, 198, "Cancel");
+		UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 127, 198, I18nTranslate("Choose"));
+		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 185, 198, I18nTranslate("Cancel"));
 	}
 	else
 	{
-		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 151, 198, "Choose");
+		UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 151, 198, I18nTranslate("Choose"));
 	}
 }
 
