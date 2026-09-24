@@ -119,9 +119,7 @@ CONSERVATIVE_FLAGS := \
 	-fwrapv \
 	-fsigned-char
 
-CHARSET_FLAGS := -finput-charset=UTF-8 -fexec-charset=UTF-8
-
-CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
+CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
@@ -129,7 +127,7 @@ CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 	-DSNESTICLE_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) \
 	-DSNESTICLE_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES)
 
-CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive $(CHARSET_FLAGS) \
+CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
@@ -257,7 +255,6 @@ INCS := \
 	-I$(CURDIR)/src/platform/ps2/common \
 	-I$(CURDIR)/src/platform/ps2/gs \
 	-I$(CURDIR)/src/platform/ps2/input \
-	-I$(CURDIR)/src/platform/ps2/i18n \
 	-I$(CURDIR)/src/platform/ps2/lowlevel \
 	-I$(CURDIR)/src/platform/ps2/memcard \
 	-I$(CURDIR)/src/platform/ps2/system \
@@ -329,7 +326,6 @@ SRCS := \
 	src/app/emusys.cpp \
 	src/common/base/file.cpp \
 	src/common/base/font_ui.cpp \
-	src/common/base/font_cjk_data.cpp \
 	src/platform/ps2/i18n/i18n.cpp \
 	src/common/base/font.cpp \
 	src/platform/ps2/gs/gpfifo.c \
