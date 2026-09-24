@@ -63,9 +63,9 @@ extern const int           _Font_ui_maxw;
  * 1247847495/SNESticleRevive (Chinese localization credited there to anyi),
  * but keeps only the glyphs used by our runtime UI catalog. */
 #define CJK_ATLAS_W       256
-#define CJK_ATLAS_H       128
+#define CJK_ATLAS_H       256
 #define CJK_ATLAS_LOG2_W  8
-#define CJK_ATLAS_LOG2_H  7
+#define CJK_ATLAS_LOG2_H  8
 #define CJK_GLYPH_SIZE    16
 #define CJK_CELLS_ROW     16
 #define CJK_ATLAS_SRC_BYTES (CJK_ATLAS_W * CJK_ATLAS_H)
