@@ -241,7 +241,30 @@ static const I18nPhraseT s_Phrases[] =
     { "Dump memory -> host:", "Exportar memoria -> host:", "Volcar memoria -> host:", "导出内存 -> host:" },
     { "Add PSX CD to mc0:title.db", "Adicionar CD PSX ao mc0:title.db", "Agregar CD PSX a mc0:title.db", "添加 PSX CD 到 mc0:title.db" },
     { "Dump mc0:title.db -> tty0:", "Exportar mc0:title.db -> tty0:", "Volcar mc0:title.db -> tty0:", "导出 mc0:title.db -> tty0:" },
-    { "Copy rom0:libsd -> host:", "Copiar rom0:libsd -> host:", "Copiar rom0:libsd -> host:", "复制 rom0:libsd -> host:" }
+    { "Copy rom0:libsd -> host:", "Copiar rom0:libsd -> host:", "Copiar rom0:libsd -> host:", "复制 rom0:libsd -> host:" },
+    { "BOOT.ELF not found on mc0: or mc1:.", "BOOT.ELF nao encontrado em mc0: ou mc1:.", "BOOT.ELF no encontrado en mc0: o mc1:.", "mc0: 或 mc1: 中未找到 BOOT.ELF。" },
+    { "Power-off driver failed (%d).", "Driver de desligamento falhou (%d).", "Fallo el driver de apagado (%d).", "关机驱动失败 (%d)。" },
+    { "Unable to open SYSTEM.CNF on cd.", "Nao foi possivel abrir SYSTEM.CNF no CD.", "No se pudo abrir SYSTEM.CNF en CD.", "无法打开 CD 上的 SYSTEM.CNF。" },
+    { "%s added to mc0:title.db", "%s adicionado ao mc0:title.db", "%s agregado a mc0:title.db", "%s 已添加到 mc0:title.db" },
+    { "Unable to add to %s", "Nao foi possivel adicionar a %s", "No se pudo agregar a %s", "无法添加到 %s" },
+    { "Unable to find PSX ELF", "Nao foi possivel encontrar o ELF de PSX", "No se pudo encontrar el ELF de PSX", "找不到 PSX ELF" },
+    { "Unknown ROM load error", "Erro desconhecido ao carregar ROM", "Error desconocido al cargar ROM", "未知 ROM 加载错误" },
+    { "ROM parser rejected image (code %d)", "Parser da ROM rejeitou a imagem (codigo %d)", "El parser de ROM rechazo la imagen (codigo %d)", "ROM 解析器拒绝镜像 (代码 %d)" },
+    { "No ROM path was provided", "Nenhum caminho de ROM foi informado", "No se proporciono una ruta de ROM", "未提供 ROM 路径" },
+    { "Unsupported file extension", "Extensao de arquivo nao suportada", "Extension de archivo no compatible", "不支持的文件扩展名" },
+    { "GZIP does not contain a recognized ROM name", "GZIP nao contem um nome de ROM reconhecido", "GZIP no contiene un nombre de ROM reconocido", "GZIP 不包含可识别的 ROM 名称" },
+    { "ZIP entry has an unsupported ROM type", "Entrada ZIP tem um tipo de ROM nao suportado", "La entrada ZIP tiene un tipo de ROM no compatible", "ZIP 条目包含不支持的 ROM 类型" },
+    { "ZIP is invalid or damaged", "ZIP invalido ou danificado", "ZIP invalido o danado", "ZIP 无效或已损坏" },
+    { "ZIP has no supported ROM inside", "ZIP nao possui ROM suportada", "ZIP no contiene una ROM compatible", "ZIP 中没有支持的 ROM" },
+    { "ROM inside ZIP is too large", "ROM dentro do ZIP e grande demais", "La ROM dentro del ZIP es demasiado grande", "ZIP 中的 ROM 太大" },
+    { "ZIP decompression failed", "Falha ao descompactar ZIP", "Fallo al descomprimir ZIP", "ZIP 解压失败" },
+    { "ZIP read failed", "Falha ao ler ZIP", "Fallo al leer ZIP", "ZIP 读取失败" },
+    { "Not enough memory to open ZIP", "Memoria insuficiente para abrir ZIP", "Memoria insuficiente para abrir ZIP", "内存不足，无法打开 ZIP" },
+    { "ROM file is empty", "Arquivo ROM vazio", "El archivo ROM esta vacio", "ROM 文件为空" },
+    { "Unsupported ROM type", "Tipo de ROM nao suportado", "Tipo de ROM no compatible", "不支持的 ROM 类型" },
+    { "WARNING: Unsupported NES Mapper", "AVISO: Mapper NES nao suportado", "AVISO: Mapper NES no compatible", "警告: 不支持的 NES Mapper" },
+    { "SRAM saved.", "SRAM salva.", "SRAM guardada.", "SRAM 已保存。" },
+    { "Error saving SRAM!", "Erro ao salvar SRAM!", "Error al guardar SRAM!", "保存 SRAM 时出错！" }
 };
 
 static const Char *_PhraseFor(const I18nPhraseT *p)
