@@ -264,7 +264,16 @@ static const I18nPhraseT s_Phrases[] =
     { "Unsupported ROM type", "Tipo de ROM nao suportado", "Tipo de ROM no compatible", "不支持的 ROM 类型" },
     { "WARNING: Unsupported NES Mapper", "AVISO: Mapper NES nao suportado", "AVISO: Mapper NES no compatible", "警告: 不支持的 NES Mapper" },
     { "SRAM saved.", "SRAM salva.", "SRAM guardada.", "SRAM 已保存。" },
-    { "Error saving SRAM!", "Erro ao salvar SRAM!", "Error al guardar SRAM!", "保存 SRAM 时出错！" }
+    { "Error saving SRAM!", "Erro ao salvar SRAM!", "Error al guardar SRAM!", "保存 SRAM 时出错！" },
+    { "Quick Slot: 1 (Auto)", "Slot Rapido: 1 (Automatico)", "Ranura Rapida: 1 (Automatico)", "快速槽: 1 (自动)" },
+    { "Stop movie recording/playback first.", "Pare a gravacao/reproducao do filme primeiro.", "Deten primero la grabacion/reproduccion de pelicula.", "请先停止影片录制或播放。" },
+    { "NES state unavailable for this cartridge/mapper.", "Estado NES indisponivel para este cartucho/mapper.", "Estado NES no disponible para este cartucho/mapper.", "此卡带/Mapper 无法使用 NES 存档。" },
+    { "SRAM save failed: cannot create system directory", "Falha ao salvar SRAM: nao foi possivel criar a pasta do sistema", "Fallo al guardar SRAM: no se pudo crear la carpeta del sistema", "SRAM 保存失败: 无法创建系统目录" },
+    { "SRAM save skipped: no SRAM", "SRAM nao salva: jogo sem SRAM", "SRAM omitida: el juego no usa SRAM", "未保存 SRAM: 游戏没有 SRAM" },
+    { "480i (default)", "480i (padrao)", "480i (predeterminado)", "480i (默认)" },
+    { "Err %d", "Erro %d", "Error %d", "错误 %d" },
+    { "<none>", "<nenhum>", "<ninguno>", "<无>" },
+    { "<unknown>", "<desconhecido>", "<desconocido>", "<未知>" }
 };
 
 static const Char *_PhraseFor(const I18nPhraseT *p)
