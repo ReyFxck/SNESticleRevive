@@ -421,7 +421,7 @@ void CNetworkScreen::Draw()
     FontPuts(50, y, I18nTranslate("Status"));
     FontColor4f(SmbIsMounted() ? 0.3f : 1.0f,
                 SmbIsMounted() ? 1.0f : 0.85f, 0.3f, 1.0f);
-    FontPuts(126, y, SmbGetStatusText());
+    FontPuts(126, y, I18nTranslate(SmbGetStatusText()));
     y += 15;
 
     UiChromeSection(y, I18nTranslate("Server / Share"));
