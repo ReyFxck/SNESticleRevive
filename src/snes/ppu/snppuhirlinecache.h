@@ -71,6 +71,14 @@ typedef char SnesPPUHiresLineStateSizeCheck[
 typedef char SnesPPUHiresLineKeySizeCheck[
 	(sizeof(SnesPPUHiresLineCacheKeyT) == 64) ? 1 : -1];
 
+/* STAT78.7 toggles every field even while SETINI interlace is disabled.
+   In that common case it cannot affect the rendered scanline and including
+   it in the key would force every cached line to miss on every frame. */
+_INLINE Uint8 SnesPPUHiresLineFieldKey(Uint8 uSetIni, Uint8 uStat78)
+{
+	return (uSetIni & 0x01u) ? (uStat78 & 0x80u) : 0;
+}
+
 _INLINE void SnesPPUHiresLineCacheSetKey(
 	SnesPPUHiresLineCacheKeyT *pKey, Uint32 uGeneration, Uint32 uLine,
 	const SnesPPUHiresLineStateT *pState)

@@ -164,7 +164,8 @@ static void TestHiresLineKey()
 	state.uTM = 0x13;
 	state.uTS = 0x13;
 	state.uRenderTM = 0x3F;
-	state.uField = 0x80;
+	state.uField = SnesPPUHiresLineFieldKey(0x00, 0x80);
+	Check("non-interlace field ignored", state.uField, 0);
 
 	SnesPPUHiresLineCacheSetKey(&key, 41, 224, &state);
 	Check("exact hires line key", SnesPPUHiresLineCacheKeyMatches(
@@ -180,6 +181,17 @@ static void TestHiresLineKey()
 	state.uObsel = 0x63;
 	Check("hires sprite state invalidates", SnesPPUHiresLineCacheKeyMatches(
 		&key, 41, 224, &state), FALSE);
+	state.uObsel = 0;
+	state.uField = SnesPPUHiresLineFieldKey(0x00, 0x00);
+	Check("non-interlace field toggle keeps key",
+		SnesPPUHiresLineCacheKeyMatches(&key, 41, 224, &state), TRUE);
+	state.uSetIni = 0x01;
+	state.uField = SnesPPUHiresLineFieldKey(0x01, 0x00);
+	SnesPPUHiresLineCacheSetKey(&key, 41, 224, &state);
+	state.uField = SnesPPUHiresLineFieldKey(0x01, 0x80);
+	Check("interlace field preserved", state.uField, 0x80);
+	Check("interlace field invalidates",
+		SnesPPUHiresLineCacheKeyMatches(&key, 41, 224, &state), FALSE);
 }
 
 int main()

@@ -126,7 +126,8 @@ static _INLINE void _SnesPPUBuildHiresLineState(
 	pState->uCGWSel = pRegs->cgwsel;
 	pState->uCGADSub = pRegs->cgadsub;
 	pState->uSetIni = pRegs->setini;
-	pState->uField = pRegs->stat78 & 0x80u;
+	pState->uField = SnesPPUHiresLineFieldKey(
+		(Uint8)pRegs->setini, (Uint8)pRegs->stat78);
 	pState->uRenderTM = _tm;
 	pState->uRenderTS = _ts;
 	pState->uRenderTMW = _tmw;
