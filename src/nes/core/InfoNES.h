@@ -36,11 +36,14 @@ extern BYTE *ROM;
 /* SRAM BANK ( 8Kb ) */
 extern BYTE *SRAMBANK;
 
-/* ROM BANK ( 8Kb * 4 ) */
-extern BYTE *ROMBANK0;
-extern BYTE *ROMBANK1;
-extern BYTE *ROMBANK2;
-extern BYTE *ROMBANK3;
+/* ROM BANK ( 8Kb * 4 ). Keep the banks contiguous so the 6502 instruction
+   fetch can select one with an index instead of a four-way branch. The legacy
+   names remain lvalue macros for the mapper implementations. */
+extern BYTE *ROMBANK[4];
+#define ROMBANK0 ROMBANK[0]
+#define ROMBANK1 ROMBANK[1]
+#define ROMBANK2 ROMBANK[2]
+#define ROMBANK3 ROMBANK[3]
 
 /*-------------------------------------------------------------------*/
 /*  PPU resources                                                    */

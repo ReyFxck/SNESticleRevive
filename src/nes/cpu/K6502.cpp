@@ -11,7 +11,16 @@
 /*-------------------------------------------------------------------*/
 
 #include "K6502.h"
+#include "InfoNES.h"
 #include "InfoNES_System.h"
+
+#if defined(__GNUC__)
+#define K6502_ALWAYS_INLINE inline __attribute__((always_inline))
+#define K6502_NOINLINE __attribute__((noinline))
+#else
+#define K6502_ALWAYS_INLINE inline
+#define K6502_NOINLINE inline
+#endif
 
 /*-------------------------------------------------------------------*/
 /*  I/O Operation prototypes (definidas em K6502_rw.h, incluido no    */
@@ -19,7 +28,9 @@
 /*  aqui porque sao usadas antes de definidas dentro deste TU; estavam*/
 /*  no K6502.h mas la' poluiam todo TU que incluia o header.          */
 /*-------------------------------------------------------------------*/
-static inline BYTE K6502_Read( WORD wAddr );
+static K6502_NOINLINE BYTE K6502_Read( WORD wAddr );
+static K6502_ALWAYS_INLINE BYTE K6502_ReadCode( WORD wAddr );
+static K6502_ALWAYS_INLINE BYTE K6502_Fetch8();
 static inline WORD K6502_ReadW( WORD wAddr );
 static inline WORD K6502_ReadW2( WORD wAddr );
 static inline BYTE K6502_ReadZp( BYTE byAddr );
@@ -40,15 +51,15 @@ static inline void K6502_WriteW( WORD wAddr, WORD wData );
 // Addressing Op.
 // Address
 // (Indirect,X)
-#define AA_IX    K6502_ReadZpW( K6502_Read( PC++ ) + X )
+#define AA_IX    K6502_ReadZpW( K6502_Fetch8() + X )
 // (Indirect),Y
-#define AA_IY    K6502_ReadZpW( K6502_Read( PC++ ) ) + Y
+#define AA_IY    K6502_ReadZpW( K6502_Fetch8() ) + Y
 // Zero Page
-#define AA_ZP    K6502_Read( PC++ )
+#define AA_ZP    K6502_Fetch8()
 // Zero Page,X
-#define AA_ZPX   (BYTE)( K6502_Read( PC++ ) + X )
+#define AA_ZPX   (BYTE)( K6502_Fetch8() + X )
 // Zero Page,Y
-#define AA_ZPY   (BYTE)( K6502_Read( PC++ ) + Y )
+#define AA_ZPY   (BYTE)( K6502_Fetch8() + Y )
 // Absolute
 #define AA_ABS   K6502_FetchW()
 // Absolute2 ( PC-- )
@@ -76,7 +87,7 @@ static inline void K6502_WriteW( WORD wAddr, WORD wData );
 // Absolute,Y
 #define A_ABSY  K6502_ReadAbsY()
 // Immediate
-#define A_IMM   K6502_Read( PC++ )
+#define A_IMM   K6502_Fetch8()
 
 // Flag Op.
 #define SETF(a)  F |= (a)
@@ -92,10 +103,10 @@ static inline void K6502_WriteW( WORD wAddr, WORD wData );
 #define LDY(a)    Y = (a); TEST( Y );
 
 // Stack Op.
-#define PUSH(a)   K6502_Write( BASE_STACK + SP--, (a) )
+#define PUSH(a)   RAM[ BASE_STACK + SP-- ] = (BYTE)(a)
 #define PUSHW(a)  PUSH( (a) >> 8 ); PUSH( (a) & 0xff )
-#define POP(a)    a = K6502_Read( BASE_STACK + ++SP )
-#define POPW(a)   POP(a); a |= ( K6502_Read( BASE_STACK + ++SP ) << 8 )
+#define POP(a)    a = RAM[ BASE_STACK + ++SP ]
+#define POPW(a)   POP(a); a |= ( (WORD)RAM[ BASE_STACK + ++SP ] << 8 )
 
 // Logical Op.
 #define ORA(a)  A |= (a); TEST( A )
@@ -143,7 +154,7 @@ static inline void K6502_WriteW( WORD wAddr, WORD wData );
   if ( a ) \
   { \
     wA0 = PC; \
-	byD0 = K6502_Read( PC ); \
+	byD0 = K6502_ReadCode( PC ); \
 	PC += ( ( byD0 & 0x80 ) ? ( 0xFF00 | (WORD)byD0 ) : (WORD)byD0 ); \
 	CLK( 3 + ( ( wA0 & 0x0100 ) != ( PC & 0x0100 ) ) ); \
     ++PC; \
@@ -478,18 +489,33 @@ void K6502_Set_Int_Wiring( BYTE byNMI_Wiring, BYTE byIRQ_Wiring )
 /*  bytes ficava por conta do compilador. Aqui low->high e' explicito */
 /*  e garantido, batendo com o 6502 real.                             */
 /*-------------------------------------------------------------------*/
+static K6502_ALWAYS_INLINE BYTE K6502_ReadCode( WORD wAddr )
+{
+  if ( wAddr & 0x8000 )
+  {
+    return ROMBANK[ ( wAddr >> 13 ) & 3 ][ wAddr & 0x1fff ];
+  }
+  return K6502_Read( wAddr );
+}
+
+static K6502_ALWAYS_INLINE BYTE K6502_Fetch8( void )
+{
+  WORD wAddr = PC++;
+  return K6502_ReadCode( wAddr );
+}
+
 static inline WORD K6502_FetchW( void )
 {
-  BYTE byLo = K6502_Read( PC++ );
-  BYTE byHi = K6502_Read( PC++ );
+  BYTE byLo = K6502_Fetch8();
+  BYTE byHi = K6502_Fetch8();
   return (WORD)byLo | ( (WORD)byHi << 8 );
 }
 
 /* Igual, mas o byte alto NAO incrementa PC (usado por JSR via AA_ABS2). */
 static inline WORD K6502_FetchW2( void )
 {
-  BYTE byLo = K6502_Read( PC++ );
-  BYTE byHi = K6502_Read( PC );
+  BYTE byLo = K6502_Fetch8();
+  BYTE byHi = K6502_ReadCode( PC );
   return (WORD)byLo | ( (WORD)byHi << 8 );
 }
 
@@ -558,7 +584,7 @@ void K6502_Step( WORD wClocks )
   while ( g_wPassedClocks < wClocks )
   {
     // Read an instruction
-    byCode = K6502_Read( PC++ );
+    byCode = K6502_Fetch8();
 
     // Execute an instruction.
     switch ( byCode )
@@ -1259,7 +1285,7 @@ static inline BYTE K6502_ReadAbsX(){ WORD wA0, wA1; wA0 = AA_ABS; wA1 = wA0 + X;
 // Absolute,Y
 static inline BYTE K6502_ReadAbsY(){ WORD wA0, wA1; wA0 = AA_ABS; wA1 = wA0 + Y; CLK( ( wA0 & 0x0100 ) != ( wA1 & 0x0100 ) ); return K6502_Read( wA1 ); };
 // (Indirect),Y
-static inline BYTE K6502_ReadIY(){ WORD wA0, wA1; wA0 = K6502_ReadZpW( K6502_Read( PC++ ) ); wA1 = wA0 + Y; CLK( ( wA0 & 0x0100 ) != ( wA1 & 0x0100 ) ); return K6502_Read( wA1 ); };
+static inline BYTE K6502_ReadIY(){ WORD wA0, wA1; wA0 = K6502_ReadZpW( K6502_Fetch8() ); wA1 = wA0 + Y; CLK( ( wA0 & 0x0100 ) != ( wA1 & 0x0100 ) ); return K6502_Read( wA1 ); };
 
 /*===================================================================*/
 /*                                                                   */

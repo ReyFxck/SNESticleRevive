@@ -3,6 +3,7 @@ name: SA-1 experimental host tests
 on:
   push:
     branches:
+      - main
       - experimental/sa1-mips
       - perf/sa1-r5900
   workflow_dispatch:

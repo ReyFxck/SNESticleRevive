@@ -171,6 +171,7 @@ Uint32 g_DbgCaptureReasons = 0;
 Uint32 g_DbgCapturePendingReasons = 0;
 Uint32 g_DbgPPURegWrites[0x40] = {0};
 static Uint32 g_DbgCaptureCooldown = 0;
+static Uint32 g_DbgCaptureSessionFrame = 0;
 #endif
 // contagem de acessos ao DSP por janela (diagnostico de carga)
 static Uint32 g_TmgDspRd = 0;
@@ -343,6 +344,7 @@ static void SnesDbgResetSession(void)
 #if SNDBG_DEEP
 	g_DbgCapturePendingReasons = 0;
 	g_DbgCaptureCooldown = 0;
+	g_DbgCaptureSessionFrame = 0;
 	g_DbgFrameBaseOAM = 0;
 	g_DbgFrameBaseVRAM = 0;
 	g_DbgFrameBaseCGRAM = 0;
@@ -1974,21 +1976,27 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 	#if SNDBG_DEEP
 	g_DbgCaptureFrameNo = g_TmgFrameNo + 1;
-	/* SNES_DIAGNOSTICS=2 means deep diagnostics are active automatically.
-	   Manual/anomaly triggers are still collected as reason bits, but they
-	   are no longer required to enable the capture. */
-	g_DbgCaptureActive = TRUE;
+	g_DbgCaptureSessionFrame++;
+	if (!g_DbgCaptureSessionFrame)
+		g_DbgCaptureSessionFrame = 1;
+	/* A full capture forces bounded portable probes and emits many DLog calls.
+	   Capture frame 1, one periodic sample per report window, or the next
+	   anomaly/manual request. Non-manual events wait through the cooldown so
+	   the profiler cannot become the bottleneck it is measuring. */
+	g_DbgCaptureActive = FALSE;
 	g_DbgCaptureReasons = 0;
 	if (g_DbgCaptureCooldown)
 		g_DbgCaptureCooldown--;
 	{
 		Uint32 uReasons = g_DbgCapturePendingReasons;
-		g_DbgCapturePendingReasons = 0;
-		if (uReasons)
+		Bool bManual = (uReasons & SNDBG_CAPTURE_MANUAL) ? TRUE : FALSE;
+		Bool bPeriodic = SnesDbgAutoCaptureDue(g_DbgCaptureSessionFrame);
+		if (bManual || bPeriodic || (uReasons && !g_DbgCaptureCooldown))
 		{
-			g_DbgCaptureReasons |= uReasons;
-			if (!g_DbgCaptureCooldown || (uReasons & SNDBG_CAPTURE_MANUAL))
-				g_DbgCaptureCooldown = SNDBG_CAPTURE_COOLDOWN;
+			g_DbgCaptureActive = TRUE;
+			g_DbgCaptureReasons = uReasons;
+			g_DbgCapturePendingReasons = 0;
+			g_DbgCaptureCooldown = SNDBG_CAPTURE_COOLDOWN;
 		}
 	}
 	if (g_DbgCaptureActive)

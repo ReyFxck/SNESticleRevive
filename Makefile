@@ -397,6 +397,7 @@ SRCS := \
 	src/common/render/audmixbuffer.cpp \
 	src/modules/audio/audio_audsrv.c \
 	src/snes/cpu/sn65816.S \
+	src/snes/cpu/sn65816_plain.S \
 	src/snes/cpu/sncpu.c \
 	src/snes/cpu/sncpu_c.c \
 	src/snes/cpu/sndisasm.c \
