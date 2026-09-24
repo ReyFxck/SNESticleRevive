@@ -287,13 +287,8 @@ static const Char *_PhraseFor(const I18nPhraseT *p)
     }
 }
 
-/*
- * Chinese stays in the catalog while its renderer is being ported faithfully
- * from the anyi fork, but it is not selectable in this stabilization build.
- * A previously-saved zh-CN value falls back to English instead of entering
- * the unstable CJK path during boot.
- */
-#define I18N_STABLE_LANGUAGE_COUNT 3
+/* All catalog languages are selectable; zh-CN uses the full anyi CJK path. */
+#define I18N_STABLE_LANGUAGE_COUNT I18N_LANGUAGE_COUNT
 
 void I18nSetLanguage(Int32 language)
 {
