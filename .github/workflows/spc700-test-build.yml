@@ -1,0 +1,59 @@
+name: SPC700 PS2 test builds
+
+on:
+  push:
+    branches:
+      - feature/spc700-complete-mesence
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ps2-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: normal
+            diagnostics: 0
+          - variant: diag2
+            diagnostics: 2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache PS2DEV
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/ps2dev
+            ~/.cache/ps2dev
+          key: ps2dev-${{ runner.os }}-${{ runner.arch }}-spc700-v1
+
+      - name: Ensure PS2DEV
+        run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
+
+      - name: Clean
+        run: make COLOR=0 clean
+
+      - name: Build PS2 ELF
+        run: make AUTO_INSTALL=yes COLOR=0 JOBS=2 PACK=0 SNES_DIAGNOSTICS=${{ matrix.diagnostics }} fast
+
+      - name: Verify and rename ELF
+        run: |
+          test -s build/SNESticle.elf
+          mkdir -p artifacts
+          cp build/SNESticle.elf "artifacts/SNESticle-SPC700-${{ matrix.variant }}.elf"
+          file "artifacts/SNESticle-SPC700-${{ matrix.variant }}.elf"
+          ls -lh "artifacts/SNESticle-SPC700-${{ matrix.variant }}.elf"
+
+      - name: Upload ELF
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticle-SPC700-${{ matrix.variant }}-${{ github.sha }}
+          path: artifacts/SNESticle-SPC700-${{ matrix.variant }}.elf
+          if-no-files-found: error
