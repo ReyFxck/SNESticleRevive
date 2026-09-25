@@ -91,34 +91,15 @@ void SNSpcIO::SyncCpuPorts(Uint32 uSpcMasterCycle)
 void SNSpcIO::WriteCpuPort(Uint32 uCpuMasterCycle, Uint32 uSpcMasterCycle,
 	Uint32 uPort, Uint8 uData)
 {
-	Uint32 uPhase;
-	Uint32 uLatchCycle;
 	Uint8 uBit;
 
+	(void)uCpuMasterCycle;
 	uPort &= 3u;
 	uBit = (Uint8)(1u << uPort);
-	uPhase = uCpuMasterCycle % SNSPC_CYCLE;
-	uLatchCycle = uCpuMasterCycle;
-
-	/* The SPC input latch is sampled at ~2 MHz.  Following MesenCE's
-	   documented behavior: a CPU write in the first half of the current
-	   SPC cycle is visible immediately; one in the second half becomes
-	   visible at the next SPC-cycle boundary. */
-	if (uPhase > (SNSPC_CYCLE / 2u))
-		uLatchCycle += SNSPC_CYCLE - uPhase;
-
 	m_CpuPendingData[uPort] = uData;
-	m_CpuPendingCycle[uPort] = uLatchCycle;
-
-	if ((Int32)(uSpcMasterCycle - uLatchCycle) >= 0)
-	{
-		m_Regs.apu_w[uPort] = uData;
-		m_uCpuPendingMask &= (Uint8)~uBit;
-	}
-	else
-	{
-		m_uCpuPendingMask |= uBit;
-	}
+	m_CpuPendingCycle[uPort] = uSpcMasterCycle;
+	m_Regs.apu_w[uPort] = uData;
+	m_uCpuPendingMask &= (Uint8)~uBit;
 }
 
 void SNSpcIO::ClearCpuPorts(Uint8 uPortMask)

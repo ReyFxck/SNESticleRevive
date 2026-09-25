@@ -15,6 +15,7 @@
 #include "snppurender.h"
 #include "snppucolor.h"
 #include "snppuchrcache.h"
+#include "snppuhirlinecache.h"
 #include "rendersurface.h"
 #include "snmask.h"
 #include "snmaskop.h"
@@ -26,6 +27,9 @@
 #endif
 
 #define SNPPURENDER_INFOSCRATCHPAD ((CODE_PLATFORM == CODE_PS2) && TRUE)
+#ifndef SNPPU_BG_CACHE
+#define SNPPU_BG_CACHE (TRUE)
+#endif
 
 /*
 
@@ -67,6 +71,87 @@ Uint8 _tm = 0x3F;
 Uint8 _tmw = 0x3F;
 Uint8 _ts = 0x3F;
 Uint8 _tsw = 0x3F;
+
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE
+struct SnesPPUHiresLineCacheEntryT
+{
+	SnesPPUHiresLineCacheKeyT Key;
+	/* A changing scene must not copy 1 KiB into a cache entry on every miss.
+	   One complete cache line of metadata keeps pixels 64-byte aligned and
+	   admits the large payload only after the exact key repeats. */
+	Uint32 uReady;
+	Uint8 uAdmissionPad[60];
+	Uint16 uPixels[SNPPU_HIRES_LINE_PIXELS];
+};
+
+static SnesPPUHiresLineCacheEntryT
+	_SnesPPU_HiresLineCache[SNPPU_HIRES_LINE_CACHE_LINES] _ALIGN(64);
+static Uint32 _SnesPPU_OutputGeneration = 1;
+
+typedef char SnesPPUHiresLineEntrySizeCheck[
+	(sizeof(SnesPPUHiresLineCacheEntryT) == 18 * 64) ? 1 : -1];
+
+static _INLINE void _SnesPPUBuildHiresLineState(
+	SnesPPUHiresLineStateT *pState, const SnesPPURegsT *pRegs)
+{
+	memset(pState, 0, sizeof(*pState));
+	pState->uScroll[0] = pRegs->bg1hofs.w;
+	pState->uScroll[1] = pRegs->bg1vofs.w;
+	pState->uScroll[2] = pRegs->bg2hofs.w;
+	pState->uScroll[3] = pRegs->bg2vofs.w;
+	pState->uScroll[4] = pRegs->bg3hofs.w;
+	pState->uScroll[5] = pRegs->bg3vofs.w;
+	pState->uScroll[6] = pRegs->bg4hofs.w;
+	pState->uScroll[7] = pRegs->bg4vofs.w;
+	pState->uOAMPriority = pRegs->oampri.w;
+	pState->uColorData = pRegs->coldata;
+	pState->uInidisp = pRegs->inidisp;
+	pState->uObsel = pRegs->obsel;
+	pState->uBGMode = pRegs->bgmode;
+	pState->uMosaic = pRegs->mosaic;
+	pState->uBG1SC = pRegs->bg1sc;
+	pState->uBG2SC = pRegs->bg2sc;
+	pState->uBG3SC = pRegs->bg3sc;
+	pState->uBG4SC = pRegs->bg4sc;
+	pState->uBG12NBA = pRegs->bg12nba;
+	pState->uBG34NBA = pRegs->bg34nba;
+	pState->uW12Sel = pRegs->w12sel;
+	pState->uW34Sel = pRegs->w34sel;
+	pState->uWObjSel = pRegs->wobjsel;
+	pState->uWH0 = pRegs->wh0;
+	pState->uWH1 = pRegs->wh1;
+	pState->uWH2 = pRegs->wh2;
+	pState->uWH3 = pRegs->wh3;
+	pState->uWBGLog = pRegs->wbglog;
+	pState->uWObjLog = pRegs->wobjlog;
+	pState->uTM = pRegs->tm;
+	pState->uTS = pRegs->ts;
+	pState->uTMW = pRegs->tmw;
+	pState->uTSW = pRegs->tsw;
+	pState->uCGWSel = pRegs->cgwsel;
+	pState->uCGADSub = pRegs->cgadsub;
+	pState->uSetIni = pRegs->setini;
+	pState->uField = SnesPPUHiresLineFieldKey(
+		(Uint8)pRegs->setini, (Uint8)pRegs->stat78);
+	pState->uRenderTM = _tm;
+	pState->uRenderTS = _ts;
+	pState->uRenderTMW = _tmw;
+	pState->uRenderTSW = _tsw;
+}
+#endif
+
+void SnesPPUInvalidateOutputCache()
+{
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE
+	_SnesPPU_OutputGeneration++;
+	if (_SnesPPU_OutputGeneration == 0)
+	{
+		memset(_SnesPPU_HiresLineCache, 0,
+			sizeof(_SnesPPU_HiresLineCache));
+		_SnesPPU_OutputGeneration = 1;
+	}
+#endif
+}
 
 #if CODE_PLATFORM == CODE_PS2
 #define PS2_RENDERINFOADDR  (PS2MEM_SCRATCHPAD +  0*1024)
@@ -184,6 +269,8 @@ void SnesPPURender::RenderLine16(Int32 iLine)
 
 void SnesPPURender::UpdateCGRAM(Uint32 uAddr, Uint16 uData)
 {
+	SnesPPUInvalidateOutputCache();
+
 	/* A video-skipped frame still updates emulated CGRAM in SnesPPU.  The
 	   following rendered frame begins with UPDATE_ALL and uploads the complete
 	   palette, so touching GS/CLUT state here would be pure duplicate work. */
@@ -191,6 +278,12 @@ void SnesPPURender::UpdateCGRAM(Uint32 uAddr, Uint16 uData)
 	{
 		m_pBlend->UpdatePaletteEntry(&m_pRenderInfo->BlendInfo, uAddr, uData, m_pPPU->GetIntensity());
 	}
+}
+
+void SnesPPURender::UpdateOAM()
+{
+	SnesPPUInvalidateOutputCache();
+	SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);
 }
 
 /* $2133.3 pseudo-hires alternates sub/main physical dots at 512-dot
@@ -283,6 +376,11 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 		(uBGMode == 5u || uBGMode == 6u) &&
 		((pRegs->cgadsub & 0x3Fu) == 0) &&
 		((pRegs->cgwsel & 0xC0u) == 0);
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE
+	SnesPPUHiresLineCacheEntryT *pHiresLineCache = NULL;
+	SnesPPUHiresLineStateT HiresLineState;
+	Bool bHiresLineCachePromote = FALSE;
+#endif
 
 #if SNDBG_LOG
 	{
@@ -314,6 +412,48 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 			g_DbgPPUHiresLines++;
 		if (uSetIni & 0x40u) g_DbgPPUExtBGLines++;
 	}
+#endif
+
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE
+	/* The expensive native-hires path is reused only for exact, fully stable
+	   Mode 5 lines.  Memory writes advance OutputGeneration; every visual PPU
+	   register and the renderer's layer masks are compared byte-for-byte.
+	   Sprites remain part of the cached final pixels, and any OAM change makes
+	   the entry miss before it can be displayed. */
+	if (uBGMode == 5u && bMode56HiresSimple &&
+	    !(pRegs->inidisp & 0x80u) && pRegs->mosaic == 0 &&
+	    iLine >= 0 && (Uint32)iLine < SNPPU_HIRES_LINE_CACHE_LINES)
+	{
+		Bool bSameState;
+
+		_SnesPPUBuildHiresLineState(&HiresLineState, pRegs);
+		pHiresLineCache = &_SnesPPU_HiresLineCache[iLine];
+		bSameState = SnesPPUHiresLineCacheKeyMatches(
+			&pHiresLineCache->Key, _SnesPPU_OutputGeneration,
+			iLine, &HiresLineState);
+		if (pHiresLineCache->uReady && bSameState)
+		{
+#if SNDBG_LOG
+			g_DbgHiresLineCacheHits++;
+#endif
+			m_pBlend->ExecHires512(pHiresLineCache->uPixels, iLine);
+			return;
+		}
+		/* Two consecutive observations are required before paying the 1 KiB
+		   store.  Animation and scrolling therefore miss without thrashing
+		   EE memory, while a stable third frame takes the fast path. */
+		bHiresLineCachePromote = bSameState;
+		pHiresLineCache->uReady = FALSE;
+#if SNDBG_LOG
+		g_DbgHiresLineCacheMisses++;
+#endif
+	}
+#if SNDBG_LOG
+	else if (uBGMode == 5u)
+	{
+		g_DbgHiresLineCacheBypasses++;
+	}
+#endif
 #endif
 
 	pRenderInfo = m_pRenderInfo;
@@ -484,6 +624,24 @@ static Bool bPrint = TRUE;
 				HiresLine, pBlendInfo, m_pPPU->GetCGData(),
 				m_pPPU->GetIntensity());
 			m_pBlend->ExecHires512(HiresLine, iLine);
+#if SNPPU_BG_CACHE
+			if (pHiresLineCache)
+			{
+				if (bHiresLineCachePromote)
+				{
+					memcpy(pHiresLineCache->uPixels, HiresLine,
+						sizeof(pHiresLineCache->uPixels));
+					/* Publish readiness only after all 512 pixels exist. */
+					pHiresLineCache->uReady = TRUE;
+				} else
+				{
+					/* Remember only the cheap candidate key on a first miss. */
+					SnesPPUHiresLineCacheSetKey(&pHiresLineCache->Key,
+						_SnesPPU_OutputGeneration, iLine,
+						&HiresLineState);
+				}
+			}
+#endif
 #else
 			m_pBlend->Exec(
 				pBlendInfo, iLine, pRegs->coldata, ColorMask,

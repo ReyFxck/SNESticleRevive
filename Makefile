@@ -402,6 +402,7 @@ SRCS := \
 	src/common/render/audmixbuffer.cpp \
 	src/modules/audio/audio_audsrv.c \
 	src/snes/cpu/sn65816.S \
+	src/snes/cpu/sn65816_plain.S \
 	src/snes/cpu/sncpu.c \
 	src/snes/cpu/sncpu_c.c \
 	src/snes/cpu/sndisasm.c \
@@ -1340,7 +1341,7 @@ help:
 	printf "  VERBOSE=1                    Show full warning AND error text (no truncation)\n"; \
 	printf "  PROFILE=1                    Enable on-screen profiler (press R3 in-game)\n"; \
 	printf "  SNES_DIAGNOSTICS=1           Universal low-overhead SNES diagnostic report\n"; \
-	printf "  SNES_DIAGNOSTICS=2           Event-triggered deep PPU/DMA/chip capture\n"; \
+	printf "  SNES_DIAGNOSTICS=2           Automatic deep PPU/DMA/chip capture\n"; \
 	printf "  SNES_OBJ_CACHE=0             Disable OBJ 4bpp CHR cache for A/B tests\n"; \
 	printf "  SNES_BG_CACHE=0              Disable BG 2bpp/4bpp CHR cache for A/B tests\n"; \
 	printf "  SNES_SAFE_FRAMESKIP=0        Disable missed-VBlank video recovery for A/B\n"; \

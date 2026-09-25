@@ -14,6 +14,8 @@
 #include "snppu.h"
 #include "snppurender.h"
 #include "snppuchrcache.h"
+#include "snppuhires.h"
+#include "snppubglinecache.h"
 #include "snppumode7.h"
 #include "rendersurface.h"
 #include "snmask.h"
@@ -43,6 +45,83 @@ static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPrio
 static SnesPPUChrCacheT _SnesPPU_ChrCache _ALIGN(64);
 #endif
 
+#if SNPPU_BG_CACHE
+struct SnesPPUBGLineCacheEntryT
+{
+	SnesPPUBGLineCacheKeyT Key;
+	Uint32 uReady;
+	Uint8 uKeyPad[20];
+	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
+	Uint8 uSub[SNPPU_BG_LINE_PIXELS];
+	SNMaskT MainOpaque;
+	SNMaskT MainPriority;
+	SNMaskT SubOpaque;
+	SNMaskT SubPriority;
+	Uint8 uAdmissionPad[48];
+};
+
+typedef char SnesPPUBGLineEntrySizeCheck[
+	(sizeof(SnesPPUBGLineCacheEntryT) == 12 * 64) ? 1 : -1];
+
+/* Four BGs by visible scanline.  Entries are accepted only after every
+   renderer input in Key matches and no VRAM write has advanced Generation.
+   This is deliberately not a hash: a collision can only become a miss, never
+   stale pixels. */
+static SnesPPUBGLineCacheEntryT
+	_SnesPPU_BGLineCache[4][SNPPU_BG_LINE_CACHE_LINES] _ALIGN(64);
+static Uint32 _SnesPPU_BGLineGeneration = 1;
+
+static _INLINE Bool _SnesPPURestoreBGLine(
+	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
+	Uint32 iBG, Bool bHiresPair)
+{
+	Uint32 iSubPlane = iBG + 2u;
+
+	memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
+		SNPPU_BG_LINE_PIXELS);
+	SNMaskCopy(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+		&pEntry->MainOpaque);
+	SNMaskCopy(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+		&pEntry->MainPriority);
+	if (bHiresPair)
+	{
+		memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
+			SNPPU_BG_LINE_PIXELS);
+		SNMaskCopy(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+			&pEntry->SubOpaque);
+		SNMaskCopy(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+			&pEntry->SubPriority);
+	}
+	return TRUE;
+}
+
+static _INLINE void _SnesPPUStoreBGLine(
+	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
+	Uint32 iBG, Bool bHiresPair)
+{
+	Uint32 iSubPlane = iBG + 2u;
+
+	memcpy(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG],
+		SNPPU_BG_LINE_PIXELS);
+	SNMaskCopy(&pEntry->MainOpaque,
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE]);
+	SNMaskCopy(&pEntry->MainPriority,
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI]);
+	if (bHiresPair)
+	{
+		memcpy(pEntry->uSub, (Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
+			SNPPU_BG_LINE_PIXELS);
+		SNMaskCopy(&pEntry->SubOpaque,
+			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE]);
+		SNMaskCopy(&pEntry->SubPriority,
+			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI]);
+	}
+
+	/* The candidate key was published while uReady was false. */
+	pEntry->uReady = TRUE;
+}
+#endif
+
 void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords)
 {
 #if SNPPU_OBJ_CACHE || SNPPU_BG_CACHE
@@ -53,10 +132,22 @@ void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords)
 #else
 	(void)nInvalidated;
 #endif
+#if SNPPU_BG_CACHE
+	/* One monotonically increasing epoch invalidates decoded scanlines in O(1).
+	   Physical CHR entries above remain granular, while the larger line cache
+	   never risks surviving a tilemap or character upload. */
+	_SnesPPU_BGLineGeneration++;
+	if (_SnesPPU_BGLineGeneration == 0)
+	{
+		memset(_SnesPPU_BGLineCache, 0, sizeof(_SnesPPU_BGLineCache));
+		_SnesPPU_BGLineGeneration = 1;
+	}
+#endif
 #else
 	(void)uWordAddress;
 	(void)nWords;
 #endif
+	SnesPPUInvalidateOutputCache();
 }
 
 #if  !SNPPURENDER_CHR64
@@ -775,10 +866,8 @@ static void _FetchCHR2HiresPair_64(
 			pFlip->uFlipXOR;
 		Uint32 uTileNo[2];
 		Uint64 uDecoded[2];
-		Uint8 *pDecoded0;
-		Uint8 *pDecoded1;
-		Uint8 uMainOpaque = 0;
-		Uint8 uSubOpaque = 0;
+		Uint32 uOpaque[2];
+		SnesPPUHiresPairT Pair;
 		Uint64 uPalette = pPalLookup[pTiles->uPal];
 		Int32 x;
 
@@ -789,38 +878,23 @@ static void _FetchCHR2HiresPair_64(
 
 		for (x = 0; x < 2; ++x)
 		{
-			Uint32 uOpaque;
 			Uint32 uRowAddr =
 				(uBaseAddr + uTileNo[x] * 8u + uRow) & 0x7FFFu;
 			_FetchPhysicalCHR2Row(pVram, uRowAddr, bHFlip,
-				&uDecoded[x], &uOpaque);
-			uDecoded[x] |= uPalette;
+				&uDecoded[x], &uOpaque[x]);
 		}
 
-		pDecoded0 = (Uint8 *)&uDecoded[0];
-		pDecoded1 = (Uint8 *)&uDecoded[1];
-		for (x = 0; x < 4; ++x)
-		{
-			Uint8 s0 = pDecoded0[x << 1];
-			Uint8 m0 = bMosaic ? s0 : pDecoded0[(x << 1) + 1];
-			Uint8 s1 = pDecoded1[x << 1];
-			Uint8 m1 = bMosaic ? s1 : pDecoded1[(x << 1) + 1];
-			pSubDest[x] = s0;
-			pMainDest[x] = m0;
-			pSubDest[x + 4] = s1;
-			pMainDest[x + 4] = m1;
-			if (s0 & 0x03u) uSubOpaque |= (Uint8)(1u << x);
-			if (m0 & 0x03u) uMainOpaque |= (Uint8)(1u << x);
-			if (s1 & 0x03u) uSubOpaque |= (Uint8)(1u << (x + 4));
-			if (m1 & 0x03u) uMainOpaque |= (Uint8)(1u << (x + 4));
-		}
+		SnesPPUPackHiresPair(uDecoded[0], uOpaque[0],
+			uDecoded[1], uOpaque[1], bMosaic, &Pair);
+		((Uint64 *)pMainDest)[0] = Pair.uMain | uPalette;
+		((Uint64 *)pSubDest)[0] = Pair.uSub | uPalette;
 
-		pMainMask[0] = uMainOpaque;
+		pMainMask[0] = Pair.uMainOpaque;
 		pMainMask[SNPPU_BGPLANE_SIZE] =
-			(pTiles->uPal & 8u) ? uMainOpaque : 0;
-		pSubMask[0] = uSubOpaque;
+			(pTiles->uPal & 8u) ? Pair.uMainOpaque : 0;
+		pSubMask[0] = Pair.uSubOpaque;
 		pSubMask[SNPPU_BGPLANE_SIZE] =
-			(pTiles->uPal & 8u) ? uSubOpaque : 0;
+			(pTiles->uPal & 8u) ? Pair.uSubOpaque : 0;
 		pMainDest += 8;
 		pSubDest += 8;
 		pMainMask++;
@@ -845,10 +919,8 @@ static void _FetchCHR4HiresPair_64(
 			pFlip->uFlipXOR;
 		Uint32 uTileNo[2];
 		Uint64 uDecoded[2];
-		Uint8 *pDecoded0;
-		Uint8 *pDecoded1;
-		Uint8 uMainOpaque = 0;
-		Uint8 uSubOpaque = 0;
+		Uint32 uOpaque[2];
+		SnesPPUHiresPairT Pair;
 		Uint64 uPalette = _SnesPPU_Tile4PalLookup64[pTiles->uPal];
 		Int32 x;
 
@@ -857,38 +929,23 @@ static void _FetchCHR4HiresPair_64(
 
 		for (x = 0; x < 2; ++x)
 		{
-			Uint32 uOpaque;
 			Uint32 uRowAddr =
 				(uBaseAddr + uTileNo[x] * 16u + uRow) & 0x7FFFu;
 			_FetchPhysicalCHR4Row(pVram, uRowAddr, bHFlip,
-				&uDecoded[x], &uOpaque);
-			uDecoded[x] |= uPalette;
+				&uDecoded[x], &uOpaque[x]);
 		}
 
-		pDecoded0 = (Uint8 *)&uDecoded[0];
-		pDecoded1 = (Uint8 *)&uDecoded[1];
-		for (x = 0; x < 4; ++x)
-		{
-			Uint8 s0 = pDecoded0[x << 1];
-			Uint8 m0 = bMosaic ? s0 : pDecoded0[(x << 1) + 1];
-			Uint8 s1 = pDecoded1[x << 1];
-			Uint8 m1 = bMosaic ? s1 : pDecoded1[(x << 1) + 1];
-			pSubDest[x] = s0;
-			pMainDest[x] = m0;
-			pSubDest[x + 4] = s1;
-			pMainDest[x + 4] = m1;
-			if (s0 & 0x0Fu) uSubOpaque |= (Uint8)(1u << x);
-			if (m0 & 0x0Fu) uMainOpaque |= (Uint8)(1u << x);
-			if (s1 & 0x0Fu) uSubOpaque |= (Uint8)(1u << (x + 4));
-			if (m1 & 0x0Fu) uMainOpaque |= (Uint8)(1u << (x + 4));
-		}
+		SnesPPUPackHiresPair(uDecoded[0], uOpaque[0],
+			uDecoded[1], uOpaque[1], bMosaic, &Pair);
+		((Uint64 *)pMainDest)[0] = Pair.uMain | uPalette;
+		((Uint64 *)pSubDest)[0] = Pair.uSub | uPalette;
 
-		pMainMask[0] = uMainOpaque;
+		pMainMask[0] = Pair.uMainOpaque;
 		pMainMask[SNPPU_BGPLANE_SIZE] =
-			(pTiles->uPal & 8u) ? uMainOpaque : 0;
-		pSubMask[0] = uSubOpaque;
+			(pTiles->uPal & 8u) ? Pair.uMainOpaque : 0;
+		pSubMask[0] = Pair.uSubOpaque;
 		pSubMask[SNPPU_BGPLANE_SIZE] =
-			(pTiles->uPal & 8u) ? uSubOpaque : 0;
+			(pTiles->uPal & 8u) ? Pair.uSubOpaque : 0;
 		pMainDest += 8;
 		pSubDest += 8;
 		pMainMask++;
@@ -1962,7 +2019,51 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		{
 			if (uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR)
 			{
+				const Bool bHiresPair =
+					(uBGMode == 5 && iBG < 2 &&
+					 BGInfo[iBG].uBitDepth != 0);
 				Uint8 TempMask[2][SNPPU_BGPLANE_SIZE];
+#if SNPPU_BG_CACHE && SNPPURENDER_CHR64
+				SnesPPUBGLineCacheEntryT *pLineCache = NULL;
+				Bool bLineCachePromote = FALSE;
+				/* Keep every raster input exact. Mode 2/4/6, offset-per-tile and
+				   mosaic stay on the established decoder because reusing their
+				   rows can leave stale text, sprites or priority masks. */
+				if ((uBGMode == 1 || uBGMode == 5) &&
+				    !(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET) &&
+				    BGInfo[iBG].uMosaic == 0 &&
+				    iLine >= 0 &&
+				    (Uint32)iLine < SNPPU_BG_LINE_CACHE_LINES)
+				{
+					Bool bSameState;
+
+					pLineCache = &_SnesPPU_BGLineCache[iBG][iLine];
+					bSameState = SnesPPUBGLineCacheKeyMatches(
+						&pLineCache->Key, _SnesPPU_BGLineGeneration,
+						pRenderInfo->uBGVramAddr[iBG], iLine, iBG,
+						uBGMode, &BGInfo[iBG]);
+					if (pLineCache->uReady && bSameState)
+					{
+						_SnesPPURestoreBGLine(pLineCache, pRenderInfo,
+							iBG, bHiresPair);
+#if SNDBG_LOG
+						g_DbgBGLineCacheHits++;
+#endif
+						continue;
+					}
+					bLineCachePromote = bSameState;
+					pLineCache->uReady = FALSE;
+#if SNDBG_LOG
+					g_DbgBGLineCacheMisses++;
+#endif
+				}
+#if SNDBG_LOG
+				else
+				{
+					g_DbgBGLineCacheBypasses++;
+				}
+#endif
+#endif
 #if SNDBG_LOG
 				g_DbgBGChrRows += 33;
 				if (BGInfo[iBG].uBitDepth == 2)
@@ -2034,6 +2135,26 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					TempMask[0], (BGInfo[iBG].uScrollX & 7));
 				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 					TempMask[1], (BGInfo[iBG].uScrollX & 7));
+#endif
+
+#if SNPPU_BG_CACHE && SNPPURENDER_CHR64
+				if (pLineCache)
+				{
+					if (bLineCachePromote)
+					{
+						_SnesPPUStoreBGLine(pLineCache, pRenderInfo,
+							iBG, bHiresPair);
+					} else
+					{
+						/* A first miss records only the exact candidate key.
+						   Changing lines no longer copy a large payload that
+						   will be replaced on the next frame. */
+						SnesPPUBGLineCacheSetKey(&pLineCache->Key,
+							_SnesPPU_BGLineGeneration,
+							pRenderInfo->uBGVramAddr[iBG], iLine, iBG,
+							uBGMode, &BGInfo[iBG]);
+					}
+				}
 #endif
 			}
 		}

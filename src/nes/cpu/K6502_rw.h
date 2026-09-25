@@ -18,6 +18,10 @@
 #include "InfoNES_System.h"
 #include "InfoNES_pAPU.h"
 
+#ifndef K6502_NOINLINE
+#define K6502_NOINLINE inline
+#endif
+
 /*===================================================================*/
 /*                                                                   */
 /*            K6502_ReadZp() : Reading from the zero page            */
@@ -53,7 +57,7 @@ static inline BYTE K6502_ReadZp( BYTE byAddr )
 /*               K6502_Read() : Reading operation                    */
 /*                                                                   */
 /*===================================================================*/
-static inline BYTE K6502_Read( WORD wAddr )
+static K6502_NOINLINE BYTE K6502_Read( WORD wAddr )
 {
 /*
  *  Reading operation
@@ -74,6 +78,14 @@ static inline BYTE K6502_Read( WORD wAddr )
  *
  */
   BYTE byRet;
+
+  /* Opcode/operand and ROM-data reads dominate the interpreter. The four
+     mapper-controlled banks are contiguous specifically so this common path
+     needs only an address test and indexed pointer load. */
+  if ( wAddr & 0x8000 )
+  {
+    return ROMBANK[ ( wAddr >> 13 ) & 3 ][ wAddr & 0x1fff ];
+  }
 
   switch ( wAddr & 0xe000 )
   {
@@ -176,17 +188,6 @@ static inline BYTE K6502_Read( WORD wAddr )
         return SRAMBANK[ wAddr & 0x1fff ];
       }
 
-    case 0x8000:  /* ROM BANK 0 */
-      return ROMBANK0[ wAddr & 0x1fff ];
-
-    case 0xa000:  /* ROM BANK 1 */
-      return ROMBANK1[ wAddr & 0x1fff ];
-
-    case 0xc000:  /* ROM BANK 2 */
-      return ROMBANK2[ wAddr & 0x1fff ];
-
-    case 0xe000:  /* ROM BANK 3 */
-      return ROMBANK3[ wAddr & 0x1fff ];
   }
 
   return ( wAddr >> 8 ); /* when a register is not readable the upper half

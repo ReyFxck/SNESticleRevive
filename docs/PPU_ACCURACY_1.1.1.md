@@ -47,6 +47,10 @@ catalogue.
 
 ### Mode 5 / high-resolution text
 
+The PS2 renderer keeps even and odd dots separate. Stable lines may reuse an
+exact final 512-dot result, but any VRAM, OAM, CGRAM or visual-register change
+falls back to the complete renderer before presentation.
+
 - **Secret of Mana** — Mode 5 menu.
 - **Seiken Densetsu 3 / Trials of Mana** — Mode 5 text boxes and menus.
 - **Dark Law: Meaning of Death** — Mode 5 text boxes, menus and status bar.

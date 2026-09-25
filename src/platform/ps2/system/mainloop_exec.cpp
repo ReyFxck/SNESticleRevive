@@ -24,6 +24,15 @@ extern "C" {
 }
 
 extern "C" Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
+extern "C" Int32 SNCPUExecute_ASM_Plain(SNCpuT *pCpu);
+
+static void SetFastSnesCpuCore()
+{
+	/* SA-1 cartridges need host-bus recording. Ordinary cartridges use the
+	   bookkeeping-free core, selected once per frame instead of once per opcode. */
+	SNCPUSetExecuteFunc(g_SNCPU_SA1BusTrackEnabled ?
+	                   SNCPUExecute_ASM : SNCPUExecute_ASM_Plain);
+}
 
 #if MAINLOOP_SNESSTATEDEBUG
 static SnesStateT _TestState[3];
@@ -35,7 +44,7 @@ Bool _ExecuteSnes(CRenderSurface *pSurface, CMixBuffer *pMixBuffer, Emu::SysInpu
         #if !TESTASM
 
             #if !MAINLOOP_SNESSTATEDEBUG
-            SNCPUSetExecuteFunc(SNCPUExecute_ASM);
+            SetFastSnesCpuCore();
             SNSPCSetExecuteFunc(SNSPCExecute_C);
 
 		    PROF_ENTER("SnesExecuteFrame");
@@ -50,7 +59,7 @@ Bool _ExecuteSnes(CRenderSurface *pSurface, CMixBuffer *pMixBuffer, Emu::SysInpu
 				_pSnes->ExecuteFrame(pInput, pSurface, NULL);
 				_pSnes->SaveState(&_TestState[1]);
 
-	SNCPUSetExecuteFunc(SNCPUExecute_ASM);
+	SetFastSnesCpuCore();
 				_pSnes->RestoreState(&_TestState[0]);
 				_pSnes->ExecuteFrame(pInput, pSurface, NULL);
 				_pSnes->SaveState(&_TestState[2]);
@@ -68,7 +77,7 @@ Bool _ExecuteSnes(CRenderSurface *pSurface, CMixBuffer *pMixBuffer, Emu::SysInpu
 				_pSnes->RestoreState(&_TestState[0]);
 				    _pSnes->ExecuteFrame(pInput, pSurface, NULL);
 
-	    SNCPUSetExecuteFunc(SNCPUExecute_ASM);
+	    SetFastSnesCpuCore();
 				    _pSnes->RestoreState(&_TestState[0]);
 				    _pSnes->ExecuteFrame(pInput, pSurface, NULL);
 

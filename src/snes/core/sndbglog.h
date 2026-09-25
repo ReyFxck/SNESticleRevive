@@ -37,6 +37,7 @@
 #define SNDBG_EE_COUNT_HZ        147456000u
 #define SNDBG_SLOW_PERCENT       105u
 #define SNDBG_CAPTURE_COOLDOWN   60u
+#define SNDBG_AUTO_CAPTURE_PERIOD SNDBG_FRAME_PERIOD
 
 /* Razoes combinaveis para a proxima captura profunda. */
 #define SNDBG_CAPTURE_MANUAL     0x0001u
@@ -67,6 +68,17 @@ _INLINE Bool SnesDbgFrameIsSlow(Uint32 uCycles, Uint32 uBudget)
 {
 	return ((Uint64)uCycles * 100u >
 	        (Uint64)uBudget * SNDBG_SLOW_PERCENT) ? TRUE : FALSE;
+}
+
+/* Deep traces execute bounded portable-code probes and write substantial log
+   traffic. Sample them often enough to diagnose progress without making the
+   diagnostic build itself the dominant workload. */
+_INLINE Bool SnesDbgAutoCaptureDue(Uint32 uFrameNo)
+{
+	if (!uFrameNo)
+		return FALSE;
+	return (((uFrameNo - 1u) % SNDBG_AUTO_CAPTURE_PERIOD) == 0u) ?
+	       TRUE : FALSE;
 }
 
 #ifdef __cplusplus
@@ -168,6 +180,12 @@ extern Uint32 g_DbgBGChrRows;
 extern Uint32 g_DbgBGChrBlankRows;
 extern Uint32 g_DbgBGChrRepeatRows;
 extern Uint32 g_DbgBGChrRowsByDepth[3];
+extern Uint32 g_DbgBGLineCacheHits;
+extern Uint32 g_DbgBGLineCacheMisses;
+extern Uint32 g_DbgBGLineCacheBypasses;
+extern Uint32 g_DbgHiresLineCacheHits;
+extern Uint32 g_DbgHiresLineCacheMisses;
+extern Uint32 g_DbgHiresLineCacheBypasses;
 
 // Cobertura universal de modos, camadas e recursos PPU por scanline.
 extern Uint32 g_DbgPPUModeLines[8];

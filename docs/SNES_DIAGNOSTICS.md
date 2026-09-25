@@ -8,12 +8,13 @@ identity is printed only to explain which mapper and coprocessor were active.
 
 ```bash
 make SNES_DIAGNOSTICS=1   # rolling low-overhead report
-make SNES_DIAGNOSTICS=2   # report plus event-triggered deep capture
+make SNES_DIAGNOSTICS=2   # report plus sampled/event deep capture
 ```
 
 `SNES_DIAGNOSTICS=0` is the release default. The preprocessor removes the
-counters and capture code from that build. Level 2 is intentionally more
-intrusive and should be used for short reproductions.
+counters and capture code from that build. Level 2 captures frame 1, one
+automatic sample per 120-frame report window, and event-triggered frames.
+It is intentionally more intrusive and should be used for diagnostics.
 
 All records go through `DLog()`, so Android emulator builds place them in their
 normal TXT log. HostFS follows the same rule: level 1 writes `[hostfs]` toggle,
@@ -56,6 +57,8 @@ throughput ceiling instead of making the logger itself steal frame time:
 | `[snes-ppu-layers]` | Main-screen, sub-screen and actually fetched BG1-BG4 lines. |
 | `[snes-ppu-features]` | Mosaic, offset, windows, color math, direct color, interlace, overscan, hires and EXTBG usage. |
 | `[snes-bg-depth]` | Decoded BG rows split into 2, 4 and 8 bpp. |
+| `[snes-bg-line-cache]` | Exact Mode 1/5 decoded-line hits, misses and conservative bypasses. |
+| `[snes-hires-line-cache]` | Final Mode 5 512-dot line reuse; a hit requires identical VRAM/OAM/CGRAM generation and visual register state. |
 | `[snes-obj]` / `[snes-obj-cache]` | OAM work, hardware range/time limits, OBJ pixels in deep mode and OBJ-only cache efficiency. |
 | `[snes-sync]` / `[snes-dma]` / `[snes-hdma]` | PPU queue pressure and transfer destinations, modes, size and wrapping. |
 | `[snes-audio]` | Mixer requests, sample range and zero-sample anomalies; this is not an audsrv underrun claim. |
@@ -73,9 +76,11 @@ refresh rate, so a PAL ROM on an NTSC console is not given a false 20 ms budget.
 
 ## Deep capture
 
-Level 2 no longer dumps periodically. It captures the next frame only when an
-event requests it, with a 60-frame cooldown to keep serial logging from causing
-the problem being measured.
+Level 2 captures frame 1 and one automatic sample every 120 frames. An anomaly
+also requests the next eligible frame; non-manual requests are retained through
+a 60-frame cooldown, while a manual request captures immediately. This keeps
+serial logging and the portable instruction probes from causing the performance
+problem being measured.
 
 | Bit | Reason |
 |---:|---|

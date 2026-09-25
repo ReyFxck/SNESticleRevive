@@ -58,10 +58,7 @@ BYTE *ROM;
 BYTE *SRAMBANK;
 
 /* ROM BANK ( 8Kb * 4 ) */
-BYTE *ROMBANK0;
-BYTE *ROMBANK1;
-BYTE *ROMBANK2;
-BYTE *ROMBANK3;
+BYTE *ROMBANK[4];
 
 /*-------------------------------------------------------------------*/
 /*  PPU resources                                                    */

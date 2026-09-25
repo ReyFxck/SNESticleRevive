@@ -3,6 +3,7 @@ name: SA-1 R5900 release test ELF
 on:
   push:
     branches:
+      - main
       - perf/sa1-r5900
       - feature/localization
   workflow_dispatch:

@@ -141,6 +141,12 @@ Uint32 g_DbgBGChrRows = 0;
 Uint32 g_DbgBGChrBlankRows = 0;
 Uint32 g_DbgBGChrRepeatRows = 0;
 Uint32 g_DbgBGChrRowsByDepth[3] = {0,0,0};
+Uint32 g_DbgBGLineCacheHits = 0;
+Uint32 g_DbgBGLineCacheMisses = 0;
+Uint32 g_DbgBGLineCacheBypasses = 0;
+Uint32 g_DbgHiresLineCacheHits = 0;
+Uint32 g_DbgHiresLineCacheMisses = 0;
+Uint32 g_DbgHiresLineCacheBypasses = 0;
 Uint32 g_DbgPPUModeLines[8] = {0,0,0,0,0,0,0,0};
 Uint32 g_DbgPPUModeChanges = 0;
 Uint8  g_DbgPPULastMode = 0xFF;
@@ -171,6 +177,7 @@ Uint32 g_DbgCaptureReasons = 0;
 Uint32 g_DbgCapturePendingReasons = 0;
 Uint32 g_DbgPPURegWrites[0x40] = {0};
 static Uint32 g_DbgCaptureCooldown = 0;
+static Uint32 g_DbgCaptureSessionFrame = 0;
 #endif
 // contagem de acessos ao DSP por janela (diagnostico de carga)
 static Uint32 g_TmgDspRd = 0;
@@ -297,6 +304,12 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrBlankRows = 0;
 	g_DbgBGChrRepeatRows = 0;
 	memset(g_DbgBGChrRowsByDepth, 0, sizeof(g_DbgBGChrRowsByDepth));
+	g_DbgBGLineCacheHits = 0;
+	g_DbgBGLineCacheMisses = 0;
+	g_DbgBGLineCacheBypasses = 0;
+	g_DbgHiresLineCacheHits = 0;
+	g_DbgHiresLineCacheMisses = 0;
+	g_DbgHiresLineCacheBypasses = 0;
 	memset(g_DbgPPUModeLines, 0, sizeof(g_DbgPPUModeLines));
 	g_DbgPPUModeChanges = 0;
 	memset(g_DbgPPUMainLayerLines, 0, sizeof(g_DbgPPUMainLayerLines));
@@ -343,6 +356,7 @@ static void SnesDbgResetSession(void)
 #if SNDBG_DEEP
 	g_DbgCapturePendingReasons = 0;
 	g_DbgCaptureCooldown = 0;
+	g_DbgCaptureSessionFrame = 0;
 	g_DbgFrameBaseOAM = 0;
 	g_DbgFrameBaseVRAM = 0;
 	g_DbgFrameBaseCGRAM = 0;
@@ -395,9 +409,8 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 #endif
         PROF_LEAVE("SNSpcExecute");
 
-        /* A pending CPU input latch can become visible while this SPC
-           slice runs. Reads from $F4-$F7 also call this at the exact access,
-           so instruction-level execution cannot skip the transition. */
+		/* Drain deferred input only for compatibility with restored legacy
+		   state. Normal CPU port writes are synchronous after this catch-up. */
         m_SpcIO.SyncCpuPorts((Uint32)SNSPCGetCounter(
             &m_Spc, SNSPC_COUNTER_TOTAL));
     }
@@ -735,9 +748,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	// APUIO0-3 are mirrored every four bytes through $217F.
 	if (uAddr >= 0x2140 && uAddr <= 0x217F)
 	{
-		/* Catch SPC up first, then let the input latch decide whether this
-		   write lands in the current SPC half-cycle or at the next boundary.
-		   Absolute counters avoid the old frame-wrap FIFO bug. */
+		/* Catch the SPC up before publishing the CPU input latch. Keeping this
+		   ordering synchronous preserves short command/acknowledgement edges
+		   used by games while avoiding the old frame-relative queue. */
 		pSnes->SyncSPC();
 		pSnes->m_SpcIO.WriteCpuPort(
 			(Uint32)SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_TOTAL),
@@ -1974,18 +1987,26 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 	#if SNDBG_DEEP
 	g_DbgCaptureFrameNo = g_TmgFrameNo + 1;
+	g_DbgCaptureSessionFrame++;
+	if (!g_DbgCaptureSessionFrame)
+		g_DbgCaptureSessionFrame = 1;
+	/* A full capture forces bounded portable probes and emits many DLog calls.
+	   Capture frame 1, one periodic sample per report window, or the next
+	   anomaly/manual request. Non-manual events wait through the cooldown so
+	   the profiler cannot become the bottleneck it is measuring. */
 	g_DbgCaptureActive = FALSE;
 	g_DbgCaptureReasons = 0;
 	if (g_DbgCaptureCooldown)
 		g_DbgCaptureCooldown--;
 	{
 		Uint32 uReasons = g_DbgCapturePendingReasons;
-		g_DbgCapturePendingReasons = 0;
-		if (uReasons &&
-		    (!g_DbgCaptureCooldown || (uReasons & SNDBG_CAPTURE_MANUAL)))
+		Bool bManual = (uReasons & SNDBG_CAPTURE_MANUAL) ? TRUE : FALSE;
+		Bool bPeriodic = SnesDbgAutoCaptureDue(g_DbgCaptureSessionFrame);
+		if (bManual || bPeriodic || (uReasons && !g_DbgCaptureCooldown))
 		{
 			g_DbgCaptureActive = TRUE;
 			g_DbgCaptureReasons = uReasons;
+			g_DbgCapturePendingReasons = 0;
 			g_DbgCaptureCooldown = SNDBG_CAPTURE_COOLDOWN;
 		}
 	}
@@ -2480,6 +2501,14 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGChrRowsByDepth[0],
 				(unsigned)g_DbgBGChrRowsByDepth[1],
 				(unsigned)g_DbgBGChrRowsByDepth[2]);
+			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u",
+				(unsigned)g_DbgBGLineCacheHits,
+				(unsigned)g_DbgBGLineCacheMisses,
+				(unsigned)g_DbgBGLineCacheBypasses);
+			DLog("[snes-hires-line-cache] hit/miss/bypass=%u/%u/%u",
+				(unsigned)g_DbgHiresLineCacheHits,
+				(unsigned)g_DbgHiresLineCacheMisses,
+				(unsigned)g_DbgHiresLineCacheBypasses);
 			DLog("[snes-obj] ports oam=%u vram=%u cgram=%u | lines=%u refs=%u tiles=%u range/time=%u/%u",
 				(unsigned)g_DbgOAMWrites, (unsigned)g_DbgVRAMWrites,
 				(unsigned)g_DbgCGRAMWrites, (unsigned)g_DbgObjEnabledLines,

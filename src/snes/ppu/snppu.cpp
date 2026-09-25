@@ -415,7 +415,7 @@ void SnesPPU::WriteOAMDATA(Uint8 uData)
 	UpdateOAMPriority();
 
 	if (bChanged)
-		m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);
+		m_pRender->UpdateOAM();
 }
 
 void SnesPPU::WriteOAMBlock(const Uint8 *pData, Int32 nBytes)
@@ -465,7 +465,7 @@ void SnesPPU::WriteOAMBlock(const Uint8 *pData, Int32 nBytes)
 	m_Regs.oamaddr.w = (m_Regs.oamaddr.w & 0x8000) | uAddress;
 	UpdateOAMPriority();
 	if (bChanged)
-		m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);
+		m_pRender->UpdateOAM();
 }
 
 Uint8 SnesPPU::ReadOAMDATA()

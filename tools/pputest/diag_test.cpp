@@ -33,6 +33,13 @@ int main()
 
 	Check("schema", std::strcmp(SNDBG_SCHEMA, "snesdiag-v1") == 0, TRUE);
 	Check("rolling window", SNDBG_FRAME_PERIOD, 120u);
+	Check("zero is not a deep sample", SnesDbgAutoCaptureDue(0u), FALSE);
+	Check("first deep sample", SnesDbgAutoCaptureDue(1u), TRUE);
+	Check("no adjacent deep sample", SnesDbgAutoCaptureDue(2u), FALSE);
+	Check("end of first window is not a second sample",
+		SnesDbgAutoCaptureDue(SNDBG_AUTO_CAPTURE_PERIOD), FALSE);
+	Check("next-window deep sample",
+		SnesDbgAutoCaptureDue(SNDBG_AUTO_CAPTURE_PERIOD + 1u), TRUE);
 	Check("NTSC budget", uNtscBudget, 2457600u);
 	Check("PAL budget", uPalBudget, 2949120u);
 	Check("zero Hz fallback", SnesDbgFrameBudget(0), uNtscBudget);

@@ -9,11 +9,24 @@
 #include "sncpudefs.h"
 #include "ps2reg.h"
 
+/* The ordinary-cartridge specialization keeps SA-1 bookkeeping out of its
+   hot path. SA-1 cartridges share one instruction image between both CPUs to
+   preserve the R5900 instruction cache; separate entry points pass the side. */
+#ifndef SNCPU_ASM_EXECUTE
+#define SNCPU_ASM_EXECUTE SNCPUExecute_ASM
+#endif
+#ifndef SNCPU_ASM_OPTABLE
+#define SNCPU_ASM_OPTABLE _SNCPU_OpTable
+#endif
+
 		.file		1 "sn65816.S"
 	.text
 	.p2align	3
-	.globl 		SNCPUExecute_ASM
-        .globl		_SNCPU_OpTable
+	.globl 		SNCPU_ASM_EXECUTE
+        .globl		SNCPU_ASM_OPTABLE
+#if !defined(SNCPU_ASM_VARIANT_PLAIN) && !defined(SNCPU_ASM_VARIANT_SA1)
+	.globl		SNCPUExecute_ASM_SA1
+#endif
 
 		.set noreorder
 
@@ -130,7 +143,7 @@
 #define SNCPU_OP(_opcode)  	\
 		op_##_opcode:
 
-#define SNCPU_OPTABLE_BEGIN()  _SNCPU_OpTable:
+#define SNCPU_OPTABLE_BEGIN()  SNCPU_ASM_OPTABLE:
 #define SNCPU_OPTABLE_OP(_opcode)  .word op_##_opcode
 #define SNCPU_OPTABLE_END()
 
@@ -138,8 +151,12 @@
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)
 //#define SNCPU_SUBCYCLES(_nCycles)
 
-/* SA-1 S-CPU bus recorder. Non-SA-1 games take only the initial load/branch.
+/* SA-1 S-CPU bus recorder. The plain and SA-1-side variants compile it out;
+   only the host core of an SA-1 cartridge needs to produce these events.
    bits 0-15=end master clock, bit16=fast access, bits17-18=byte count. */
+#if defined(SNCPU_ASM_VARIANT_PLAIN) || defined(SNCPU_ASM_VARIANT_SA1)
+#define SNCPU_SA1_TRACK(_addr,_cycles,_bytes)
+#else
 #define SNCPU_SA1_TRACK(_addr,_cycles,_bytes) \
 		lw		t0,SP_SA1Track				;\
 		beq		t0,zr,99f				;\
@@ -171,13 +188,31 @@
 		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
 		sw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
 99:
+#endif
+
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+
+#define SNCPU_SA1_PENALTY(_addr,_cycles)
+#define SNCPU_SA1_ROM_PENALTY(_cycles)
+#define SNCPU_SA1_IRAM_PENALTY()
+#define SNCPU_SA1_JUMP_PENALTY()
+#define SNCPU_SA1_BRANCH_PENALTY()
+
+#else
+
+#if defined(SNCPU_ASM_VARIANT_SA1)
+#define SNCPU_SA1_EXEC_GUARD(_label)
+#else
+#define SNCPU_SA1_EXEC_GUARD(_label) \
+		lw		t0,SP_SA1Exec				;\
+		beq		t0,zr,_label				;\
+		nop						;
+#endif
 
 /* SA-1 arbitration: pre-expanded penalty bytes keep the R5900 hot path
    independent from C callbacks. */
 #define SNCPU_SA1_PENALTY(_addr,_cycles) \
-		lw		t0,SP_SA1Exec				;\
-		beq		t0,zr,90f				;\
-		nop						;\
+		SNCPU_SA1_EXEC_GUARD(90f)			\
 		srl		t0,_addr,SNCPU_BANK_SHIFT		;\
 		sll		t0,t0,4					;\
 		addu		t0,t0,R_pCpu				;\
@@ -233,9 +268,7 @@
 /* Fast form for the hottest SA-1 path: direct I-RAM reads such as the
    Super Mario RPG A5 $00 polling loop.  No bus classification is needed. */
 #define SNCPU_SA1_ROM_PENALTY(_cycles) \
-		lw		t0,SP_SA1Exec				;\
-		beq		t0,zr,85f				;\
-		nop						;\
+		SNCPU_SA1_EXEC_GUARD(85f)			\
 		lw		t0,SNCPU_Counter2			;\
 		subu		t0,t0,R_Cycles				;\
 		subu		t0,t0,_cycles				;\
@@ -281,9 +314,7 @@
 86:
 
 #define SNCPU_SA1_JUMP_PENALTY() \
-		lw		t0,SP_SA1Exec				;\
-		beq		t0,zr,88f				;\
-		nop						;\
+		SNCPU_SA1_EXEC_GUARD(88f)			\
 		lwu		t0,SP_PCBank				;\
 		subu		t0,R_PC,t0				;\
 		srl		t1,t0,SNCPU_BANK_SHIFT			;\
@@ -297,9 +328,7 @@
 88:
 
 #define SNCPU_SA1_BRANCH_PENALTY() \
-		lw		t0,SP_SA1Exec				;\
-		beq		t0,zr,87f				;\
-		nop						;\
+		SNCPU_SA1_EXEC_GUARD(87f)			\
 		lwu		t0,SP_PCBank				;\
 		subu		t0,R_PC,t0				;\
 		andi		t1,t0,1					;\
@@ -313,6 +342,8 @@
 		nop						;\
 		addiu		R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST	;\
 87:
+
+#endif /* SA-1-side penalty variant */
 
 #define SNCPU_ENDOP(_nCycles)		\
 		j		_SNCPUExecute_Loop	;	\
@@ -614,10 +645,12 @@
 /* SA-1 direct-page hot path.  This is intentionally limited to DP=0,
    where an 8-bit direct-page operand is guaranteed to address I-RAM $0000-$00FF.
    Every other CPU/address case falls back to the canonical memory helper. */
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+#define SNCPU_SA1_DP_READ8(_addr,_data) SNCPU_READ8(_addr,_data)
+#define SNCPU_SA1_DP_WRITE8(_addr,_data) SNCPU_WRITE8(_addr,_data)
+#else
 #define SNCPU_SA1_DP_READ8(_addr,_data) \
-		lw		t0,SP_SA1Exec			;\
-		beq		t0,zr,93f			;\
-		nop					;\
+		SNCPU_SA1_EXEC_GUARD(93f)		\
 		bne		R_DP,zr,93f			;\
 		nop					;\
 		lui		t0,%hi(g_SNCPU_SA1IRAM)		;\
@@ -635,9 +668,7 @@
 94:
 
 #define SNCPU_SA1_DP_WRITE8(_addr,_data) \
-		lw		t0,SP_SA1Exec			;\
-		beq		t0,zr,95f			;\
-		nop					;\
+		SNCPU_SA1_EXEC_GUARD(95f)		\
 		bne		R_DP,zr,95f			;\
 		nop					;\
 		/* DP=0 means this access is on I-RAM page 0; CIWP bit 0 gates it. */ \
@@ -659,6 +690,7 @@
 		nop					;\
 95:		SNCPU_WRITE8(_addr,_data)		;\
 97:
+#endif
 
 #define SNCPU_WRITE16(_addr,_data)     \
 		move	R_Addr, _addr		;  \
@@ -865,9 +897,12 @@
 */
 
 _SNCPU_Write8:
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
+#if !defined(SNCPU_ASM_VARIANT_SA1)
 		lw		t1,SP_SA1Exec
 		beq		t1,zr,_SNCPU_Write8HostStart
 		nop
+#endif
 		/* Direct-page, stack, STZ/STX/STA hot paths in SA-1 games are usually
 		   bank-0 I-RAM. Fast-dispatch those before any bank-map work. */
 		sltiu		t0,R_Addr,0x0800
@@ -1041,6 +1076,7 @@ _SNCPU_Write8SA1Generic:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		b		_SNCPU_Write8Generic
 		nop
+#endif
 
 _SNCPU_Write8HostStart:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
@@ -1131,9 +1167,14 @@ _SNCPU_Write16_Slow:
 _SNCPU_Write16:
 
 _SNCPU_Write16_Fast:
+#if defined(SNCPU_ASM_VARIANT_SA1)
+		b		_SNCPU_Write16_Slow
+		nop
+#elif !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lw		t0,SP_SA1Exec
 		bne		t0,zr,_SNCPU_Write16_Slow
 		nop
+#endif
         addiu	t1,R_Addr,1								// t1 = addr + 1
 		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank
 
@@ -1241,9 +1282,12 @@ _SNCPU_Write16Wrap16:
 */
 
 _SNCPU_Read8:
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
+#if !defined(SNCPU_ASM_VARIANT_SA1)
 		lw		t1,SP_SA1Exec
 		beq		t1,zr,_SNCPU_Read8HostStart
 		nop
+#endif
 		/* Direct-page and stack overwhelmingly hit bank-0 I-RAM. Bypass the
 		   generic bank-tag classifier for the common $0000-$07FF case. */
 		sltiu		t0,R_Addr,0x0800
@@ -1357,6 +1401,7 @@ _SNCPU_Read8SA1Generic:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
 		b		4f
 		nop
+#endif
 
 _SNCPU_Read8HostStart:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
@@ -1470,9 +1515,14 @@ _SNCPU_Read16_Slow:
 
 _SNCPU_Read16:
 _SNCPU_Read16_Fast:
+#if defined(SNCPU_ASM_VARIANT_SA1)
+		b		_SNCPU_Read16_Slow
+		nop
+#elif !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lw		t0,SP_SA1Exec
 		bne		t0,zr,_SNCPU_Read16_Slow
 		nop
+#endif
         addiu	t1,R_Addr,1								// t1 = addr + 1
 		srl		t2,R_Addr,SNCPU_BANK_SHIFT				// t2 = bank
 
@@ -1764,6 +1814,20 @@ _SNCPU_Fetch16Fast:
 		lwl		R_Data,3(R_PC)
 		addiu	R_PC,R_PC,2
 
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
+		jr		ra
+		andi	R_Data,R_Data,0xFFFF
+#elif defined(SNCPU_ASM_VARIANT_SA1)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		jr		ra
+		andi	R_Data,R_Data,0xFFFF
+#else
 		lw		t0,SP_SA1Exec
 		beq		t0,zr,_SNCPU_Fetch16HostTiming
 		nop
@@ -1773,6 +1837,7 @@ _SNCPU_Fetch16Fast:
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		jr		ra
 		andi	R_Data,R_Data,0xFFFF
+#endif
 
 _SNCPU_Fetch16HostTiming:
 		subu	R_Cycles,R_Cycles,R_PCCycles
@@ -1835,6 +1900,23 @@ _SNCPU_Fetch24Fast:
 		sll		R_Data,R_Data,8
 		srl		R_Data,R_Data,8
 
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
+		jr		ra
+		nop
+#elif defined(SNCPU_ASM_VARIANT_SA1)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		subu	R_Cycles,R_Cycles,R_PCCycles
+		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
+		jr		ra
+		nop
+#else
 		lw		t0,SP_SA1Exec
 		beq		t0,zr,_SNCPU_Fetch24HostTiming
 		nop
@@ -1846,6 +1928,7 @@ _SNCPU_Fetch24Fast:
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		jr		ra
 		nop
+#endif
 
 _SNCPU_Fetch24HostTiming:
 		subu	R_Cycles,R_Cycles,R_PCCycles
@@ -1982,7 +2065,7 @@ _SNCPU_UpdateOpTable:
 
 // E=0
 _E0:
-		la		R_pOpTable, _SNCPU_OpTable	// get pointer to optable base
+		la		R_pOpTable, SNCPU_ASM_OPTABLE	// get pointer to optable base
 		sll		t1,t1, 4 + 2				// t1 = opcode table offset
 
 		j		_SNCPU_UpdateDPMask
@@ -1990,7 +2073,7 @@ _E0:
 
 // E=1
 _E1:
-		la		R_pOpTable, _SNCPU_OpTable	// get pointer to optable base
+		la		R_pOpTable, SNCPU_ASM_OPTABLE	// get pointer to optable base
         addiu	R_pOpTable,R_pOpTable, 0x400*4	// point to E=1 instructions
         ori		R_P,R_P, SNCPU_FLAG_M | SNCPU_FLAG_X
         andi	R_X,R_X,0x00FF
@@ -2169,7 +2252,16 @@ _SNCPU_SBC16_DECIMAL:
 //
 */
 
-SNCPUExecute_ASM:
+#if !defined(SNCPU_ASM_VARIANT_PLAIN) && !defined(SNCPU_ASM_VARIANT_SA1)
+SNCPU_ASM_EXECUTE:
+		b		_SNCPUExecute_ASM_SharedEntry
+		move	a1,zr
+SNCPUExecute_ASM_SA1:
+		addiu	a1,zr,1
+_SNCPUExecute_ASM_SharedEntry:
+#else
+SNCPU_ASM_EXECUTE:
+#endif
 		addiu	sp,sp,-0x90
         sd		s0,0x00(sp)
         sd		s1,0x08(sp)
@@ -2183,19 +2275,16 @@ SNCPUExecute_ASM:
         sd		fp,0x48(sp)
 
 		move	R_pCpu, a0
-		lui		t0,%hi(g_SNCPU_SA1BusHostCpu)
-		lw		t0,%lo(g_SNCPU_SA1BusHostCpu)(t0)
-		xor		t1,t0,R_pCpu
-		sltiu		t1,t1,1
-		lui		t0,%hi(g_SNCPU_SA1BusTrackEnabled)
-		lw		t0,%lo(g_SNCPU_SA1BusTrackEnabled)(t0)
-		and		t1,t1,t0
-		sw		t1,SP_SA1Track
-		lui		t0,%hi(g_SNCPU_SA1ExecCpu)
-		lw		t0,%lo(g_SNCPU_SA1ExecCpu)(t0)
-		xor		t0,t0,R_pCpu
-		sltiu		t0,t0,1
-		sw		t0,SP_SA1Exec
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+		/* No SA-1 sidecars are referenced by this specialization. */
+#elif defined(SNCPU_ASM_VARIANT_SA1)
+		/* The SA-1 identity is resolved by the preprocessor in this core. */
+#else
+		/* a1=0 selects the host recorder, a1=1 the SA-1 penalty paths. */
+		sw		a1,SP_SA1Exec
+		xori		t0,a1,1
+		sw		t0,SP_SA1Track
+#endif
 
 //
 //
@@ -2313,7 +2402,7 @@ _SNCPUExecute_DoneNoRewind:
 		SNCPU_FETCH8(R_t0);
         SNCPU_OR(R_P,R_t0);
 
-		la		R_pOpTable, _SNCPU_OpTable	// get pointer to optable base
+		la		R_pOpTable, SNCPU_ASM_OPTABLE	// get pointer to optable base
 
         // set C flag
         andi 	t0,R_t0,SNCPU_FLAG_C
@@ -2347,7 +2436,7 @@ _SNCPUExecute_DoneNoRewind:
         SNCPU_NOT8(R_t0);       // R_t0 = ~rep bits
         SNCPU_AND(R_P,R_t0);
 
-		la		R_pOpTable, _SNCPU_OpTable	// get pointer to optable base
+		la		R_pOpTable, SNCPU_ASM_OPTABLE	// get pointer to optable base
 
         // clear C flag
         and		R_fC, R_fC, R_t0
@@ -2563,9 +2652,15 @@ _SNCPUExecute_DoneNoRewind:
 		   but re-fetching 54/00/00 and redispatching for every byte is pure
 		   emulator overhead. Batch only while both 16-bit addresses are in
 		   the two real I-RAM windows; all other cases keep the generic path. */
+
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
+#if defined(SNCPU_ASM_VARIANT_SA1)
+		or		t0,R_t0,R_t1
+#else
 		lw		t0,SP_SA1Exec
 		beq		t0,zr,_SNCPU_MVN_X0_Normal
 		or		t0,R_t0,R_t1
+#endif
 		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
 		lui		t0,%hi(g_SNCPU_SA1BWRAMMap)
@@ -2693,6 +2788,7 @@ _SNCPU_SA1_MVN00_X0_Final:
 		/* Final byte does not rewind; execution continues after the operands. */
 		j		_SNCPUExecute_Loop
 		nop
+#endif
 
 _SNCPU_MVN_X0_Normal:
         SNCPU_SHLI(R_t0,16)

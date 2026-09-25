@@ -233,8 +233,11 @@ public:
 	void EndRender();
 	void UpdateVRAM(Uint32 uVramAddr);
 	void UpdateVRAMRange(Uint32 uVramAddr, Uint32 nWords);
+	void UpdateOAM();
 	void UpdateCGRAM(Uint32 uAddr, Uint16 uData);
 };
+
+void SnesPPUInvalidateOutputCache();
 
 extern SnesChrLookupT _SnesPPU_PlaneLookup[2];
 extern Uint8 _SnesPPU_HFlipLookup[2][256];

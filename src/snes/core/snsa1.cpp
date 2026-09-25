@@ -14,7 +14,7 @@
 extern "C" {
 #include "sncpu_c.h"
 #if defined(__mips__)
-Int32 SNCPUExecute_ASM(SNCpuT *pCpu);
+Int32 SNCPUExecute_ASM_SA1(SNCpuT *pCpu);
 #endif
 }
 
@@ -1477,13 +1477,11 @@ Bool SNSA1::ExecuteCpuFast()
 	   every tiny S-CPU/SA-1 synchronization slice is redundant and extremely
 	   expensive in games which exchange shared memory thousands of times per
 	   frame. */
-	SNCPUSA1BusSetExecCpu(&m_Cpu);
-	SNCPUExecute_ASM(&m_Cpu);
-	SNCPUSA1BusSetExecCpu(NULL);
-	/* Keep the I-RAM sidecar live between slices. SA-1 fast paths are gated by
-	   g_SNCPU_SA1ExecCpu, so the host S-CPU cannot accidentally use it. The
-	   pointer/config is refreshed on every architectural mutation instead of
-	   being torn down and rebuilt for each micro-slice. */
+	SNCPUExecute_ASM_SA1(&m_Cpu);
+	/* Keep the I-RAM sidecar live between slices. The SA-1 entry selects those
+	   fast paths inside the shared R5900 instruction image, so the host S-CPU
+	   cannot accidentally use them. The pointer/config is refreshed on every
+	   architectural mutation instead of per micro-slice. */
 	m_Cpu.bRunning = FALSE;
 	if (m_Cpu.nAbortCycles != 0)
 	{

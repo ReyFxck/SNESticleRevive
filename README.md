@@ -815,8 +815,9 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 | `VERBOSE=1` | Show the **full** warning/error text (no truncation). |
 | `PROFILE=1` | Compile the on‑screen profiler in — press **R3** in‑game to capture one frame's per‑section timing. |
 | `SNES_DIAGNOSTICS=1` | Enable the universal rolling `snesdiag-v1` CPU/PPU/APU/DMA/chip report. |
-| `SNES_DIAGNOSTICS=2` | Add bounded deep capture triggered by anomalies or **R3** / **L2+R2**. See [SNES diagnostics](docs/SNES_DIAGNOSTICS.md). |
+| `SNES_DIAGNOSTICS=2` | Enable sampled deep diagnostics (frame 1, every 120 frames, anomalies, or **R3** / **L2+R2**) without tracing every frame. See [SNES diagnostics](docs/SNES_DIAGNOSTICS.md). |
 | `SNES_OBJ_CACHE=0` | Disable the OBJ-only 4-bpp CHR cache for controlled A/B tests. |
+| `SNES_BG_CACHE=0` | Disable physical CHR, exact Mode 1/5 BG-line and stable Mode 5 output-line caches for controlled A/B tests. |
 | `OUT=/path` | Copy the final ELF/ISO to this folder. |
 | `ROMS=/path` | ROM folder to embed when building an ISO. |
 | `COVER=y` / `cover=y` | Download matching Libretro boxart/title/snap/logo into the ISO; `n` is the offline default. |
@@ -829,7 +830,7 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 | `SMB_CONFIG=/path/SMB.CNF` | Copy a single-share SMB configuration into an ISO root without printing its credentials. |
 
 > Note: the build records compile-affecting options such as `PROFILE`,
-> `SNES_DIAGNOSTICS`, the OBJ cache switch and `APP_VERSION`. Changing one of them
+> `SNES_DIAGNOSTICS`, the OBJ/BG cache switches and `APP_VERSION`. Changing one of them
 > automatically rebuilds the affected objects; `make clean` is not required.
 
 </details>
