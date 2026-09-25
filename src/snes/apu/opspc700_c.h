@@ -51,7 +51,6 @@ SNSPC_ENDOP(2)
 	// SETP_
 SNSPC_OP(0x040,2)
 	SNSPC_SETFLAG_P();
-	SNSPC_CLRFLAG_I();
 SNSPC_ENDOP(2)
 
 	// PUSHA_
@@ -2007,14 +2006,15 @@ SNSPC_OP(0x05a,4)
 	SNSPC_SETFLAG_C(t2);
 SNSPC_ENDOP(4)
 
-	// MUL_
+	// MUL YA: the SPC700 sets N/Z from Y (the high product byte).
 SNSPC_OP(0x0cf,9)
 	SNSPC_GET_Y8(t0);
 	SNSPC_GET_A8(t1);
 	SNSPC_MUL(t1,t0);
 	SNSPC_SET_YA16(t1);
-	SNSPC_SETFLAG_Z16(t1);
-	SNSPC_SETFLAG_N16(t1);
+	SNSPC_SHRI(t1,8);
+	SNSPC_SETFLAG_Z8(t1);
+	SNSPC_SETFLAG_N8(t1);
 SNSPC_ENDOP(9)
 
 	// addr_abs_CALL_
@@ -2198,30 +2198,32 @@ SNSPC_OP(0x0f2,4)
 	SNSPC_WRITE8(t0,t1);
 SNSPC_ENDOP(4)
 
-	// TSET1_addr_abs_
+	// TSET1 abs: flags are based on A-memory, while memory becomes memory|A.
 SNSPC_OP(0x00e,6)
 	SNSPC_FETCH16(t0);
 	SNSPC_READ8(t0,t1);
 	SNSPC_GET_A8(t2);
-	SNSPC_AND(t2,t1);
-	SNSPC_SETFLAG_Z8(t2);
-	SNSPC_SETFLAG_N8(t2);
-	SNSPC_GET_A8(t2);
+	{
+		Uint32 uCompare = (t2 - t1) & 0xFF;
+		SNSPC_SETFLAG_Z8(uCompare);
+		SNSPC_SETFLAG_N8(uCompare);
+	}
 	SNSPC_OR(t1,t2);
 	SNSPC_WRITE8(t0,t1);
 SNSPC_ENDOP(6)
 
-	// TCLR1_addr_abs_
+	// TCLR1 abs: flags are based on A-memory, while memory becomes memory&~A.
 SNSPC_OP(0x04e,6)
 	SNSPC_FETCH16(t0);
 	SNSPC_READ8(t0,t1);
 	SNSPC_GET_A8(t2);
-	SNSPC_AND(t2,t1);
-	SNSPC_SETFLAG_Z8(t2);
-	SNSPC_SETFLAG_N8(t2);
-	SNSPC_GET_A8(t2);
-	SNSPC_OR(t1,t2);
-	SNSPC_XOR(t1,t2);
+	{
+		Uint32 uCompare = (t2 - t1) & 0xFF;
+		SNSPC_SETFLAG_Z8(uCompare);
+		SNSPC_SETFLAG_N8(uCompare);
+	}
+	SNSPC_NOT8(t2);
+	SNSPC_AND(t1,t2);
 	SNSPC_WRITE8(t0,t1);
 SNSPC_ENDOP(6)
 
