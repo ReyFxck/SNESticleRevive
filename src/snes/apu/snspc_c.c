@@ -677,7 +677,8 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		break;
 
 	SNSPC_OP(0xEF, 3);
-		// SLEEP
+		// SLEEP/STOP halt the SPC and repeat the opcode until reset/wakeup.
+		rPC--;
 		SNSPC_SUBCYCLES(3);
 		break;
 
