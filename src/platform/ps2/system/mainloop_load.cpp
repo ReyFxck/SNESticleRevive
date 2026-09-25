@@ -31,6 +31,7 @@
 #include "audmixbuffer.h"
 #include "emumovie.h"
 #include "mainloop_load.h"
+#include "i18n.h"
 #include "embedded_irx.h"   /* HddMapPath (hdd0:/PART -> pfs0:) */
 #include "sndbglog.h"
 
@@ -39,6 +40,7 @@ static Char s_MainLoopLoadError[192] = "Unknown ROM load error";
 static void _MainLoopSetLoadError(const Char *pFormat, ...)
 {
         va_list args;
+        pFormat = I18nTranslate(pFormat);
         va_start(args, pFormat);
         vsnprintf(s_MainLoopLoadError, sizeof(s_MainLoopLoadError), pFormat, args);
         va_end(args);

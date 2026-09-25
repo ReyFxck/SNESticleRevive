@@ -17,10 +17,12 @@
 
 #include "poly.h"
 #include "font.h"
+#include "i18n.h"
 
 void MainLoopModalPrintf(Int32 Time, const Char *pFormat, ...)
 {
 	va_list argptr;
+	pFormat = I18nTranslate(pFormat);
 	va_start(argptr,pFormat);
 	vsnprintf(_MainLoop_ModalStr, sizeof(_MainLoop_ModalStr), pFormat, argptr);
 	va_end(argptr);
@@ -38,6 +40,7 @@ void MainLoopModalPrintf(Int32 Time, const Char *pFormat, ...)
 void MainLoopStatusPrintf(Int32 Time, const Char *pFormat, ...)
 {
 	va_list argptr;
+	pFormat = I18nTranslate(pFormat);
 	va_start(argptr,pFormat);
 	vsnprintf(_MainLoop_StatusStr, sizeof(_MainLoop_StatusStr), pFormat, argptr);
 	va_end(argptr);

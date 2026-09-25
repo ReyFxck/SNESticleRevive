@@ -15,6 +15,7 @@
 #include "poly.h"
 #include "uiLog.h"
 #include "uiChrome.h"
+#include "../i18n/i18n.h"
 
 CLogScreen::CLogScreen()
 {
@@ -66,7 +67,7 @@ void CLogScreen::Draw()
 	Int32 vx=10, vy = 31;
 
 	FontSelect(0);
-	UiChromeHeader("MESSAGE LOG", TRUE);
+	UiChromeHeader(I18nTranslate("MESSAGE LOG"), TRUE);
 
 	FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);   // -> amber via FontColor4f remap
 
@@ -95,7 +96,7 @@ void CLogScreen::Draw()
 	UiChromeScroll(m_iScroll > 0,
 	               (m_iScroll + m_nDisplayLines) < m_nMessages,
 	               232, 36, 184);
-	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 92, 198, "Scroll");
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 92, 198, I18nTranslate("Scroll"));
 }
 
 void CLogScreen::Process()

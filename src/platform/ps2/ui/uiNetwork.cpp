@@ -16,6 +16,7 @@
 #include "uiNetwork.h"
 #include "uiChrome.h"
 #include "uiVideo.h"
+#include "../i18n/i18n.h"
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
 #include "mainloop_ui.h"
@@ -312,13 +313,14 @@ void CNetworkScreen::Input(Uint32 buttons, Uint32 trigger)
         else if (m_iSelect == 5)
         {
             CommitEditIP();
-            MainLoopModalPrintf(1, "SMB: Saving config...");
+            MainLoopModalPrintf(1, "%s", I18nTranslate("SMB: Saving config..."));
             if (SmbSaveAndConnect(&m_Config) == 0)
                 MainLoopModalPrintf(60 * 2, "SMB: Connected\n%s",
                                     SmbGetConfigPath());
             else
                 MainLoopModalPrintf(60 * 3, "SMB: %s (error %d)",
-                                    SmbGetStatusText(), SmbGetLastError());
+                                    I18nTranslate(SmbGetStatusText()),
+                                    SmbGetLastError());
             VideoSettingsSave();
         }
         else if (m_iSelect == 6)
@@ -326,7 +328,7 @@ void CNetworkScreen::Input(Uint32 buttons, Uint32 trigger)
             BgmIOBegin();
             SmbDisconnect();
             BgmIOEnd();
-            MainLoopModalPrintf(60, "SMB: Disconnected");
+            MainLoopModalPrintf(60, "%s", I18nTranslate("SMB: Disconnected"));
         }
     }
 
@@ -390,7 +392,9 @@ void CNetworkScreen::BuildDisplayText(char *output, int outputSize,
         output[out++] = ']';
     }
     output[out] = '\0';
-    if (!output[0]) strcpy(output, password ? "Guest" : "(empty)");
+    if (!output[0])
+        snprintf(output, outputSize, "%s",
+                 I18nTranslate(password ? "Guest" : "(empty)"));
 }
 
 void CNetworkScreen::Draw()
@@ -413,50 +417,50 @@ void CNetworkScreen::Draw()
                      m_iEditField == 4);
 
     FontSelect(0);
-    UiChromeHeader("SMB NETWORK", TRUE);
+    UiChromeHeader(I18nTranslate("SMB NETWORK"), TRUE);
     y = 31;
 
     FontColor4f(0.55f, 0.55f, 0.55f, 1.0f);
-    FontPuts(50, y, "Status");
+    FontPuts(50, y, I18nTranslate("Status"));
     FontColor4f(SmbIsMounted() ? 0.3f : 1.0f,
                 SmbIsMounted() ? 1.0f : 0.85f, 0.3f, 1.0f);
-    FontPuts(126, y, SmbGetStatusText());
+    FontPuts(126, y, I18nTranslate(SmbGetStatusText()));
     y += 15;
 
-    UiChromeSection(y, "Server / Share");
+    UiChromeSection(y, I18nTranslate("Server / Share"));
     y += 13;
-    SmbRow(y, 0, m_iSelect, "Server IP", "");
+    SmbRow(y, 0, m_iSelect, I18nTranslate("Server IP"), "");
     FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     DrawIP(126, y); y += 12;
-    SmbRow(y, 1, m_iSelect, "Port", port); y += 12;
-    SmbRow(y, 2, m_iSelect, "Share", share); y += 12;
-    SmbRow(y, 3, m_iSelect, "Username", user); y += 12;
-    SmbRow(y, 4, m_iSelect, "Password", password); y += 15;
+    SmbRow(y, 1, m_iSelect, I18nTranslate("Port"), port); y += 12;
+    SmbRow(y, 2, m_iSelect, I18nTranslate("Share"), share); y += 12;
+    SmbRow(y, 3, m_iSelect, I18nTranslate("Username"), user); y += 12;
+    SmbRow(y, 4, m_iSelect, I18nTranslate("Password"), password); y += 15;
 
-    UiChromeSection(y, "Actions"); y += 13;
-    SmbAction(y, 5, m_iSelect, "Save & Connect"); y += 12;
-    SmbAction(y, 6, m_iSelect, "Disconnect");
+    UiChromeSection(y, I18nTranslate("Actions")); y += 13;
+    SmbAction(y, 5, m_iSelect, I18nTranslate("Save & Connect")); y += 12;
+    SmbAction(y, 6, m_iSelect, I18nTranslate("Disconnect"));
 
     if (m_iDigitIP >= 0)
     {
-        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 8, 198, "Octet");
-        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 71, 198, "Value");
-        UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 138, 198, "Done");
-        UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 190, 198, "Done");
+        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 8, 198, I18nTranslate("Octet"));
+        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 71, 198, I18nTranslate("Value"));
+        UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 138, 198, I18nTranslate("Done"));
+        UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 190, 198, I18nTranslate("Done"));
     }
     else if (m_iEditField >= 0)
     {
-        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 4, 198, "Cursor");
-        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 72, 198, "Char");
-        UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 135, 198, "Delete");
-        UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 193, 198, "Done");
+        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 4, 198, I18nTranslate("Cursor"));
+        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 72, 198, I18nTranslate("Char"));
+        UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 135, 198, I18nTranslate("Delete"));
+        UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 193, 198, I18nTranslate("Done"));
     }
     else
     {
-        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 5, 198, "Select");
-        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 69, 198, "Change");
-        UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 139, 198, "Reset");
-        UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 190, 198, "Edit");
+        UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 5, 198, I18nTranslate("Select"));
+        UiChromeHint(UI_ICON_LEFT, UI_ICON_RIGHT, 69, 198, I18nTranslate("Change"));
+        UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 139, 198, I18nTranslate("Reset"));
+        UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 190, 198, I18nTranslate("Edit"));
     }
 
     path = SmbGetConfigPath();

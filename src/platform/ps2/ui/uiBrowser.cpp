@@ -27,6 +27,7 @@
 #include "uiBrowser.h"
 #include "uiCover.h"
 #include "uiChrome.h"
+#include "../i18n/i18n.h"
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
 #include "mainloop_ui.h"
@@ -301,10 +302,10 @@ static int BrowserOpenDirectory(const Char *pPath)
 	bMass = BrowserIsMassPath(pPath);
 	if (bMass && !UsbBdmIsLoaded() && !Mx4sioIsLoaded())
 	{
-		MainLoopModalPrintf(1, "USB: Starting driver...");
+		MainLoopModalPrintf(1, "%s", I18nTranslate("USB: Starting driver..."));
 		if (UsbBdmLoadEmbeddedIrx() < 0)
 		{
-			MainLoopModalPrintf(180, "USB: Driver failed (%d)",
+			MainLoopModalPrintf(180, I18nTranslate("USB: Driver failed (%d)"),
 			                    UsbBdmGetLastError());
 			return -1;
 		}
@@ -313,7 +314,7 @@ static int BrowserOpenDirectory(const Char *pPath)
 	bDisc = BrowserIsDiscPath(pPath);
 	if (bDisc && !CdfsIsLoaded())
 	{
-		MainLoopModalPrintf(1, "CD/DVD: Starting driver...");
+		MainLoopModalPrintf(1, "%s", I18nTranslate("CD/DVD: Starting driver..."));
 		if (CdfsLoadEmbeddedIrx() < 0)
 		{
 			MainLoopModalPrintf(180, "CD/DVD: Driver failed (%d)",
@@ -326,7 +327,7 @@ static int BrowserOpenDirectory(const Char *pPath)
 	   DEV9 during boot; the explicit selection of smb: is the trigger. */
 	bSmb = BrowserIsSmbPath(pPath);
 	if (bSmb && !SmbIsMounted())
-		MainLoopModalPrintf(1, "SMB: Connecting...");
+		MainLoopModalPrintf(1, "%s", I18nTranslate("SMB: Connecting..."));
 	if (bSmb && SmbEnsureMounted() < 0)
 		return -1;
 
@@ -1253,7 +1254,7 @@ void CBrowserScreen::Draw()
 	PolyTexture(NULL);
 	PolyBlend(TRUE);
 
-	UiChromeHeader(m_bStateManager ? "STATE FILES" : "BROWSER", TRUE);
+	UiChromeHeader(I18nTranslate(m_bStateManager ? "STATE FILES" : "BROWSER"), TRUE);
 	{
 		Char dirView[128];
 		BrowserCopyEllipsis(dirView, sizeof(dirView), m_Dir, 220);
@@ -1532,7 +1533,7 @@ void CBrowserScreen::Draw()
 /*
 	FontSelect(0);
 	FontColor4f(0.5, 0.5f, 0.5f, 1.0f);
-	FontPuts(10, 220, "Select=Network");
+	FontPuts(10, 220, I18nTranslate("Select=Network"));
   */
 
 /*
@@ -1565,7 +1566,7 @@ void CBrowserScreen::Draw()
 		}
 		else if (CoverNoImage())
 		{
-			const Char *msg = "No Covers";
+			const Char *msg = I18nTranslate("No Covers");
 			FontColor4f(0.55f, 0.55f, 0.55f, 1.0f);
 			FontPrintf(BROWSER_COVER_X + (BROWSER_COVER_W - FontGetStrWidth(msg)) / 2,
 			           BROWSER_COVER_Y + BROWSER_COVER_H / 2 - 6, "%s", msg);
@@ -1577,12 +1578,12 @@ void CBrowserScreen::Draw()
 	UiChromeScroll(m_iScroll > 0,
 	               (m_iScroll + m_MaxLines) < m_nEntries,
 	               232, 36, 184);
-	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 4, 198, "Select");
-	UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 62, 198, "Open");
-	UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 101, 198, "Back");
+	UiChromeHint(UI_ICON_UP, UI_ICON_DOWN, 4, 198, I18nTranslate("Select"));
+	UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 62, 198, I18nTranslate("Open"));
+	UiChromeHint(UI_ICON_TRIANGLE, UI_ICON_COUNT, 101, 198, I18nTranslate("Back"));
 	UiChromeHint(UI_ICON_SQUARE, UI_ICON_COUNT, 140, 198,
-	             CoverIsEnabled() ? "Cover" : "PgUp");
-	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 186, 198, "PgDn");
+	             CoverIsEnabled() ? I18nTranslate("Cover") : I18nTranslate("PgUp"));
+	UiChromeHint(UI_ICON_CIRCLE, UI_ICON_COUNT, 186, 198, I18nTranslate("PgDn"));
 
 	FontSelect(0);
 
@@ -1913,12 +1914,12 @@ void CBrowserScreen::SetDir(const Char *pDir)
 			if (dreadResult < 0 && BrowserIsSmbPath(openPath))
 			{
 				SmbReportBrowseError(dreadResult);
-				MainLoopModalPrintf(60 * 2, "SMB: %s", SmbGetStatusText());
+				MainLoopModalPrintf(60 * 2, "SMB: %s", I18nTranslate(SmbGetStatusText()));
 			}
 		}
 		else if (BrowserIsSmbPath(openPath))
 		{
-			MainLoopModalPrintf(60 * 2, "SMB: %s\nCheck config/network", SmbGetStatusText());
+			MainLoopModalPrintf(60 * 2, "SMB: %s\nCheck config/network", I18nTranslate(SmbGetStatusText()));
 		}
 	} else
 	{
