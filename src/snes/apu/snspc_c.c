@@ -593,7 +593,11 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 			Uint32 uResultY;
 
 			SNSPC_SETFLAG_H((uY & 0x0F) >= (uX & 0x0F));
-			if (uY >= uX) SNSPC_SETFLAG_V(); else SNSPC_CLRFLAG_V();
+			if (uY >= uX) {
+				SNSPC_SETFLAG_V();
+			} else {
+				SNSPC_CLRFLAG_V();
+			}
 
 			if (uY < (uX << 1)) {
 				uResultA = uYA / uX;
