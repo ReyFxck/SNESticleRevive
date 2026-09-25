@@ -409,9 +409,8 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 #endif
         PROF_LEAVE("SNSpcExecute");
 
-        /* A pending CPU input latch can become visible while this SPC
-           slice runs. Reads from $F4-$F7 also call this at the exact access,
-           so instruction-level execution cannot skip the transition. */
+		/* Drain deferred input only for compatibility with restored legacy
+		   state. Normal CPU port writes are synchronous after this catch-up. */
         m_SpcIO.SyncCpuPorts((Uint32)SNSPCGetCounter(
             &m_Spc, SNSPC_COUNTER_TOTAL));
     }
@@ -749,9 +748,9 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 	// APUIO0-3 are mirrored every four bytes through $217F.
 	if (uAddr >= 0x2140 && uAddr <= 0x217F)
 	{
-		/* Catch SPC up first, then let the input latch decide whether this
-		   write lands in the current SPC half-cycle or at the next boundary.
-		   Absolute counters avoid the old frame-wrap FIFO bug. */
+		/* Catch the SPC up before publishing the CPU input latch. Keeping this
+		   ordering synchronous preserves short command/acknowledgement edges
+		   used by games while avoiding the old frame-relative queue. */
 		pSnes->SyncSPC();
 		pSnes->m_SpcIO.WriteCpuPort(
 			(Uint32)SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_TOTAL),

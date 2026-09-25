@@ -137,21 +137,13 @@ static void TestLineKey()
 		&info);
 	Check("exact line key", SnesPPUBGLineCacheKeyMatches(&key, 9,
 		0x12345678, 223, 1, 5, &info), TRUE);
-	/* Fine-X scrolling only changes which eight-dot phase is selected from
-	   the same decoded 33-tile row. */
 	info.uScrollX = 1;
-	Check("fine X keeps decoded row", SnesPPUBGLineCacheKeyMatches(&key, 9,
-		0x12315678, 223, 1, 5, &info), TRUE);
-	info.uScrollX = 8;
-	Check("coarse X invalidates row", SnesPPUBGLineCacheKeyMatches(&key, 9,
-		0x12305678, 223, 1, 5, &info), FALSE);
+	Check("fine X invalidates exact row", SnesPPUBGLineCacheKeyMatches(&key, 9,
+		0x12345678, 223, 1, 5, &info), FALSE);
 	info.uScrollX = 7;
 	info.uScrollY = 20;
-	Check("vertical translation reuses world row",
-		SnesPPUBGLineCacheKeyMatches(&key, 9, 0x12345678,
-			222, 1, 5, &info), TRUE);
-	Check("world-line cache index", SnesPPUBGLineCacheIndex(&info, 222),
-		(20 + 222) & (SNPPU_BG_LINE_CACHE_LINES - 1));
+	Check("scroll Y invalidates exact row", SnesPPUBGLineCacheKeyMatches(
+		&key, 9, 0x12345678, 223, 1, 5, &info), FALSE);
 	info.uScrollY = 19;
 	Check("VRAM generation invalidates", SnesPPUBGLineCacheKeyMatches(
 		&key, 10, 0x12345678, 223, 1, 5, &info), FALSE);

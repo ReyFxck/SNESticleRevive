@@ -49,15 +49,15 @@ static SnesPPUChrCacheT _SnesPPU_ChrCache _ALIGN(64);
 struct SnesPPUBGLineCacheEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
-	Uint8 uKeyPad[24];
+	Uint32 uReady;
+	Uint8 uKeyPad[20];
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uSub[SNPPU_BG_LINE_PIXELS];
-	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES];
-	Uint8 uMainPriority[SNPPU_BG_LINE_MASK_BYTES];
-	Uint8 uSubOpaque[SNPPU_BG_LINE_MASK_BYTES];
-	Uint8 uSubPriority[SNPPU_BG_LINE_MASK_BYTES];
-	Uint32 uReady;
-	Uint8 uAdmissionPad[12];
+	SNMaskT MainOpaque;
+	SNMaskT MainPriority;
+	SNMaskT SubOpaque;
+	SNMaskT SubPriority;
+	Uint8 uAdmissionPad[48];
 };
 
 typedef char SnesPPUBGLineEntrySizeCheck[
@@ -73,52 +73,48 @@ static Uint32 _SnesPPU_BGLineGeneration = 1;
 
 static _INLINE Bool _SnesPPURestoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
-	Uint32 iBG, Uint32 uFineScrollX, Bool bHiresPair)
+	Uint32 iBG, Bool bHiresPair)
 {
 	Uint32 iSubPlane = iBG + 2u;
 
 	memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
 		SNPPU_BG_LINE_PIXELS);
-	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
-		pEntry->uMainOpaque, uFineScrollX);
-	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
-		pEntry->uMainPriority, uFineScrollX);
+	SNMaskCopy(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+		&pEntry->MainOpaque);
+	SNMaskCopy(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+		&pEntry->MainPriority);
 	if (bHiresPair)
 	{
 		memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
 			SNPPU_BG_LINE_PIXELS);
-		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
-			pEntry->uSubOpaque, uFineScrollX);
-		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
-			pEntry->uSubPriority, uFineScrollX);
+		SNMaskCopy(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+			&pEntry->SubOpaque);
+		SNMaskCopy(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+			&pEntry->SubPriority);
 	}
 	return TRUE;
 }
 
-static _INLINE void _SnesPPUStoreBGMask(Uint8 *pDest, const Uint8 *pSrc)
-{
-	memcpy(pDest, pSrc, SNPPU_BG_LINE_MASK_DATA_BYTES);
-	memset(pDest + SNPPU_BG_LINE_MASK_DATA_BYTES, 0,
-		SNPPU_BG_LINE_MASK_BYTES - SNPPU_BG_LINE_MASK_DATA_BYTES);
-}
-
 static _INLINE void _SnesPPUStoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
-	Uint32 iBG, const Uint8 *pMainOpaque, const Uint8 *pMainPriority,
-	const Uint8 *pSubOpaque, const Uint8 *pSubPriority, Bool bHiresPair)
+	Uint32 iBG, Bool bHiresPair)
 {
 	Uint32 iSubPlane = iBG + 2u;
 
 	memcpy(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG],
 		SNPPU_BG_LINE_PIXELS);
-	_SnesPPUStoreBGMask(pEntry->uMainOpaque, pMainOpaque);
-	_SnesPPUStoreBGMask(pEntry->uMainPriority, pMainPriority);
+	SNMaskCopy(&pEntry->MainOpaque,
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE]);
+	SNMaskCopy(&pEntry->MainPriority,
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI]);
 	if (bHiresPair)
 	{
 		memcpy(pEntry->uSub, (Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
 			SNPPU_BG_LINE_PIXELS);
-		_SnesPPUStoreBGMask(pEntry->uSubOpaque, pSubOpaque);
-		_SnesPPUStoreBGMask(pEntry->uSubPriority, pSubPriority);
+		SNMaskCopy(&pEntry->SubOpaque,
+			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE]);
+		SNMaskCopy(&pEntry->SubPriority,
+			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI]);
 	}
 
 	/* The candidate key was published while uReady was false. */
@@ -2024,25 +2020,24 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			if (uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR)
 			{
 				const Bool bHiresPair =
-					((uBGMode == 5 || uBGMode == 6) && iBG < 2 &&
+					(uBGMode == 5 && iBG < 2 &&
 					 BGInfo[iBG].uBitDepth != 0);
 				Uint8 TempMask[2][SNPPU_BGPLANE_SIZE];
-				Uint8 SubMask[2][SNPPU_BGPLANE_SIZE];
 #if SNPPU_BG_CACHE && SNPPURENDER_CHR64
 				SnesPPUBGLineCacheEntryT *pLineCache = NULL;
 				Bool bLineCachePromote = FALSE;
-				/* Every non-Mode-7 layer reaches this same decoder. Offset-per-
-				   tile and mosaic remain on the established path; ordinary rows
-				   can be reused across screen-line translation and fine-X scroll. */
-				if (!(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET) &&
+				/* Keep every raster input exact. Mode 2/4/6, offset-per-tile and
+				   mosaic stay on the established decoder because reusing their
+				   rows can leave stale text, sprites or priority masks. */
+				if ((uBGMode == 1 || uBGMode == 5) &&
+				    !(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET) &&
 				    BGInfo[iBG].uMosaic == 0 &&
 				    iLine >= 0 &&
 				    (Uint32)iLine < SNPPU_BG_LINE_CACHE_LINES)
 				{
 					Bool bSameState;
 
-					pLineCache = &_SnesPPU_BGLineCache[iBG]
-						[SnesPPUBGLineCacheIndex(&BGInfo[iBG], iLine)];
+					pLineCache = &_SnesPPU_BGLineCache[iBG][iLine];
 					bSameState = SnesPPUBGLineCacheKeyMatches(
 						&pLineCache->Key, _SnesPPU_BGLineGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iLine, iBG,
@@ -2050,7 +2045,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					if (pLineCache->uReady && bSameState)
 					{
 						_SnesPPURestoreBGLine(pLineCache, pRenderInfo,
-							iBG, BGInfo[iBG].uScrollX & 7u, bHiresPair);
+							iBG, bHiresPair);
 #if SNDBG_LOG
 						g_DbgBGLineCacheHits++;
 #endif
@@ -2084,6 +2079,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				    BGInfo[iBG].uBitDepth != 0)
 				{
 					const Int32 iSubPlane = iBG + 2;
+					Uint8 SubMask[2][SNPPU_BGPLANE_SIZE];
 
 					_FetchCHRHiresPair_64(
 						(Uint8 *)pRenderInfo->BGPlanes[iBG],
@@ -2147,8 +2143,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					if (bLineCachePromote)
 					{
 						_SnesPPUStoreBGLine(pLineCache, pRenderInfo,
-							iBG, TempMask[0], TempMask[1],
-							SubMask[0], SubMask[1], bHiresPair);
+							iBG, bHiresPair);
 					} else
 					{
 						/* A first miss records only the exact candidate key.

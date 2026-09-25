@@ -14,29 +14,6 @@
 
 #define SNPPU_BG_LINE_CACHE_LINES 256u
 #define SNPPU_BG_LINE_PIXELS      (33u * 8u)
-#define SNPPU_BG_LINE_MASK_DATA_BYTES 33u
-#define SNPPU_BG_LINE_MASK_BYTES  40u
-
-/* The decoded 33-tile row does not change during the eight fine-X phases.
-   Only the final 256-bit masks and the source pointer shift; both are rebuilt
-   cheaply when an entry is restored. */
-_INLINE Uint32 SnesPPUBGLineCacheRasterState(Uint32 uVramState)
-{
-	return uVramState & ~(7u << 16);
-}
-
-_INLINE Uint32 SnesPPUBGLineCacheWorldLine(
-	const SnesBGInfoT *pInfo, Uint32 uLine)
-{
-	return pInfo->uScrollY + uLine;
-}
-
-_INLINE Uint32 SnesPPUBGLineCacheIndex(
-	const SnesBGInfoT *pInfo, Uint32 uLine)
-{
-	return SnesPPUBGLineCacheWorldLine(pInfo, uLine) &
-		(SNPPU_BG_LINE_CACHE_LINES - 1u);
-}
 
 struct SnesPPUBGLineCacheKeyT
 {
@@ -61,16 +38,14 @@ _INLINE void SnesPPUBGLineCacheSetKey(SnesPPUBGLineCacheKeyT *pKey,
 	Uint32 uGeneration, Uint32 uVramState, Uint32 uLine, Uint32 uBG,
 	Uint32 uMode, const SnesBGInfoT *pInfo)
 {
-	Uint32 uWorldLine = SnesPPUBGLineCacheWorldLine(pInfo, uLine);
-
 	pKey->uGeneration = uGeneration;
-	pKey->uVramState = SnesPPUBGLineCacheRasterState(uVramState);
-	pKey->uScrollX = pInfo->uScrollX & ~7u;
-	pKey->uScrollY = uWorldLine;
+	pKey->uVramState = uVramState;
+	pKey->uScrollX = pInfo->uScrollX;
+	pKey->uScrollY = pInfo->uScrollY;
 	pKey->uScrAddr = pInfo->uScrAddr;
 	pKey->uChrAddr = pInfo->uChrAddr;
 	pKey->uMosaic = pInfo->uMosaic;
-	pKey->uLine = (Uint16)uWorldLine;
+	pKey->uLine = (Uint16)uLine;
 	pKey->uBG = (Uint8)uBG;
 	pKey->uMode = (Uint8)uMode;
 	pKey->uScrSize = pInfo->uScrSize;
@@ -85,16 +60,14 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 	Uint32 uGeneration, Uint32 uVramState, Uint32 uLine, Uint32 uBG,
 	Uint32 uMode, const SnesBGInfoT *pInfo)
 {
-	Uint32 uWorldLine = SnesPPUBGLineCacheWorldLine(pInfo, uLine);
-
 	return pKey->uGeneration == uGeneration &&
-	       pKey->uVramState == SnesPPUBGLineCacheRasterState(uVramState) &&
-	       pKey->uScrollX == (pInfo->uScrollX & ~7u) &&
-	       pKey->uScrollY == uWorldLine &&
+	       pKey->uVramState == uVramState &&
+	       pKey->uScrollX == pInfo->uScrollX &&
+	       pKey->uScrollY == pInfo->uScrollY &&
 	       pKey->uScrAddr == pInfo->uScrAddr &&
 	       pKey->uChrAddr == pInfo->uChrAddr &&
 	       pKey->uMosaic == pInfo->uMosaic &&
-	       pKey->uLine == (Uint16)uWorldLine &&
+	       pKey->uLine == (Uint16)uLine &&
 	       pKey->uBG == (Uint8)uBG &&
 	       pKey->uMode == (Uint8)uMode &&
 	       pKey->uScrSize == pInfo->uScrSize &&

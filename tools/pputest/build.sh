@@ -82,6 +82,21 @@ ROOT=../..
 
 "${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
     -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/common/render" \
+    -I "$ROOT/src/common/debug" \
+    -I "$ROOT/src/snes/apu" \
+    -I "$ROOT/src/snes/ppu" \
+    -I "$ROOT/src/snes/core" \
+    -I "$ROOT/src/snes/cpu" \
+    -I "$ROOT/src/snes" \
+    -I "$ROOT/src" \
+    spcio_test.cpp "$ROOT/src/snes/apu/snspcio.cpp" \
+    "$ROOT/src/snes/apu/snspctimer.cpp" -o spcio_test
+
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections \
     -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
     -I "$ROOT/src/common/base" \
     -I "$ROOT/src/platform/ps2/system" \
@@ -95,4 +110,4 @@ ROOT=../..
     -I "$ROOT/src/snes/core" \
     diag_test.cpp -o diag_test
 
-echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./safe_frameskip_test && ./diag_test"
+echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./safe_frameskip_test && ./diag_test"

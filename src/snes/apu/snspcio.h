@@ -30,9 +30,9 @@ class SNSpcIO
 	SNSpc_t			*m_pSpc;
 	SNSpcDsp		*m_pSpcDsp;
 
-	/* CPU->SPC input latches are sampled on the SPC clock.  Keep the newest
-	   value per port plus its absolute master-clock visibility point; this
-	   mirrors the hardware latch better than the old frame-relative FIFO. */
+	/* Retained for legacy state/layout compatibility. CPU writes are published
+	   synchronously after the SPC has caught up, so no deferred write should
+	   remain during normal execution. */
 	Uint8			m_uCpuPendingMask;
 	Uint8			m_CpuPendingData[4];
 	Uint32			m_CpuPendingCycle[4];
