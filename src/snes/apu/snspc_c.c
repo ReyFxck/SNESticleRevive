@@ -7,11 +7,12 @@
  */
 
 /*
-Todo:
-Half carry support
-
-Read 16-bit value from dp does not wrap!
-
+ * SPC700 execution core.
+ *
+ * Accuracy notes:
+ * - arithmetic flags (including half-carry) are kept live
+ * - direct-page 16-bit accesses wrap inside the selected DP page
+ * - opcode semantics are cross-checked against Mesen CE
  */
 
 #include <stdlib.h>
@@ -23,7 +24,6 @@ Read 16-bit value from dp does not wrap!
 #include "sndebug.h"
 
 #define SNSPC_STATEDEBUG (SNES_DEBUG && 1)
-#define SNSPC_HALFFLAG FALSE
 #define SNSPC_PROFILE FALSE
 
 //#define SNSPC_SUBCYCLES(_nCycles)			pCpu->Cycles-= ((_nCycles)*SNSPC_CYCLE) >> pCpu->uCycleShift;
@@ -34,9 +34,11 @@ Read 16-bit value from dp does not wrap!
 
 #define SNSPC_WRITE8(_Addr, _Data)  pCpu->Cycles = nCycles; _SNSPCWrite8(pCpu, _Addr, _Data);
 #define SNSPC_WRITE16(_Addr, _Data) pCpu->Cycles = nCycles; _SNSPCWrite16(pCpu, _Addr, _Data);
+#define SNSPC_WRITE16_DP(_Addr, _Data) pCpu->Cycles = nCycles; _SNSPCWrite16DP(pCpu, _Addr, _Data);
 
 #define SNSPC_READ8(_Addr, _x)  pCpu->Cycles = nCycles; _x = _SNSPCRead8(pCpu, _Addr);
 #define SNSPC_READ16(_Addr, _x) pCpu->Cycles = nCycles; _x = _SNSPCRead16(pCpu, _Addr);
+#define SNSPC_READ16_DP(_Addr, _x) pCpu->Cycles = nCycles; _x = _SNSPCRead16DP(pCpu, _Addr);
 
 #define SNSPC_PUSH8(_Data)	_SNSPCPush8(pCpu, _Data);
 #define SNSPC_PUSH16(_Data)	_SNSPCPush16(pCpu, _Data);
@@ -80,11 +82,10 @@ Read 16-bit value from dp does not wrap!
 #define SNSPC_SETFLAG_D() r_P |= SNSPC_FLAG_D;
 #define SNSPC_CLRFLAG_D() r_P &= ~SNSPC_FLAG_D;
 #define SNSPC_SETFLAGI_V(__V) r_P &= ~SNSPC_FLAG_V; r_P |= ((__V) & 1) << 6;
-#if SNSPC_HALFFLAG
-#define SNSPC_SETFLAG_H(__H) r_P &= ~SNSPC_FLAG_H; r_P |= ((__H) & 1) << 3;
-#else
-#define SNSPC_SETFLAG_H(__H) r_P &= ~SNSPC_FLAG_H;
-#endif
+#define SNSPC_SETFLAG_H(__H) do { \
+	r_P &= ~SNSPC_FLAG_H; \
+	r_P |= (((__H) & 1) << 3); \
+} while (0)
 
 #define SNSPC_SETFLAG_P() r_P |= SNSPC_FLAG_P; r_DP=0x100;
 #define SNSPC_CLRFLAG_P() r_P &= ~SNSPC_FLAG_P; r_DP=0x000;
@@ -156,67 +157,30 @@ Read 16-bit value from dp does not wrap!
 #define SNSPC_SHLI(_Dest, _Src) _Dest<<=_Src;
 #define SNSPC_SHRI(_Dest, _Src) _Dest>>=_Src;
 
-#if SNSPC_HALFFLAG
+#define SNSPC_ADC8(_Dest,_Src) \
+		do { \
+			Uint32 _a = (_Dest) & 0xFF; \
+			Uint32 _b = (_Src) & 0xFF; \
+			Uint32 _c = fC & 1; \
+			Uint32 _r = _a + _b + _c; \
+			r_P &= ~(SNSPC_FLAG_V | SNSPC_FLAG_H); \
+			if ((~(_a ^ _b) & (_a ^ _r) & 0x80) != 0) r_P |= SNSPC_FLAG_V; \
+			if (((_a & 0x0F) + (_b & 0x0F) + _c) & 0x10) r_P |= SNSPC_FLAG_H; \
+			(_Dest) = _r; \
+		} while (0)
 
-#define SNSPC_ADC8(_Dest,_Src)						\
-		{											\
-			Uint32 _Target = _Dest;					\
-			_Dest = _Target + _Src;					\
-			r_P &= ~(SNSPC_FLAG_V|SNSPC_FLAG_H);	\
-			if ( ~(_Target ^ _Src) & (_Target ^ _Dest) & 0x80 )	\
-					r_P |= SNSPC_FLAG_V;		\
-			if (((_Target&0xF) + (_Src & 0xF))&0x10) r_P|=SNSPC_FLAG_H; \
-		}
+#define SNSPC_SBC8(_Dest,_Src) SNSPC_ADC8((_Dest), (_Src))
 
-#define SNSPC_ADC16(_Dest,_Src)						\
-		{											\
-			Uint32 _Target = _Dest;					\
-			_Dest = _Target + _Src;					\
-			r_P &= ~(SNSPC_FLAG_V|SNSPC_FLAG_H);	\
-			if ( ~(_Target ^ _Src) & (_Target ^ _Dest) & 0x8000 )	\
-					r_P |= SNSPC_FLAG_V;		\
-			if (((_Target&0xF) + (_Src & 0xF))&0x10) r_P|=SNSPC_FLAG_H; \
-		}
-#else
-
-#define SNSPC_ADC8(_Dest,_Src)						\
-		{											\
-		Uint32 _Target = _Dest;					\
-		_Dest = _Target + _Src + (fC&1);					\
-		r_P &= ~(SNSPC_FLAG_V|SNSPC_FLAG_H);	\
-		if ( ~(_Target ^ _Src) & (_Target ^ _Dest) & 0x80 )	\
-		r_P |= SNSPC_FLAG_V;		\
-		}
-
-#define SNSPC_ADC16(_Dest,_Src)						\
-		{											\
-		Uint32 _Target = _Dest;					\
-		_Dest = _Target + _Src;					\
-		r_P &= ~(SNSPC_FLAG_V|SNSPC_FLAG_H);	\
-		if ( ~(_Target ^ _Src) & (_Target ^ _Dest) & 0x8000 )	\
-		r_P |= SNSPC_FLAG_V;		\
-		}
-
-#define SNSPC_SBC8(_Dest,_Src)						\
-		{											\
-		Uint32 _Target = _Dest;					\
-		_Dest = _Target + _Src + (fC&1);					\
-		r_P &= ~(SNSPC_FLAG_V|SNSPC_FLAG_H);	\
-		if ( ~(_Target ^ _Src) & (_Target ^ _Dest) & 0x80 )	\
-		r_P |= SNSPC_FLAG_V;		\
-		}
-
-/*
-#define SNSPC_SUB16(_Dest,_Src)						\
-		{											\
-		Uint32 _Target = _Dest;					\
-		_Dest = _Target + _Src);					\
-		r_P &= ~(SNSPC_FLAG_V|SNSPC_FLAG_H);	\
-		if ( ~(_Target ^ _Src) & (_Target ^ _Dest) & 0x8000 )	\
-		r_P |= SNSPC_FLAG_V;		\
-		}
-*/
-#endif
+#define SNSPC_ADC16(_Dest,_Src) \
+		do { \
+			Uint32 _a = (_Dest) & 0xFFFF; \
+			Uint32 _b = (_Src) & 0xFFFF; \
+			Uint32 _r = _a + _b; \
+			r_P &= ~(SNSPC_FLAG_V | SNSPC_FLAG_H); \
+			if ((~(_a ^ _b) & (_a ^ _r) & 0x8000) != 0) r_P |= SNSPC_FLAG_V; \
+			if (((_a & 0x0FFF) + (_b & 0x0FFF)) & 0x1000) r_P |= SNSPC_FLAG_H; \
+			(_Dest) = _r; \
+		} while (0)
 
 // BPL
 #define SNSPC_BRREL(_bTest)				\
@@ -296,8 +260,17 @@ static Uint16 _SNSPCRead16(SNSpcT *pCpu, Uint32 Addr)
 {
 	Uint32 uData;
 	uData =  __SNSPCRead8(pCpu, Addr);
-	uData|= (__SNSPCRead8(pCpu, Addr+1)<<8);
+	uData|= (__SNSPCRead8(pCpu, (Addr + 1) & 0xFFFF)<<8);
 	return  uData;
+}
+
+/* SPC700 direct-page 16-bit accesses wrap inside page 0/1. */
+static Uint16 _SNSPCRead16DP(SNSpcT *pCpu, Uint32 Addr)
+{
+	Uint32 uNext = (Addr & 0xFF00) | ((Addr + 1) & 0xFF);
+	Uint32 uData = __SNSPCRead8(pCpu, Addr & 0xFFFF);
+	uData |= (__SNSPCRead8(pCpu, uNext) << 8);
+	return (Uint16)uData;
 }
 
 static __inline void  __SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
@@ -332,8 +305,15 @@ static void  _SNSPCWrite8(SNSpcT *pCpu, Uint32 Addr, Uint8 Data)
 
 static void  _SNSPCWrite16(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
 {
-	__SNSPCWrite8(pCpu, Addr + 0, Data >> 0);
-	__SNSPCWrite8(pCpu, Addr + 1, Data >> 8);
+	__SNSPCWrite8(pCpu, Addr & 0xFFFF, Data >> 0);
+	__SNSPCWrite8(pCpu, (Addr + 1) & 0xFFFF, Data >> 8);
+}
+
+static void _SNSPCWrite16DP(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
+{
+	Uint32 uNext = (Addr & 0xFF00) | ((Addr + 1) & 0xFF);
+	__SNSPCWrite8(pCpu, Addr & 0xFFFF, Data >> 0);
+	__SNSPCWrite8(pCpu, uNext, Data >> 8);
 }
 
 static void _SNSPCPush8(SNSpcT *pCpu, Uint8 Data)
@@ -424,6 +404,98 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 
 #include "opspc700_c.h"
 
+	/* Mesen CE parity: logical bit operations missing from the original table. */
+	SNSPC_OP(0x0A, 5);
+		SNSPC_FETCH16(t0);
+		SNSPC_MOVE(t2,t0);
+		SNSPC_ANDI(t0,0x1FFF);
+		SNSPC_SHRI(t2,13);
+		SNSPC_READ8(t0,t1);
+		SNSPC_SHR(t1,t2);
+		SNSPC_ANDI(t1,1);
+		SNSPC_GETFLAG_C(t2);
+		SNSPC_OR(t2,t1);
+		SNSPC_SETFLAG_C(t2);
+	SNSPC_ENDOP(5);
+
+	SNSPC_OP(0x2A, 5);
+		SNSPC_FETCH16(t0);
+		SNSPC_MOVE(t2,t0);
+		SNSPC_ANDI(t0,0x1FFF);
+		SNSPC_SHRI(t2,13);
+		SNSPC_READ8(t0,t1);
+		SNSPC_SHR(t1,t2);
+		SNSPC_ANDI(t1,1);
+		SNSPC_XORI(t1,1);
+		SNSPC_GETFLAG_C(t2);
+		SNSPC_OR(t2,t1);
+		SNSPC_SETFLAG_C(t2);
+	SNSPC_ENDOP(5);
+
+	SNSPC_OP(0x4A, 4);
+		SNSPC_FETCH16(t0);
+		SNSPC_MOVE(t2,t0);
+		SNSPC_ANDI(t0,0x1FFF);
+		SNSPC_SHRI(t2,13);
+		SNSPC_READ8(t0,t1);
+		SNSPC_SHR(t1,t2);
+		SNSPC_ANDI(t1,1);
+		SNSPC_GETFLAG_C(t2);
+		SNSPC_AND(t2,t1);
+		SNSPC_SETFLAG_C(t2);
+	SNSPC_ENDOP(4);
+
+	SNSPC_OP(0x6A, 4);
+		SNSPC_FETCH16(t0);
+		SNSPC_MOVE(t2,t0);
+		SNSPC_ANDI(t0,0x1FFF);
+		SNSPC_SHRI(t2,13);
+		SNSPC_READ8(t0,t1);
+		SNSPC_SHR(t1,t2);
+		SNSPC_ANDI(t1,1);
+		SNSPC_XORI(t1,1);
+		SNSPC_GETFLAG_C(t2);
+		SNSPC_AND(t2,t1);
+		SNSPC_SETFLAG_C(t2);
+	SNSPC_ENDOP(4);
+
+	/* RETI restores PSW before the return PC. */
+	SNSPC_OP(0x7F, 6);
+		SNSPC_POP8(t0);
+		SNSPC_SET_PSW8(t0);
+		SNSPC_POP16(t1);
+		SNSPC_SET_PC16(t1);
+	SNSPC_ENDOP(6);
+
+	/* Decimal adjust uses the carry/half-carry state produced by ADC/SBC. */
+	SNSPC_OP(0xBE, 3);
+		SNSPC_GET_A8(t0);
+		if (!(fC & 1) || t0 > 0x99) {
+			t0 = (t0 - 0x60) & 0xFF;
+			fC = 0;
+		}
+		if (!(r_P & SNSPC_FLAG_H) || (t0 & 0x0F) > 9) {
+			t0 = (t0 - 6) & 0xFF;
+		}
+		SNSPC_SET_A8(t0);
+		SNSPC_SETFLAG_Z8(t0);
+		SNSPC_SETFLAG_N8(t0);
+	SNSPC_ENDOP(3);
+
+	SNSPC_OP(0xDF, 3);
+		SNSPC_GET_A8(t0);
+		if ((fC & 1) || t0 > 0x99) {
+			t0 = (t0 + 0x60) & 0xFF;
+			fC = 1;
+		}
+		if ((r_P & SNSPC_FLAG_H) || (t0 & 0x0F) > 9) {
+			t0 = (t0 + 6) & 0xFF;
+		}
+		SNSPC_SET_A8(t0);
+		SNSPC_SETFLAG_Z8(t0);
+		SNSPC_SETFLAG_N8(t0);
+	SNSPC_ENDOP(3);
+
 	SNSPC_OP(0x10, 2);
 		// BPL
 		SNSPC_BRREL(!(fN & 0x8000));
@@ -508,29 +580,36 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
        SNSPC_ENDOP(4);
 
 	SNSPC_OP(0x9E, 12);
-		SNSPC_GET_YA16(t0);
-		SNSPC_GET_X8(t1);
-		SNSPC_CLRFLAG_V();
+		/* SPC700 DIV is not a normal host division in overflow cases. */
+		SNSPC_GET_A8(t0);
+		SNSPC_GET_Y8(t1);
+		SNSPC_GET_X8(t2);
+		{
+			Uint32 uA = t0 & 0xFF;
+			Uint32 uY = t1 & 0xFF;
+			Uint32 uX = t2 & 0xFF;
+			Uint32 uYA = (uY << 8) | uA;
+			Uint32 uResultA;
+			Uint32 uResultY;
 
-		if (t1!=0)
-		{
-			t2 = t0 / t1;
-			t1 = t0 % t1;
-		} else
-		{
-			t1 = 0x0000;
-			t2 = 0xFFFF;
-		}
-		// set flag on overflow ??
-		if (t2 >= 0x100)
-		{
-			SNSPC_SETFLAG_V();
-		}
+			SNSPC_SETFLAG_H((uY & 0x0F) >= (uX & 0x0F));
+			if (uY >= uX) SNSPC_SETFLAG_V(); else SNSPC_CLRFLAG_V();
 
-		SNSPC_SET_A8(t2);
-		SNSPC_SET_Y8(t1);
-		SNSPC_SETFLAG_N8(t2);
-		SNSPC_SETFLAG_Z8(t2);
+			if (uY < (uX << 1)) {
+				uResultA = uYA / uX;
+				uResultY = uYA % uX;
+			} else {
+				Uint32 uDivisor = 0x100 - uX;
+				Uint32 uAdjusted = uYA - (uX << 9);
+				uResultA = 0xFF - (uAdjusted / uDivisor);
+				uResultY = uX + (uAdjusted % uDivisor);
+			}
+
+			SNSPC_SET_A8(uResultA & 0xFF);
+			SNSPC_SET_Y8(uResultY & 0xFF);
+			SNSPC_SETFLAG_N8(uResultA & 0xFF);
+			SNSPC_SETFLAG_Z8(uResultA & 0xFF);
+		}
         SNSPC_ENDOP(12);
 
 	SNSPC_OP(0x03, 5);
@@ -631,13 +710,13 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		SNSPC_ENDOP(5)
 
 	SNSPC_OP(0x0F, 8);
-		// BRK
-		SNSPC_SETFLAG_I();
-		SNSPC_SETFLAG_B();
+		// BRK: stack the pre-BRK PSW, then enter break state with IRQ disabled.
 		SNSPC_GET_PC(t0);
 		SNSPC_PUSH16(t0);
 		SNSPC_GET_PSW8(t1);
 		SNSPC_PUSH8(t1);
+		SNSPC_SETFLAG_B();
+		SNSPC_CLRFLAG_I();
 		SNSPC_READ16(SNSPC_VECTOR_BRK,t0);
 		SNSPC_SET_PC16(t0);
         SNSPC_ENDOP(8);
