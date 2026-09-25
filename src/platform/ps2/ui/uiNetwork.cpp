@@ -318,8 +318,9 @@ void CNetworkScreen::Input(Uint32 buttons, Uint32 trigger)
                 MainLoopModalPrintf(60 * 2, "SMB: Connected\n%s",
                                     SmbGetConfigPath());
             else
-                MainLoopModalPrintf(60 * 3, I18nTranslate("SMB: %s (error %d)"),
-                                    SmbGetStatusText(), SmbGetLastError());
+                MainLoopModalPrintf(60 * 3, "SMB: %s (error %d)",
+                                    I18nTranslate(SmbGetStatusText()),
+                                    SmbGetLastError());
             VideoSettingsSave();
         }
         else if (m_iSelect == 6)
@@ -391,7 +392,9 @@ void CNetworkScreen::BuildDisplayText(char *output, int outputSize,
         output[out++] = ']';
     }
     output[out] = '\0';
-    if (!output[0]) strcpy(output, I18nTranslate(password ? "Guest" : "(empty)"));
+    if (!output[0])
+        snprintf(output, outputSize, "%s",
+                 I18nTranslate(password ? "Guest" : "(empty)"));
 }
 
 void CNetworkScreen::Draw()

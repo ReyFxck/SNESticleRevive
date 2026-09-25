@@ -1914,7 +1914,7 @@ void CBrowserScreen::SetDir(const Char *pDir)
 			if (dreadResult < 0 && BrowserIsSmbPath(openPath))
 			{
 				SmbReportBrowseError(dreadResult);
-				MainLoopModalPrintf(60 * 2, I18nTranslate("SMB: %s"), I18nTranslate(SmbGetStatusText()));
+				MainLoopModalPrintf(60 * 2, "SMB: %s", I18nTranslate(SmbGetStatusText()));
 			}
 		}
 		else if (BrowserIsSmbPath(openPath))

@@ -12,7 +12,10 @@
 #include "i18n.h"
 
 static Int32 s_I18nLanguage = I18N_ENGLISH;
-static Char s_I18nDynamic[384];
+#define I18N_DYNAMIC_BUFFER_COUNT 4
+#define I18N_DYNAMIC_BUFFER_SIZE 384
+static Char s_I18nDynamic[I18N_DYNAMIC_BUFFER_COUNT][I18N_DYNAMIC_BUFFER_SIZE];
+static Uint32 s_I18nDynamicIndex = 0;
 
 static const Char *s_I18nLanguageNames[I18N_LANGUAGE_COUNT] =
 {
@@ -84,7 +87,7 @@ typedef struct
 
 static const I18nPhraseT s_Phrases[] =
 {
-    { "BROWSER", "NAVEGADOR", "NAVEGADOR", "浏览器" },
+    { "BROWSER", "NAVEGADOR", "NAVEGADOR", "文件管理器" },
     { "STATE FILES", "ARQUIVOS DE ESTADO", "ARCHIVOS DE ESTADO", "状态文件" },
     { "MESSAGE LOG", "LOG DE MENSAGENS", "REGISTRO", "消息日志" },
     { "SMB NETWORK", "REDE SMB", "RED SMB", "SMB 网络" },
@@ -101,7 +104,7 @@ static const I18nPhraseT s_Phrases[] =
     { "Quick Save", "Save Rapido", "Guardado Rapido", "快速存档" },
     { "Current Target", "Destino Atual", "Destino Actual", "当前目标" },
     { "Choose Save Location Again", "Escolher Local Novamente", "Elegir Ubicacion de Nuevo", "重新选择位置" },
-    { "Browse State Files", "Explorar Estados", "Explorar Estados", "浏览存档" },
+    { "Browse State Files", "Explorar Estados", "Explorar Estados", "查看存档" },
     { "Ask Save Location Again", "Escolher Local Novamente", "Elegir Ubicacion de Nuevo", "重新选择位置" },
     { "Choose quick-save location", "Escolha o local do save rapido", "Elige la ubicacion del guardado rapido", "选择快速存档位置" },
     { "Format Card", "Formatar Cartao", "Formatear Tarjeta", "格式化记忆卡" },
@@ -140,7 +143,7 @@ static const I18nPhraseT s_Phrases[] =
     { "Select YES, then press X", "Selecione SIM e pressione X", "Selecciona SI y pulsa X", "选择“是”后按 X" },
     { "Memory card formatted.", "Cartao de memoria formatado.", "Tarjeta de memoria formateada.", "记忆卡已格式化。" },
     { "Memory card formatted, but save failed.", "Cartao formatado, mas o save falhou.", "Tarjeta formateada, pero fallo el guardado.", "记忆卡已格式化，但保存失败。" },
-    { "Return to PS2 Browser", "Voltar ao Navegador do PS2", "Volver al Navegador de PS2", "返回 PS2 浏览器" },
+    { "Return to PS2 Browser", "Voltar ao Navegador do PS2", "Volver al Navegador de PS2", "返回 PS2 菜单" },
     { "Launch mc?:/BOOT/BOOT.ELF", "Iniciar mc?:/BOOT/BOOT.ELF", "Iniciar mc?:/BOOT/BOOT.ELF", "启动 mc?:/BOOT/BOOT.ELF" },
     { "Power Off PS2", "Desligar PS2", "Apagar PS2", "关闭 PS2" },
     { "Status", "Status", "Estado", "状态" },
@@ -178,7 +181,7 @@ static const I18nPhraseT s_Phrases[] =
     { "SMB1 Required", "SMB1 Necessario", "SMB1 Necesario", "需要 SMB1" },
     { "Auth Error", "Erro de Autenticacao", "Error de Autenticacion", "认证错误" },
     { "Share Error", "Erro de Compartilhamento", "Error de Recurso", "共享错误" },
-    { "Browse Error", "Erro de Navegacao", "Error de Navegacion", "浏览错误" },
+    { "Browse Error", "Erro de Navegacao", "Error de Navegacion", "访问错误" },
     { "Enabled", "Ativado", "Habilitado", "已启用" },
     { "USB: Starting driver...", "USB: iniciando driver...", "USB: iniciando driver...", "USB: 正在启动驱动..." },
     { "SMB: Connecting...", "SMB: conectando...", "SMB: conectando...", "SMB: 正在连接..." },
@@ -347,8 +350,10 @@ const Char *I18nTranslate(const Char *english)
         const Char *prefix = (s_I18nLanguage == I18N_PORTUGUESE_BR) ? pt : \
                              (s_I18nLanguage == I18N_SPANISH) ? es : zh; \
         const Char *translatedSuffix = I18nTranslate(suffix); \
-        snprintf(s_I18nDynamic, sizeof(s_I18nDynamic), "%s%s", prefix, translatedSuffix); \
-        return s_I18nDynamic; \
+        Char *output = s_I18nDynamic[s_I18nDynamicIndex]; \
+        s_I18nDynamicIndex = (s_I18nDynamicIndex + 1) % I18N_DYNAMIC_BUFFER_COUNT; \
+        snprintf(output, I18N_DYNAMIC_BUFFER_SIZE, "%s%s", prefix, translatedSuffix); \
+        return output; \
     }
 
     PREFIX("Storage: ", "Armazenamento: ", "Almacenamiento: ", "存储: ")
