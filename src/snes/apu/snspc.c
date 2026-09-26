@@ -92,7 +92,7 @@ void SNSPCResetRegs(SNSpcT *pCpu)
 	pCpu->Regs.rA   = 0;
 	pCpu->Regs.rX   = 0;
 	pCpu->Regs.rY   = 0;
-	pCpu->Regs.rSP  = 0;
+	pCpu->Regs.rSP  = 0xFF;
 	pCpu->Regs.rPC  = 0;
 	pCpu->Regs.rPSW = 0;
 }
@@ -175,8 +175,8 @@ Uint8 SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 Uint16 SNSPCRead16(SNSpcT *pCpu, Uint32 Addr)
 {
 	Uint32 uData;
-	uData =  SNSPCRead8(pCpu, Addr);
-	uData|= (SNSPCRead8(pCpu, Addr+1)<<8);
+	uData =  SNSPCRead8(pCpu, Addr & 0xFFFF);
+	uData|= (SNSPCRead8(pCpu, (Addr + 1) & 0xFFFF)<<8);
 	return  uData;
 }
 
@@ -218,8 +218,8 @@ void SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
 
 void SNSPCWrite16(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
 {
-	SNSPCWrite8(pCpu, Addr + 0, Data >> 0);
-	SNSPCWrite8(pCpu, Addr + 1, Data >> 8);
+	SNSPCWrite8(pCpu, Addr & 0xFFFF, Data >> 0);
+	SNSPCWrite8(pCpu, (Addr + 1) & 0xFFFF, Data >> 8);
 }
 
 void SNSPCSetExecuteFunc(SNSpcExecuteFuncT pFunc)

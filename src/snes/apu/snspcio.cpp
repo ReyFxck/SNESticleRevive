@@ -169,6 +169,13 @@ Uint8 SNSpcIO::Read8Trap(SNSpcT *pSpc, Uint32 uAddr)
 #endif
 	switch (uAddr)
 	{
+	case 0xF0: // TEST is write-only
+	case 0xF1: // CONTROL is write-only
+	case 0xFA: // timer targets are write-only
+	case 0xFB:
+	case 0xFC:
+		return 0;
+
 	case 0xF2:
 		return pSpc->Mem[uAddr];
 
