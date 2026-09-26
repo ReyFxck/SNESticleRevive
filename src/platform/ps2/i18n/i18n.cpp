@@ -87,6 +87,11 @@ typedef struct
 
 static const I18nPhraseT s_Phrases[] =
 {
+    { "TV Standard", "Padrao de TV", "Estandar de TV", "电视制式" },
+    { "Auto (game)", "Auto (jogo)", "Auto (juego)", "自动（游戏）" },
+    { "Console BIOS", "BIOS do Console", "BIOS de Consola", "主机 BIOS" },
+    { "NTSC 60 Hz", "NTSC 60 Hz", "NTSC 60 Hz", "NTSC 60 Hz" },
+    { "PAL 50 Hz", "PAL 50 Hz", "PAL 50 Hz", "PAL 50 Hz" },
     { "BROWSER", "NAVEGADOR", "NAVEGADOR", "文件管理器" },
     { "STATE FILES", "ARQUIVOS DE ESTADO", "ARCHIVOS DE ESTADO", "状态文件" },
     { "MESSAGE LOG", "LOG DE MENSAGENS", "REGISTRO", "消息日志" },
