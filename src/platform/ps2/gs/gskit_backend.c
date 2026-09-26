@@ -21,9 +21,11 @@
 #include "gskit_backend.h"
 #include "gpprim.h"
 
-/* Legacy logical coordinate space the entire UI was written in. Both
-   supported outputs use a 640x480 physical framebuffer; 1080i is scaled by
-   the PCRTC into a centred 1280x960 4:3 window. */
+/* Legacy logical coordinate space the entire UI was written in.
+   480i keeps the proven 640x480 framebuffer for the homebrew UI. During
+   gameplay only, the PCRTC reads a 512-pixel-wide source window and the
+   logical renderer switches to exact 2x horizontal scaling. 1080i keeps
+   its existing 640x480 source path. */
 #define GSK_LOGICAL_W   256
 #define GSK_LOGICAL_H   240
 
@@ -54,6 +56,7 @@ static int _gsk_vck         = 4;   /* display-offset VCK units            */
 static int _gsk_fb_width    = 640; /* active FB width                     */
 static int _gsk_fb_height   = 480; /* active FB height                    */
 static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
+static int _gsk_gameplay_view = 0; /* 480i: 0=UI 640 source, 1=game 512 */
 
 /* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
    overscan/widescreen can be recomputed from a clean baseline. */
@@ -159,6 +162,12 @@ void GSK_Init(int width, int height,
         _pGsGlobal->Mode      = _gsk_DetectTvMode();
         _pGsGlobal->Interlace = GS_INTERLACED;
         _pGsGlobal->Field     = GS_FIELD;
+        /* Keep the physical framebuffer at 640x480 so the homebrew UI keeps
+           its original 2.5x horizontal layout and VRAM geometry. Gameplay
+           switches presentation only: the same framebuffer is drawn at 2x
+           (512 source pixels) and PCRTC MAGH is raised so those 512 pixels
+           still occupy the exact same TV output width. This avoids a costly
+           GS/VRAM reinitialisation when entering/leaving the menu. */
         _gsk_fb_width         = 640;
         _gsk_fb_height        = 480;
         _gsk_vck              = 4;
@@ -285,11 +294,17 @@ void GSK_Init(int width, int height,
 
 }
 
-/* Map the 256x240 application canvas onto the common 640x480 framebuffer. */
+/* Map the 256x240 application canvas to the active presentation.
+   The UI retains its historical 640/256 = 2.5x horizontal transform.
+   In 480i gameplay we deliberately draw only 512 source pixels = exact 2x;
+   the PCRTC expands that 512-wide window to the same analogue/DTV width. */
 static void _GskApplyRenderTransform(void)
 {
     float sx = (float)_gsk_fb_width / (float)GSK_LOGICAL_W;
     float sy = (float)_gsk_fb_height / (float)GSK_LOGICAL_H;
+
+    if (_gsk_active_mode == GSK_VIDMODE_480I && _gsk_gameplay_view)
+        sx = 2.0f;
 
     GPPrimSetTransform(sx, sy, 0.0f, 0.0f);
 }
@@ -308,6 +323,14 @@ static void _GskApplyDisplay(void)
     magh   = _gsk_base_magh;
     startx = _gsk_base_startx;
     starty = _gsk_base_starty;
+
+    /* 480i gameplay integer-scale path.
+       NTSC and PAL SD both use the same 2560-VCK horizontal active width
+       after gsKit normalisation. Raising MAGH from 3 to 4 makes DISPLAY read
+       2560 / (4+1) = 512 framebuffer pixels instead of 640, while keeping
+       the exact same output width and leaving PAL/NTSC timing untouched. */
+    if (_gsk_active_mode == GSK_VIDMODE_480I && _gsk_gameplay_view)
+        magh = 4;
 
     /* Overscan: shrink the active area and recentre (adds a border to
        compensate TVs that crop the edges). */
@@ -352,6 +375,21 @@ static void _GskApplyDisplay(void)
     /* Re-emit DISPLAY1/2 (also folds in the user X/Y offset). */
     gsKit_set_display_offset(gs, g_GskDispOffX * _gsk_vck, g_GskDispOffY);
     _GskApplyRenderTransform();
+}
+
+void GSK_SetGameplayViewport(int on)
+{
+    int new_state = on ? 1 : 0;
+
+    if (_gsk_gameplay_view == new_state)
+        return;
+
+    _gsk_gameplay_view = new_state;
+
+    /* Only 480i has the split UI/game presentation. 240p and 1080i keep
+       their existing transforms and DISPLAY programming unchanged. */
+    if (_gsk_initialised && _gsk_active_mode == GSK_VIDMODE_480I)
+        _GskApplyDisplay();
 }
 
 void GSK_SetDisplayOffset(int x, int y)
