@@ -10,6 +10,9 @@
 #include <cstring>
 
 #include "types.h"
+extern "C" {
+#include "sncpu.h"
+}
 #include "sndma.h"
 #include "snppu.h"
 
@@ -242,6 +245,28 @@ int main()
 	ppu.Reset();
 	pOAM = (Uint8 *)ppu.GetOAM();
 
+	// PPU revision/open-bus behavior used by read-only PPU ports.
+	Check("PPU2 revision", ppu.GetRegs()->stat78 & 0x0F, 0x03);
+	ppu.Write8(0x2121, 0x00);
+	ppu.WriteCGDATA(0xB4);
+	ppu.WriteCGDATA(0x12);
+	ppu.Write8(0x2121, 0x00);
+	Check("CGRAM low read", ppu.ReadCGDATA(), 0xB4);
+	Check("CGRAM high keeps PPU2 bus bit7", ppu.ReadCGDATA(), 0x92);
+	Check("CGRAM read updates PPU2 bus", ppu.GetPPU2OpenBus(), 0x92);
+
+	// Invalid DMA register offsets are S-CPU open bus, not a hardcoded zero.
+	{
+		SNCpuT cpu;
+		SnesDMAC dma;
+		std::memset(&cpu, 0, sizeof(cpu));
+		dma.SetCPU(&cpu);
+		SNCPUSetOpenBus(&cpu, 0x5A);
+		Check("DMA $43xC open bus", dma.Read8(0, 0x0C), 0x5A);
+		SNCPUSetOpenBus(&cpu, 0xA6);
+		Check("DMA $43xE open bus", dma.Read8(0, 0x0E), 0xA6);
+	}
+
 	// CGRAM commits only after the high byte and stores 15-bit colors.
 	render.ClearStats();
 	ppu.Write8(0x2121, 0x00);
@@ -308,6 +333,7 @@ int main()
 	Check("high OAM mirror", ppu.GetOAM()->ObjEx[0], 0x5A);
 	ppu.Write8(0x2102, 0x10);
 	Check("high OAM mirrored read", ppu.ReadOAMDATA(), 0x5A);
+	Check("OAM read updates PPU1 bus", ppu.GetPPU1OpenBus(), 0x5A);
 
 	// Priority rotation follows the current byte address as the port advances.
 	ppu.Write8(0x2102, 0x00);
