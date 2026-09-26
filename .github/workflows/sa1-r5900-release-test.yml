@@ -6,7 +6,6 @@ on:
       - main
       - perf/sa1-r5900
       - feature/localization
-      - test/480i-integer-scale
   workflow_dispatch:
 
 permissions:
