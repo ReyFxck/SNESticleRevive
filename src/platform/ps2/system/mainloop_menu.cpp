@@ -472,7 +472,7 @@ int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                 case 1:
                         _MainLoopStateManagerCommitStorageTarget();
                         _MainLoopStateMenuRefresh();
-                        MainLoopModalPrintf(
+                        MainLoopInfoPrintf(
                                 45,
                                 "Save storage selected."
                         );
@@ -484,11 +484,11 @@ int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                         if (MainLoopStateHasDeviceChoice())
                         {
                                 MainLoopStateSettingsSave();
-                                MainLoopModalPrintf(45, "Quick slot selected.");
+                                MainLoopInfoPrintf(45, "Quick slot selected.");
                         }
                         else
                         {
-                                MainLoopModalPrintf(
+                                MainLoopInfoPrintf(
                                         45,
                                         "Choose Storage and press X first."
                                 );
@@ -502,7 +502,7 @@ int _MainLoopStateMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                            pending choice without writing another target. */
                         MainLoopStateForgetDeviceChoice();
                         _MainLoopStateMenuRefresh();
-                        MainLoopModalPrintf(
+                        MainLoopInfoPrintf(
                                 45,
                                 "Save location cleared. Select Storage, then X."
                         );
@@ -649,7 +649,7 @@ int _MainLoopStateDeviceMenuEvent(
         MainLoopStateSetDevice(_MainLoop_StateDeviceMap[Parm1]);
         MainLoopStateSettingsSave();
 
-        MainLoopModalPrintf(
+        MainLoopInfoPrintf(
                 1,
                 "Saving state slot %d...",
                 (int)MainLoopStateGetSlot() + 1
@@ -805,7 +805,7 @@ int _MainLoopMemCardFormatMenuEvent(
                 return 1;
         }
 
-        MainLoopModalPrintf(1, "Formatting mc%d:...", (int)iPort);
+        MainLoopInfoPrintf(1, "Formatting mc%d:...", (int)iPort);
         if (!MemCardFormat(iPort))
         {
                 MainLoopStatusPrintf(

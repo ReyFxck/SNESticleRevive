@@ -169,10 +169,16 @@ static void _MainLoopDrawModal(void)
     PolyColor4f(0.0f, 0.0f, 0.0f, 0.82f);
     PolyRect((Float32)boxX, (Float32)boxY, (Float32)boxW, (Float32)boxH);
 
-    /* Entire modal is one semi-transparent black panel: no colored header. */
-    FontColor4f(1.0f, 0.35f, 0.35f, 1.0f);
+    /* Errors keep the original red ERROR title; synchronous save-state
+       progress uses a neutral INFO title instead of reporting a false error. */
+    FontColor4f(
+        _MainLoop_ModalIsError ? 1.0f : 0.35f,
+        _MainLoop_ModalIsError ? 0.35f : 0.85f,
+        _MainLoop_ModalIsError ? 0.35f : 0.85f,
+        1.0f
+    );
     {
-        static const Char *title = "ERROR..";
+        const Char *title = _MainLoop_ModalIsError ? "ERROR.." : "INFO";
         FontPrintf(
                 boxX + (boxW - FontGetStrWidth(title)) / 2,
                 boxY + 2,

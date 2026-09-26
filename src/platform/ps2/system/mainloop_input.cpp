@@ -95,7 +95,7 @@ static void _MainLoopQuickStateAction(Bool bSave)
 		Aud_Setvol(0);
 	}
 
-	MainLoopModalPrintf(
+	MainLoopInfoPrintf(
 		1,
 		bSave ? "Saving state slot %d..." : "Loading state slot %d...",
 		(int)MainLoopStateGetSlot() + 1

@@ -19,22 +19,36 @@
 #include "font.h"
 #include "i18n.h"
 
-void MainLoopModalPrintf(Int32 Time, const Char *pFormat, ...)
+static void _MainLoopShowModal(Int32 Time, Bool bError,
+                               const Char *pFormat, va_list argptr)
 {
-	va_list argptr;
-	pFormat = I18nTranslate(pFormat);
-	va_start(argptr,pFormat);
 	vsnprintf(_MainLoop_ModalStr, sizeof(_MainLoop_ModalStr), pFormat, argptr);
-	va_end(argptr);
-
+	_MainLoop_ModalIsError = bError ? TRUE : FALSE;
 	_MainLoop_ModalCount = Time;
 
-	// render frame to display text
 	while (Time > 0)
 	{
 		MainLoopRender();
 		Time--;
 	}
+}
+
+void MainLoopModalPrintf(Int32 Time, const Char *pFormat, ...)
+{
+	va_list argptr;
+	pFormat = I18nTranslate(pFormat);
+	va_start(argptr,pFormat);
+	_MainLoopShowModal(Time, TRUE, pFormat, argptr);
+	va_end(argptr);
+}
+
+void MainLoopInfoPrintf(Int32 Time, const Char *pFormat, ...)
+{
+	va_list argptr;
+	pFormat = I18nTranslate(pFormat);
+	va_start(argptr,pFormat);
+	_MainLoopShowModal(Time, FALSE, pFormat, argptr);
+	va_end(argptr);
 }
 
 void MainLoopStatusPrintf(Int32 Time, const Char *pFormat, ...)

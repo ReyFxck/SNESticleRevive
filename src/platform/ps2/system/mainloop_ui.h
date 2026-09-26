@@ -17,6 +17,7 @@ extern "C" {
 #endif
 
 void MainLoopModalPrintf(Int32 Time, const Char *pFormat, ...);
+void MainLoopInfoPrintf(Int32 Time, const Char *pFormat, ...);
 void MainLoopStatusPrintf(Int32 Time, const Char *pFormat, ...);
 void ScrPrintf(const Char *pFormat, ...);
 
