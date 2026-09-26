@@ -285,6 +285,7 @@ void SNCPUReset(SNCpuT *pCpu, Bool bHardReset)
 	{
 		SNCPUResetCounters(pCpu);
 		SNCPUResetRegs(pCpu);
+		SNCPUSetOpenBus(pCpu, 0);
 	}
 
 	// no IRQ
