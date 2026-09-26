@@ -60,8 +60,17 @@ class SnesIO
 {
 	Emu::SysInputT	m_Input;
 
+	/* 5A22 multiply/divide unit. These are transient execution fields; the
+	   visible result/input registers remain in m_Regs and in legacy states. */
+	Uint32			m_uAluLastClock;
+	Uint32			m_uAluShift;
+	Uint8			m_uAluMulCounter;
+	Uint8			m_uAluDivCounter;
+	Uint8			m_uAluCycleClocks;
+
 	Uint8			ReadSerialPad(Uint32 uPad);
 	void			ShiftSerialPad(Uint32 uPad);
+	void			RunAlu(Uint32 uClock);
 
 public:
 	SnesIORegsT		m_Regs;
@@ -78,6 +87,11 @@ public:
 	Uint8	ReadSerial0();
 	Uint8	ReadSerial1();
 	void	UpdateJoyPads();
+
+	void	WriteAlu(Uint16 uAddr, Uint8 uData, Uint32 uBeforeClock,
+	             Uint32 uAfterClock, Uint8 uCycleClocks);
+	Uint8	ReadAlu(Uint16 uAddr, Uint32 uBeforeClock);
+	void	ResetAluTransient();
 };
 
 #endif
