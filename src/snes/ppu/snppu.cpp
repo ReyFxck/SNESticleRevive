@@ -17,7 +17,7 @@
 #include "sndbglog.h"
 
 #define SNPPU_VERSION_5C77 (0x01)
-#define SNPPU_VERSION_5C78 (0x01)
+#define SNPPU_VERSION_5C78 (0x03)
 
 void SnesPPU::WriteCGDATA(Uint8 uData)
 {
@@ -62,21 +62,24 @@ Uint8 SnesPPU::ReadCGDATA()
 {
 	Uint32 uCGAddr;
 	Uint8 uData;
+	Bool bHigh = (m_Regs.cgadd.w & 1) != 0;
 
 	uCGAddr = m_Regs.cgadd.w >> 1;
 	uCGAddr&= SNESPPU_CGRAM_NUM-1;
-	if (!(m_Regs.cgadd.w&1))
+	if (!bHigh)
 	{
 		// lower byte
 		uData =  m_CGRAM[uCGAddr] & 0xFF;
 	} else
 	{
-		// upper byte
-		uData =  (m_CGRAM[uCGAddr] >> 8);
+		/* CGRAM is 15-bit. Bit 7 of the high-byte read is PPU2 open bus. */
+		uData = (Uint8)(((m_CGRAM[uCGAddr] >> 8) & 0x7F) |
+		                (m_PPU2OpenBus & 0x80));
 	}
 
 	// increment color address
 	m_Regs.cgadd.w++;
+	m_PPU2OpenBus = uData;
 
 	return uData;
 }
@@ -281,6 +284,7 @@ Uint8 SnesPPU::ReadVMDATAL()
 
 	// fetch data from latch
 	uData = pVram[uVramAddr].b.l;
+	m_PPU1OpenBus = uData;
 
 	return uData;
 }
@@ -304,6 +308,7 @@ Uint8 SnesPPU::ReadVMDATAH()
 
 	// fetch data from latch
 	uData = pVram[uVramAddr].b.h;
+	m_PPU1OpenBus = uData;
 
 	return uData;
 }
@@ -477,8 +482,16 @@ Uint8 SnesPPU::ReadOAMDATA()
 	m_Regs.oamaddr.w = (m_Regs.oamaddr.w & 0x8000) |
 	                     ((uAddress + 1) & 0x3FF);
 	UpdateOAMPriority();
+	m_PPU1OpenBus = uData;
 
 	return uData;
+}
+
+void SnesPPU::LatchHV(Uint16 uH, Uint16 uV)
+{
+	m_Regs.ophct.Reg.w = uH & 0x1FF;
+	m_Regs.opvct.Reg.w = uV & 0x1FF;
+	m_Regs.stat78 |= 0x40; // counters have been externally/software latched
 }
 
 void SnesPPU::UpdateMatMul()
@@ -1010,6 +1023,8 @@ void SnesPPU::Reset()
 	m_pRender->UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
 	m_OAMLatch = 0;
 	m_CGRAMLatch = 0;
+	m_PPU1OpenBus = 0;
+	m_PPU2OpenBus = 0;
 
 	// confirmed:
 	m_Regs.stat77 =  SNPPU_VERSION_5C77;
@@ -1021,6 +1036,8 @@ SnesPPU::SnesPPU()
 	m_pRender = NULL;
 	m_OAMLatch = 0;
 	m_CGRAMLatch = 0;
+	m_PPU1OpenBus = 0;
+	m_PPU2OpenBus = 0;
 	m_uLine = 0;
 	m_bVBlank = FALSE;
 	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
