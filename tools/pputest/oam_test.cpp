@@ -268,6 +268,7 @@ int main()
 	}
 
 	// CGRAM commits only after the high byte and stores 15-bit colors.
+	ppu.Reset();
 	render.ClearStats();
 	ppu.Write8(0x2121, 0x00);
 	ppu.WriteCGDATA(0x34);
