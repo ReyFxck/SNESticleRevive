@@ -131,3 +131,37 @@ ST018 and Sufami Turbo implementations. DSP-3 is also not a complete Revive impl
 No game-specific PC hacks and no forced register values. Every proposed fix should carry:
 the behavioral difference, a MesenCE reference location, a focused regression test, and
 PS2 validation after host correctness passes.
+
+
+## Resolution status
+
+The concrete first-pass gaps above have now been addressed on this branch without
+adding any new special-chip implementation.
+
+| Item | Resolution |
+|---|---|
+| A1 global open bus | Fixed: shared S-CPU data-bus latch is updated by C and R5900 read/write/fetch paths; unmapped MMIO uses it. |
+| A2 $4213 RDIO | Fixed: returns the programmable I/O latch instead of zero. |
+| A3 $4201 H/V latch | Fixed: bit-7 falling edge latches H/V; $2137 uses the software latch path. |
+| A4 multiply/divide latency | Fixed: serial 8/16-cycle 5A22 arithmetic model with intermediate results and overlap rules. |
+| A5 $4210/$4211/$4212 | Fixed observable status/open-bus composition while preserving the existing IRQ/NMI scheduler. The very short NMI flag hold window occurs before this opcode-level core's first MMIO-visible point on the new scanline, so no duplicate delay state was added. |
+| A6 PPU read-side bus | Fixed: PPU1/PPU2 residue is tracked for VRAM/OAM/CGRAM/counter/status reads. |
+| A7 DMA $43xC-$43xE | Fixed: reads now return S-CPU open bus. |
+| A8 portable 65816 notes | Verified: the old PC-wrap/direct-page debt comment was stale; current behavior is already covered by the CPU suite, so the misleading comment was removed rather than changing working logic. |
+| A9 opcode fallback | Verified by `tools/mesence_audit.py --strict`: all legal 65816/SPC700 opcode bytes and all five R5900 65816 dispatch tables are explicitly covered. The default remains defensive only. |
+| A10 extra coprocessors | Intentionally deferred by project decision; no BS-X/MSU1/SGB/SPC7110/ST018/Sufami Turbo/DSP-3 expansion is part of this change. |
+
+### Verification gate
+
+Before integration into `main`, this branch requires all of the following at the
+same head commit:
+
+1. `python3 tools/mesence_audit.py --strict`
+2. shared 65816 host regressions
+3. SA-1 host regressions
+4. PPU/DMA/SPC700/5A22-ALU host regressions
+5. ROM-loader host regressions
+6. full PS2 diagnostic ELF compilation, including `sn65816.S`
+
+The audit helper intentionally treats missing special chips as informational, not a
+failure, so future compatibility work can be planned separately.
