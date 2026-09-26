@@ -95,6 +95,19 @@ typedef struct SNCpu_t
 
 } SNCpuT;
 
+/* Keep the S-CPU data-bus latch in the second existing bank padding byte.
+   This preserves every SNCpuT/Bank offset consumed by the hand-written R5900
+   core while giving C, MMIO and assembly one per-CPU open-bus value. */
+static _INLINE Uint8 SNCPUGetOpenBus(const SNCpuT *pCpu)
+{
+	return pCpu->Bank[0].uPad[1];
+}
+
+static _INLINE void SNCPUSetOpenBus(SNCpuT *pCpu, Uint8 uData)
+{
+	pCpu->Bank[0].uPad[1] = uData;
+}
+
 void SNCPUNew(SNCpuT *pCpu);
 void SNCPUDelete(SNCpuT *pCpu);
 
