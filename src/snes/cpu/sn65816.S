@@ -65,6 +65,8 @@
 #define SNCPU_uBankCycle	(SNCPU_MemIO+12)
 #define SNCPU_bRAM			(SNCPU_MemIO+13)
 #define SNCPU_uSA1Bus		(SNCPU_MemIO+14)
+/* Bank[0].uPad[1]: per-CPU data-bus latch; Bank layout stays ABI-stable. */
+#define SNCPU_uOpenBus		(SNCPU_MemIO+15)
 
 //
 // temporary storage on stack
@@ -988,6 +990,7 @@ _SNCPU_Write8SA1IRAMTimed:
 		addiu		t2,zr,SNCPU_CYCLE_FAST
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_IRAM_PENALTY()
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
 		nop
 
@@ -1031,6 +1034,7 @@ _SNCPU_Write8SA1BWRAMWindowTimed:
 		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
 		nop
 
@@ -1069,6 +1073,7 @@ _SNCPU_Write8SA1BWRAMTimed:
 		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
 		nop
 
@@ -1095,6 +1100,7 @@ _SNCPU_Write8Generic:
         sb		R_Data, 0(t0)
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
         nop
 
@@ -1102,6 +1108,7 @@ _SNCPU_Write8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
         addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_SLOW		// zero bank is slow
         addu	t0,t0,R_Addr
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
         sb		R_Data, 0(t0)							// load byte unsigned
 
@@ -1112,6 +1119,7 @@ _SNCPU_Write8Trap:
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
 		lw		t0,SP_SaveTrap
         lw		t1,SNCPU_WriteTrap(t0)					// t1 -> trap handler
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 
 		// save volatile and temporary registers
 		sw		ra,SP_RA1
@@ -1197,6 +1205,7 @@ _SNCPU_Write16_Fast:
         sb		R_Data, 0(t0)							// store low byte
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
         sb		t1, 1(t0)								// store high byte
+		sb		t1,SNCPU_uOpenBus(R_pCpu)
 		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
 		jr		ra
@@ -1218,6 +1227,7 @@ _SNCPU_Write16Trap:
         sw		t1, SP_SaveTrap
 
 		// call trap handler
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		move	a0, R_pCpu
 		addiu	a1, R_Addr, 0
 		jalr	t1
@@ -1227,6 +1237,8 @@ _SNCPU_Write16Trap:
         lw		t1, SP_SaveTrap
 
 		// call trap handler
+		srl		t0,R_Data,8
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
 		move	a0, R_pCpu
 		addiu	a1, R_Addr, 1
         srl		a2,R_Data,8
@@ -1374,6 +1386,7 @@ _SNCPU_Read8SA1BWRAMWindow:
 		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
 		nop
 
@@ -1394,6 +1407,7 @@ _SNCPU_Read8SA1BWRAM:
 		addiu		t2,zr,(SNCPU_CYCLE_FAST*2)
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
 		nop
 
@@ -1423,6 +1437,7 @@ _SNCPU_Read8HostStart:
         lbu		R_Data, 0(t0)							// load byte unsigned
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 
 		jr		ra
         nop
@@ -1437,6 +1452,7 @@ _SNCPU_Read8SA1IRAM:
 		addiu		t2,zr,SNCPU_CYCLE_FAST
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_IRAM_PENALTY()
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 		jr		ra
 		nop
 2:
@@ -1452,8 +1468,9 @@ _SNCPU_Read8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
         addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_SLOW		// zero bank is slow
         addu	t0,t0,R_Addr
-		jr		ra
-        lbu		R_Data, 0(t0)							// load byte unsigned
+		lbu		R_Data, 0(t0)
+		jr			ra
+        sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 
 _SNCPU_Read8Trap:
 		sw		t0,SP_SaveTrap
@@ -1475,6 +1492,7 @@ _SNCPU_Read8Trap:
 
 		lw		ra,SP_RA1
         SNCPU_LOADREGSTATE()
+		sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 
 		jr		ra
         nop
@@ -1543,6 +1561,8 @@ _SNCPU_Read16_Fast:
 
         lwr		R_Data, 0(t0)							// load word
         lwl		R_Data, 3(t0)
+		srl		t0,R_Data,8
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
 		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
 		jr		ra
@@ -1566,6 +1586,7 @@ _SNCPU_Read16Trap:
 		jalr	t1
 		addiu	a1, R_Addr,0
         sb		v0,SP_Data0
+		sb		v0,SNCPU_uOpenBus(R_pCpu)
 
         lw		t1, SP_SaveTrap
 
@@ -1574,6 +1595,7 @@ _SNCPU_Read16Trap:
 		jalr	t1
 		addiu	a1, R_Addr,1
         sb		v0,SP_Data1
+		sb		v0,SNCPU_uOpenBus(R_pCpu)
 
 		lw		ra,SP_RA1
         lhu		R_Data,SP_Data0
@@ -1743,7 +1765,7 @@ _SNCPU_Fetch8Fast:
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
 
 		jr		ra
-        nop
+        sb		R_Data,SNCPU_uOpenBus(R_pCpu)
 
 _SNCPU_Fetch8Update:
 		lwu		t0,SP_PCBank			// restore PC to normal
@@ -1818,14 +1840,18 @@ _SNCPU_Fetch16Fast:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
-		jr		ra
+		srl		t0,R_Data,8
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		andi	R_Data,R_Data,0xFFFF
 #elif defined(SNCPU_ASM_VARIANT_SA1)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
-		jr		ra
+		srl		t0,R_Data,8
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		andi	R_Data,R_Data,0xFFFF
 #else
 		lw		t0,SP_SA1Exec
@@ -1835,7 +1861,9 @@ _SNCPU_Fetch16Fast:
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
-		jr		ra
+		srl		t0,R_Data,8
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		andi	R_Data,R_Data,0xFFFF
 #endif
 
@@ -1843,7 +1871,9 @@ _SNCPU_Fetch16HostTiming:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
-		jr		ra
+		srl		t0,R_Data,8
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		andi	R_Data,R_Data,0xFFFF
 
 _SNCPU_Fetch16Trap:
@@ -1905,7 +1935,9 @@ _SNCPU_Fetch24Fast:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
-		jr		ra
+		srl		t0,R_Data,16
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		nop
 #elif defined(SNCPU_ASM_VARIANT_SA1)
 		subu	R_Cycles,R_Cycles,R_PCCycles
@@ -1914,7 +1946,9 @@ _SNCPU_Fetch24Fast:
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
-		jr		ra
+		srl		t0,R_Data,16
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		nop
 #else
 		lw		t0,SP_SA1Exec
@@ -1926,7 +1960,9 @@ _SNCPU_Fetch24Fast:
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
-		jr		ra
+		srl		t0,R_Data,16
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		nop
 #endif
 
@@ -1935,7 +1971,9 @@ _SNCPU_Fetch24HostTiming:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
-		jr		ra
+		srl		t0,R_Data,16
+		sb		t0,SNCPU_uOpenBus(R_pCpu)
+		jr			ra
 		nop
 
 _SNCPU_Fetch24Trap:
