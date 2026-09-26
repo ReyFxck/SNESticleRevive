@@ -47,6 +47,7 @@ extern "C" int AudMixGameGetVolume(void)
 AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
 {
     m_uSampleRate = uSampleRate;
+    m_uFrameRate  = 60;
     m_bAsync      = bAsync;
     Reset();
 }
@@ -80,19 +81,16 @@ Int32 AudMixBuffer::GetOutputSamples()
     /*
      * Audio acompanha TEMPO EMULADO, nao o espaco livre do ring do IOP.
      * Consultar Aud_Available() fazia um quadro lento encontrar o ring mais
-     * vazio e misturar 1064..1069 amostras em vez de 532..536. Esse trabalho
-     * extra tornava o quadro seguinte ainda mais lento (feedback positivo) e
-     * tambem avancava o DSP por mais tempo do que um frame do SNES.
+     * vazio e misturar amostras extras, criando feedback positivo.
      *
-     * O core atual executa 262 linhas a 60 quadros. Distribua exatamente uma
-     * taxa de audio por esses quadros, em blocos multiplos de quatro exigidos
-     * pelo conversor 2:3. Em 32 kHz a sequencia e' 532, 532, 536; ao fim de
-     * 60 quadros a soma e' 32000. Se o EE realmente nao sustentar 60 fps, o
-     * audsrv pode ter underrun, mas nunca tentamos "pagar a divida" dobrando
-     * o custo do mixer no proximo quadro.
+     * Distribua a taxa de audio por QUADROS DO CONSOLE. NTSC usa 60 e PAL
+     * usa 50; o host PS2 pode estar no padrao oposto e isso nao deve mudar
+     * pitch/tempo. Em 32 kHz temos 532/532/536 no NTSC e 640 amostras
+     * exatas por quadro PAL. O main loop decide apenas quais quadros chegam
+     * ao display quando fonte e host usam cadencias diferentes.
      */
     nSamples = AudFrameScheduleNext(&m_uFrameSamplePhase,
-                                    m_uSampleRate, 60, 4);
+                                    m_uSampleRate, m_uFrameRate, 4);
 
     m_uLastOutput  = nSamples;
     return nSamples;

@@ -48,6 +48,23 @@ int main()
 	Check("32k maximum", nMax, 536);
 	Check("32k final phase", uPhase, 0);
 
+	/* PAL 32 kHz / 50 Hz is exact: 640 samples every emulated frame. */
+	uPhase = 0;
+	nTotal = 0;
+	nMin = 99999;
+	nMax = 0;
+	for (i = 0; i < 50; i++)
+	{
+		Int32 n = AudFrameScheduleNext(&uPhase, 32000, 50, 4);
+		nTotal += n;
+		if (n < nMin) nMin = n;
+		if (n > nMax) nMax = n;
+	}
+	Check("32k PAL samples per second", nTotal, 32000);
+	Check("32k PAL minimum", nMin, 640);
+	Check("32k PAL maximum", nMax, 640);
+	Check("32k PAL final phase", uPhase, 0);
+
 	uPhase = 0;
 	nTotal = 0;
 	for (i = 0; i < 60; i++)

@@ -36,12 +36,12 @@ extern "C" {
 extern Char _SramPath[256];
 extern TextureT _OutTex;
 
-#define VIDEO_ITEM_COUNT 20
+#define VIDEO_ITEM_COUNT 21
 
 /* Persistence                                                         */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 21
+#define VIDEOCFG_VERSION 22
 
 typedef struct
 {
@@ -67,7 +67,35 @@ typedef struct
 	Int32  texturefilter;/* 0=Sharp/nearest, 1=Smooth/linear            */
 	Int32  scanlines;    /* 0=off, 1=CRT-style overlay                  */
 	Int32  language;     /* I18nLanguageE                                */
+	Int32  tvstandard;   /* GSK_TV_STANDARD_*                            */
 } VideoCfgT;
+
+/* v21 is the exact prefix before TV-standard policy was added. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  frameskip;
+	Int32  hostenable;
+	Int32  texturefilter;
+	Int32  scanlines;
+	Int32  language;
+} VideoCfgV21T;
 
 /* v20 is the exact prefix before UI language selection was added. */
 typedef struct
@@ -226,6 +254,7 @@ void VideoSettingsSave(void)
 	cfg.texturefilter = g_GskTextureFilter ? 1 : 0;
 	cfg.scanlines = g_GskScanlines ? 1 : 0;
 	cfg.language = I18nGetLanguage();
+	cfg.tvstandard = g_GskTvStandard;
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
@@ -236,6 +265,7 @@ void VideoSettingsSave(void)
 void VideoSettingsLoad(void)
 {
 	VideoCfgT cfg;
+	VideoCfgV21T oldcfg21;
 	VideoCfgV20T oldcfg20;
 	VideoCfgV19T oldcfg19;
 	VideoCfgV18T oldcfg18;
@@ -255,6 +285,17 @@ void VideoSettingsLoad(void)
 		if (header.version == VIDEOCFG_VERSION)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
+		}
+		else if (header.version == 21)
+		{
+			memset(&oldcfg21, 0, sizeof(oldcfg21));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg21, sizeof(oldcfg21)))
+			{
+				memcpy(&cfg, &oldcfg21, sizeof(oldcfg21));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.tvstandard = GSK_TV_STANDARD_AUTO;
+				loaded = TRUE;
+			}
 		}
 		else if (header.version == 20)
 		{
@@ -341,6 +382,12 @@ void VideoSettingsLoad(void)
 		else
 			g_GskVideoMode = GSK_VIDMODE_480I;
 
+		if (cfg.tvstandard >= GSK_TV_STANDARD_AUTO &&
+		    cfg.tvstandard <= GSK_TV_STANDARD_PAL)
+			g_GskTvStandard = cfg.tvstandard;
+		else
+			g_GskTvStandard = GSK_TV_STANDARD_AUTO;
+
 		if (cfg.offx >= -64 && cfg.offx <= 64) g_GskDispOffX = cfg.offx;
 		if (cfg.offy >= -64 && cfg.offy <= 64) g_GskDispOffY = cfg.offy;
 		if (cfg.overscan >= 0 && cfg.overscan <= 100) g_GskOverscan = cfg.overscan;
@@ -420,16 +467,16 @@ static void _VideoRow(int vy, int idx, int sel, const char *pLabel, const char *
 
 static const Int32 _VideoItemY[] =
 {
-	14, 26, 38, 50, 62, 74, 86, 98,       /* Screen */
-	128, 140,                               /* Interface */
-	170, 182, 194,                          /* Audio */
-	224,                                    /* Performance */
-	254, 266, 278, 290, 302, 314           /* Storage */
+	14, 26, 38, 50, 62, 74, 86, 98, 110,  /* Screen */
+	140, 152,                               /* Interface */
+	182, 194, 206,                          /* Audio */
+	236,                                    /* Performance */
+	266, 278, 290, 302, 314, 326           /* Storage */
 };
 
 #define VIDEO_VIEW_TOP   34
 #define VIDEO_VIEW_BOTTOM 181
-#define VIDEO_CONTENT_H 326
+#define VIDEO_CONTENT_H 338
 
 static Int32 _VideoScrollForSelection(Int32 sel)
 {
@@ -494,6 +541,29 @@ static const VideoModeChoiceT _VideoModes[] =
 	{ GSK_VIDMODE_1080I, "1080i" }
 };
 
+typedef struct
+{
+	Int32 standard;
+	const char *name;
+} TvStandardChoiceT;
+
+static const TvStandardChoiceT _TvStandards[] =
+{
+	{ GSK_TV_STANDARD_AUTO,    "Auto (game)" },
+	{ GSK_TV_STANDARD_CONSOLE, "Console BIOS" },
+	{ GSK_TV_STANDARD_NTSC,    "NTSC 60 Hz" },
+	{ GSK_TV_STANDARD_PAL,     "PAL 50 Hz" }
+};
+
+static Int32 _TvStandardIndex(Int32 standard)
+{
+	Int32 i;
+	for (i = 0; i < (Int32)(sizeof(_TvStandards) / sizeof(_TvStandards[0])); i++)
+		if (_TvStandards[i].standard == standard)
+			return i;
+	return 0;
+}
+
 static Int32 _VideoModeIndex(Int32 mode)
 {
 	Int32 i;
@@ -509,7 +579,9 @@ void CVideoScreen::Draw()
 	Int32 scroll = _VideoScrollForSelection(m_iSelect);
 	Int32 y;
 	Int32 m = _VideoModeIndex(g_GskVideoMode);
+	Int32 t = _TvStandardIndex(g_GskTvStandard);
 	const char *pMode = I18nTranslate(_VideoModes[m].name);
+	const char *pStandard = I18nTranslate(_TvStandards[t].name);
 	const char *pWide = g_GskWidescreen ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF);
 	const char *pColor =
 		(SNPPUColorGetProfile() == SNPPU_COLOR_PROFILE_COMPOSITE)
@@ -523,34 +595,36 @@ void CVideoScreen::Draw()
 	y = VIDEO_VIEW_TOP + _VideoItemY[0] - scroll;
 	_VideoRow(y, 0, m_iSelect, I18nGetText(I18N_VIDEO_MODE), pMode);
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[1] - scroll, 1, m_iSelect,
-	          I18nGetText(I18N_WIDESCREEN), pWide);
+	          I18nTranslate("TV Standard"), pStandard);
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[2] - scroll, 2, m_iSelect,
-	          I18nGetText(I18N_SNES_COLORS), pColor);
+	          I18nGetText(I18N_WIDESCREEN), pWide);
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[3] - scroll, 3, m_iSelect,
-	          I18nGetText(I18N_FILTER), g_GskTextureFilter ? I18nGetText(I18N_SMOOTH) : I18nGetText(I18N_SHARP));
+	          I18nGetText(I18N_SNES_COLORS), pColor);
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[4] - scroll, 4, m_iSelect,
+	          I18nGetText(I18N_FILTER), g_GskTextureFilter ? I18nGetText(I18N_SMOOTH) : I18nGetText(I18N_SHARP));
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[5] - scroll, 5, m_iSelect,
 	          I18nGetText(I18N_SCANLINES), g_GskScanlines ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	snprintf(buf, sizeof(buf), "%d", g_GskOverscan);
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[5] - scroll, 5, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[6] - scroll, 6, m_iSelect,
 	          I18nGetText(I18N_OVERSCAN), buf);
 	snprintf(buf, sizeof(buf), "%d", g_GskDispOffX);
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[6] - scroll, 6, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[7] - scroll, 7, m_iSelect,
 	          I18nGetText(I18N_OFFSET_X), buf);
 	snprintf(buf, sizeof(buf), "%d", g_GskDispOffY);
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[7] - scroll, 7, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[8] - scroll, 8, m_iSelect,
 	          I18nGetText(I18N_OFFSET_Y), buf);
 
 	/* Interface */
-	_VideoSection(VIDEO_VIEW_TOP + 114 - scroll, I18nGetText(I18N_INTERFACE));
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[8] - scroll, 8, m_iSelect,
-	          I18nGetText(I18N_COVER_ART), CoverIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoSection(VIDEO_VIEW_TOP + 126 - scroll, I18nGetText(I18N_INTERFACE));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[9] - scroll, 9, m_iSelect,
+	          I18nGetText(I18N_COVER_ART), CoverIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[10] - scroll, 10, m_iSelect,
 	          I18nGetText(I18N_LANGUAGE), I18nGetLanguageName());
 
 	/* Audio */
-	_VideoSection(VIDEO_VIEW_TOP + 156 - scroll, I18nGetText(I18N_AUDIO));
+	_VideoSection(VIDEO_VIEW_TOP + 168 - scroll, I18nGetText(I18N_AUDIO));
 	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[10] - scroll, 10, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[11] - scroll, 11, m_iSelect,
 	          I18nGetText(I18N_GAME_VOLUME), buf);
 	{
 		int bv = BgmGetVolume();
@@ -561,30 +635,30 @@ void CVideoScreen::Draw()
 		else
 			snprintf(buf, sizeof(buf), "%d", bv);
 	}
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[11] - scroll, 11, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[12] - scroll, 12, m_iSelect,
 	          I18nGetText(I18N_MENU_MUSIC), buf);
 	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[12] - scroll, 12, m_iSelect,
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[13] - scroll, 13, m_iSelect,
 	          I18nGetText(I18N_FREQUENCY), buf);
 
 	/* Performance */
-	_VideoSection(VIDEO_VIEW_TOP + 210 - scroll, I18nGetText(I18N_PERFORMANCE));
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[13] - scroll, 13, m_iSelect,
+	_VideoSection(VIDEO_VIEW_TOP + 222 - scroll, I18nGetText(I18N_PERFORMANCE));
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[14] - scroll, 14, m_iSelect,
 	          I18nGetText(I18N_FRAMESKIP), MainLoopSafeFrameskipIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 
 	/* Storage */
-	_VideoSection(VIDEO_VIEW_TOP + 240 - scroll, I18nGetText(I18N_STORAGE_DEVICES));
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[14] - scroll, 14, m_iSelect,
-	          I18nGetText(I18N_MASS_USB), MassStorageIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoSection(VIDEO_VIEW_TOP + 252 - scroll, I18nGetText(I18N_STORAGE_DEVICES));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[15] - scroll, 15, m_iSelect,
-	          I18nGetText(I18N_HDD_SUPPORT), HddSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	          I18nGetText(I18N_MASS_USB), MassStorageIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
-	          I18nGetText(I18N_MMCE_CARDS), _VideoMmceStatus());
+	          I18nGetText(I18N_HDD_SUPPORT), HddSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll, 17, m_iSelect,
-	          I18nGetText(I18N_MX4SIO_SD), _VideoMx4sioStatus());
+	          I18nGetText(I18N_MMCE_CARDS), _VideoMmceStatus());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
-	          I18nGetText(I18N_HOSTFS_EMU), HostFsSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	          I18nGetText(I18N_MX4SIO_SD), _VideoMx4sioStatus());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[19] - scroll, 19, m_iSelect,
+	          I18nGetText(I18N_HOSTFS_EMU), HostFsSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[20] - scroll, 20, m_iSelect,
 	          I18nGetText(I18N_SMB_NETWORK), I18nTranslate(SmbGetStatusText()));
 
 	UiChromeScroll(scroll > 0,
@@ -596,6 +670,7 @@ void CVideoScreen::Draw()
 	UiChromeHint(UI_ICON_CROSS, UI_ICON_COUNT, 190, 198, I18nGetText(I18N_SAVE));
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode() ||
+	    GSK_TvStandardNeedsReinit() ||
 	    MmceNeedsRestart() || Mx4sioNeedsRestart())
 	{
 		FontColor4f(1.0f, 0.86f, 0.35f, 1.0f);
@@ -611,6 +686,7 @@ static void _VideoResetDefaults()
 	/* Match the runtime's actual boot defaults, not merely the visible
 	   offsets. Square is therefore a complete configuration reset. */
 	g_GskVideoMode = GSK_VIDMODE_480I;
+	g_GskTvStandard = GSK_TV_STANDARD_AUTO;
 	g_GskWidescreen = 0;
 	g_GskOverscan = 0;
 	g_GskDispOffX = 0;
@@ -679,47 +755,56 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			}
 			break;
 		case 1:
+			{
+				Int32 count = (Int32)(sizeof(_TvStandards) / sizeof(_TvStandards[0]));
+				Int32 idx = _TvStandardIndex(g_GskTvStandard) + dir;
+				if (idx < 0) idx = count - 1;
+				if (idx >= count) idx = 0;
+				g_GskTvStandard = _TvStandards[idx].standard;
+			}
+			break;
+		case 2:
 			g_GskWidescreen = !g_GskWidescreen;
 			GSK_SetWidescreen(g_GskWidescreen);
 			break;
-		case 2:
+		case 3:
 			SNPPUColorSetProfile(
 				SNPPUColorGetProfile() == SNPPU_COLOR_PROFILE_ORIGINAL
 				? SNPPU_COLOR_PROFILE_COMPOSITE
 				: SNPPU_COLOR_PROFILE_ORIGINAL);
 			break;
-		case 3:
+		case 4:
 			g_GskTextureFilter = !g_GskTextureFilter;
 			TextureSetFilter(&_OutTex, g_GskTextureFilter);
 			break;
-		case 4:
+		case 5:
 			g_GskScanlines = !g_GskScanlines;
 			break;
-		case 5:
+		case 6:
 			g_GskOverscan += dir * 5;
 			if (g_GskOverscan < 0) g_GskOverscan = 0;
 			if (g_GskOverscan > 100) g_GskOverscan = 100;
 			GSK_SetOverscan(g_GskOverscan);
 			break;
-		case 6:
+		case 7:
 			g_GskDispOffX += dir;
 			if (g_GskDispOffX < -64) g_GskDispOffX = -64;
 			if (g_GskDispOffX > 64) g_GskDispOffX = 64;
 			GSK_SetDisplayOffset(g_GskDispOffX, g_GskDispOffY);
 			break;
-		case 7:
+		case 8:
 			g_GskDispOffY += dir;
 			if (g_GskDispOffY < -64) g_GskDispOffY = -64;
 			if (g_GskDispOffY > 64) g_GskDispOffY = 64;
 			GSK_SetDisplayOffset(g_GskDispOffX, g_GskDispOffY);
 			break;
-		case 8:
+		case 9:
 			CoverToggle();
 			break;
-		case 9:
+		case 10:
 			I18nCycleLanguage(dir);
 			break;
-		case 10:
+		case 11:
 			{
 				int v = AudMixGameGetVolume() + dir;
 				if (v < 0) v = 0;
@@ -727,7 +812,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				AudMixGameSetVolume(v);
 			}
 			break;
-		case 11:
+		case 12:
 			{
 				int v = BgmGetVolume() + dir;
 				if (v < 0) v = 0;
@@ -735,20 +820,20 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmSetVolume(v);
 			}
 			break;
-		case 12:
+		case 13:
 			BgmCycleRate(dir);
 			break;
-		case 13:
+		case 14:
 			MainLoopSafeFrameskipSetEnabled(
 				MainLoopSafeFrameskipIsEnabled() ? FALSE : TRUE);
 			break;
-		case 14:
+		case 15:
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
-		case 15:
+		case 16:
 			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
-		case 16:
+		case 17:
 			MmceSupportSetEnabled(!MmceSupportIsEnabled());
 			if (MmceSupportIsEnabled())
 			{
@@ -757,7 +842,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 17:
+		case 18:
 			Mx4sioSetEnabled(!Mx4sioIsEnabled());
 			if (Mx4sioIsEnabled())
 			{
@@ -766,10 +851,10 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 18:
+		case 19:
 			HostFsSupportSetEnabled(!HostFsSupportIsEnabled());
 			break;
-		case 19:
+		case 20:
 			if (SmbSupportIsEnabled())
 			{
 				BgmIOBegin();

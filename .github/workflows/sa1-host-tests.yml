@@ -34,6 +34,7 @@ jobs:
           ./tools/pputest/queue_test
           ./tools/pputest/spcio_test
           ./tools/pputest/safe_frameskip_test
+          ./tools/pputest/regioncadence_test
           ./tools/pputest/diag_test
       - name: Build ROM loader tests
         run: ./tools/romtest/build.sh

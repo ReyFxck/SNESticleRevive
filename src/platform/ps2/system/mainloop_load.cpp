@@ -35,6 +35,10 @@
 #include "embedded_irx.h"   /* HddMapPath (hdd0:/PART -> pfs0:) */
 #include "sndbglog.h"
 
+extern "C" {
+#include "gskit_backend.h"
+}
+
 static Char s_MainLoopLoadError[192] = "Unknown ROM load error";
 
 static void _MainLoopSetLoadError(const Char *pFormat, ...)
@@ -493,6 +497,26 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 			return FALSE;
 		}
 	}
+
+    if (pSystem == _pSnes)
+    {
+        GSK_SetContentRegion(
+            (_pSnesRom && _pSnesRom->m_eVideoType == SNROM_VIDEO_PAL)
+            ? GSK_CONTENT_PAL : GSK_CONTENT_NTSC);
+    }
+    else
+    {
+        GSK_SetContentRegion(GSK_CONTENT_NTSC);
+    }
+
+    if (GSK_TvStandardNeedsReinit())
+    {
+        if (!MainLoopReinitVideo())
+        {
+            _MainLoopSetLoadError("Could not switch PS2 video standard");
+            return FALSE;
+        }
+    }
 
 	if (pBios)
 	{

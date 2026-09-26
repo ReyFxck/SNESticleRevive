@@ -696,10 +696,23 @@ static Bool bPrint = TRUE;
 extern Uint32 _MainLoop_uBlenderTBP;
 extern Uint32 _MainLoop_uOutTexTBP;
 static SNPPUBlendGS *_Blend;
+
+void SnesPPURenderResetVideoBackend()
+{
+    if (_Blend)
+    {
+        delete _Blend;
+        _Blend = NULL;
+    }
+}
 #else
 
 #include "snppublend_c.h"
 static SNPPUBlendC _Blend;
+
+void SnesPPURenderResetVideoBackend()
+{
+}
 #endif
 
 #if !SNPPURENDER_INFOSCRATCHPAD

@@ -190,6 +190,31 @@ static Bool _MainLoopAllocVideoVram(void)
 	return TRUE;
 }
 
+Bool MainLoopReinitVideo()
+{
+    SnesPPURenderResetVideoBackend();
+    GSK_ReinitVideo();
+    if (!_MainLoopAllocVideoVram())
+        return FALSE;
+
+    FontInit(s_FontTexTBP);
+    CoverInit(s_CoverTexTBP);
+    UiIconsInit(s_UiIconsTexTBP);
+
+    if (_fbTexture[0])
+    {
+        TextureNew(&_OutTex, 256, 256, GS_PSMCT32);
+        TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
+        TextureSetFilter(&_OutTex, g_GskTextureFilter);
+        _fbTexture[0]->Clear();
+        if (_fbTexture[1])
+            _fbTexture[1]->Clear();
+        TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
+    }
+
+    return TRUE;
+}
+
 /* Browser starting directory. On real PS2 you typically want "mass:/"
    (USB stick) or a memcard path. On PCSX2/AetherSX2/NetherSX2 the
    "host:" device is not mapped, so an empty string here makes the
@@ -320,14 +345,11 @@ Bool MainLoopInit()
     /* state.cfg can live on USB/MX4SIO/MMCE as well as a memory card. Load it
        only after the configured removable-storage backend is available. */
     MainLoopStateSettingsLoad();
-    if (g_GskVideoMode != GSK_GetActiveVideoMode())
+    if (g_GskVideoMode != GSK_GetActiveVideoMode() ||
+        GSK_TvStandardNeedsReinit())
     {
-        GSK_ReinitVideo();
-        if (!_MainLoopAllocVideoVram())
+        if (!MainLoopReinitVideo())
             return FALSE;
-        FontInit(s_FontTexTBP);
-        CoverInit(s_CoverTexTBP);
-        UiIconsInit(s_UiIconsTexTBP);
     }
     else
     {

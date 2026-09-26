@@ -171,6 +171,7 @@ extern Float32 _MainLoop_fOutputIntensity;
 /* ---- Function entrypoints across mainloop_*.cpp ------------------- */
 
 void MainLoopRender();
+Bool MainLoopReinitVideo();
 void _MenuEnable(Bool bEnable);
 void _MenuRuntimeUpdate(void);
 /* Drawn from MainLoopRender() (mainloop_render.cpp), defined in
