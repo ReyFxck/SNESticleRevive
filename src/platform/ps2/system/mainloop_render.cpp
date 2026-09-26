@@ -251,6 +251,11 @@ void MainLoopRender()
 	static Uint32 _iFrame=0;
         static int whichdrawbuf = 0;
 
+    /* Keep the homebrew/menu at its original 640-wide 480i presentation,
+       but switch active gameplay to the proven 512-wide exact-2x source
+       window. The backend ignores this request in 240p and 1080i. */
+    GSK_SetGameplayViewport(_bMenu ? 0 : 1);
+
     /* Re-anchor FRAME_1 to gsKit's current draw buffer before any
        primitive runs this frame. The legacy GS_SetDrawFB used to do
        this implicitly per frame; gsKit_sync_flip only swaps the
