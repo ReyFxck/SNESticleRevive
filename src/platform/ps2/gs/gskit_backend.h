@@ -48,6 +48,11 @@ extern int g_GskWidescreen;   /* 0 = 4:3, 1 = safe mode-specific 16:9           
 extern int g_GskTextureFilter;/* 0 = nearest/sharp, 1 = linear/smooth           */
 extern int g_GskScanlines;    /* 0 = off, 1 = translucent scanline overlay      */
 
+/* Switch only the 480i presentation between the original 640-wide homebrew
+   UI and the 512-wide exact-2x gameplay source window. This does not change
+   the video standard, framebuffer allocation, refresh rate or PAL/NTSC mode. */
+void GSK_SetGameplayViewport(int on);
+
 /* Set the display offset live (no VRAM realloc) and remember it for the
    next GSK_Init. X is in VCK units, matching FCEUmm-PS2. */
 void GSK_SetDisplayOffset(int x, int y);
