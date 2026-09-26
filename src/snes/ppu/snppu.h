@@ -193,6 +193,11 @@ public:
 	Bool                    GetField() const                             {return (m_Regs.stat78 & 0x80) != 0;}
 	Bool                    IsPseudoHires() const                       {return (m_Regs.setini & SNESPPU_SETINI_PSEUDOHIR) != 0;}
 	Bool                    IsObjInterlace() const                       {return (m_Regs.setini & SNESPPU_SETINI_OBJ_INTERLACE) != 0;}
+	Uint8                   GetPPU1OpenBus() const                       {return m_PPU1OpenBus;}
+	Uint8                   GetPPU2OpenBus() const                       {return m_PPU2OpenBus;}
+	void                    SetPPU1OpenBus(Uint8 uData)                  {m_PPU1OpenBus = uData;}
+	void                    SetPPU2OpenBus(Uint8 uData)                  {m_PPU2OpenBus = uData;}
+	void                    LatchHV(Uint16 uH, Uint16 uV);
 
 	#if SNPPU_WRITEQUEUE
 	_INLINE Bool            EnqueueWrite(Uint32 uLine, Uint32 uAddr, Uint8 uData,
@@ -251,6 +256,8 @@ private:
     SnesOAMT		        m_OAM;
 	Uint8                   m_OAMLatch;
 	Uint8                   m_CGRAMLatch;
+	Uint8                   m_PPU1OpenBus;
+	Uint8                   m_PPU2OpenBus;
 
     ISnesPPURender *        m_pRender;
 
