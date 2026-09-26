@@ -113,6 +113,7 @@ Bool _bMenu = FALSE;
 
 Char  _MainLoop_ModalStr[256];
 Int32 _MainLoop_ModalCount = 0;
+Bool  _MainLoop_ModalIsError = TRUE;
 
 Char  _MainLoop_StatusStr[256];
 Int32 _MainLoop_StatusCount = 0;

@@ -156,11 +156,12 @@ static Bool BrowserIsDiscPath(const Char *pPath)
 	        strncasecmp(pPath, "cdrom", 5) == 0);
 }
 
-/* HostFS needs its own classifier. Some emulator/ps2link HostFS bridges
-   return unreliable mode bits (notably marking regular files as directories).
-   Do not copy that flag into the UI. Probe actual file behavior first, then
-   actual directory behavior. Known ROM extensions are handled before this
-   function, so the extra RPCs only apply to otherwise-unknown HostFS entries. */
+/* HostFS needs its own classifier. Some emulator/ps2link bridges return
+   unreliable mode bits. More importantly, a few bridges accept file-open on
+   a directory and then return a zero-byte read; the old file-first probe
+   therefore turned real folders into files and Cross could never enter them.
+   Probe dopen first. Known ROM extensions are resolved before this function,
+   so normal ROM files never pay this extra directory RPC. */
 static Bool BrowserResolveHostDirectory(const Char *pParent, const Char *pName,
                                         unsigned int uMode)
 {
@@ -182,42 +183,27 @@ static Bool BrowserResolveHostDirectory(const Char *pParent, const Char *pName,
 	             pName) >= (int)sizeof(path))
 		return FALSE;
 
+	dfd = fileXioDopen(path);
+	if (dfd >= 0)
+	{
+		fileXioDclose(dfd);
+		HOSTFS_DLOG_DEEP("[hostfs-entry] dir path=%s mode=%08X dopen=%d",
+		                path, (unsigned)uMode, dfd);
+		return TRUE;
+	}
+
 	fd = fileXioOpen(path, FIO_O_RDONLY, 0);
 	if (fd >= 0)
 	{
 		readResult = fileXioRead(fd, &probe, 1);
 		fileXioClose(fd);
-		if (readResult >= 0)
-		{
-			HOSTFS_DLOG_DEEP("[hostfs-entry] file path=%s mode=%08X read=%d",
-			                path, (unsigned)uMode, readResult);
-			return FALSE;
-		}
-	}
-
-	dfd = fileXioDopen(path);
-	if (dfd >= 0)
-	{
-		fileXioDclose(dfd);
-		HOSTFS_DLOG_DEEP("[hostfs-entry] dir path=%s mode=%08X fileopen=%d read=%d",
-		                path, (unsigned)uMode, fd, readResult);
-		return TRUE;
-	}
-
-	/* If file open succeeded but the one-byte read was rejected, it is still
-	   safer to keep the item file-like than to repeat the broken DIR bit. */
-	if (fd >= 0)
-	{
-		HOSTFS_DLOG_DEEP("[hostfs-entry] file-fallback path=%s mode=%08X read=%d dopen=%d",
+		HOSTFS_DLOG_DEEP("[hostfs-entry] file path=%s mode=%08X read=%d dopen=%d",
 		                path, (unsigned)uMode, readResult, dfd);
 		return FALSE;
 	}
 
 	HOSTFS_DLOG_DEEP("[hostfs-entry] unresolved-as-file path=%s mode=%08X dopen=%d",
 	                path, (unsigned)uMode, dfd);
-	/* Never re-trust HostFS' broken DIR bit here. A directory that cannot
-	   actually be opened is not useful to the browser; defaulting to file
-	   avoids recreating the original "every file is a folder" failure. */
 	return FALSE;
 }
 
@@ -2030,31 +2016,57 @@ void CBrowserScreen::Chdir(const Char *pSubDir)
 	if (!strcmp(pSubDir, ".."))
 	{
 		/* Already at the device list: refresh it instead of calculating from
-		   strlen("") - 2 (the original code wrote one byte before dir here).
-		   This also makes newly enabled SMB/HDD/MMCE entries appear safely. */
+		   strlen("") - 2 (the original code wrote one byte before dir here). */
 		if (!dir[0])
 		{
 			SetDir("");
 			return;
 		}
-        if (strcmp(dir,"/"))
-        {
+
+		if (BrowserIsHostPath(dir))
+		{
+			Char *pColon = strchr(dir, ':');
+			size_t n = strlen(dir);
+			Char *pSlash = NULL;
+			Char *p;
+
+			while (n > 0 && (dir[n - 1] == '/' || dir[n - 1] == '\\'))
+				dir[--n] = 0;
+
+			if (!pColon || !pColon[1] ||
+			    (pColon[1] == '/' && !pColon[2]) ||
+			    (pColon[1] == '\\' && !pColon[2]))
+			{
+				SetDir("");
+				return;
+			}
+
+			for (p = pColon + 1; *p; ++p)
+				if (*p == '/' || *p == '\\')
+					pSlash = p;
+
+			if (!pSlash)
+				pColon[1] = 0;              /* host:foo -> host: */
+			else if (pSlash == pColon + 1)
+				pSlash[1] = 0;              /* host:/foo -> host:/ */
+			else
+				pSlash[1] = 0;              /* host:/foo/bar -> host:/foo/ */
+		}
+		else if (strcmp(dir,"/"))
+		{
 		    Int32 i = strlen(dir) - 2;
-
-		    // backup
 		    while (i >= 0 && dir[i]!='/')
-		    {
 			    i--;
-		    }
             i++;
-
 		    dir[i] = 0;
-        }
+		}
 	}
 	else
 	{
-		strcat(dir, pSubDir);
-		strcat(dir, "/");
+		size_t n = strlen(dir);
+		if (snprintf(dir + n, sizeof(dir) - n, "%s/", pSubDir) >=
+		    (int)(sizeof(dir) - n))
+			return;
 	}
 
 	SetDir(dir);

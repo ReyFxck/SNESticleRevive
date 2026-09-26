@@ -92,6 +92,7 @@ extern Char _SramPath[256];
 extern Char _MainLoop_SaveTitle[];
 extern Char _MainLoop_ModalStr[256];
 extern Char _MainLoop_StatusStr[256];
+extern Bool _MainLoop_ModalIsError;
 
 /* ---- Emulator core handles ---------------------------------------- */
 
