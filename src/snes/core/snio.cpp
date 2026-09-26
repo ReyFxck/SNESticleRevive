@@ -13,6 +13,126 @@
 
 #define SNIO_VERSION_5A22 (0x02)
 
+void SnesIO::ResetAluTransient()
+{
+	m_uAluLastClock = 0;
+	m_uAluShift = 0;
+	m_uAluMulCounter = 0;
+	m_uAluDivCounter = 0;
+	m_uAluCycleClocks = 0;
+}
+
+void SnesIO::RunAlu(Uint32 uClock)
+{
+	Uint32 uSteps;
+	Uint32 uDone = 0;
+
+	if ((!m_uAluMulCounter && !m_uAluDivCounter) || !m_uAluCycleClocks)
+		return;
+
+	uSteps = (uClock - m_uAluLastClock) / m_uAluCycleClocks;
+	while (uSteps-- > 0 && (m_uAluMulCounter || m_uAluDivCounter))
+	{
+		if (m_uAluMulCounter)
+		{
+			m_uAluMulCounter--;
+			if (m_Regs.rddiv.w & 1)
+				m_Regs.rdmpy.w = (Uint16)(m_Regs.rdmpy.w + m_uAluShift);
+			m_uAluShift <<= 1;
+			m_Regs.rddiv.w >>= 1;
+		}
+
+		if (m_uAluDivCounter)
+		{
+			m_uAluDivCounter--;
+			m_uAluShift >>= 1;
+			m_Regs.rddiv.w <<= 1;
+			if ((Uint32)m_Regs.rdmpy.w >= m_uAluShift)
+			{
+				m_Regs.rdmpy.w = (Uint16)((Uint32)m_Regs.rdmpy.w - m_uAluShift);
+				m_Regs.rddiv.w |= 1;
+			}
+		}
+		uDone++;
+	}
+	m_uAluLastClock += uDone * m_uAluCycleClocks;
+}
+
+void SnesIO::WriteAlu(Uint16 uAddr, Uint8 uData, Uint32 uBeforeClock,
+                      Uint32 uAfterClock, Uint8 uCycleClocks)
+{
+	Bool bBlocked;
+
+	/* Match the 5A22 ordering: determine whether an operation was active
+	   before this write cycle, then allow that cycle to advance the old op. */
+	RunAlu(uBeforeClock);
+	bBlocked = (m_uAluMulCounter || m_uAluDivCounter) ? TRUE : FALSE;
+	RunAlu(uAfterClock);
+
+	if (uCycleClocks != 6 && uCycleClocks != 8)
+		uCycleClocks = 6;
+
+	switch (uAddr)
+	{
+	case 0x4202:
+		m_Regs.wrmpya = uData;
+		break;
+
+	case 0x4203:
+		m_Regs.rdmpy.w = 0;
+		if (!bBlocked)
+		{
+			m_uAluMulCounter = 8;
+			m_uAluDivCounter = 0;
+			m_Regs.wrmpyb = uData;
+			m_Regs.rddiv.w = ((Uint16)uData << 8) | m_Regs.wrmpya;
+			m_uAluShift = uData;
+			m_uAluCycleClocks = uCycleClocks;
+			m_uAluLastClock = uAfterClock;
+		}
+		else if (!m_uAluMulCounter && !m_uAluDivCounter)
+		{
+			/* A write on the exact final clock corrupts/overwrites the internal
+			   shift value but does not start a second multiplication. */
+			m_Regs.rddiv.w = ((Uint16)uData << 8) | m_Regs.wrmpya;
+		}
+		break;
+
+	case 0x4204:
+		m_Regs.wrdiv.b.l = uData;
+		break;
+	case 0x4205:
+		m_Regs.wrdiv.b.h = uData;
+		break;
+
+	case 0x4206:
+		m_Regs.rdmpy.w = m_Regs.wrdiv.w;
+		if (!bBlocked)
+		{
+			m_uAluDivCounter = 16;
+			m_uAluMulCounter = 0;
+			m_Regs.wrdivb = uData;
+			m_uAluShift = (Uint32)uData << 16;
+			m_uAluCycleClocks = uCycleClocks;
+			m_uAluLastClock = uAfterClock;
+		}
+		break;
+	}
+}
+
+Uint8 SnesIO::ReadAlu(Uint16 uAddr, Uint32 uBeforeClock)
+{
+	RunAlu(uBeforeClock);
+	switch (uAddr)
+	{
+	case 0x4214: return m_Regs.rddiv.b.l;
+	case 0x4215: return m_Regs.rddiv.b.h;
+	case 0x4216: return m_Regs.rdmpy.b.l;
+	case 0x4217: return m_Regs.rdmpy.b.h;
+	default: return 0;
+	}
+}
+
 Uint8 SnesIO::ReadSerialPad(Uint32 uPad)
 {
 	// read top-most joypad bit
@@ -181,6 +301,9 @@ void SnesIO::Reset()
 {
 	memset(this, 0, sizeof(*this));
 	m_Regs.rdnmi  =  SNIO_VERSION_5A22;
+	m_Regs.wrmpya = 0xFF;
+	m_Regs.wrdiv.w = 0xFFFF;
+	ResetAluTransient();
 }
 
 void SnesIO::LatchInput(Emu::SysInputT  *pInput)
