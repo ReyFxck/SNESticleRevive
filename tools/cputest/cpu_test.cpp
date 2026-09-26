@@ -24,18 +24,68 @@ extern "C" {
 static Uint32 g_TrapReadAddress;
 static Uint32 g_TrapWriteAddress;
 static Uint8 g_TrapWriteData;
+static Uint8 g_TrapReadOpenBus;
+static Uint8 g_TrapWriteOpenBus;
 
-extern "C" Uint8 SNCPU_TRAPFUNC TestTrapRead(SNCpuT *, Uint32 address)
+extern "C" Uint8 SNCPU_TRAPFUNC TestTrapRead(SNCpuT *cpu, Uint32 address)
 {
 	g_TrapReadAddress = address;
+	g_TrapReadOpenBus = SNCPUGetOpenBus(cpu);
 	return 0xA5;
 }
 
-extern "C" void SNCPU_TRAPFUNC TestTrapWrite(SNCpuT *, Uint32 address,
+extern "C" void SNCPU_TRAPFUNC TestTrapWrite(SNCpuT *cpu, Uint32 address,
 	Uint8 data)
 {
 	g_TrapWriteAddress = address;
 	g_TrapWriteData = data;
+	g_TrapWriteOpenBus = SNCPUGetOpenBus(cpu);
+}
+
+static bool CheckOpenBus(SNCpuT *cpu, Uint8 *memory)
+{
+	bool ok = true;
+	const Uint32 pc = 0x008000;
+
+	SNCPUSetOpenBus(cpu, 0x11);
+	memory[0x1234] = 0x5A;
+	ok &= SNCPURead8(cpu, 0x1234) == 0x5A;
+	ok &= SNCPUGetOpenBus(cpu) == 0x5A;
+
+	SNCPUWrite8(cpu, 0x1234, 0xC7);
+	ok &= memory[0x1234] == 0xC7;
+	ok &= SNCPUGetOpenBus(cpu) == 0xC7;
+
+	SNCPUSetTrap(cpu, 0x2000, SNCPU_BANK_SIZE, TestTrapRead, TestTrapWrite);
+	SNCPUSetOpenBus(cpu, 0x3C);
+	g_TrapReadOpenBus = 0;
+	ok &= SNCPURead8(cpu, 0x2345) == 0xA5;
+	ok &= g_TrapReadOpenBus == 0x3C;
+	ok &= SNCPUGetOpenBus(cpu) == 0xA5;
+
+	g_TrapWriteOpenBus = 0;
+	SNCPUWrite8(cpu, 0x2345, 0x7E);
+	ok &= g_TrapWriteOpenBus == 0x7E;
+	ok &= SNCPUGetOpenBus(cpu) == 0x7E;
+
+	/* Opcode fetches drive the bus too. */
+	SNCPUSetBank(cpu, 0x2000, SNCPU_BANK_SIZE, memory + 0x2000, TRUE);
+	SNCPUSetMemSpeed(cpu, 0x2000, SNCPU_BANK_SIZE, SNCPU_CYCLE_FAST);
+	memory[pc] = 0xEA; // NOP
+	cpu->Regs.rPC = pc;
+	cpu->Regs.rP = SNCPU_FLAG_M | SNCPU_FLAG_X | SNCPU_FLAG_I;
+	cpu->Regs.rE = 1;
+	cpu->uSignal = 0;
+	cpu->Cycles = 100;
+	cpu->uTestCycles = 0;
+	SNCPUSetOpenBus(cpu, 0);
+	SNCPUExecuteOne(cpu);
+	ok &= SNCPUGetOpenBus(cpu) == 0xEA;
+
+	memory[0x1234] = 0;
+	memory[pc] = 0;
+	std::printf("S-CPU open bus: %s\n", ok ? "PASS" : "FAIL");
+	return ok;
 }
 
 static bool Check24BitBusWrap(SNCpuT *cpu, Uint8 *memory)
@@ -387,6 +437,11 @@ int main(int argc, char **argv)
 	SNCPUSetMemSpeed(&cpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_FAST);
 	SNCPUMirror24BitBus(&cpu);
 	SNCPUSetExecuteFunc(SNCPUExecute_C);
+	if (!CheckOpenBus(&cpu, memory))
+	{
+		std::free(memory);
+		return 1;
+	}
 	if (!Check24BitBusWrap(&cpu, memory))
 	{
 		std::free(memory);
