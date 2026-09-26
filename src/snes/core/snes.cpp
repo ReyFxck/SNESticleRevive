@@ -935,16 +935,15 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
         return pIO->m_Regs.wrio;
 
 	case 0x4214:	// RDDIVL
-		return pIO->m_Regs.rddiv.b.l;
-
 	case 0x4215:	// RDDIVH
-		return pIO->m_Regs.rddiv.b.h;
-
 	case 0x4216:	// RDMPYL
-		return pIO->m_Regs.rdmpy.b.l;
-
 	case 0x4217:	// RDMPYH
-		return pIO->m_Regs.rdmpy.b.h;
+		{
+			Uint32 uNow = (Uint32)SNCPUGetCounter(pCpu, SNCPU_COUNTER_TOTAL);
+			Uint32 uAccess = pCpu->Bank[(uAddr & 0xFFFFFF) >> SNCPU_BANK_SHIFT].uBankCycle;
+			Uint32 uBefore = (uNow >= uAccess) ? (uNow - uAccess) : 0;
+			return pIO->ReadAlu((Uint16)uAddr, uBefore);
+		}
 
 	case 0x4218:	// JOY1L
 		return pIO->m_Regs.joy1.b.l;
@@ -1073,35 +1072,19 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
             break;
 		}
 
-		case 0x4202:	// wrmpya (multiplicand-a)
-			pIO->m_Regs.wrmpya = uData;
+		case 0x4202:	// WRMPYA
+		case 0x4203:	// WRMPYB - starts 8-cycle multiplication
+		case 0x4204:	// WRDIVL
+		case 0x4205:	// WRDIVH
+		case 0x4206:	// WRDIVB - starts 16-cycle division
+		{
+			Uint32 uNow = (Uint32)SNCPUGetCounter(pCpu, SNCPU_COUNTER_TOTAL);
+			Uint32 uAccess = pCpu->Bank[(uAddr & 0xFFFFFF) >> SNCPU_BANK_SHIFT].uBankCycle;
+			Uint32 uBefore = (uNow >= uAccess) ? (uNow - uAccess) : 0;
+			Uint8 uCodeCycle = pCpu->Bank[(pCpu->Regs.rPC & 0xFFFFFF) >> SNCPU_BANK_SHIFT].uBankCycle;
+			pIO->WriteAlu((Uint16)uAddr, uData, uBefore, uNow, uCodeCycle);
 			break;
-		case 0x4203:	// wrmpyb (multiplicand-b)
-			pIO->m_Regs.wrmpyb = uData;
-
-			// multiply
-			pIO->m_Regs.rdmpy.w = pIO->m_Regs.wrmpya * pIO->m_Regs.wrmpyb;
-			break;
-
-		case 0x4204:	// wrdivl (multiplier-c low)
-			pIO->m_Regs.wrdiv.b.l = uData;
-			break;
-		case 0x4205:	// wrdivh (multiplier-c high)
-			pIO->m_Regs.wrdiv.b.h = uData;
-			break;
-		case 0x4206:	// wrdivb (divisor-b)
-			pIO->m_Regs.wrdivb  = uData;
-			if (uData!=0)
-			{
-				pIO->m_Regs.rddiv.w = pIO->m_Regs.wrdiv.w / pIO->m_Regs.wrdivb;
-				pIO->m_Regs.rdmpy.w = pIO->m_Regs.wrdiv.w % pIO->m_Regs.wrdivb;
-			} else
-			{
-                // divide by zero
-				pIO->m_Regs.rddiv.w = 0xFFFF;
-				pIO->m_Regs.rdmpy.w = pIO->m_Regs.wrdiv.w;
-			}
-			break;
+		}
 
         case 0x4207:	// htmel (video horizontal IRQ beam position)
             pIO->m_Regs.htime.b.l = uData;
