@@ -6,6 +6,7 @@ on:
       - main
       - experimental/sa1-mips
       - perf/sa1-r5900
+      - test/pal-tv-compat
   workflow_dispatch:
 
 jobs:
