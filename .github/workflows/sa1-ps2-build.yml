@@ -6,6 +6,7 @@ on:
       - main
       - experimental/sa1-mips
       - perf/sa1-r5900
+      - fix/hostfs-state-feedback
   workflow_dispatch:
 
 permissions:
