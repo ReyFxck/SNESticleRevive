@@ -40,7 +40,19 @@ void GSK_Init(int width, int height,
 #define GSK_VIDMODE_480I  1   /* NTSC/PAL 640x480 interlaced source            */
 #define GSK_VIDMODE_1080I 3   /* DTV 1280x960 4:3 window in a 1080i raster     */
 
+/* SD TV-standard policy. AUTO follows the loaded game's region; CONSOLE
+   follows the BIOS region. Forced NTSC/PAL are useful for unusual displays. */
+#define GSK_TV_STANDARD_AUTO     0
+#define GSK_TV_STANDARD_CONSOLE  1
+#define GSK_TV_STANDARD_NTSC     2
+#define GSK_TV_STANDARD_PAL      3
+
+#define GSK_CONTENT_UNKNOWN     -1
+#define GSK_CONTENT_NTSC         0
+#define GSK_CONTENT_PAL          1
+
 extern int g_GskVideoMode;    /* one of GSK_VIDMODE_*    */
+extern int g_GskTvStandard;   /* one of GSK_TV_STANDARD_* */
 extern int g_GskDispOffX;     /* horizontal display offset (0 = centred) */
 extern int g_GskDispOffY;     /* vertical display offset   (0 = centred) */
 extern int g_GskOverscan;     /* 0..100 shrink of the display area (0 = none) */
@@ -65,9 +77,16 @@ void GSK_SetOverscan(int percent);
 /* Toggle the PCRTC 16:9 presentation live (1 = on, 0 = 4:3). */
 void GSK_SetWidescreen(int on);
 
-/* Tear down and rebuild the GS for the current g_GskVideoMode. The caller
-   MUST re-upload any textures it owns afterwards (e.g. FontInit). Intended
-   to run once at boot after the saved settings are read from the card. */
+/* Tell the backend which TV cadence the loaded content was authored for.
+   AUTO uses this region to choose 50/60 Hz in SD modes. */
+void GSK_SetContentRegion(int region);
+
+/* True when the selected TV-standard policy resolves to a different physical
+   SD standard than the GS is currently outputting. */
+int GSK_TvStandardNeedsReinit(void);
+
+/* Tear down and rebuild the GS for the current video mode / TV-standard
+   policy. The caller MUST re-upload every VRAM-owned texture afterwards. */
 void GSK_ReinitVideo(void);
 
 /* The video mode the GS is currently programmed for (set by GSK_Init).

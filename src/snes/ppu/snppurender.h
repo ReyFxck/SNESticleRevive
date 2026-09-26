@@ -238,6 +238,7 @@ public:
 };
 
 void SnesPPUInvalidateOutputCache();
+void SnesPPURenderResetVideoBackend();
 
 extern SnesChrLookupT _SnesPPU_PlaneLookup[2];
 extern Uint8 _SnesPPU_HFlipLookup[2][256];

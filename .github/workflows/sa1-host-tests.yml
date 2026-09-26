@@ -6,6 +6,7 @@ on:
       - main
       - experimental/sa1-mips
       - perf/sa1-r5900
+      - test/pal-tv-compat
   workflow_dispatch:
 
 jobs:
@@ -34,6 +35,7 @@ jobs:
           ./tools/pputest/queue_test
           ./tools/pputest/spcio_test
           ./tools/pputest/safe_frameskip_test
+          ./tools/pputest/regioncadence_test
           ./tools/pputest/diag_test
       - name: Build ROM loader tests
         run: ./tools/romtest/build.sh

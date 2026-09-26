@@ -16,6 +16,7 @@
 #include "mainloop_exec.h"
 #include "mainloop_iop.h"
 #include "mainloop_safe_frameskip.h"
+#include "mainloop_region_cadence.h"
 #include "gskit_backend.h"
 
 #include "types.h"
@@ -57,58 +58,11 @@ static Uint32 _iframetex=0;
  * recovery takes precedence and resets this phase so both recovery systems
  * cannot charge the same elapsed interval.
  */
-static Uint32 s_SnesRegionCadencePhase = 0;
-static Uint32 s_SnesRegionCadenceSourceHz = 0;
-static Uint32 s_SnesRegionCadenceHostHz = 0;
+static MainLoopRegionCadenceT s_SnesRegionCadence = { 0, 0, 0 };
 
 static void _MainLoopResetSnesRegionCadence(void)
 {
-    s_SnesRegionCadencePhase = 0;
-    s_SnesRegionCadenceSourceHz = 0;
-    s_SnesRegionCadenceHostHz = 0;
-}
-
-static void _MainLoopGetSnesRegionCadence(
-        Bool bAllowed,
-        Uint32 uSourceHz,
-        Uint32 uHostHz,
-        Uint32 *puExtraHidden,
-        Bool *pbHoldPrevious)
-{
-    Uint32 uDiff;
-
-    *puExtraHidden = 0;
-    *pbHoldPrevious = FALSE;
-
-    if (!bAllowed || !uSourceHz || !uHostHz || uSourceHz == uHostHz)
-    {
-        _MainLoopResetSnesRegionCadence();
-        return;
-    }
-
-    if (s_SnesRegionCadenceSourceHz != uSourceHz ||
-        s_SnesRegionCadenceHostHz != uHostHz)
-    {
-        s_SnesRegionCadencePhase = 0;
-        s_SnesRegionCadenceSourceHz = uSourceHz;
-        s_SnesRegionCadenceHostHz = uHostHz;
-    }
-
-    uDiff = (uSourceHz > uHostHz)
-        ? (uSourceHz - uHostHz)
-        : (uHostHz - uSourceHz);
-
-    s_SnesRegionCadencePhase += uDiff;
-    if (s_SnesRegionCadencePhase >= uHostHz)
-    {
-        Uint32 uEvents = s_SnesRegionCadencePhase / uHostHz;
-        s_SnesRegionCadencePhase %= uHostHz;
-
-        if (uSourceHz > uHostHz)
-            *puExtraHidden = uEvents;
-        else
-            *pbHoldPrevious = TRUE;
-    }
+    MainLoopRegionCadenceReset(&s_SnesRegionCadence);
 }
 
 Bool MainLoopProcess()
@@ -332,7 +286,8 @@ Bool MainLoopProcess()
 
                 if (uCatchupFrames == 0)
                 {
-                    _MainLoopGetSnesRegionCadence(
+                    MainLoopRegionCadenceStep(
+                        &s_SnesRegionCadence,
                         bFrameskipAllowed, uSourceHz, uHostHz,
                         &uRegionExtra, &bRegionHold);
                 }

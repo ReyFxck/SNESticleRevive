@@ -45,7 +45,8 @@ static int       _gsk_invalidate_pending = 0;
 
 /* Video mode + display offset (selectable in the Settings screen).
    480i is the safe default and 1080i is the only alternate output. */
-int g_GskVideoMode = GSK_VIDMODE_480I;
+int g_GskVideoMode  = GSK_VIDMODE_480I;
+int g_GskTvStandard = GSK_TV_STANDARD_AUTO;
 int g_GskDispOffX  = 0;
 int g_GskDispOffY  = 0;
 int g_GskOverscan  = 0;   /* 0..100 shrink of display area */
@@ -56,7 +57,8 @@ static int _gsk_vck         = 4;   /* display-offset VCK units            */
 static int _gsk_fb_width    = 640; /* active FB width                     */
 static int _gsk_fb_height   = 480; /* active FB height                    */
 static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
-static int _gsk_gameplay_view = 0; /* 480i: 0=UI 640 source, 1=game 512 */
+static int _gsk_gameplay_view = 0; /* UI/game presentation selector       */
+static int _gsk_content_region = GSK_CONTENT_UNKNOWN; /* loaded game region */
 
 /* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
    overscan/widescreen can be recomputed from a clean baseline. */
@@ -91,6 +93,26 @@ static int _gsk_DetectTvMode(void)
 {
     volatile char region = *(volatile char *)0x1FC7FF52;
     return (region == 'E') ? GS_MODE_PAL : GS_MODE_NTSC;
+}
+
+static int _gsk_ResolveTvMode(void)
+{
+    switch (g_GskTvStandard)
+    {
+    case GSK_TV_STANDARD_NTSC:
+        return GS_MODE_NTSC;
+    case GSK_TV_STANDARD_PAL:
+        return GS_MODE_PAL;
+    case GSK_TV_STANDARD_CONSOLE:
+        return _gsk_DetectTvMode();
+    case GSK_TV_STANDARD_AUTO:
+    default:
+        if (_gsk_content_region == GSK_CONTENT_PAL)
+            return GS_MODE_PAL;
+        if (_gsk_content_region == GSK_CONTENT_NTSC)
+            return GS_MODE_NTSC;
+        return _gsk_DetectTvMode();
+    }
 }
 
 void GSK_Init(int width, int height,
@@ -146,7 +168,7 @@ void GSK_Init(int width, int height,
          *
          * Progressive output requires GS_FRAME rather than GS_FIELD.
          */
-        _pGsGlobal->Mode      = _gsk_DetectTvMode();
+        _pGsGlobal->Mode      = _gsk_ResolveTvMode();
         _pGsGlobal->Interlace = GS_NONINTERLACED;
         _pGsGlobal->Field     = GS_FRAME;
         _gsk_fb_width         = 256;
@@ -159,7 +181,7 @@ void GSK_Init(int width, int height,
         /* Unsupported or removed saved values are normalised to 480i. PAL
            consoles emit the same source centred in their interlaced raster. */
         g_GskVideoMode        = GSK_VIDMODE_480I;
-        _pGsGlobal->Mode      = _gsk_DetectTvMode();
+        _pGsGlobal->Mode      = _gsk_ResolveTvMode();
         _pGsGlobal->Interlace = GS_INTERLACED;
         _pGsGlobal->Field     = GS_FIELD;
         /* Keep the physical framebuffer at 640x480 so the homebrew UI keeps
@@ -441,16 +463,42 @@ void GSK_SetWidescreen(int on)
     _GskApplyDisplay();
 }
 
+void GSK_SetContentRegion(int region)
+{
+    if (region == GSK_CONTENT_NTSC || region == GSK_CONTENT_PAL)
+        _gsk_content_region = region;
+    else
+        _gsk_content_region = GSK_CONTENT_UNKNOWN;
+}
+
+int GSK_TvStandardNeedsReinit(void)
+{
+    int target;
+
+    if (!_gsk_initialised || !_pGsGlobal)
+        return 0;
+    if (_gsk_active_mode == GSK_VIDMODE_1080I)
+        return 0;
+
+    target = _gsk_ResolveTvMode();
+    return (_pGsGlobal->Mode != target) ? 1 : 0;
+}
+
 void GSK_ReinitVideo(void)
 {
+    GSGLOBAL *oldGlobal;
+
     if (!_gsk_initialised) {
         return;
     }
-    /* Allow GSK_Init to run again; it re-programs the PCRTC and
-       reallocates VRAM for the (possibly new) g_GskVideoMode.  The
-       caller is responsible for re-uploading its textures (FontInit)
-       since the VRAM allocator is reset. */
+
+    GSK_DrainAndWait();
+    oldGlobal = _pGsGlobal;
     _gsk_initialised = 0;
+    _pGsGlobal = NULL;
+    if (oldGlobal)
+        gsKit_deinit_global(oldGlobal);
+
     GSK_Init(_gsk_arg_w, _gsk_arg_h, _gsk_arg_dispx, _gsk_arg_dispy,
              _gsk_arg_psm, _gsk_arg_psmz, _gsk_arg_mode, _gsk_arg_interlace);
 }
