@@ -22,7 +22,7 @@
 #include "gpprim.h"
 
 /* Legacy logical coordinate space the entire UI was written in. Both
-   supported outputs use a 640x480 physical framebuffer; 1080i is scaled by
+   480i uses a 512x480 physical framebuffer for exact 2x SNES scaling; 1080i uses 640x480 and is scaled by
    the PCRTC into a centred 1280x960 4:3 window. */
 #define GSK_LOGICAL_W   256
 #define GSK_LOGICAL_H   240
@@ -51,7 +51,7 @@ int g_GskWidescreen = 0;  /* 0 = 4:3, 1 = safe 16:9 presentation */
 int g_GskTextureFilter = 0; /* 0 = nearest/sharp, 1 = linear/smooth */
 int g_GskScanlines = 0;     /* 0 = off, 1 = translucent scanline overlay */
 static int _gsk_vck         = 4;   /* display-offset VCK units            */
-static int _gsk_fb_width    = 640; /* active FB width                     */
+static int _gsk_fb_width    = 512; /* active FB width                     */
 static int _gsk_fb_height   = 480; /* active FB height                    */
 static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
 
@@ -159,7 +159,11 @@ void GSK_Init(int width, int height,
         _pGsGlobal->Mode      = _gsk_DetectTvMode();
         _pGsGlobal->Interlace = GS_INTERLACED;
         _pGsGlobal->Field     = GS_FIELD;
-        _gsk_fb_width         = 640;
+        /* 512x480 keeps the 256x240 SNES/NES canvas at an exact 2x2 render
+           scale. gsKit still produces the same 2560-VCK active NTSC/PAL
+           display width (MAGH=4 instead of MAGH=3), so the TV geometry is
+           unchanged while horizontal 2/3-pixel cadence shimmer is avoided. */
+        _gsk_fb_width         = 512;
         _gsk_fb_height        = 480;
         _gsk_vck              = 4;
         break;
