@@ -107,6 +107,9 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_Cpu.uSignal    = pState->CPU.uSignal;
 	m_Cpu.uNmiDmaDelay = 0;
 	m_Cpu.uIrqPending = 0;
+	/* Legacy state payloads predate open-bus serialization. Avoid inheriting
+	   residue from the game state that is being replaced. */
+	SNCPUSetOpenBus(&m_Cpu, 0);
 
 	m_Spc.Regs = pState->SPC.Regs;
 	m_Spc.Cycles = pState->SPC.Cycles;
@@ -181,6 +184,9 @@ void SnesIO::RestoreState(struct SNStateIOT *pState)
 {
 	m_Input = pState->Input;
 	m_Regs = pState->Regs;
+	/* Pending ALU micro-steps were never part of the legacy state payload.
+	   Frame-boundary states normally have no operation in flight. */
+	ResetAluTransient();
 }
 
 void SNSpcIO::SaveState(struct SNStateSPCIOT *pState)
@@ -233,6 +239,8 @@ void SnesPPU::RestoreState(struct SNStatePPUT *pState)
 	   as the safest reconstruction without changing the on-disk format. */
 	m_CGRAMLatch = (Uint8)(m_CGRAM[(m_Regs.cgadd.w >> 1) &
 	                              (SNESPPU_CGRAM_NUM - 1)] & 0xFF);
+	m_PPU1OpenBus = 0;
+	m_PPU2OpenBus = 0;
 	m_pRender->UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
 	UpdateOAMPriority();
 }
