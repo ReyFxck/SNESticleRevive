@@ -6,7 +6,6 @@ on:
       - main
       - perf/sa1-r5900
       - feature/localization
-      - test/pal-tv-compat
   workflow_dispatch:
 
 permissions:
