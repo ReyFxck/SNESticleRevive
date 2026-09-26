@@ -102,7 +102,9 @@ static _INLINE Uint8 SnesHDMARead8(SNCpuT *pCPU, Uint32 uAddr)
 {
 	SNCpuBankT *pBank = &pCPU->Bank[uAddr >> SNCPU_BANK_SHIFT];
 	Uint8 *pMem = pBank->pMem;
-	return pMem ? pMem[uAddr] : pBank->pReadTrapFunc(pCPU, uAddr);
+	Uint8 uData = pMem ? pMem[uAddr] : pBank->pReadTrapFunc(pCPU, uAddr);
+	SNCPUSetOpenBus(pCPU, uData);
+	return uData;
 }
 
 #if SNDBG_DEEP
@@ -203,7 +205,9 @@ Uint8 SnesDMAC::Read8(Uint32 uChan, Uint32 uAddr)
 		return pChan->unknown;
 
 	default:
-		return 0x00;
+		/* $43xC-$43xE are not implemented DMA registers. Reads expose the
+		   current S-CPU data bus, matching the rest of the A-bus MMIO space. */
+		return m_pCPU ? SNCPUGetOpenBus(m_pCPU) : 0;
 	}
 }
 
