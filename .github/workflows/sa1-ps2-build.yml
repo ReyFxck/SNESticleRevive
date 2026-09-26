@@ -6,6 +6,7 @@ on:
       - main
       - experimental/sa1-mips
       - perf/sa1-r5900
+      - audit/mesence-full-core-gap
   workflow_dispatch:
 
 permissions:
