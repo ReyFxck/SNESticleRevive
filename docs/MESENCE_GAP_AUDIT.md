@@ -4,8 +4,8 @@ This branch is an investigation branch. It does not intentionally change emulato
 
 ## Pinned baselines
 
-- SNESticle Revive: \`main\` at \`09668f7c70deff5c6e8230f1b0370c7123d74472\`
-- MesenCE: \`master\` at \`a60e79feb4d6dcced5922d636f9211837d01e381\`
+- SNESticle Revive: `main` at `09668f7c70deff5c6e8230f1b0370c7123d74472`
+- MesenCE: `master` at `a60e79feb4d6dcced5922d636f9211837d01e381`
 
 MesenCE is used as a behavioral reference. PS2-specific architecture/performance remains separate from SNES semantic correctness.
 
@@ -21,31 +21,31 @@ MesenCE is used as a behavioral reference. PS2-specific architecture/performance
 ### A1 — Global open-bus model — HIGH-RISK APPROXIMATION
 
 Revive does not maintain a general S-CPU open-bus byte comparable to MesenCE's
-\`SnesMemoryManager::_openBus\`.
+`SnesMemoryManager::_openBus`.
 
 Examples:
-- \`SnesSystem::Read2000()\` falls back to \`uAddr >> 8\`.
-- \`SnesSystem::Read4000()\` falls back to \`uAddr >> 8\`.
-- \`SnesSystem::ReadMem()\` returns \`0\`.
-- SA-1 unmapped/open-bus paths commonly return \`0xFF\`.
-- GSU unknown register reads return \`0x00\`.
+- `SnesSystem::Read2000()` falls back to `uAddr >> 8`.
+- `SnesSystem::Read4000()` falls back to `uAddr >> 8`.
+- `SnesSystem::ReadMem()` returns `0`.
+- SA-1 unmapped/open-bus paths commonly return `0xFF`.
+- GSU unknown register reads return `0x00`.
 
 MesenCE updates the bus value on normal accesses and returns it for unmapped reads.
 It also tracks separate PPU1/PPU2 open-bus values.
 
 ### A2 — $4213 RDIO — CONFIRMED GAP
 
-Revive stores \`$4201 WRIO\` in \`m_Regs.wrio\`, but \`$4213 RDIO\` currently returns \`0\`.
-MesenCE returns the programmable I/O output latch for \`$4213\`.
+Revive stores `$4201 WRIO` in `m_Regs.wrio`, but `$4213 RDIO` currently returns `0`.
+MesenCE returns the programmable I/O output latch for `$4213`.
 
 ### A3 — WRIO bit 7 external H/V latch edge — CONFIRMED GAP
 
-Revive's \`$4201\` write stores the byte but does not perform the H/V latch on a bit-7
+Revive's `$4201` write stores the byte but does not perform the H/V latch on a bit-7
 1->0 transition. MesenCE explicitly latches the PPU H/V counters on that falling edge.
 
 ### A4 — CPU multiply/divide latency — HIGH-RISK APPROXIMATION
 
-Revive computes \`$4202/$4203\` multiplication and \`$4204-$4206\` division immediately.
+Revive computes `$4202/$4203` multiplication and `$4204-$4206` division immediately.
 MesenCE models multiplication over 8 CPU cycles and division over 16 CPU cycles, including
 overlapping-write/read timing.
 
@@ -53,30 +53,30 @@ overlapping-write/read timing.
 
 Revive tracks the main flags but mostly returns the stored register byte.
 MesenCE combines live flags with open-bus bits:
-- \`$4210\`: NMI flag + CPU revision + open-bus bits 4-6.
-- \`$4211\`: IRQ flag + open-bus bits 0-6.
-- \`$4212\`: VBlank/HBlank/auto-joy state + open-bus bits 1-5.
+- `$4210`: NMI flag + CPU revision + open-bus bits 4-6.
+- `$4211`: IRQ flag + open-bus bits 0-6.
+- `$4212`: VBlank/HBlank/auto-joy state + open-bus bits 1-5.
 
 MesenCE also preserves short NMI/IRQ flag timing windows. Existing Terranigma timing work
 must be preserved during this audit.
 
 ### A6 — $2137 and PPU read-side open bus — HIGH-RISK APPROXIMATION
 
-Revive's \`$2137 SLHV\` path latches H/V counters and returns \`0\`.
+Revive's `$2137 SLHV` path latches H/V counters and returns `0`.
 MesenCE latches the counters and returns open bus.
 
-Audit \`$213B-$213F\` together because MesenCE uses distinct PPU1/PPU2 open-bus state for
+Audit `$213B-$213F` together because MesenCE uses distinct PPU1/PPU2 open-bus state for
 unused/high bits.
 
 ### A7 — DMA unused offsets $43xC-$43xE — AUDIT CANDIDATE
 
-Revive's DMA reader returns \`0x00\` for unhandled channel offsets.
+Revive's DMA reader returns `0x00` for unhandled channel offsets.
 MesenCE returns S-CPU open bus for offsets that are not real DMA registers.
-The \`$43xB/$43xF\` scratch-register mirror already exists in both.
+The `$43xB/$43xF` scratch-register mirror already exists in both.
 
 ### A8 — portable 65816 C core correctness debt — AUDIT CANDIDATE
 
-\`src/snes/cpu/sncpu_c.c\` still documents:
+`src/snes/cpu/sncpu_c.c` still documents:
 - program-counter bank-wrap problems;
 - missing direct-page extra-cycle behavior.
 
@@ -86,11 +86,11 @@ changing semantics.
 
 ### A9 — opcode fallback coverage — AUDIT CANDIDATE
 
-The 65816 C core and SPC700 C core retain a default \`unimplemented opcode\` fallback.
+The 65816 C core and SPC700 C core retain a default `unimplemented opcode` fallback.
 This does not prove a legal opcode is missing. Add generated coverage tests for all 256
 opcode bytes in required CPU modes.
 
-The old \`WDM\` comment in \`sn65816.S\` is stale: current MIPS code does consume its
+The old `WDM` comment in `sn65816.S` is stale: current MIPS code does consume its
 signature byte.
 
 ### A10 — coprocessor/platform feature inventory — FEATURE GAP
