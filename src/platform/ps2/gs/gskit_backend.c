@@ -372,12 +372,11 @@ static void _GskApplyDisplay(void)
         starty = _gsk_base_starty + sy;
     }
 
-    /* Widescreen: stretch the picture horizontally to ~16:9 by raising
-       the horizontal magnification (MAGH) and the display width (DW)
-       together, while still reading the SAME framebuffer pixels.  This
-       is the anamorphic path -- on a 16:9 TV the wider picture fills the
-       screen; on a 4:3 TV it overscans the left/right edges. */
-    if (g_GskWidescreen)
+    /* Widescreen is a GAMEPLAY presentation choice. Keep the homebrew UI
+       on the normal 4:3 aperture so CRT overscan cannot hide browser
+       columns/buttons (GitHub #60). The game keeps the same anamorphic
+       ~16:9 path as before. */
+    if (g_GskWidescreen && _gsk_gameplay_view)
     {
         int magh1  = magh + 1;
         int srcpix = magh1 ? dw / magh1 : dw;
@@ -414,12 +413,10 @@ void GSK_SetGameplayViewport(int on)
 
     _gsk_gameplay_view = new_state;
 
-    /* 480i uses the integer 512-source gameplay window; 240p keeps its
-       256x240 framebuffer but narrows the PCRTC aperture during gameplay.
-       1080i keeps its existing presentation unchanged. */
-    if (_gsk_initialised &&
-        (_gsk_active_mode == GSK_VIDMODE_480I ||
-         _gsk_active_mode == GSK_VIDMODE_240P))
+    /* Gameplay/UI presentation can differ in every mode when widescreen is
+       enabled. 480i also switches its 512-source integer window and 240p its
+       CRT aperture; 1080i only needs the widescreen state change. */
+    if (_gsk_initialised)
         _GskApplyDisplay();
 }
 

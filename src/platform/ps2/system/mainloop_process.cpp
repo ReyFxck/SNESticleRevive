@@ -44,6 +44,73 @@ extern "C" {
 
 static Uint32 _iframetex=0;
 
+/*
+ * Source/host cadence converter for mixed-region use.
+ *
+ * The emulated SNES keeps the cartridge cadence (60 NTSC / 50 PAL) even
+ * when the PS2 BIOS selected the other TV standard. One source frame is the
+ * baseline for each host tick; the rate difference is accumulated:
+ *   NTSC source -> PAL host: one extra hidden frame every 5 host VBlanks.
+ *   PAL source  -> NTSC host: repeat the previous picture every 6 VBlanks.
+ *
+ * Netplay/movie paths keep their historical 1:1 semantics. Missed-VBlank
+ * recovery takes precedence and resets this phase so both recovery systems
+ * cannot charge the same elapsed interval.
+ */
+static Uint32 s_SnesRegionCadencePhase = 0;
+static Uint32 s_SnesRegionCadenceSourceHz = 0;
+static Uint32 s_SnesRegionCadenceHostHz = 0;
+
+static void _MainLoopResetSnesRegionCadence(void)
+{
+    s_SnesRegionCadencePhase = 0;
+    s_SnesRegionCadenceSourceHz = 0;
+    s_SnesRegionCadenceHostHz = 0;
+}
+
+static void _MainLoopGetSnesRegionCadence(
+        Bool bAllowed,
+        Uint32 uSourceHz,
+        Uint32 uHostHz,
+        Uint32 *puExtraHidden,
+        Bool *pbHoldPrevious)
+{
+    Uint32 uDiff;
+
+    *puExtraHidden = 0;
+    *pbHoldPrevious = FALSE;
+
+    if (!bAllowed || !uSourceHz || !uHostHz || uSourceHz == uHostHz)
+    {
+        _MainLoopResetSnesRegionCadence();
+        return;
+    }
+
+    if (s_SnesRegionCadenceSourceHz != uSourceHz ||
+        s_SnesRegionCadenceHostHz != uHostHz)
+    {
+        s_SnesRegionCadencePhase = 0;
+        s_SnesRegionCadenceSourceHz = uSourceHz;
+        s_SnesRegionCadenceHostHz = uHostHz;
+    }
+
+    uDiff = (uSourceHz > uHostHz)
+        ? (uSourceHz - uHostHz)
+        : (uHostHz - uSourceHz);
+
+    s_SnesRegionCadencePhase += uDiff;
+    if (s_SnesRegionCadencePhase >= uHostHz)
+    {
+        Uint32 uEvents = s_SnesRegionCadencePhase / uHostHz;
+        s_SnesRegionCadencePhase %= uHostHz;
+
+        if (uSourceHz > uHostHz)
+            *puExtraHidden = uEvents;
+        else
+            *pbHoldPrevious = TRUE;
+    }
+}
+
 Bool MainLoopProcess()
 {
     NetPlayRPCInputT NetInput;
@@ -208,8 +275,14 @@ Bool MainLoopProcess()
                and CLUT bookkeeping.  NesSystem renders directly into
                the surface (Phase 2 = diagnostic test pattern) and we
                upload to the EE texture from here. */
+            Bool bProducedFrame = TRUE;
+
             if (_pSystem == _pNes)
             {
+                /* NES is a 60 Hz source in the current integration. */
+                _AudMix->SetFrameRate(60);
+                _MainLoopResetSnesRegionCadence();
+
                 /* The shared VRAM block is 256 KiB either way:
                    NES = 256x256 RGBA32, SNES = 512x256 RGBA5551.
                    Re-describe it instead of reserving a second texture. */
@@ -236,8 +309,13 @@ Bool MainLoopProcess()
                     TextureSetAddr(&_OutTex, _MainLoop_uOutTexTBP);
                     TextureSetFilter(&_OutTex, g_GskTextureFilter);
                 }
+                Uint32 uSourceHz =
+                    (_pSnesRom && _pSnesRom->m_eVideoType == SNROM_VIDEO_PAL)
+                    ? 50u : 60u;
+                Uint32 uHostHz = (Uint32)GSK_GetRefreshHz();
+                _AudMix->SetFrameRate(uSourceHz);
 #if SNDBG_LOG
-				g_DbgHostRefreshHz = (Uint32)GSK_GetRefreshHz();
+				g_DbgHostRefreshHz = uHostHz;
 #endif
 				/* Recover after missed host VBlanks by running the missing SNES
 				   frames without video before drawing the newest one.  Unlike merely
@@ -249,23 +327,53 @@ Bool MainLoopProcess()
 					 !s_pMovieClip->IsRecording()) ? TRUE : FALSE;
 				Uint32 uCatchupFrames =
 					MainLoopSafeFrameskipTake(bFrameskipAllowed);
-				for (Uint32 uCatchup = 0; uCatchup < uCatchupFrames; ++uCatchup)
-				{
+                Uint32 uRegionExtra = 0;
+                Bool bRegionHold = FALSE;
+
+                if (uCatchupFrames == 0)
+                {
+                    _MainLoopGetSnesRegionCadence(
+                        bFrameskipAllowed, uSourceHz, uHostHz,
+                        &uRegionExtra, &bRegionHold);
+                }
+                else
+                {
+                    _MainLoopResetSnesRegionCadence();
+                }
+
+                if (!bRegionHold)
+                {
+                    Uint32 uHiddenFrames = uCatchupFrames + uRegionExtra;
+                    for (Uint32 uCatchup = 0; uCatchup < uHiddenFrames; ++uCatchup)
+                    {
 #if SNDBG_LOG
-					g_DbgVideoSkippedFrames++;
-					SnesDbgRequestCapture(SNDBG_CAPTURE_FRAMESKIP);
+                        g_DbgVideoSkippedFrames++;
+                        if (uCatchup < uCatchupFrames)
+                            SnesDbgRequestCapture(SNDBG_CAPTURE_FRAMESKIP);
 #endif
-					_ExecuteSnes(NULL, pMixBuffer, &Input, eMode);
-				}
+                        _ExecuteSnes(NULL, pMixBuffer, &Input, eMode);
+                    }
 #if SNDBG_LOG
-				g_DbgVideoRenderedFrames++;
+                    g_DbgVideoRenderedFrames++;
 #endif
-				_ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
+                    _ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
+                }
+                else
+                {
+                    /* PAL source on a 60 Hz host: keep emulated time at 50 Hz
+                       by presenting the already-uploaded texture once more. */
+                    bProducedFrame = FALSE;
+                }
             }
-		    _iframetex^=1;
+            if (bProducedFrame)
+                _iframetex^=1;
         }
 
         Aud_BufferedAsyncStart();
+    }
+    else
+    {
+        _MainLoopResetSnesRegionCadence();
     }
 
     _MainLoopCheckSRAM();
