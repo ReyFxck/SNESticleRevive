@@ -57,9 +57,9 @@ CASE_HEX = re.compile(r"\bcase\s+0x([0-9A-Fa-f]{4})\s*:")
 HEX_ADDR = re.compile(r"\b0x((?:21|42|43)[0-9A-Fa-f]{2})\b")
 
 CPU_OP = re.compile(
-    r"\bSNCPU_OP(?:_[A-Z0-9]+)?\(\s*(?:0x)?([0-9A-Fa-f]{2})\s*\)"
+    r"\bSNCPU_OP(?:_[A-Z0-9]+)?\(\s*(?:0x)?([0-9A-Fa-f]{2,3})\s*\)"
 )
-SPC_OP = re.compile(r"\bSNSPC_OP\(\s*(?:0x)?([0-9A-Fa-f]{2})\s*,")
+SPC_OP = re.compile(r"\bSNSPC_OP\(\s*(?:0x)?([0-9A-Fa-f]{2,3})\s*,")
 ASM_TABLE = re.compile(r"\bSNCPU_OPTABLE_OP\(\s*0x([0-9A-Fa-f]{3})\s*\)")
 
 FEATURE_DIRS = {
@@ -100,8 +100,23 @@ def register_set(root: Path, files: list[str]) -> set[int]:
     return out
 
 
-def opcode_set(regex: re.Pattern[str], source: str) -> set[int]:
-    return {int(match.group(1), 16) for match in regex.finditer(source)}
+def opcode_set(
+    regex: re.Pattern[str], source: str, mask: int | None = None
+) -> set[int]:
+    values = {int(match.group(1), 16) for match in regex.finditer(source)}
+    if mask is not None:
+        values = {value & mask for value in values}
+    return values
+
+
+def case_block(source: str, address: int) -> str:
+    match = re.search(
+        r"case\s+0x%04X\s*:(.*?)(?=\n\s*case\s+0x|\n\s*default\s*:|\Z)"
+        % address,
+        source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(1) if match else ""
 
 
 def fmt_addr(value: int) -> str:
@@ -131,7 +146,11 @@ def strict_checks(root: Path) -> list[str]:
     cpu_interp = read_text(root, "src/snes/cpu/sncpu_c.c")
     cpu_ops = read_text(root, "src/snes/cpu/op65816.h")
     cpu_asm = read_text(root, "src/snes/cpu/sn65816.S")
-    spc = read_text(root, "src/snes/apu/snspc_c.c")
+    spc = (
+        read_text(root, "src/snes/apu/snspc_c.c")
+        + "\n"
+        + read_text(root, "src/snes/apu/opspc700_c.h")
+    )
 
     # Concrete MMIO/open-bus fixes.
     require_text(failures, cpu_h, "SNCPUGetOpenBus", "S-CPU open-bus latch")
@@ -148,20 +167,20 @@ def strict_checks(root: Path) -> list[str]:
 
     forbid_regex(
         failures,
-        snes,
-        r"case\s+0x4213\s*:.*?return\s+0\s*;",
+        case_block(snes, 0x4213),
+        r"return\s+0\s*;",
         "$4213 returning zero",
     )
     forbid_regex(
         failures,
-        snes,
-        r"case\s+0x420B\s*:.*?return\s+.*?GetMDMAEnable",
+        case_block(snes, 0x420B),
+        r"return\s+.*?GetMDMAEnable",
         "$420B write-only readback",
     )
     forbid_regex(
         failures,
-        snes,
-        r"case\s+0x420C\s*:.*?return\s+.*?GetHDMAEnable",
+        case_block(snes, 0x420C),
+        r"return\s+.*?GetHDMAEnable",
         "$420C write-only readback",
     )
     forbid_regex(
@@ -172,8 +191,8 @@ def strict_checks(root: Path) -> list[str]:
     )
 
     # Every legal opcode byte must have an explicit C/SPC handler.
-    c_coverage = opcode_set(CPU_OP, cpu_interp + "\n" + cpu_ops)
-    spc_coverage = opcode_set(SPC_OP, spc)
+    c_coverage = opcode_set(CPU_OP, cpu_interp + "\n" + cpu_ops, 0xFF)
+    spc_coverage = opcode_set(SPC_OP, spc, 0xFF)
     asm_table = opcode_set(ASM_TABLE, cpu_ops)
 
     missing_c = sorted(set(range(0x100)) - c_coverage)
