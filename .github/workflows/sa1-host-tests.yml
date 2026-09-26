@@ -6,6 +6,7 @@ on:
       - main
       - experimental/sa1-mips
       - perf/sa1-r5900
+      - audit/mesence-full-core-gap
   workflow_dispatch:
 
 jobs:
@@ -13,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Run strict MesenCE gap audit
+        run: python3 tools/mesence_audit.py --strict
       - name: Build shared CPU tests
         run: ./tools/cputest/build.sh
       - name: Run shared CPU tests
@@ -33,6 +36,8 @@ jobs:
           ./tools/pputest/mode7_test
           ./tools/pputest/queue_test
           ./tools/pputest/spcio_test
+          ./tools/pputest/alu_test
+          ./tools/pputest/spc700_test
           ./tools/pputest/safe_frameskip_test
           ./tools/pputest/diag_test
       - name: Build ROM loader tests
