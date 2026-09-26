@@ -535,18 +535,17 @@ static __inline Uint8 __SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
 	if (pBankMem)
-	{
-		return pBankMem[Addr];
-	}
+		uData = pBankMem[Addr];
 	else
-	{
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
-	}
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
+	SNCPUSetOpenBus(pCpu, uData);
+	return uData;
 }
 
 static Uint8 _SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
@@ -609,19 +608,17 @@ static __inline Uint8 __SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
 	if (pBankMem)
-	{
-		return pBankMem[Addr];
-	}
+		uData = pBankMem[Addr];
 	else
-	{
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
-
-	}
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
+	SNCPUSetOpenBus(pCpu, uData);
+	return uData;
 }
 
 static Uint8 _SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
@@ -663,6 +660,7 @@ static __inline void  __SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 	Uint8 *pBankMem;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
+	SNCPUSetOpenBus(pCpu, Data);
 
 	if (pCpu->Bank[iBank].bRAM)
 	{
