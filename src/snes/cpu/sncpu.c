@@ -506,6 +506,7 @@ Uint8 SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
@@ -517,16 +518,16 @@ Uint8 SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 	uLastAddr[0] = Addr;*/
 	if (pBankMem)
 	{
-
 //		char str[64];
-		return pBankMem[Addr];
+		uData = pBankMem[Addr];
 	}
 	else
 	{
 		//call trap function
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
-
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
 	}
+	SNCPUSetOpenBus(pCpu, uData);
+	return uData;
 }
 
 Uint16 SNCPURead16(SNCpuT *pCpu, Uint32 Addr)
@@ -587,6 +588,8 @@ void SNCPUReadMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 *pBuffer, Uint32 nTotalBytes
 		{
 			// copy data directly from bank memory
 			memcpy(pBuffer, pBankMem + uAddr, nBytes);
+			if (nBytes > 0)
+				SNCPUSetOpenBus(pCpu, pBuffer[nBytes - 1]);
 
 			pBuffer += nBytes;
 			nTotalBytes -= nBytes;
@@ -598,6 +601,7 @@ void SNCPUReadMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 *pBuffer, Uint32 nTotalBytes
 			{
 				// call trap function
 				*pBuffer = pCpu->Bank[iBank].pReadTrapFunc(pCpu, uAddr);
+				SNCPUSetOpenBus(pCpu, *pBuffer);
 
 				pBuffer++;
 				nBytes--;
@@ -615,12 +619,14 @@ void  SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 	Uint8 *pBankMem;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
+	/* Writes also drive the CPU data bus, including write-only MMIO. */
+	SNCPUSetOpenBus(pCpu, Data);
 
 //	uBankWrite[iBank]++;
 
 	if (pCpu->Bank[iBank].bRAM)
 	{
-	pBankMem = pCpu->Bank[iBank].pMem;
+		pBankMem = pCpu->Bank[iBank].pMem;
 		// write directly to memory
 		pBankMem[Addr] = Data;
 	}
