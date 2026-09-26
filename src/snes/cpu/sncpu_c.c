@@ -6,20 +6,9 @@
  *   Implements sncpu c behavior for SNES CPU emulation.
  */
 
-/*
-	Problems:
-
-		PC can does not wrap to 16-bits.
-		The Program Bank register is not affected by the Relative, Relative Long,
-		Absolute, Absolute Indirect, and Absolute Indexed Indirect addressing modes
-		or by incrementing the Program Counter from FFFF. The only instructions that
-		affect the Program Bank register are: RTI, RTL, JML, JSL, and JMP Absolute
-		Long. Program code may exceed 64K bytes altough code segments may not span
-		bank boundaries.
-
-		Extra cycle for (DP & FF)!=0
-
- */
+/* The portable core is the host-side correctness oracle for the PS2 R5900
+   interpreter. Bank-local PC wrapping and the non-zero direct-page penalty are
+   covered by the shared CPU regression suite. */
 
 #include <stdlib.h>
 #include <string.h>
