@@ -598,46 +598,77 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	switch (uAddr)
 	{
 
-	case 0x2137: // slhv
-		pPPURegs->ophct.Reg.w = (SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_LINE) + 14) >> 2;
-		pPPURegs->opvct.Reg.w = pSnes->m_uLine & 0x1FF;
-		//pPPURegs->opvct.Reg.w |= (pPPURegs->opvct.Reg.w << 8) & 0xFE00;
-		//pPPURegs->opvct.Reg.w = 0xE1;
-		return 0;
+	case 0x2137: // SLHV - software H/V latch, read itself is S-CPU open bus
+		if (pSnes->m_IO.m_Regs.wrio & 0x80)
+		{
+			pSnes->m_PPU.LatchHV(
+				(Uint16)((SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_LINE) + 14) >> 2),
+				(Uint16)(pSnes->m_uLine & 0x1FF));
+		}
+		return SNCPUGetOpenBus(pCpu);
 
-	case 0x2138: // read oam
+	case 0x2138: // read OAM -> PPU1 bus
 		#if SNPPU_WRITEQUEUE
 		pSnes->SyncPPU();
 		#endif
         return pSnes->m_PPU.ReadOAMDATA();
 
-	case 0x213c: // ophct
-		return pPPURegs->ophct.Read8();
+	case 0x213c: // OPHCT
+		{
+			Bool bHigh = pPPURegs->ophct.bFlip;
+			Uint8 uData = pPPURegs->ophct.Read8();
+			if (bHigh)
+				uData = (uData & 1) | (pSnes->m_PPU.GetPPU2OpenBus() & 0xFE);
+			pSnes->m_PPU.SetPPU2OpenBus(uData);
+			return uData;
+		}
 
-	case 0x213d: // opvct
-		return pPPURegs->opvct.Read8();
+	case 0x213d: // OPVCT
+		{
+			Bool bHigh = pPPURegs->opvct.bFlip;
+			Uint8 uData = pPPURegs->opvct.Read8();
+			if (bHigh)
+				uData = (uData & 1) | (pSnes->m_PPU.GetPPU2OpenBus() & 0xFE);
+			pSnes->m_PPU.SetPPU2OpenBus(uData);
+			return uData;
+		}
 
-	case 0x213e: // stat77
-		return pPPURegs->stat77;
+	case 0x213e: // STAT77 - range/time flags + PPU1 open bus bit 4 + revision
+		{
+			Uint8 uData = (pPPURegs->stat77 & 0xC1) |
+			              (pSnes->m_PPU.GetPPU1OpenBus() & 0x10);
+			pSnes->m_PPU.SetPPU1OpenBus(uData);
+			return uData;
+		}
 
-	case 0x213f: // stat78
-		pPPURegs->ophct.Reset();
-		pPPURegs->opvct.Reset();
-		return pPPURegs->stat78; // NTSC/PAL bit 4
-	case 0x2134: //mpyl
+	case 0x213f: // STAT78 - field/latch/open-bus/region/revision
+		{
+			Uint8 uData = (pPPURegs->stat78 & 0xD3) |
+			              (pSnes->m_PPU.GetPPU2OpenBus() & 0x20);
+			if (pSnes->m_IO.m_Regs.wrio & 0x80)
+				pPPURegs->stat78 &= (Uint8)~0x40;
+			pPPURegs->ophct.Reset();
+			pPPURegs->opvct.Reset();
+			pSnes->m_PPU.SetPPU2OpenBus(uData);
+			return uData;
+		}
+	case 0x2134: // MPYL
 		#if SNPPU_WRITEQUEUE
 		pSnes->SyncPPU();
 		#endif
+		pSnes->m_PPU.SetPPU1OpenBus(pPPURegs->mpyl);
 		return pPPURegs->mpyl;
-	case 0x2135: //mpym
+	case 0x2135: // MPYM
 		#if SNPPU_WRITEQUEUE
 		pSnes->SyncPPU();
 		#endif
+		pSnes->m_PPU.SetPPU1OpenBus(pPPURegs->mpym);
 		return pPPURegs->mpym;
-	case 0x2136: //mpyh
+	case 0x2136: // MPYH
 		#if SNPPU_WRITEQUEUE
 		pSnes->SyncPPU();
 		#endif
+		pSnes->m_PPU.SetPPU1OpenBus(pPPURegs->mpyh);
 		return pPPURegs->mpyh;
 	case 0x2139:
 		#if SNPPU_WRITEQUEUE
@@ -675,7 +706,15 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 		break;
 	}
 
-	return uAddr >> 8;
+	/* Write-only PPU1 aliases $21x4-6/$21x8-A expose the last PPU1 bus byte.
+	   Other unmapped/read-prohibited ports expose the S-CPU data bus. */
+	{
+		Uint16 uReg = (Uint16)(uAddr & 0x210F);
+		if ((uReg >= 0x2104 && uReg <= 0x2106) ||
+		    (uReg >= 0x2108 && uReg <= 0x210A))
+			return pSnes->m_PPU.GetPPU1OpenBus();
+	}
+	return SNCPUGetOpenBus(pCpu);
 }
 
 //#define SNES_SPCWRITE_LATENCY (21)
@@ -858,20 +897,12 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
         SNCPUConsumeCycles(&pSnes->m_Cpu, 2);       //access from 4000>41FF is 1.78mhz
         return pIO->ReadSerial1();
 
-    // 42XX
-    case 0x4202:	// wrmpya (multiplicand-a)
-		return 0; // ? pIO->m_Regs.wrmpya
-	case 0x4203:	// wrmpyb (multiplicand-b)
-		return 0; // ? pIO->m_Regs.wrmpyb = uData;
-
-    case 0x420B:	// mdmaen (DMA enable register)
-        return pSnes->m_DMAC.GetMDMAEnable();
-    case 0x420C:
-        return pSnes->m_DMAC.GetHDMAEnable();
+    // 42XX write-only ports fall through to S-CPU open bus on reads.
 
     case 0x4210:	// RDNMI
         {
-            Uint8 uData = pIO->m_Regs.rdnmi;
+            Uint8 uData = (pIO->m_Regs.rdnmi & 0x80) | 0x02 |
+                          (SNCPUGetOpenBus(pCpu) & 0x70);
 
             // clear RDNMI on read
             pIO->m_Regs.rdnmi &= ~0x80;
@@ -883,26 +914,25 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 
     case 0x4211:	// TIMEUP
         {
-            Uint8 uData = pIO->m_Regs.timeup;
+            Uint8 uData = (pIO->m_Regs.timeup & 0x80) |
+                          (SNCPUGetOpenBus(pCpu) & 0x7F);
             pIO->m_Regs.timeup &= ~0x80;
             pSnes->RefreshSCPUIRQ();
             return uData;
         }
     case 0x4212:	// HVBJOY
         {
-            /* Aero the Acro-Bat 2 polls VBlank around the frame wrap.
-               Line 0 is not part of VBlank even though the PPU does not draw
-               it.  Derive bit 7 from the live vertical counter so a stale
-               latched status (for example after restoring state) cannot keep
-               the game waiting forever. */
-            Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0x80;
+            /* Keep live VBlank plus the scheduled HBlank/auto-read bits; bits
+               1-5 are S-CPU open bus. */
+            Uint8 uData = (pIO->m_Regs.hvbjoy & 0x41) |
+                          (SNCPUGetOpenBus(pCpu) & 0x3E);
             if (SNES_LINE_IN_VBLANK(pSnes->m_uLine))
                 uData |= 0x80;
             return uData;
         }
 
-    case 0x4213:	// RDIO
-        return 0;
+    case 0x4213:	// RDIO - programmable I/O port input/latch
+        return pIO->m_Regs.wrio;
 
 	case 0x4214:	// RDDIVL
 		return pIO->m_Regs.rddiv.b.l;
@@ -943,7 +973,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
     if (Snes_bDebugUnhandledIO)
 	    SnesDebugRead(uAddr);
 	#endif
-	return uAddr >> 8;
+	return SNCPUGetOpenBus(pCpu);
 }
 
 #if SNES_DEBUG
@@ -1029,12 +1059,19 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
             break;
 		}
 
-        case 0x4201:	// wrio (programmable i/o port)
-            // confirmed:
-            // setting this to a value will cause the h/v latching to be controlled
-            // by external latching (v-count seemed to stick at E1)
+        case 0x4201:	// WRIO (programmable I/O port)
+        {
+			Uint8 uOld = pIO->m_Regs.wrio;
+			/* A 1->0 edge on bit 7 is the external H/V latch request. */
+			if ((uOld & 0x80) && !(uData & 0x80))
+			{
+				pSnes->m_PPU.LatchHV(
+					(Uint16)((SNCPUGetCounter(&pSnes->m_Cpu, SNCPU_COUNTER_LINE) + 14) >> 2),
+					(Uint16)(pSnes->m_uLine & 0x1FF));
+			}
             pIO->m_Regs.wrio = uData;
             break;
+		}
 
 		case 0x4202:	// wrmpya (multiplicand-a)
 			pIO->m_Regs.wrmpya = uData;
@@ -1142,7 +1179,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadMem(SNCpuT *pCpu, Uint32 uAddr)
     if (Snes_bDebugUnhandledIO)
 	SnesDebugRead(uAddr);
 	#endif
-	return 0;
+	return SNCPUGetOpenBus(pCpu);
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
