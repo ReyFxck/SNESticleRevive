@@ -6,7 +6,6 @@ on:
       - main
       - perf/sa1-r5900
       - feature/localization
-      - fix/hostfs-state-feedback
   workflow_dispatch:
 
 permissions:
