@@ -332,6 +332,34 @@ static void _GskApplyDisplay(void)
     if (_gsk_active_mode == GSK_VIDMODE_480I && _gsk_gameplay_view)
         magh = 4;
 
+    /* Native SNES/NES 240p aperture.
+       Keep the full 256x240 framebuffer untouched and narrow only the PCRTC
+       sample width during gameplay. With a 256-wide 240p framebuffer gsKit
+       normally resolves to 11 VCK/source-pixel; using 10 VCK/source-pixel
+       keeps every source column uniform while pulling the picture inside a
+       real CRT's visible aperture. The small X/Y bias follows the
+       hardware-tested presentation used by SNESticle Aurora.
+       Technique independently reimplemented for Revive; credit:
+       Vinicius Nunes (@itsveenee), SNESticle Aurora. */
+    if (_gsk_active_mode == GSK_VIDMODE_240P &&
+        _gsk_gameplay_view &&
+        g_GskOverscan == 0 &&
+        _gsk_base_magh > 0)
+    {
+        int old_magh1 = _gsk_base_magh + 1;
+        int new_magh1 = old_magh1 - 1;
+        int srcpix = _gsk_base_dw / old_magh1;
+        int new_dw = srcpix * new_magh1;
+
+        if (new_magh1 < 1)
+            new_magh1 = 1;
+
+        startx += (dw - new_dw) / 2 - (2 * new_magh1);
+        starty += 1;
+        dw = new_dw;
+        magh = new_magh1 - 1;
+    }
+
     /* Overscan: shrink the active area and recentre (adds a border to
        compensate TVs that crop the edges). */
     if (g_GskOverscan > 0)
@@ -386,9 +414,12 @@ void GSK_SetGameplayViewport(int on)
 
     _gsk_gameplay_view = new_state;
 
-    /* Only 480i has the split UI/game presentation. 240p and 1080i keep
-       their existing transforms and DISPLAY programming unchanged. */
-    if (_gsk_initialised && _gsk_active_mode == GSK_VIDMODE_480I)
+    /* 480i uses the integer 512-source gameplay window; 240p keeps its
+       256x240 framebuffer but narrows the PCRTC aperture during gameplay.
+       1080i keeps its existing presentation unchanged. */
+    if (_gsk_initialised &&
+        (_gsk_active_mode == GSK_VIDMODE_480I ||
+         _gsk_active_mode == GSK_VIDMODE_240P))
         _GskApplyDisplay();
 }
 
