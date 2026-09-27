@@ -19,6 +19,19 @@
 #include "sndebug.h"
 #include "sndbglog.h"
 
+#ifndef SNESTICLE_ROMLAB
+#define SNESTICLE_ROMLAB 0
+#endif
+
+#if SNESTICLE_ROMLAB
+extern "C" void SnesRomLabTraceUnhandledAccess(SNCpuT *pCpu,
+    Uint32 uAddr, Uint8 uValue, Uint8 uFlags);
+#define ROMLAB_UNHANDLED(_cpu, _addr, _value, _flags) \
+    SnesRomLabTraceUnhandledAccess((_cpu), (_addr), (_value), (_flags))
+#else
+#define ROMLAB_UNHANDLED(_cpu, _addr, _value, _flags) ((void)0)
+#endif
+
 // --- diagnostico de TIMING (ver sndbglog.h) ---
 #if SNDBG_LOG
 static Uint32 g_TmgFrameStart = 0;   // COP0 cycle no inicio do frame
@@ -528,6 +541,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 	SnesPPURegsT *pPPURegs = (SnesPPURegsT *)pSnes->m_PPU.GetRegs();
+	Uint32 uTraceAddr = uAddr & 0xFFFFFF;
 
 	uAddr &= 0xFFFF;
 
@@ -668,6 +682,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 		}
 
 	default:
+		ROMLAB_UNHANDLED(pCpu, uTraceAddr, (Uint8)(uAddr >> 8), 2);
 		#if SNES_DEBUG
         if (Snes_bDebugUnhandledIO)
             SnesDebugRead(uAddr);
@@ -693,6 +708,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000Debug(SNCpuT *pCpu, Uint32 uAddr, Uint8
 void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	Uint32 uTraceAddr = uAddr & 0xFFFFFF;
 
 	uAddr &= 0xFFFF;
 
@@ -805,6 +821,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 				break;
 
 			default:
+				ROMLAB_UNHANDLED(pCpu, uTraceAddr, uData, 3);
 				#if SNES_DEBUG
                 if (Snes_bDebugUnhandledIO)
                     SnesDebugWrite(uAddr, uData);
@@ -832,6 +849,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
 	SnesIO *pIO = &pSnes->m_IO;
+	Uint32 uTraceAddr = uAddr & 0xFFFFFF;
 
 	uAddr &= 0xFFFF;
 
@@ -939,6 +957,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 	default:
 		break;
 	}
+	ROMLAB_UNHANDLED(pCpu, uTraceAddr, (Uint8)(uAddr >> 8), 2);
 	#if SNES_DEBUG
     if (Snes_bDebugUnhandledIO)
 	    SnesDebugRead(uAddr);
@@ -961,6 +980,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000Debug(SNCpuT *pCpu, Uint32 uAddr, Uint8
 void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	Uint32 uTraceAddr = uAddr & 0xFFFFFF;
 
 	uAddr &= 0xFFFF;
 
@@ -1125,6 +1145,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 			break; // mario ??
 
 		default:
+			ROMLAB_UNHANDLED(pCpu, uTraceAddr, uData, 3);
 			#if SNES_DEBUG
             if (Snes_bDebugUnhandledIO)
 			    SnesDebugWrite(uAddr, uData);
@@ -1138,6 +1159,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 Uint8 SNCPU_TRAPFUNC SnesSystem::ReadMem(SNCpuT *pCpu, Uint32 uAddr)
 {
 //	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	ROMLAB_UNHANDLED(pCpu, uAddr & 0xFFFFFF, 0, 0);
 	#if SNES_DEBUG
     if (Snes_bDebugUnhandledIO)
 	SnesDebugRead(uAddr);
@@ -1148,6 +1170,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadMem(SNCpuT *pCpu, Uint32 uAddr)
 void SNCPU_TRAPFUNC SnesSystem::WriteMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
 {
 //	SnesSystem *pSnes = (SnesSystem *)pCpu->pUserData;
+	ROMLAB_UNHANDLED(pCpu, uAddr & 0xFFFFFF, uData, 1);
 	#if SNES_DEBUG
     if (Snes_bDebugUnhandledIO)
         SnesDebugWrite(uAddr, uData);

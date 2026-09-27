@@ -9,8 +9,10 @@
 #include <string.h>
 #include "types.h"
 #include "rendersurface.h"
+#if CODE_PLATFORM == CODE_PS2
 #include "ps2mem.h"
 #include "ps2dma.h"
+#endif
 
 // render surface
 
@@ -97,8 +99,12 @@ void CRenderSurface::RenderLine32(Int32 iLine, Uint32 *pLine, Int32 nPixels)
                 break;
 
             case 32:
+#if CODE_PLATFORM == CODE_PS2
                 DmaSyncSprToRam();
                 DmaExecSprToRam((Uint128 *)pOut, (Uint128 *)pLine, nPixels >> 2);
+#else
+                memcpy(pOut, pLine, (size_t)nPixels * sizeof(*pLine));
+#endif
                 break;
         }
     }

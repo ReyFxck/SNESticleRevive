@@ -26,6 +26,15 @@
 #define SNSPC_STATEDEBUG (SNES_DEBUG && 1)
 #define SNSPC_PROFILE FALSE
 
+#ifndef SNESTICLE_ROMLAB
+#define SNESTICLE_ROMLAB 0
+#endif
+
+#if SNESTICLE_ROMLAB
+extern void SnesRomLabTraceSpcOpcode(Uint32 uPC, Uint8 uOpcode);
+extern void SnesRomLabUnimplementedSpcOpcode(Uint32 uPC, Uint8 uOpcode);
+#endif
+
 //#define SNSPC_SUBCYCLES(_nCycles)			pCpu->Cycles-= ((_nCycles)*SNSPC_CYCLE) >> pCpu->uCycleShift;
 #define SNSPC_SUBCYCLES(_nCycles)			nCycles-= ((_nCycles)*SNSPC_CYCLE);
 
@@ -397,7 +406,15 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 //		}
 //#endif
 
+		#if SNESTICLE_ROMLAB
+		{
+			Uint32 uOpcodePC = rPC;
+			SNSPC_FETCH8(uOpcode);
+			SnesRomLabTraceSpcOpcode(uOpcodePC, (Uint8)uOpcode);
+		}
+		#else
 		SNSPC_FETCH8(uOpcode);
+		#endif
 
 		switch (uOpcode)
 		{
@@ -744,6 +761,10 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 	SNSPC_OP(0xF1, 8);	SNSPC_TCALL(15);      SNSPC_ENDOP(8);
 
 		default:	// unimplemented opcode
+			#if SNESTICLE_ROMLAB
+			SnesRomLabUnimplementedSpcOpcode((rPC - 1) & 0xFFFF,
+				(Uint8)uOpcode);
+			#endif
 			SNSPC_SUBCYCLES(1);
 		}
 	}

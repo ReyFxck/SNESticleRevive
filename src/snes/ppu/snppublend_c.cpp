@@ -152,6 +152,41 @@ static void _ColorSub(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels
 	}
 }
 
+static void _ColorIntensity(Uint32 *pDest, Uint32 nPixels,
+	PixelFormatT *pFormat, Uint32 uIntensity)
+{
+	Uint32 uRedMask;
+	Uint32 uGreenMask;
+	Uint32 uBlueMask;
+	Uint32 uColorMask;
+
+	if (uIntensity >= 15)
+		return;
+
+	uRedMask = 0xFFu << pFormat->uRedShift;
+	uGreenMask = 0xFFu << pFormat->uGreenShift;
+	uBlueMask = 0xFFu << pFormat->uBlueShift;
+	uColorMask = uRedMask | uGreenMask | uBlueMask;
+
+	while (nPixels > 0)
+	{
+		Uint32 uColor = pDest[0];
+		Uint32 uR = ((uColor & uRedMask) >> pFormat->uRedShift) *
+			uIntensity / 15;
+		Uint32 uG = ((uColor & uGreenMask) >> pFormat->uGreenShift) *
+			uIntensity / 15;
+		Uint32 uB = ((uColor & uBlueMask) >> pFormat->uBlueShift) *
+			uIntensity / 15;
+
+		pDest[0] = (uColor & ~uColorMask) |
+			(uR << pFormat->uRedShift) |
+			(uG << pFormat->uGreenShift) |
+			(uB << pFormat->uBlueShift);
+		pDest++;
+		nPixels--;
+	}
+}
+
 static void _ClearLine32(Uint32 *pPixels, Int32 nPixels, Uint32 uColor, Uint32 uBGMask)
 {
 	while (nPixels > 0)
@@ -228,7 +263,11 @@ void SNPPUBlendC::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor16
 	// if add/sub is being performed on the pixel and 1/2mode is enabled, then 1/2 color result
 	// the 1/2 is done even if the main or sub screen color window is masking it ?!
 	uSaveColor = pPalMain->Color32[0];
-	pPalMain->Color32[0] = _ConvertColor16to32(uFixedColor16, m_pTarget->GetFormat(), uIntensity, 3);
+	/* Master brightness is applied after main/sub colour math. Keep the
+	   transient fixed colour at full intensity so it is scaled exactly once
+	   together with the final composed scanline below. */
+	pPalMain->Color32[0] = _ConvertColor16to32(uFixedColor16,
+		m_pTarget->GetFormat(), 15, 3);
 	PROF_ENTER("Color8to32");
 	_Color8to32(pInfo->uSub32, pInfo->uSub8, pInfo->Pal[0].Color32, 256, &pColorMask[1], &pColorMask[2]);
 	PROF_LEAVE("Color8to32");
@@ -251,6 +290,11 @@ void SNPPUBlendC::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor16
 		_ColorAdd(pInfo->uLine32, pInfo->uMain32, pInfo->uSub32, 256);
 	}
 	PROF_LEAVE("ColorAdd");
+
+	/* INIDISP brightness may change without a CGRAM update (fades commonly do
+	   this once per scanline). Scaling the completed line mirrors the GS path
+	   and avoids stale palette brightness in host captures. */
+	_ColorIntensity(pInfo->uLine32, 256, m_pTarget->GetFormat(), uIntensity);
 
 	// submit line to surface
 	PROF_ENTER("SubmitLine");

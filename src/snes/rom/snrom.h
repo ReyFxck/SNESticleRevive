@@ -115,7 +115,7 @@ public:
 	Uint32			m_Flags;
 	SNRomMappingE	m_eMapping;		// mapping (lo,hi rom)
 	SNRomVideoE		m_eVideoType;
-	Uint32			m_uROMSize;		// size of ROM (in kilobits)
+	Uint32			m_uROMSize;		// nominal size from header (in megabits)
 	Uint32			m_uSRAMSize;	// size of SRAM (in kilobits)
 
 public:
