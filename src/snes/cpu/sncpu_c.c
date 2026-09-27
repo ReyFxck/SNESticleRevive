@@ -31,6 +31,17 @@
 #define SNCPU_TRACE (CODE_DEBUG && FALSE)
 #define SNCPU_TRACE_NUM 256
 
+#ifndef SNESTICLE_ROMLAB
+#define SNESTICLE_ROMLAB 0
+#endif
+
+#if SNESTICLE_ROMLAB
+extern void SnesRomLabTraceCpuOpcode(SNCpuT *pCpu, Uint32 uPC,
+	Uint8 uOpcode);
+extern void SnesRomLabUnimplementedCpuOpcode(SNCpuT *pCpu, Uint32 uPC,
+	Uint8 uOpcode);
+#endif
+
 /* Only the correctness-first SA-1 C interpreter opts into these timing
    quirks. Keep this pointer outside SNCpuT: sn65816.S relies on the exact
    structure offsets used by the main S-CPU on PS2. */
@@ -913,7 +924,15 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 		}*/
 #endif
 
+		#if SNESTICLE_ROMLAB
+		{
+			Uint32 uOpcodePC = rPC;
+			SNCPU_FETCH8(uOpcode);
+			SnesRomLabTraceCpuOpcode(pCpu, uOpcodePC, (Uint8)uOpcode);
+		}
+		#else
 		SNCPU_FETCH8(uOpcode);
+		#endif
 		uOpcode|= uOpcodeMod;
 		uOpcode&= 0x7FF;
 
@@ -1153,6 +1172,10 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 		SNCPU_FETCH8(uDestBank);
 		break;
 		default:	// unimplemented opcode
+			#if SNESTICLE_ROMLAB
+			SnesRomLabUnimplementedCpuOpcode(pCpu,
+				(rPC - 1) & 0xFFFFFF, (Uint8)(uOpcode & 0xFF));
+			#endif
 			SNCPU_SUBCYCLES(1);
 		}
 	}

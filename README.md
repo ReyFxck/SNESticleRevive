@@ -981,6 +981,9 @@ src/common/    shared helpers (render, base, io, debug)
 tools/         host‑side test harnesses (chip + OBJ verification)
 ```
 
+For whole-core ROM/save-state reproduction and frame-by-frame regression
+traces, see [`tools/romlab`](tools/romlab/README.md).
+
 </details>
 
 ---

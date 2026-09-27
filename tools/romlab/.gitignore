@@ -1,0 +1,8 @@
+/.build/
+/.build-sanitize/
+/romlab
+/romlab-sanitize
+/romlab_test
+/*.jsonl
+/*.state
+/*.sfc

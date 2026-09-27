@@ -817,7 +817,7 @@ SNGSU_ALWAYS_INLINE void SNGSU::Step()
             WriteRegister(n, (Uint16)(Int16)(Int8)imm);
         }
     }
-    else if (op >= 0xF0 && op <= 0xFF)       // IWT Rn,#imm16 / LM / SM
+    else if (op >= 0xF0)                     // IWT Rn,#imm16 / LM / SM
     {
         if (m_bAlt1) {                        // LM Rn,(hilo)
             Uint8 lo = Pipe(), hi = Pipe();

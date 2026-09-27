@@ -126,4 +126,20 @@ ROOT=../..
     -I "$ROOT/src/snes/core" \
     diag_test.cpp -o diag_test
 
-echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test"
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/common/render" \
+    -I "$ROOT/src/common/debug" \
+    -I "$ROOT/src/snes/ppu" \
+    -I "$ROOT/src/snes/core" \
+    brightness_test.cpp \
+    "$ROOT/src/common/base/pixelformat.cpp" \
+    "$ROOT/src/common/render/surface.cpp" \
+    "$ROOT/src/common/render/rendersurface.cpp" \
+    "$ROOT/src/snes/ppu/snppublend_c.cpp" \
+    "$ROOT/src/snes/ppu/snppucolor.cpp" \
+    -o brightness_test
+
+echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test && ./brightness_test"

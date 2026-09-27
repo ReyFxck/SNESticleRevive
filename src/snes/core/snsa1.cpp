@@ -11,6 +11,19 @@
 #include "sntiming.h"
 #include "sndbglog.h"
 
+#ifndef SNESTICLE_ROMLAB
+#define SNESTICLE_ROMLAB 0
+#endif
+
+#if SNESTICLE_ROMLAB
+extern "C" void SnesRomLabTraceUnhandledAccess(SNCpuT *pCpu,
+    Uint32 uAddr, Uint8 uValue, Uint8 uFlags);
+#define ROMLAB_SA1_UNHANDLED(_cpu, _addr, _value, _flags) \
+    SnesRomLabTraceUnhandledAccess((_cpu), (_addr), (_value), (_flags))
+#else
+#define ROMLAB_SA1_UNHANDLED(_cpu, _addr, _value, _flags) ((void)0)
+#endif
+
 extern "C" {
 #include "sncpu_c.h"
 #if defined(__mips__)
@@ -303,6 +316,7 @@ Uint8 SNSA1::ReadSA1Register(Uint16 uAddr)
 	// CFR/counters/math/VBR are visible to the SA-1 CPU itself.
 	if (uAddr >= 0x2301 && uAddr <= 0x230D)
 		return ReadRegister(uAddr);
+	ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, 0xFF, 2);
 	return 0xFF;
 }
 
@@ -514,6 +528,8 @@ void SNSA1::WriteSA1Register(Uint16 uAddr, Uint8 uData)
 
 	if (bAllowed)
 		WriteRegister(uAddr, uData);
+	else
+		ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, uData, 3);
 }
 
 Uint8 SNSA1::ReadIRAM(Uint16 uAddr) const
@@ -1315,6 +1331,7 @@ Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
 			return ReadSA1Register(uLow);
 		if (uLow >= 0x6000 && uLow <= 0x7FFF)
 			return ReadSA1BWRAMWindow(uLow);
+		ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, 0xFF, 0);
 		return 0xFF;
 	}
 
@@ -1323,6 +1340,7 @@ Uint8 SNSA1::ReadCpuBus(Uint32 uAddr)
 	if (uBank >= 0x60 && uBank <= 0x6F)
 		return ReadBitmap(uAddr & 0x0FFFFF);
 
+	ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, 0xFF, 0);
 	return 0xFF;
 }
 
@@ -1356,6 +1374,7 @@ void SNSA1::WriteCpuBus(Uint32 uAddr, Uint8 uData)
 			WriteSA1BWRAMWindow(uLow, uData);
 			return;
 		}
+		ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, uData, 1);
 		return;
 	}
 
@@ -1363,6 +1382,8 @@ void SNSA1::WriteCpuBus(Uint32 uAddr, Uint8 uData)
 		WriteBWRAMDirectSA1(uAddr, uData);
 	else if (uBank >= 0x60 && uBank <= 0x6F)
 		WriteBitmap(uAddr & 0x0FFFFF, uData);
+	else
+		ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, uData, 1);
 }
 
 Uint8 SNCPU_TRAPFUNC SNSA1::CpuReadTrap(SNCpuT *pCpu, Uint32 uAddr)

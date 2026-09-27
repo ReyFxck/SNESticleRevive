@@ -7,3 +7,7 @@ audioschedule_test
 queue_test
 safe_frameskip_test
 diag_test
+spcio_test
+spc700_test
+regioncadence_test
+brightness_test

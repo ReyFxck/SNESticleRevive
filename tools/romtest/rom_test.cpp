@@ -179,6 +179,22 @@ static void TestSramExponent(void)
 		"SRAM code 8 deve representar 256 KiB");
 }
 
+static void TestSmallRomSizeExponent(void)
+{
+	std::vector<Uint8> rom(0x8000, 0xFF);
+	PutHeader(rom, 0x7FC0, "SMALL HOMEBREW", 0x20, 0x2468,
+		0x8000, 0x0000);
+	((SNRomInfoT *)&rom[0x7FC0])->RomSize = 5;
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"32 KiB homebrew ROM must load");
+	CHECK(snesRom.m_uROMSize == 0,
+		"small ROM exponent must not perform a negative shift");
+}
+
 static void TestSA1HeaderDetection(void)
 {
 	for (int battery = 0; battery < 2; battery++)
@@ -299,6 +315,7 @@ int main(void)
 	TestCleanExLoRom();
 	TestCleanExHiRom();
 	TestSramExponent();
+	TestSmallRomSizeExponent();
 	TestSA1HeaderDetection();
 	TestVideoRegionHeaderCodes();
 	TestPinocchioFalseType1Regression();

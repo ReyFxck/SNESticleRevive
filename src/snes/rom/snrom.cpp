@@ -532,7 +532,14 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 		pLicense = _SNRomGetLicense(pCartInfo->License);
 
 		m_eVideoType = pCountry ? pCountry->eVideoType : SNROM_VIDEO_NTSC;
-		m_uROMSize	  = 1 << (pCartInfo->RomSize - 7);
+		/* RomSize is an exponent and the historical display value is in
+		   megabits.  Malformed/homebrew headers smaller than code 7 used to
+		   shift by a negative amount here, which is undefined in C/C++ and
+		   can behave differently between the host runner and R5900. */
+		if (pCartInfo->RomSize >= 7 && pCartInfo->RomSize <= 38)
+			m_uROMSize = (Uint32)1u << (pCartInfo->RomSize - 7);
+		else
+			m_uROMSize = 0;
 		/* Header SRAMSize is an exponent. m_uSRAMSize is stored in
 		   kilobits, so code N maps to 8 << N kbit.  The core already owns
 		   a 256 KiB backing store, therefore codes 1..8 are representable. */
