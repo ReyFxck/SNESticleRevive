@@ -34,6 +34,7 @@ Int32 GSListGetSpace();
 void GSDmaCntOpen();
 void GSDmaCntClose();
 void GSDmaRef(Uint128 *pRefAddr, Uint32 nQwords);
+void GSDmaNext(Uint128 *pTag);
 void GSDmaEnd();
 void GSDmaCall(Uint128 *pTag);
 void GSDmaRet();

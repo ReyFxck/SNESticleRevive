@@ -183,6 +183,21 @@ void GSDmaRef(Uint128 *pRefAddr, Uint32 nQwords)
     pTag->pad[1] = 0;
 }
 
+void GSDmaNext(Uint128 *pNext)
+{
+    GSListT *pList = &_GSList_List;
+    DmaTagT *pTag;
+
+    GSAssert(!pList->pDmaCnt);
+
+    pTag = (DmaTagT *)pList->pPtr++;
+    pTag->addr   = (Uint32)pNext;
+    pTag->qwc    = 0;
+    pTag->id     = DMA_TAG_NEXT;
+    pTag->pad[0] = 0;
+    pTag->pad[1] = 0;
+}
+
 void GSDmaEnd()
 {
     GSListT *pList = &_GSList_List;

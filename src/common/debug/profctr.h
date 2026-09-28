@@ -25,8 +25,20 @@ static inline Uint32 ProfCtrGetCycle()
     Uint32 uCycle;
 	__asm__ volatile ("mfc0  %0, $9" : "=r" (uCycle) : );
     return uCycle;
+#elif defined(__i386__) || defined(__x86_64__)
+	/* Diagnostic ROM Lab builds need section ratios as well as state hashes.
+	   RDTSC is cheap enough to sample the scanline hot path; only deltas are
+	   consumed, so the low-word wrap has the same semantics as EE Count. */
+	Uint32 uLow, uHigh;
+	__asm__ volatile ("rdtsc" : "=a" (uLow), "=d" (uHigh));
+	(void)uHigh;
+	return uLow;
+#elif defined(__aarch64__)
+	Uint64 uCycle;
+	__asm__ volatile ("mrs %0, cntvct_el0" : "=r" (uCycle));
+	return (Uint32)uCycle;
 #else
-	/* Host tools validate state and cache behavior, not EE cycle timing. */
+	/* Unsupported host: correctness tools still work without timing data. */
 	return 0;
 #endif
 }

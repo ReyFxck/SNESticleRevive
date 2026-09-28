@@ -36,6 +36,10 @@ struct SNPPUBlendColorCalibT
 	Float32	q_mul,q_add;
 };
 
+#define SNPPU_SPARSE_PALETTE_MAX_GROUPS 8u
+#define SNPPU_SPARSE_PALETTE_LIST_QWORDS \
+	(2u + 8u * SNPPU_SPARSE_PALETTE_MAX_GROUPS)
+
 class SNPPUBlendGS : public ISNPPUBlend
 {
     SNPPUDmaListT m_DmaList _ALIGN(16);
@@ -46,6 +50,8 @@ class SNPPUBlendGS : public ISNPPUBlend
     Bool m_bDmaListHasIntensity;
 	Bool m_bDmaListDirectMain;
 	Uint128 m_HiresDmaList[32] _ALIGN(16);
+	Uint128 m_SparsePaletteDmaList[
+		SNPPU_SPARSE_PALETTE_LIST_QWORDS] _ALIGN(64);
 	Uint64 *m_pHiresTrxPos;
 	Bool m_bHiresDmaListReady;
 	Uint32 m_uPaletteDirty[8];
@@ -54,6 +60,9 @@ class SNPPUBlendGS : public ISNPPUBlend
 	void MarkPaletteEntryDirty(Uint32 uAddr);
 	void MarkPaletteAllDirty();
 	Uint32 CopyDirtyPalette(PaletteT *pDest, const PaletteT *pSource);
+	Uint64 GetDirtyPaletteGroups() const;
+	Uint128 *BuildSparsePaletteList(PaletteT *pPalette,
+		Uint64 uDirtyGroups, SNPPUDmaListT *pRenderList);
 
 public:
     SNPPUBlendGS(Uint32 uVramAddr, Uint32 uOutAddr);

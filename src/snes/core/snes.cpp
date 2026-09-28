@@ -18,6 +18,7 @@
 #include "sntiming.h"
 #include "sndebug.h"
 #include "sndbglog.h"
+#include "snppubglinecache.h"
 
 #ifndef SNESTICLE_ROMLAB
 #define SNESTICLE_ROMLAB 0
@@ -2434,10 +2435,12 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
 			// diretamente qual rotina esta consumindo o tempo da EE.
-			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=%u bg-chr-cache=%u obj-cache=%u",
+			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=%u bg-line-ways=%u bg-chr-cache=%u obj-cache=%u",
 				SNDBG_SCHEMA, (unsigned)(SNDBG_DEEP ? 2 : 1),
 				(unsigned)g_DbgSessionId, (unsigned)g_TmgWinFrames,
-				(unsigned)SNPPU_BG_CACHE, (unsigned)SNPPU_BG_CHR_CACHE,
+				(unsigned)SNPPU_BG_CACHE,
+				(unsigned)SNPPU_BG_LINE_CACHE_WAYS,
+				(unsigned)SNPPU_BG_CHR_CACHE,
 				(unsigned)SNPPU_OBJ_CACHE);
 			DLog("[snes-frame] f=%u rom-video=%s host-target=%u budget=%u cycles min/avg/max=%u/%u/%u slow=%u threshold=%u%% capacity=%u.%u fps",
 				(unsigned)g_TmgFrameNo, bPAL ? "pal" : "ntsc",

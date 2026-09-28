@@ -10,6 +10,7 @@ DIAGNOSTICS=${ROMLAB_DIAGNOSTICS:-0}
 BG_CACHE=${ROMLAB_BG_CACHE:-1}
 BG_CHR_CACHE=${ROMLAB_BG_CHR_CACHE:-1}
 OBJ_CACHE=${ROMLAB_OBJ_CACHE:-1}
+BG_CACHE_WAYS=${ROMLAB_BG_CACHE_WAYS:-2}
 BUILD_TAG=${ROMLAB_BUILD_TAG:-}
 
 if [[ "$BG_CACHE" != 0 && "$BG_CACHE" != 1 ]]; then
@@ -26,6 +27,10 @@ if [[ "$BG_CHR_CACHE" != 0 && "$BG_CHR_CACHE" != 1 ]]; then
 fi
 if [[ "$OBJ_CACHE" != 0 && "$OBJ_CACHE" != 1 ]]; then
     echo "ROMLAB_OBJ_CACHE must be 0 or 1" >&2
+    exit 2
+fi
+if [[ "$BG_CACHE_WAYS" != 1 && "$BG_CACHE_WAYS" != 2 ]]; then
+    echo "ROMLAB_BG_CACHE_WAYS must be 1 or 2" >&2
     exit 2
 fi
 if [[ -n "$BUILD_TAG" && ! "$BUILD_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -53,6 +58,7 @@ DEFS=(
     -DSNPPU_OBJ_CACHE="$OBJ_CACHE"
     -DSNPPU_BG_CHR_CACHE="$BG_CHR_CACHE"
     -DSNPPU_BG_CACHE="$BG_CACHE"
+    -DSNPPU_BG_LINE_CACHE_WAYS="$BG_CACHE_WAYS"
 )
 
 INCLUDES=(

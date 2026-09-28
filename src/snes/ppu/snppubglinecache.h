@@ -16,6 +16,10 @@
 #define SNPPU_BG_LINE_PIXELS      (33u * 8u)
 #define SNPPU_BG_LINE_MASK_BYTES  40u
 
+#ifndef SNPPU_BG_LINE_CACHE_WAYS
+#define SNPPU_BG_LINE_CACHE_WAYS 2u
+#endif
+
 struct SnesPPUBGLineCacheKeyT
 {
 	Uint32 uGeneration;

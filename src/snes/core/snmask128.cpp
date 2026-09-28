@@ -31,8 +31,9 @@ void SNMaskLeft(union SNMaskT *pMask, Int32 iPos)
         nWords--;
     }
 
-    // write partial mask
-    uMask    = 0xFFFFFFFF >> (32 - iPos);
+	// A multiple of 32 still needs one complete final word. Shifting a
+	// 32-bit value by 32 is undefined and produced sanitizer failures.
+	uMask = iPos ? (0xFFFFFFFFu >> (32 - iPos)) : 0xFFFFFFFFu;
 	pDest[0] = uMask;
 }
 
@@ -57,8 +58,12 @@ void SNMaskRight(union SNMaskT *pMask, Int32 iPos)
         nWords--;
     }
 
-    // write partial mask
-    uMask    = 0xFFFFFFFF << (iPos);
+	/* At an exact word boundary the initial SNMaskSet already left the next
+	   word correct. For 256 this return also avoids writing a ninth word. */
+	if (iPos == 0) return;
+
+	// write partial mask
+	uMask = 0xFFFFFFFFu << iPos;
 	pDest[0] = uMask;
 }
 

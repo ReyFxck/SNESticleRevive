@@ -32,6 +32,24 @@ static void CheckMask(const char *pName, Int32 nBits,
 	}
 }
 
+static void CheckEdgeMask(const char *pName, Int32 iPos,
+	const SNMaskT &Got, bool bLeft)
+{
+	for (Uint32 i = 0; i < 256; i++)
+	{
+		bool bExpected = bLeft ? ((Int32)i < iPos) : ((Int32)i >= iPos);
+		bool bGot = (Got.uMask8[i >> 3] & (1u << (i & 7))) != 0;
+		if (bGot != bExpected)
+		{
+			std::printf("FAIL %s(%d) pixel %u: %u != %u\n",
+				pName, (int)iPos, (unsigned)i, (unsigned)bGot,
+				(unsigned)bExpected);
+			g_Failures++;
+			return;
+		}
+	}
+}
+
 int main()
 {
 	struct RawRowT
@@ -81,6 +99,16 @@ int main()
 		}
 		SNMaskSHR(&Got, Row.uData, nBits);
 		CheckMask("SHR", nBits, Got, Expected);
+	}
+
+	static const Int32 EdgePositions[] =
+		{ 0, 1, 31, 32, 33, 63, 64, 127, 128, 255, 256 };
+	for (Uint32 i = 0; i < sizeof(EdgePositions) / sizeof(EdgePositions[0]); i++)
+	{
+		SNMaskLeft(&Got, EdgePositions[i]);
+		CheckEdgeMask("Left", EdgePositions[i], Got, true);
+		SNMaskRight(&Got, EdgePositions[i]);
+		CheckEdgeMask("Right", EdgePositions[i], Got, false);
 	}
 
 	std::puts(g_Failures ? "FAIL" : "PASS");

@@ -67,6 +67,9 @@ struct SNPPUGSDiagT
 	Uint32 KickCycles;
 	Uint32 CopyBytes;
 	Uint32 PaletteUploads;
+	Uint32 PaletteFullUploads;
+	Uint32 PaletteSparseUploads;
+	Uint32 PaletteTransferBytes;
 	Uint32 IntensityLines;
 	Uint32 DirectMainLines;
 	Uint32 StageMismatch;
@@ -266,6 +269,27 @@ Uint32 SNPPUBlendGS::CopyDirtyPalette(PaletteT *pDest,
 	return uCopiedBytes;
 }
 
+Uint64 SNPPUBlendGS::GetDirtyPaletteGroups() const
+{
+	Uint64 uGroups = 0;
+	Uint32 iWord;
+
+	/* GIF image payloads are qword-sized. Group four adjacent PSMCT32
+	   entries so every sparse source and destination is 16-byte aligned. */
+	for (iWord = 0; iWord < 8; iWord++)
+	{
+		Uint32 uBits = m_uPaletteDirty[iWord];
+		while (uBits)
+		{
+			Uint32 uBit = (Uint32)__builtin_ctz(uBits);
+			Uint32 uAddr = iWord * 32u + uBit;
+			uGroups |= (Uint64)1u << (uAddr >> 2);
+			uBits &= uBits - 1u;
+		}
+	}
+	return uGroups;
+}
+
 #if SNPPUBLEND_PAL32
 
 void SNPPUBlendGS::UpdatePaletteEntry(SNPPUBlendInfoT *pInfo, Uint32 uAddr, Uint32 uData, Uint32 uIntensity)
@@ -408,6 +432,58 @@ static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs,
 {
 	_GPFifoUploadTextureTracked(TBP, TBW, xofs, yofs, pxlfmt, tex,
 		wpxls, hpxls, NULL);
+}
+
+Uint128 *SNPPUBlendGS::BuildSparsePaletteList(PaletteT *pPalette,
+	Uint64 uDirtyGroups, SNPPUDmaListT *pRenderList)
+{
+	/* Write through the uncached alias: this list is rebuilt after every GIF
+	   sync and must be visible to DMAC immediately without flushing the EE's
+	   complete 8 KiB data cache. */
+	Uint128 *pBuild = (Uint128 *)PS2MEM_UNCACHED(m_SparsePaletteDmaList);
+	Uint32 iRow;
+
+	GSListBegin(pBuild, SNPPU_SPARSE_PALETTE_LIST_QWORDS, NULL);
+	GSDmaCntOpen();
+
+	for (iRow = 0; iRow < 16u; iRow++)
+	{
+		Uint32 uRowGroups = (Uint32)((uDirtyGroups >> (iRow * 4u)) & 0x0Fu);
+		while (uRowGroups)
+		{
+			Uint32 iFirst = (Uint32)__builtin_ctz(uRowGroups);
+			Uint32 nGroups = 1;
+			Uint32 uRunMask = 1u << iFirst;
+
+			/* Merge adjacent qwords on the same 16-entry CLUT row. The staged
+			   neighbors already contain the last uploaded values, so sending a
+			   complete run is exact even when only one entry in it changed. */
+			while (iFirst + nGroups < 4u &&
+			       (uRowGroups & (1u << (iFirst + nGroups))))
+			{
+				uRunMask |= 1u << (iFirst + nGroups);
+				nGroups++;
+			}
+
+			Uint32 uPaletteAddr = iRow * 16u + iFirst * 4u;
+			_GPFifoUploadTexture(
+				pRenderList->uPalAddr * 0x100,
+				1, (int)(iFirst * 4u), (int)iRow,
+				GS_PSMCT32,
+				(void *)(((Uint32)&pPalette->Color32[uPaletteAddr]) |
+					0x80000000),
+				(int)(nGroups * 4u), 1);
+			uRowGroups &= ~uRunMask;
+		}
+	}
+
+	GSDmaCntClose();
+	/* Continue directly into the immutable render chain. Its END tag also
+	   terminates this wrapper, so sparse CLUT updates cost no second kick. */
+	GSDmaNext(pRenderList->Data);
+	GSListEnd();
+	__asm__ __volatile__ ("sync.l");
+	return m_SparsePaletteDmaList;
 }
 
 static void _SNPPURenderTexLineWH(Int32 iDestLine, Int32 iSrcLine,
@@ -604,13 +680,16 @@ void SNPPUBlendGS::End()
 	{
 		Uint32 uLines = _SNPPUGSDiag.Lines ? _SNPPUGSDiag.Lines : 1;
 		Uint32 uSync = _SNPPUGSDiag.SyncCalls ? _SNPPUGSDiag.SyncCalls : 1;
-		DLog("[snes-gs] frames/lines=%u/%u avgcyc sync/copy/kick=%u/%u/%u avg-copy-bytes=%u pal-uploads=%u intensity-lines=%u direct-main-lines=%u",
+		DLog("[snes-gs] frames/lines=%u/%u avgcyc sync/copy/kick=%u/%u/%u avg-copy-bytes=%u pal-uploads/full/sparse=%u/%u/%u pal-gif-bytes=%u intensity-lines=%u direct-main-lines=%u",
 			(unsigned)_SNPPUGSDiag.Frames, (unsigned)_SNPPUGSDiag.Lines,
 			(unsigned)(_SNPPUGSDiag.SyncCycles / uSync),
 			(unsigned)(_SNPPUGSDiag.CopyCycles / uLines),
 			(unsigned)(_SNPPUGSDiag.KickCycles / uLines),
 			(unsigned)(_SNPPUGSDiag.CopyBytes / uLines),
 			(unsigned)_SNPPUGSDiag.PaletteUploads,
+			(unsigned)_SNPPUGSDiag.PaletteFullUploads,
+			(unsigned)_SNPPUGSDiag.PaletteSparseUploads,
+			(unsigned)_SNPPUGSDiag.PaletteTransferBytes,
 			(unsigned)_SNPPUGSDiag.IntensityLines,
 			(unsigned)_SNPPUGSDiag.DirectMainLines);
 		#if SNDBG_DEEP
@@ -919,10 +998,14 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 	SNPPUBlendInfoT *pDmaInfo =
 		(SNPPUBlendInfoT *)SNPPU_DMA_BLENDINFO_ADDR;
 	SNPPUDmaListT *pExecList;
+	Uint128 *pExecChain;
 	Bool bUploadPalette;
+	Bool bSparsePalette;
 	Bool bApplyIntensity = uIntensity < 15;
 	Bool bDirectMain = pColorMask == NULL && !bApplyIntensity;
 	Uint32 uPaletteCopyBytes;
+	Uint64 uDirtyPaletteGroups;
+	Uint32 nDirtyPaletteGroups;
 
 	if (!m_pTarget)
 	{
@@ -975,11 +1058,25 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 		m_bDmaListDirectMain = bDirectMain;
     }
 
-	/* The previous GIF chain is done with the staging area now.  Main, sub
-	   and attributes change every line; the 1 KiB CLUT is copied and sent
-	   only when CGRAM changed (and once after Begin because scratchpad is
-	   shared between frames). */
+	/* The previous GIF chain is done with the staging area now. Main, sub and
+	   attributes change every line. Snapshot the dirty CLUT groups before the
+	   CPU copy clears them: up to eight qword groups use an exact partial GS
+	   upload, while larger changes retain the single 1 KiB burst. */
 	bUploadPalette = m_bPaletteDirty;
+	if (bUploadPalette)
+	{
+		uDirtyPaletteGroups = GetDirtyPaletteGroups();
+		nDirtyPaletteGroups =
+			(Uint32)__builtin_popcountll(uDirtyPaletteGroups);
+		bSparsePalette = nDirtyPaletteGroups > 0 &&
+			nDirtyPaletteGroups <= SNPPU_SPARSE_PALETTE_MAX_GROUPS;
+	}
+	else
+	{
+		uDirtyPaletteGroups = 0;
+		nDirtyPaletteGroups = 0;
+		bSparsePalette = FALSE;
+	}
 #if SNDBG_LOG
 	{
 		Uint32 uStart = ProfCtrGetCycle();
@@ -1016,6 +1113,17 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 		{
 			_SNPPUGSDiag.CopyBytes += uPaletteCopyBytes;
 			_SNPPUGSDiag.PaletteUploads++;
+			if (bSparsePalette)
+			{
+				_SNPPUGSDiag.PaletteSparseUploads++;
+				_SNPPUGSDiag.PaletteTransferBytes +=
+					nDirtyPaletteGroups * 16u;
+			}
+			else
+			{
+				_SNPPUGSDiag.PaletteFullUploads++;
+				_SNPPUGSDiag.PaletteTransferBytes += sizeof(PaletteT);
+			}
 		}
 		#if SNDBG_DEEP
 		uSourceHash = _SNPPUGSSample(pInfo, NULL);
@@ -1039,13 +1147,19 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 		memcpy(pDmaInfo->uAttrib8, pInfo->uAttrib8, sizeof(pDmaInfo->uAttrib8));
 	}
 #endif
-	pExecList = bUploadPalette ? &m_DmaListWithPalette : &m_DmaList;
+	pExecList = (bUploadPalette && !bSparsePalette) ?
+		&m_DmaListWithPalette : &m_DmaList;
 
     PROF_ENTER("SNPPUBlendExec");
 
     // set parameters of dma-list
     _SNPPUBlendSetParm(pExecList, iLine, uFixedColor32, bAddSub,
 		uIntensity, bDirectMain);
+	if (bSparsePalette)
+		pExecChain = BuildSparsePaletteList(pDmaInfo->Pal,
+			uDirtyPaletteGroups, pExecList);
+	else
+		pExecChain = pExecList->Data;
 
     PROF_LEAVE("SNPPUBlendExec");
 
@@ -1053,7 +1167,7 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 #if SNDBG_LOG
 	{
 		Uint32 uStart = ProfCtrGetCycle();
-		DmaExecGIFChain(pExecList->Data);
+		DmaExecGIFChain(pExecChain);
 		_SNPPUGSDiag.KickCycles += ProfCtrGetCycle() - uStart;
 		_SNPPUGSDiag.Lines++;
 		if (bApplyIntensity)
@@ -1062,7 +1176,7 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 			_SNPPUGSDiag.DirectMainLines++;
 	}
 #else
-    DmaExecGIFChain(pExecList->Data);
+    DmaExecGIFChain(pExecChain);
 #endif
 
 }

@@ -49,6 +49,10 @@ static SnesPPUChrCacheT _SnesPPU_ChrCache _ALIGN(64);
 #endif
 
 #if SNPPU_BG_CACHE
+typedef char SnesPPUBGLineWaysCheck[
+	(SNPPU_BG_LINE_CACHE_WAYS == 1u ||
+	 SNPPU_BG_LINE_CACHE_WAYS == 2u) ? 1 : -1];
+
 struct SnesPPUBGLineCacheEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
@@ -66,11 +70,34 @@ struct SnesPPUBGLineCacheEntryT
 typedef char SnesPPUBGLineEntrySizeCheck[
 	(sizeof(SnesPPUBGLineCacheEntryT) == 12 * 64) ? 1 : -1];
 
+/* A second normal-resolution way does not need the Mode 5 main/sub pair.
+   Keeping only the one decoded plane cuts the extra way from 768 KiB to
+   416 KiB while still covering split-screen Mode 1 games such as Top Gear. */
+struct SnesPPUBGLineCacheNormalEntryT
+{
+	SnesPPUBGLineCacheKeyT Key;
+	Uint32 uReady;
+	Uint8 uKeyPad[36];
+	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
+	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
+	Uint8 uMainPriority[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
+	Uint8 uEntryPad[8];
+};
+
+typedef char SnesPPUBGLineNormalEntrySizeCheck[
+	(sizeof(SnesPPUBGLineCacheNormalEntryT) == 416) ? 1 : -1];
+
 /* Four BGs by wrapped world scanline. Every renderer input in Key must match
    and any VRAM write advances Generation. A direct-map collision can only
    become a miss, never stale pixels. */
 static SnesPPUBGLineCacheEntryT
 	_SnesPPU_BGLineCache[4][SNPPU_BG_LINE_CACHE_LINES] _ALIGN(64);
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+static SnesPPUBGLineCacheNormalEntryT
+	_SnesPPU_BGLineCacheNormal[4][SNPPU_BG_LINE_CACHE_LINES] _ALIGN(64);
+static Uint8
+	_SnesPPU_BGLineCacheVictim[4][SNPPU_BG_LINE_CACHE_LINES] _ALIGN(64);
+#endif
 static Uint32 _SnesPPU_BGLineGeneration = 1;
 
 static _INLINE Bool _SnesPPURestoreBGLine(
@@ -127,6 +154,36 @@ static _INLINE void _SnesPPUStoreBGLine(
 
 	pEntry->uReady = TRUE;
 }
+
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+static _INLINE void _SnesPPURestoreBGLineNormal(
+	SnesPPUBGLineCacheNormalEntryT *pEntry,
+	SnesRender8pInfoT *pRenderInfo, Uint32 iBG, Uint32 uFineX)
+{
+	memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
+		SNPPU_BG_LINE_PIXELS);
+	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+		pEntry->uMainOpaque, uFineX);
+	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+		pEntry->uMainPriority, uFineX);
+}
+
+static _INLINE void _SnesPPUStoreBGLineNormal(
+	SnesPPUBGLineCacheNormalEntryT *pEntry,
+	SnesRender8pInfoT *pRenderInfo, Uint32 iBG,
+	const Uint8 *pMainOpaque, const Uint8 *pMainPriority)
+{
+	memcpy(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG],
+		SNPPU_BG_LINE_PIXELS);
+	memcpy(pEntry->uMainOpaque, pMainOpaque, 33u);
+	memset(pEntry->uMainOpaque + 33u, 0,
+		SNPPU_BG_LINE_MASK_BYTES - 33u);
+	memcpy(pEntry->uMainPriority, pMainPriority, 33u);
+	memset(pEntry->uMainPriority + 33u, 0,
+		SNPPU_BG_LINE_MASK_BYTES - 33u);
+	pEntry->uReady = TRUE;
+}
+#endif
 #endif
 
 void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords)
@@ -153,6 +210,10 @@ void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords)
 	if (_SnesPPU_BGLineGeneration == 0)
 	{
 		memset(_SnesPPU_BGLineCache, 0, sizeof(_SnesPPU_BGLineCache));
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+		memset(_SnesPPU_BGLineCacheNormal, 0,
+			sizeof(_SnesPPU_BGLineCacheNormal));
+#endif
 		_SnesPPU_BGLineGeneration = 1;
 	}
 #endif
@@ -2126,6 +2187,9 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				Uint8 SubMask[2][SNPPU_BGPLANE_SIZE] _ALIGN(8);
 #if SNPPU_BG_CACHE && SNPPURENDER_CHR64
 				SnesPPUBGLineCacheEntryT *pLineCache = NULL;
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+				SnesPPUBGLineCacheNormalEntryT *pNormalLineCache = NULL;
+#endif
 				/* Keep every raster input exact. Mode 2/4/6, offset-per-tile and
 				   mosaic stay on the established decoder because reusing their
 				   rows can leave stale text, sprites or priority masks. */
@@ -2134,32 +2198,80 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				    BGInfo[iBG].uMosaic == 0 &&
 				    iLine >= 0)
 				{
-					Bool bSameState;
 					Uint32 uLineCacheIndex = SnesPPUBGLineCacheIndex(
 						pRenderInfo->uBGVramAddr[iBG],
 						BGInfo[iBG].uChrSize);
-
-					pLineCache =
+					SnesPPUBGLineCacheEntryT *pPrimary =
 						&_SnesPPU_BGLineCache[iBG][uLineCacheIndex];
-					bSameState = SnesPPUBGLineCacheKeyMatches(
-						&pLineCache->Key, _SnesPPU_BGLineGeneration,
+
+					if (pPrimary->uReady &&
+					    SnesPPUBGLineCacheKeyMatches(&pPrimary->Key,
+						_SnesPPU_BGLineGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iBG,
-						uBGMode, &BGInfo[iBG]);
-					if (pLineCache->uReady && bSameState)
+						uBGMode, &BGInfo[iBG]))
 					{
-						_SnesPPURestoreBGLine(pLineCache, pRenderInfo,
-							iBG, bHiresPair,
-							BGInfo[iBG].uScrollX & 7u);
+						_SnesPPURestoreBGLine(pPrimary, pRenderInfo,
+							iBG, bHiresPair, BGInfo[iBG].uScrollX & 7u);
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 1;
+#endif
 #if SNDBG_LOG
 						g_DbgBGLineCacheHits++;
 #endif
 						continue;
 					}
-					pLineCache->uReady = FALSE;
-					SnesPPUBGLineCacheSetKey(&pLineCache->Key,
+
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+					/* The compact second way is valid only for normal-resolution
+					   lines. Split-screen games often alternate two horizontal tile
+					   windows at the same wrapped Y coordinate. */
+					SnesPPUBGLineCacheNormalEntryT *pSecondary =
+						&_SnesPPU_BGLineCacheNormal[iBG][uLineCacheIndex];
+					if (!bHiresPair && pSecondary->uReady &&
+					    SnesPPUBGLineCacheKeyMatches(&pSecondary->Key,
+						_SnesPPU_BGLineGeneration,
+						pRenderInfo->uBGVramAddr[iBG], iBG,
+						uBGMode, &BGInfo[iBG]))
+					{
+						_SnesPPURestoreBGLineNormal(pSecondary, pRenderInfo,
+							iBG, BGInfo[iBG].uScrollX & 7u);
+						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 0;
+#if SNDBG_LOG
+						g_DbgBGLineCacheHits++;
+#endif
+						continue;
+					}
+#endif
+
+					/* Empty entries win. Once both ways are populated, replace the
+					   least recently used one. Native hires always uses the complete
+					   primary entry because it must retain both physical phases. */
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+					if (!bHiresPair && pPrimary->uReady &&
+					    (!pSecondary->uReady ||
+					     _SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] == 1))
+					{
+						pNormalLineCache = pSecondary;
+						pNormalLineCache->uReady = FALSE;
+						SnesPPUBGLineCacheSetKey(&pNormalLineCache->Key,
+							_SnesPPU_BGLineGeneration,
+							pRenderInfo->uBGVramAddr[iBG], iBG,
+							uBGMode, &BGInfo[iBG]);
+						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 0;
+					}
+					else
+#endif
+					{
+						pLineCache = pPrimary;
+						pLineCache->uReady = FALSE;
+						SnesPPUBGLineCacheSetKey(&pLineCache->Key,
 						_SnesPPU_BGLineGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iBG,
 						uBGMode, &BGInfo[iBG]);
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 1;
+#endif
+					}
 #if SNDBG_LOG
 					g_DbgBGLineCacheMisses++;
 #endif
@@ -2251,6 +2363,13 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						bHiresPair ? SubMask[0] : NULL,
 						bHiresPair ? SubMask[1] : NULL);
 				}
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+				else if (pNormalLineCache)
+				{
+					_SnesPPUStoreBGLineNormal(pNormalLineCache, pRenderInfo,
+						iBG, TempMask[0], TempMask[1]);
+				}
+#endif
 #endif
 			}
 		}

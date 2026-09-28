@@ -60,6 +60,7 @@ throughput ceiling instead of making the logger itself steal frame time:
 | `[snes-bg-chr-cache]` | Physical BG CHR hit, miss, bypass and invalidation totals. |
 | `[snes-bg-line-cache]` | Exact Mode 1/5 decoded-line hits, misses and conservative bypasses. |
 | `[snes-hires-line-cache]` | Final Mode 5 512-dot line reuse; a hit requires identical VRAM/OAM/CGRAM generation and visual register state. |
+| `[snes-gs]` | PS2 GIF wait/copy/kick cost plus full versus sparse CLUT uploads and actual palette payload bytes. |
 | `[snes-obj]` / `[snes-obj-cache]` | OAM work, hardware range/time limits, OBJ pixels in deep mode and physical 4-bpp cache efficiency. |
 | `[snes-chr-cache]` | Actual physical cache footprint and its 2-bpp/shared 4-bpp split. |
 | `[snes-sync]` / `[snes-dma]` / `[snes-hdma]` | PPU queue pressure and transfer destinations, modes, size and wrapping. |
@@ -114,6 +115,14 @@ occupies 448,512 bytes: 299,008 bytes of BG-only 2-bpp rows plus 149,504 bytes
 of 4-bpp rows shared by BG and OBJ. The rolling report prints the actual build
 configuration, footprint and hit/miss/bypass totals so a speed result cannot
 be attributed to the wrong cache layer.
+
+`SNPPU_BG_LINE_CACHE_WAYS=2` keeps a compact second normal-resolution way for
+split-screen/raster-scroll collisions; Mode 5 main/sub pairs remain in the
+complete primary entry. ROM Lab exposes `ROMLAB_BG_CACHE_WAYS=1|2` for exact
+A/B traces. On PS2, one to eight dirty 16-byte CLUT groups are prepended to the
+existing render DMA chain; larger palette changes retain the full 1 KiB burst.
+The first line of every frame still refreshes the full CLUT because audio and
+video share scratchpad staging.
 
 This framework makes failures comparable across the catalog; it does not by
 itself claim that every ROM is already correct. Fixes found with it still
