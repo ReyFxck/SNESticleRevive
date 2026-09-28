@@ -467,6 +467,12 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Inspect PS2 input mapping
+        run: |
+          echo '--- INPUT_SOURCE_BEGIN ---'
+          sed -n '1,1000p' work/port/platform/Ps2Input.cpp
+          echo '--- INPUT_SOURCE_END ---'
+
       - name: Build NES PS2 ELF
         run: |
           set -euo pipefail
