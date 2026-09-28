@@ -1,0 +1,70 @@
+name: MesenCE NES PS2 CI
+
+on:
+  push:
+    branches:
+      - ci/mesen-ps2-fixed-20260928
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout CI branch
+        uses: actions/checkout@v4
+
+      - name: Cache PS2DEV
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/ps2dev
+            ~/.cache/ps2dev
+          key: ps2dev-${{ runner.os }}-${{ runner.arch }}-mesen-ps2-v1
+
+      - name: Install PS2DEV
+        run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
+
+      - name: Rebuild and verify PS2 overlay
+        run: |
+          set -euo pipefail
+          cat ci/mesen/overlay.part* | base64 -d > /tmp/mesen-overlay.tar.xz
+          echo "d47b8fc6554da1a892a9d4450aa5f588e09b6631f5b7824c51851f17687c5977  /tmp/mesen-overlay.tar.xz" | sha256sum -c -
+          mkdir -p work/overlay work/base work/port
+          tar -xJf /tmp/mesen-overlay.tar.xz -C work/overlay
+
+      - name: Fetch exact MesenCE 2.2.1 base
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3             https://github.com/nesdev-org/MesenCE/archive/20ba206cef5ba207c21203176d02cb9f43dda9fb.tar.gz             | tar -xz --strip-components=1 -C work/base
+          git -C work/base init -q
+
+      - name: Apply PS2 port
+        run: |
+          set -euo pipefail
+          cd work/overlay
+          chmod +x setup.sh
+          ./setup.sh "$GITHUB_WORKSPACE/work/base" "$GITHUB_WORKSPACE/work/port"
+
+      - name: Build PS2 ELF
+        run: |
+          set -euo pipefail
+          export PS2DEV="$HOME/.local/ps2dev"
+          export PS2SDK="$PS2DEV/ps2sdk"
+          export PATH="$PS2DEV/ee/bin:$PS2DEV/bin:$PS2SDK/bin:$PATH"
+          make -C work/port -j2
+          test -s work/port/mesence-ps2.elf
+          file work/port/mesence-ps2.elf
+          ls -lh work/port/mesence-ps2.elf work/port/audsrv.irx || true
+
+      - name: Upload PS2 build
+        uses: actions/upload-artifact@v4
+        with:
+          name: MesenCE-NES-PS2-${{ github.sha }}
+          path: |
+            work/port/mesence-ps2.elf
+            work/port/audsrv.irx
+          if-no-files-found: error
