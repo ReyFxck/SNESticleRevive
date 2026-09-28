@@ -83,6 +83,13 @@ jobs:
           assert old in s
           p.write_text(s.replace(old, "", 1))
 
+          p = Path("work/port/src/Utilities/CRC32.cpp")
+          s = p.read_text()
+          old = "#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__aarch64__)"
+          new = "#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__aarch64__) || defined(PS2_PORT)"
+          assert old in s
+          p.write_text(s.replace(old, new, 1))
+
           p = Path("work/port/src/Core/Shared/BaseControlDevice.cpp")
           s = p.read_text()
 
