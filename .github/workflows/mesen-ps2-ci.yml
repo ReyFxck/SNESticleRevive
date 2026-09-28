@@ -446,6 +446,17 @@ jobs:
           EE_LIBS += -lstdc++ -lsupc++ -latomic
           EOF
 
+      - name: Inspect PS2 emulation loop
+        run: |
+          echo '--- PERF_SOURCE_BEGIN ---'
+          echo '=== EmulatorPs2.cpp ==='
+          sed -n '1,1200p' work/port/src/Core/Shared/EmulatorPs2.cpp
+          echo '=== Ps2Video.cpp ==='
+          sed -n '1,1200p' work/port/platform/Ps2Video.cpp
+          echo '=== Timer.cpp ==='
+          sed -n '1,800p' work/port/src/Utilities/Timer.cpp
+          echo '--- PERF_SOURCE_END ---'
+
       - name: Build NES PS2 ELF
         run: |
           set -euo pipefail
