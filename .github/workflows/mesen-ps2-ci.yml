@@ -235,8 +235,6 @@ jobs:
       - name: Fix ROM launch and ZIP loading
         run: |
           set -euo pipefail
-          cp work/base/Utilities/miniz.cpp work/port/src/Utilities/miniz.cpp
-          cp work/base/Utilities/miniz.h work/port/src/Utilities/miniz.h
           python3 - <<'PY'
           from pathlib import Path
 
