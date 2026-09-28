@@ -467,11 +467,197 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Inspect PS2 input mapping
+      - name: Fix low-FPS controller sampling
         run: |
-          echo '--- INPUT_SOURCE_BEGIN ---'
-          sed -n '1,1000p' work/port/platform/Ps2Input.cpp
-          echo '--- INPUT_SOURCE_END ---'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("work/port/platform/Ps2Input.cpp")
+          s = p.read_text()
+
+          s = s.replace(
+              "#include <loadfile.h>\n",
+              "#include <loadfile.h>\n#include <kernel.h>\n",
+              1,
+          )
+
+          ns = """namespace {
+          static bool IsNesPad(ControllerType type)
+          {
+          """
+          replacement = r'''namespace {
+          alignas(64) static unsigned char gPadThreadStack[4096];
+          static int gPadThreadId = -1;
+          static volatile int gPadThreadRun = 0;
+          static volatile int gSamplerPortOpen[2] = {0, 0};
+          static uint32_t gPadCurrent[2] = {0, 0};
+          static uint32_t gPadLatched[2] = {0, 0};
+
+          static void PadSamplerThread(void*)
+          {
+              while(__atomic_load_n(&gPadThreadRun, __ATOMIC_RELAXED)) {
+                  for(int port = 0; port < 2; port++) {
+                      if(!__atomic_load_n(&gSamplerPortOpen[port], __ATOMIC_RELAXED)) {
+                          continue;
+                      }
+
+                      const int state = padGetState(port, 0);
+                      if(state != PAD_STATE_STABLE && state != PAD_STATE_FINDCTP1) {
+                          continue;
+                      }
+
+                      padButtonStatus status = {};
+                      if(!padRead(port, 0, &status)) {
+                          continue;
+                      }
+
+                      const uint32_t pressed = (uint16_t)~status.btns;
+                      __atomic_store_n(&gPadCurrent[port], pressed, __ATOMIC_RELAXED);
+                      // Preserve short taps until the slow emulation loop consumes them.
+                      __atomic_fetch_or(&gPadLatched[port], pressed, __ATOMIC_RELAXED);
+                  }
+                  DelayThread(4000);
+              }
+              ExitThread();
+          }
+
+          static bool IsNesPad(ControllerType type)
+          {
+          '''
+          if ns not in s:
+              raise RuntimeError("Ps2Input namespace anchor not found")
+          s = s.replace(ns, replacement, 1)
+
+          old_ready = '''    _ready = true;
+              printf("[pad] P1 ready%s\\n", _portOpen[1] ? ", P2 ready" : "");
+              return true;'''
+          new_ready = '''    _ready = true;
+              __atomic_store_n(&gSamplerPortOpen[0], _portOpen[0] ? 1 : 0, __ATOMIC_RELAXED);
+              __atomic_store_n(&gSamplerPortOpen[1], _portOpen[1] ? 1 : 0, __ATOMIC_RELAXED);
+              __atomic_store_n(&gPadCurrent[0], 0u, __ATOMIC_RELAXED);
+              __atomic_store_n(&gPadCurrent[1], 0u, __ATOMIC_RELAXED);
+              __atomic_store_n(&gPadLatched[0], 0u, __ATOMIC_RELAXED);
+              __atomic_store_n(&gPadLatched[1], 0u, __ATOMIC_RELAXED);
+
+              ee_thread_t thread = {};
+              thread.func = (void*)PadSamplerThread;
+              thread.stack = gPadThreadStack;
+              thread.stack_size = sizeof(gPadThreadStack);
+              thread.gp_reg = &_gp;
+              thread.initial_priority = 48;
+              thread.attr = 0;
+              thread.option = 0;
+
+              __atomic_store_n(&gPadThreadRun, 1, __ATOMIC_RELAXED);
+              gPadThreadId = CreateThread(&thread);
+              if(gPadThreadId >= 0) {
+                  if(StartThread(gPadThreadId, nullptr) < 0) {
+                      DeleteThread(gPadThreadId);
+                      gPadThreadId = -1;
+                      __atomic_store_n(&gPadThreadRun, 0, __ATOMIC_RELAXED);
+                  }
+              } else {
+                  __atomic_store_n(&gPadThreadRun, 0, __ATOMIC_RELAXED);
+              }
+
+              printf("[pad] P1 ready%s, sampler=%s\\n",
+                     _portOpen[1] ? ", P2 ready" : "",
+                     gPadThreadId >= 0 ? "async" : "direct");
+              return true;'''
+          if old_ready not in s:
+              raise RuntimeError("Ps2Input ready block not found")
+          s = s.replace(old_ready, new_ready, 1)
+
+          old_shutdown = '''void Ps2Input::Shutdown()
+          {
+              if(_ready) {
+                  for(int port = 0; port < 2; port++) {
+                      if(_portOpen[port]) padPortClose(port, 0);
+                      _portOpen[port] = false;
+                  }
+                  padEnd();
+              }
+              _ready = false;
+          }'''
+          new_shutdown = '''void Ps2Input::Shutdown()
+          {
+              __atomic_store_n(&gPadThreadRun, 0, __ATOMIC_RELAXED);
+              if(gPadThreadId >= 0) {
+                  DelayThread(8000);
+                  ee_thread_status_t status = {};
+                  if(ReferThreadStatus(gPadThreadId, &status) >= 0) {
+                      if(status.status != THS_DORMANT) {
+                          TerminateThread(gPadThreadId);
+                      }
+                      DeleteThread(gPadThreadId);
+                  }
+                  gPadThreadId = -1;
+              }
+
+              if(_ready) {
+                  for(int port = 0; port < 2; port++) {
+                      __atomic_store_n(&gSamplerPortOpen[port], 0, __ATOMIC_RELAXED);
+                      if(_portOpen[port]) padPortClose(port, 0);
+                      _portOpen[port] = false;
+                  }
+                  padEnd();
+              }
+              _ready = false;
+          }'''
+          if old_shutdown not in s:
+              raise RuntimeError("Ps2Input shutdown block not found")
+          s = s.replace(old_shutdown, new_shutdown, 1)
+
+          old_poll = '''void Ps2Input::PollPort(int port)
+          {
+              _buttons[port] = 0;
+              if(!_ready || !_portOpen[port]) return;
+
+              const int state = padGetState(port, 0);
+              if(state != PAD_STATE_STABLE && state != PAD_STATE_FINDCTP1) return;
+
+              padButtonStatus status = {};
+              if(!padRead(port, 0, &status)) return;
+              _buttons[port] = (uint16_t)~status.btns;
+          }'''
+          new_poll = '''void Ps2Input::PollPort(int port)
+          {
+              _buttons[port] = 0;
+              if(!_ready || !_portOpen[port]) return;
+
+              if(gPadThreadId >= 0) {
+                  const uint32_t current = __atomic_load_n(&gPadCurrent[port], __ATOMIC_RELAXED);
+                  const uint32_t latched = __atomic_exchange_n(&gPadLatched[port], 0u, __ATOMIC_RELAXED);
+                  _buttons[port] = (uint16_t)(current | latched);
+                  return;
+              }
+
+              const int state = padGetState(port, 0);
+              if(state != PAD_STATE_STABLE && state != PAD_STATE_FINDCTP1) return;
+
+              padButtonStatus status = {};
+              if(!padRead(port, 0, &status)) return;
+              _buttons[port] = (uint16_t)~status.btns;
+          }'''
+          if old_poll not in s:
+              raise RuntimeError("Ps2Input PollPort block not found")
+          s = s.replace(old_poll, new_poll, 1)
+
+          old_exit = '''    const uint16_t p1 = _buttons[0];
+              _exitRequested = ((p1 & PAD_START) && (p1 & PAD_SELECT));'''
+          new_exit = '''    const uint16_t p1 = _buttons[0];
+              static uint16_t prevP1 = 0;
+              if((p1 & PAD_START) && !(prevP1 & PAD_START)) {
+                  printf("[pad] START captured\\n");
+              }
+              prevP1 = p1;
+              _exitRequested = ((p1 & PAD_START) && (p1 & PAD_SELECT));'''
+          if old_exit not in s:
+              raise RuntimeError("Ps2Input Poll block not found")
+          s = s.replace(old_exit, new_exit, 1)
+
+          p.write_text(s)
+          PY
 
       - name: Build NES PS2 ELF
         run: |
