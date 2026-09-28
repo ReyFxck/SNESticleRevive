@@ -477,7 +477,7 @@ jobs:
 
           s = s.replace(
               "#include <loadfile.h>\n",
-              "#include <loadfile.h>\n#include <kernel.h>\n",
+              "#include <loadfile.h>\n#include <kernel.h>\n#include <unistd.h>\n",
               1,
           )
 
@@ -516,7 +516,7 @@ jobs:
                       // Preserve short taps until the slow emulation loop consumes them.
                       __atomic_fetch_or(&gPadLatched[port], pressed, __ATOMIC_RELAXED);
                   }
-                  DelayThread(4000);
+                  usleep(4000);
               }
               ExitThread();
           }
@@ -583,7 +583,7 @@ jobs:
           {
               __atomic_store_n(&gPadThreadRun, 0, __ATOMIC_RELAXED);
               if(gPadThreadId >= 0) {
-                  DelayThread(8000);
+                  usleep(8000);
                   ee_thread_status_t status = {};
                   if(ReferThreadStatus(gPadThreadId, &status) >= 0) {
                       if(status.status != THS_DORMANT) {
