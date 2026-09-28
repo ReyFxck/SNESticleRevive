@@ -42,6 +42,7 @@ public:
 	virtual void UpdateVRAMRange(Uint32 uVramAddr, Uint32 nWords) {};
 	virtual void UpdateOAM() {SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);};
 	virtual void UpdateCGRAM(Uint32 uAddr, Uint16 uData) {};
+	virtual void InvalidateHiresPalette() {};
 };
 
 #endif

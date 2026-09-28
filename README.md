@@ -816,8 +816,9 @@ Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
 | `PROFILE=1` | Compile the on‑screen profiler in — press **R3** in‑game to capture one frame's per‑section timing. |
 | `SNES_DIAGNOSTICS=1` | Enable the universal rolling `snesdiag-v1` CPU/PPU/APU/DMA/chip report. |
 | `SNES_DIAGNOSTICS=2` | Enable sampled deep diagnostics (frame 1, every 120 frames, anomalies, or **R3** / **L2+R2**) without tracing every frame. See [SNES diagnostics](docs/SNES_DIAGNOSTICS.md). |
-| `SNES_OBJ_CACHE=0` | Disable the OBJ-only 4-bpp CHR cache for controlled A/B tests. |
-| `SNES_BG_CACHE=0` | Disable physical CHR, exact Mode 1/5 BG-line and stable Mode 5 output-line caches for controlled A/B tests. |
+| `SNES_OBJ_CACHE=0` | Disable the OBJ 4-bpp physical CHR cache for controlled A/B tests. |
+| `SNES_BG_CHR_CACHE=0` | Disable only the BG 2/4-bpp physical CHR cache while retaining decoded line caches. |
+| `SNES_BG_CACHE=0` | Disable the exact Mode 1/5 BG-line and stable Mode 5 output-line caches. |
 | `OUT=/path` | Copy the final ELF/ISO to this folder. |
 | `ROMS=/path` | ROM folder to embed when building an ISO. |
 | `COVER=y` / `cover=y` | Download matching Libretro boxart/title/snap/logo into the ISO; `n` is the offline default. |
@@ -937,11 +938,17 @@ Release notes are published directly on the [GitHub Releases](https://github.com
   and corrects the HDMA state machine/mode 5. The full-screen flicker reported
   after character selection still needs confirmation on the same NetherSX2
   setup before the issue is marked fixed.
+- **Trials of Mana / Seiken Densetsu 3** — the former post-intro APUIO wait was
+  traced to the missing ExHiROM SRAM compatibility mirror at
+  `$20-$3F:6000-$7FFF`. A deterministic host replay now reaches gameplay with
+  no unhandled access; sprite/presentation speed still needs a new PS2 build
+  retest.
 - Some large / special‑chip titles may still freeze or misbehave.
 - **SuperFX (GSU)** remains experimental in v1.0.7: r15 corrects cache-window
   rotation, executable RAM banks `$60-$7F`, byte MMIO and the hot loop, but
   Star Fox/Yoshi and other boards still need game-by-game PS2 validation.
-- **Missing chip**: SA‑1 is not implemented.
+- **SA‑1** is implemented, serialized and covered by the host SA‑1 regression
+  suite. Its EE performance path still needs representative real-PS2 testing.
 
 **NES (InfoNES)**
 - Save states currently cover `.nes` cartridges; FDS state serialization is

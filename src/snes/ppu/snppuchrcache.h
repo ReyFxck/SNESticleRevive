@@ -12,6 +12,14 @@
 #include <string.h>
 #include "types.h"
 
+#ifndef SNPPU_OBJ_CACHE
+#define SNPPU_OBJ_CACHE 1
+#endif
+
+#ifndef SNPPU_BG_CHR_CACHE
+#define SNPPU_BG_CHR_CACHE 1
+#endif
+
 /*
  * Cache fisico de CHR 2bpp/4bpp compartilhado por BG e OBJ.
  *
@@ -26,19 +34,25 @@
 #define SNPPU_CHR4_TILE_WORDS 16u
 #define SNPPU_CHR4_TILE_COUNT 2048u
 #define SNPPU_VRAM_WORD_MASK  0x7FFFu
+#define SNPPU_CHR2_CACHE_BYTES 299008u
+#define SNPPU_CHR4_CACHE_BYTES 149504u
 
 struct SnesPPUChrCacheT
 {
 	/* Physical VRAM row cache shared by BG and OBJ.  Entries contain only
 	   decoded color indices; palette/priority stay outside so the same row
 	   survives CGRAM and tilemap changes. */
+#if SNPPU_BG_CHR_CACHE
 	Uint64 uData2[SNPPU_CHR2_TILE_COUNT][8];
 	Uint8  uOpaque2[SNPPU_CHR2_TILE_COUNT][8];
 	Uint8  uValid2[SNPPU_CHR2_TILE_COUNT];
+#endif
 
+#if SNPPU_BG_CHR_CACHE || SNPPU_OBJ_CACHE
 	Uint64 uData4[SNPPU_CHR4_TILE_COUNT][8];
 	Uint8  uOpaque4[SNPPU_CHR4_TILE_COUNT][8];
 	Uint8  uValid4[SNPPU_CHR4_TILE_COUNT];
+#endif
 };
 
 _INLINE Uint64 SnesPPUChrCacheReverseBytes(Uint64 uData)
@@ -63,6 +77,7 @@ _INLINE void SnesPPUChrCacheFlipRow(Uint64 *pData, Uint32 *pOpaque)
 	*pOpaque = SnesPPUChrCacheReverseMask((Uint8)*pOpaque);
 }
 
+#if SNPPU_BG_CHR_CACHE
 _INLINE Bool SnesPPUChrCacheLookup2(const SnesPPUChrCacheT *pCache,
 	Uint32 uRowAddress, Bool bHFlip, Uint64 *pData, Uint32 *pOpaque)
 {
@@ -91,7 +106,9 @@ _INLINE void SnesPPUChrCacheStore2(SnesPPUChrCacheT *pCache,
 	pCache->uOpaque2[uTile][uRow] = (Uint8)uOpaque;
 	pCache->uValid2[uTile] |= (Uint8)(1u << uRow);
 }
+#endif
 
+#if SNPPU_BG_CHR_CACHE || SNPPU_OBJ_CACHE
 _INLINE Bool SnesPPUChrCacheLookup4(const SnesPPUChrCacheT *pCache,
 	Uint32 uRowAddress, Bool bHFlip, Uint64 *pData, Uint32 *pOpaque)
 {
@@ -120,32 +137,50 @@ _INLINE void SnesPPUChrCacheStore4(SnesPPUChrCacheT *pCache,
 	pCache->uOpaque4[uTile][uRow] = (Uint8)uOpaque;
 	pCache->uValid4[uTile] |= (Uint8)(1u << uRow);
 }
+#endif
 
 _INLINE void SnesPPUChrCacheInvalidateAll(SnesPPUChrCacheT *pCache)
 {
+#if SNPPU_BG_CHR_CACHE
 	memset(pCache->uValid2, 0, sizeof(pCache->uValid2));
+#endif
+#if SNPPU_BG_CHR_CACHE || SNPPU_OBJ_CACHE
 	memset(pCache->uValid4, 0, sizeof(pCache->uValid4));
+#endif
 }
 
-_INLINE Uint32 SnesPPUChrCacheInvalidateRange(SnesPPUChrCacheT *pCache,
-	Uint32 uWordAddress, Uint32 nWords)
+_INLINE Uint32 SnesPPUChrCacheInvalidateRangeDetailed(
+	SnesPPUChrCacheT *pCache, Uint32 uWordAddress, Uint32 nWords,
+	Uint32 *pInvalidated2, Uint32 *pInvalidated4)
 {
-	Uint32 nValidTiles = 0;
+	Uint32 nValid2 = 0;
+	Uint32 nValid4 = 0;
 	Uint32 uStart;
 	Uint32 nRemain;
 
+	if (pInvalidated2) *pInvalidated2 = 0;
+	if (pInvalidated4) *pInvalidated4 = 0;
 	if (!nWords)
 		return 0;
 
 	if (nWords >= 0x8000u)
 	{
 		SnesPPUChrCacheInvalidateAll(pCache);
-		return SNPPU_CHR2_TILE_COUNT + SNPPU_CHR4_TILE_COUNT;
+#if SNPPU_BG_CHR_CACHE
+		nValid2 = SNPPU_CHR2_TILE_COUNT;
+#endif
+#if SNPPU_BG_CHR_CACHE || SNPPU_OBJ_CACHE
+		nValid4 = SNPPU_CHR4_TILE_COUNT;
+#endif
+		if (pInvalidated2) *pInvalidated2 = nValid2;
+		if (pInvalidated4) *pInvalidated4 = nValid4;
+		return nValid2 + nValid4;
 	}
 
 	/* One VRAM write can overlap a 2bpp BG tile and a 4bpp BG/OBJ tile.
 	   Walk physical tile boundaries instead of words so even a full DMA
 	   costs only O(number of touched tiles). */
+#if SNPPU_BG_CHR_CACHE
 	uStart = uWordAddress;
 	nRemain = nWords;
 	while (nRemain)
@@ -156,13 +191,15 @@ _INLINE Uint32 SnesPPUChrCacheInvalidateRange(SnesPPUChrCacheT *pCache,
 		if (pCache->uValid2[uTile2])
 		{
 			pCache->uValid2[uTile2] = 0;
-			nValidTiles++;
+			nValid2++;
 		}
 		if (nStep > nRemain) nStep = nRemain;
 		uStart = (uAddress + nStep) & SNPPU_VRAM_WORD_MASK;
 		nRemain -= nStep;
 	}
+#endif
 
+#if SNPPU_BG_CHR_CACHE || SNPPU_OBJ_CACHE
 	uStart = uWordAddress;
 	nRemain = nWords;
 	while (nRemain)
@@ -173,14 +210,24 @@ _INLINE Uint32 SnesPPUChrCacheInvalidateRange(SnesPPUChrCacheT *pCache,
 		if (pCache->uValid4[uTile4])
 		{
 			pCache->uValid4[uTile4] = 0;
-			nValidTiles++;
+			nValid4++;
 		}
 		if (nStep > nRemain) nStep = nRemain;
 		uStart = (uAddress + nStep) & SNPPU_VRAM_WORD_MASK;
 		nRemain -= nStep;
 	}
+#endif
 
-	return nValidTiles;
+	if (pInvalidated2) *pInvalidated2 = nValid2;
+	if (pInvalidated4) *pInvalidated4 = nValid4;
+	return nValid2 + nValid4;
+}
+
+_INLINE Uint32 SnesPPUChrCacheInvalidateRange(SnesPPUChrCacheT *pCache,
+	Uint32 uWordAddress, Uint32 nWords)
+{
+	return SnesPPUChrCacheInvalidateRangeDetailed(pCache, uWordAddress,
+		nWords, 0, 0);
 }
 
 /* Implementado em snppurender8.cpp; chamado pelo caminho de escrita da PPU. */

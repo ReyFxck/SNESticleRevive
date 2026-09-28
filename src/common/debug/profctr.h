@@ -21,23 +21,36 @@ void ProfCtrReset();
 
 static inline Uint32 ProfCtrGetCycle()
 {
+#if CODE_PLATFORM == CODE_PS2
     Uint32 uCycle;
 	__asm__ volatile ("mfc0  %0, $9" : "=r" (uCycle) : );
     return uCycle;
+#else
+	/* Host tools validate state and cache behavior, not EE cycle timing. */
+	return 0;
+#endif
 }
 
 static inline Uint32 ProfCtrGetCounter0()
 {
+#if CODE_PLATFORM == CODE_PS2
     Uint32 uCount;
 	__asm__ volatile ("mfpc  %0, 0" : "=r" (uCount) : );
     return uCount;
+#else
+	return 0;
+#endif
 }
 
 static inline Uint32 ProfCtrGetCounter1()
 {
+#if CODE_PLATFORM == CODE_PS2
     Uint32 uCount;
 	__asm__ volatile ("mfpc  %0, 1" : "=r" (uCount) : );
     return uCount;
+#else
+	return 0;
+#endif
 }
 
 #define PROFCTR_CYCLEMULTIPLY 1

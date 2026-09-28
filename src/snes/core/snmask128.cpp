@@ -71,7 +71,13 @@ void SNMaskSHL(union SNMaskT *pDestMask,  const Uint8 *pSrcMask, Int32 nBits)
 
 	if (nBits==0)
 	{
-		SNMaskCopy(pDestMask, ( const union SNMaskT *)pSrc);
+		/* pSrcMask is a byte-buffer API and is only required to be 64-bit
+		   aligned by the shifting path. Do not cast it to SNMaskT here: the
+		   PS2 SNMaskCopy implementation uses aligned lq loads. */
+		pDestMask->uMask64[0] = pSrc[0];
+		pDestMask->uMask64[1] = pSrc[1];
+		pDestMask->uMask64[2] = pSrc[2];
+		pDestMask->uMask64[3] = pSrc[3];
 		return;
 	}
 
@@ -103,7 +109,10 @@ void SNMaskSHR(union SNMaskT *pDestMask,  const Uint8 *pSrcMask, Int32 nBits)
 
 	if (nBits==0)
 	{
-		SNMaskCopy(pDestMask, ( const union SNMaskT *)pSrc);
+		pDestMask->uMask64[0] = pSrc[0];
+		pDestMask->uMask64[1] = pSrc[1];
+		pDestMask->uMask64[2] = pSrc[2];
+		pDestMask->uMask64[3] = pSrc[3];
 		return;
 	}
 

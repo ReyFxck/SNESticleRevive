@@ -23,6 +23,10 @@
 #include "pixelformat.h"
 #include "rendersurface.h"
 #include "snes.h"
+extern "C" {
+#include "sncpu_c.h"
+#include "snspc_c.h"
+}
 #include "snppucolor.h"
 #include "snstate.h"
 
@@ -33,7 +37,15 @@
 
 extern "C" void DLog(const char *format, ...)
 {
+#if SNDBG_LOG
+	va_list args;
+	va_start(args, format);
+	std::vfprintf(stderr, format, args);
+	std::fputc('\n', stderr);
+	va_end(args);
+#else
     (void)format;
+#endif
 }
 
 namespace {
@@ -755,8 +767,61 @@ static std::vector<uint8_t> BuildSelfTestRom()
     return rom;
 }
 
+static bool CheckExHiRomSramMirrors()
+{
+    std::vector<uint8_t> image(0x600000, 0xFF);
+    SNRomInfoT *header = (SNRomInfoT *)&image[0x40FFC0];
+    memset(header, 0, sizeof(*header));
+    memset(header->Title, ' ', sizeof(header->Title));
+    memcpy(header->Title, "ROMLAB EXHI SRAM", 17);
+    header->RomMakeup = 0x35;
+    header->RomType = 0x02;
+    header->RomSize = 0x0D;
+    header->SRAMSize = 0x03;
+    header->Country = 1;
+    header->License = 0x33;
+    header->Checksum = 0x3456;
+    header->InverseChecksum = (uint16_t)~header->Checksum;
+
+    /* CPU $00:FF00 and its reset vector both live in the extended half. */
+    image[0x40FF00] = 0x78; // SEI
+    image[0x40FF01] = 0x80; // BRA -2
+    image[0x40FF02] = 0xFE;
+    image[0x40FFFC] = 0x00;
+    image[0x40FFFD] = 0xFF;
+
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE ||
+        rom.m_eMapping != SNROM_MAPPING_EXHIROM)
+        return false;
+
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+    if (system.GetSRAMBytes() != 8192)
+        return false;
+
+    /* Mesen's compatibility map exposes the strict $80-$BF window and the
+       $20-$3F mirror used by expanded translations. Both must reach the
+       same physical SRAM byte. */
+    SNCPUWrite8(system.GetCpu(), 0x307808, 0x5A);
+    if (SNCPURead8(system.GetCpu(), 0xB07808) != 0x5A ||
+        system.GetSRAMData()[0x1808] != 0x5A)
+        return false;
+    SNCPUWrite8(system.GetCpu(), 0xB07FFF, 0xA5);
+    return SNCPURead8(system.GetCpu(), 0x307FFF) == 0xA5;
+}
+
 static int SelfTestCommand()
 {
+    if (!CheckExHiRomSramMirrors())
+    {
+        fprintf(stderr, "ROM Lab self-test: ExHiROM SRAM mirrors failed\n");
+        return 1;
+    }
+
     std::vector<uint8_t> image = BuildSelfTestRom();
     CMemFileIO file;
     file.Open(image.data(), (Uint32)image.size());
@@ -783,6 +848,13 @@ static int SelfTestCommand()
     std::unique_ptr<SnesStateT> expected(new SnesStateT);
     std::unique_ptr<SnesStateT> actual(new SnesStateT);
     system.SaveState(checkpoint.get());
+    if (checkpoint->CPU.Regs.rPC == 0x008000u ||
+        checkpoint->SPC.Regs.rPC == 0xFFC0u)
+    {
+        fprintf(stderr,
+                "ROM Lab self-test: CPU executor did not advance the core\n");
+        return 1;
+    }
     system.ExecuteFrame(&input, NULL, NULL,
                         Emu::System::MODE_ACCURATEDETERMINISTIC);
     system.ExecuteFrame(&input, NULL, NULL,
@@ -893,6 +965,9 @@ static int SelfTestCommand()
         error = "cannot close trace";
     if (!error.empty() || first.Records.size() != options.Frames)
         return fail(error.empty() ? "whole-core run returned too few frames" : error);
+    if (!first.Records[0].Instructions.CpuInstructions ||
+        !first.Records[0].Instructions.SpcInstructions)
+        return fail("whole-core trace recorded zero executed instructions");
 
     std::vector<RomLabFrameRecord> loadedTrace;
     uint32_t loadedCRC = 0;
@@ -933,6 +1008,13 @@ static int SelfTestCommand()
 
 int main(int argc, char **argv)
 {
+	/* The PS2 frontend selects its CPU backends before entering the main
+	   loop. ROM Lab has no frontend, so select the same portable executors
+	   explicitly; otherwise the library defaults merely consume each slice
+	   without executing a single instruction. */
+	SNCPUSetExecuteFunc(SNCPUExecute_C);
+	SNSPCSetExecuteFunc(SNSPCExecute_C);
+
 	/* The PS2 frontend builds this 15-bit-to-RGB table during boot. ROM Lab
 	   uses the same portable renderer directly, so initialise the table here
 	   before any frame can be captured. The original profile preserves the

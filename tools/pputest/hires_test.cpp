@@ -68,6 +68,59 @@ static Uint32 NextRandom(Uint32 *pState)
 	return *pState;
 }
 
+static Uint16 ReferenceGS16(Uint16 uColor, Uint32 uIntensity)
+{
+	Uint32 r = uColor & 0x1Fu;
+	Uint32 g = (uColor >> 5) & 0x1Fu;
+	Uint32 b = (uColor >> 10) & 0x1Fu;
+
+	if (uIntensity < 15u)
+	{
+		r = r * uIntensity / 15u;
+		g = g * uIntensity / 15u;
+		b = b * uIntensity / 15u;
+	}
+	return (Uint16)(r | (g << 5) | (b << 10) | 0x8000u);
+}
+
+static void TestHiresPalette()
+{
+	Uint16 cgram[256];
+	Uint16 palette[256];
+	Uint8 mainLine[256];
+	Uint8 subLine[256];
+	Uint32 output[256];
+	Uint32 state = 0x2468ACE1u;
+	Uint32 intensity;
+	Uint32 i;
+
+	for (i = 0; i < 256u; ++i)
+	{
+		cgram[i] = (Uint16)(NextRandom(&state) & 0x7FFFu);
+		mainLine[i] = (Uint8)NextRandom(&state);
+		subLine[i] = (Uint8)NextRandom(&state);
+	}
+
+	for (intensity = 0; intensity <= 15u; ++intensity)
+	{
+		SnesPPUBuildHiresPalette16(palette, cgram, intensity);
+		SnesPPUBuildHiresOutput32(output, mainLine, subLine, palette);
+
+		for (i = 0; i < 256u; ++i)
+		{
+			Uint32 expected = ReferenceGS16(cgram[subLine[i]], intensity) |
+				((Uint32)ReferenceGS16(cgram[mainLine[i]], intensity) << 16);
+			if (output[i] != expected)
+			{
+				std::printf("FAIL hires palette intensity=%u pair=%u\n",
+					intensity, i);
+				g_Failures++;
+				return;
+			}
+		}
+	}
+}
+
 static void TestPacking()
 {
 	Uint32 state = 0x13579BDFu;
@@ -133,29 +186,30 @@ static void TestLineKey()
 	info.uPalBase = 1;
 	info.Priority = 5;
 
-	SnesPPUBGLineCacheSetKey(&key, 9, 0x12345678, 223, 1, 5,
-		&info);
+	SnesPPUBGLineCacheSetKey(&key, 9, 0x12345678, 1, 5, &info);
 	Check("exact line key", SnesPPUBGLineCacheKeyMatches(&key, 9,
-		0x12345678, 223, 1, 5, &info), TRUE);
+		0x12345678, 1, 5, &info), TRUE);
 	info.uScrollX = 1;
-	Check("fine X invalidates exact row", SnesPPUBGLineCacheKeyMatches(&key, 9,
-		0x12345678, 223, 1, 5, &info), FALSE);
+	Check("scroll coordinate is represented by fetch state",
+		SnesPPUBGLineCacheKeyMatches(&key, 9, 0x12345678, 1, 5,
+			&info), TRUE);
 	info.uScrollX = 7;
 	info.uScrollY = 20;
-	Check("scroll Y invalidates exact row", SnesPPUBGLineCacheKeyMatches(
-		&key, 9, 0x12345678, 223, 1, 5, &info), FALSE);
+	Check("world coordinate is represented by fetch state",
+		SnesPPUBGLineCacheKeyMatches(&key, 9, 0x12345678, 1, 5,
+			&info), TRUE);
 	info.uScrollY = 19;
 	Check("VRAM generation invalidates", SnesPPUBGLineCacheKeyMatches(
-		&key, 10, 0x12345678, 223, 1, 5, &info), FALSE);
+		&key, 10, 0x12345678, 1, 5, &info), FALSE);
 	Check("raster state invalidates", SnesPPUBGLineCacheKeyMatches(
-		&key, 9, 0x12345679, 223, 1, 5, &info), FALSE);
-	Check("scanline invalidates", SnesPPUBGLineCacheKeyMatches(&key, 9,
-		0x12345678, 222, 1, 5, &info), FALSE);
+		&key, 9, 0x12345679, 1, 5, &info), FALSE);
+	Check("fine X reuses decoded row", SnesPPUBGLineCacheKeyMatches(&key, 9,
+		(0x12345678 & ~(7u << 16)) | (2u << 16), 1, 5, &info), TRUE);
 	Check("mode invalidates", SnesPPUBGLineCacheKeyMatches(&key, 9,
-		0x12345678, 223, 1, 1, &info), FALSE);
+		0x12345678, 1, 1, &info), FALSE);
 	info.uChrAddr ^= 0x1000;
 	Check("CHR base invalidates", SnesPPUBGLineCacheKeyMatches(&key, 9,
-		0x12345678, 223, 1, 5, &info), FALSE);
+		0x12345678, 1, 5, &info), FALSE);
 }
 
 static void TestHiresLineKey()
@@ -205,6 +259,7 @@ static void TestHiresLineKey()
 int main()
 {
 	TestPacking();
+	TestHiresPalette();
 	TestLineKey();
 	TestHiresLineKey();
 	std::puts(g_Failures ? "FAIL" : "PASS");

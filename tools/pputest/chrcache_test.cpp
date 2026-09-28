@@ -30,9 +30,15 @@ int main()
 	Uint64 uData = 0;
 	Uint32 uOpaque = 0;
 	Uint32 nInvalidated;
+	Uint32 nInvalidated2 = 0;
+	Uint32 nInvalidated4 = 0;
 
 	std::memset(&g_Cache, 0, sizeof(g_Cache));
+#if SNPPU_BG_CHR_CACHE
 	Check("shared CHR cache bytes", sizeof(g_Cache), 448512);
+#else
+	Check("OBJ-only CHR cache bytes", sizeof(g_Cache), 149504);
+#endif
 	Check("4bpp cold miss", SnesPPUChrCacheLookup4(&g_Cache,
 		0x2345, FALSE, &uData, &uOpaque), FALSE);
 
@@ -67,14 +73,27 @@ int main()
 	Check("wrap clears low 4bpp", SnesPPUChrCacheLookup4(&g_Cache,
 		0x0000, FALSE, &uData, &uOpaque), FALSE);
 
-	/* Full VRAM invalidation now covers the shared 2bpp + 4bpp cache. */
+	/* Full VRAM invalidation reports each physical table independently. */
+#if SNPPU_BG_CHR_CACHE
 	SnesPPUChrCacheStore2(&g_Cache, 0x1111, 0x88, 8);
+#endif
 	SnesPPUChrCacheStore4(&g_Cache, 0x2222, 0x99, 9);
-	nInvalidated = SnesPPUChrCacheInvalidateRange(&g_Cache, 0, 0x8000);
+	nInvalidated = SnesPPUChrCacheInvalidateRangeDetailed(&g_Cache, 0,
+		0x8000, &nInvalidated2, &nInvalidated4);
+#if SNPPU_BG_CHR_CACHE
 	Check("full clear slot coverage", nInvalidated,
 		SNPPU_CHR2_TILE_COUNT + SNPPU_CHR4_TILE_COUNT);
+	Check("full clear 2bpp count", nInvalidated2, SNPPU_CHR2_TILE_COUNT);
+	Check("full clear 4bpp count", nInvalidated4, SNPPU_CHR4_TILE_COUNT);
 	Check("full clear 2bpp", SnesPPUChrCacheLookup2(&g_Cache,
 		0x1111, FALSE, &uData, &uOpaque), FALSE);
+#else
+	Check("OBJ-only full clear slot coverage", nInvalidated,
+		SNPPU_CHR4_TILE_COUNT);
+	Check("OBJ-only has no 2bpp invalidations", nInvalidated2, 0);
+	Check("OBJ-only full clear 4bpp count", nInvalidated4,
+		SNPPU_CHR4_TILE_COUNT);
+#endif
 	Check("full clear 4bpp", SnesPPUChrCacheLookup4(&g_Cache,
 		0x2222, FALSE, &uData, &uOpaque), FALSE);
 

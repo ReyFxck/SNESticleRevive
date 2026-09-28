@@ -99,10 +99,13 @@ static SnesMemMapT _SnesMemMap_LoRom_SRAMFullHigh[]=
 };
 
 /* ExHiROM keeps the first 4 MiB in the high half of the address space and
-   exposes bytes above 4 MiB through the low half.  Cartridge RAM is decoded
-   in $80-$BF:6000-$7FFF on strict ExHiROM boards. */
+   exposes bytes above 4 MiB through the low half.  Strict boards decode
+   cartridge RAM at $80-$BF:6000-$7FFF.  Keep the $20-$3F compatibility
+   mirror used by Mesen's default mapping as well: translated/expanded carts
+   such as Trials of Mana actively store save data through $30:xxxx. */
 static SnesMemMapT _SnesMemMap_ExHiRom_Sys[]=
 {
+	{0x20, 0x3F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 	{0x80, 0xBF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
 	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},

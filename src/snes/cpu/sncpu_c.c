@@ -435,8 +435,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 		if (_bTest)					\
 			{							\
 			Uint32 uOldPC = rPC;		\
-			iRel <<=24;				\
-			iRel >>=24;				\
+				iRel = (Int32)(Int8)iRel;		\
 			rPC = (rPC & 0xFF0000) |	\
 				((rPC + iRel) & 0xFFFF); \
 			SNCPU_SUBCYCLES(1);		\
@@ -1034,8 +1033,7 @@ Int32 SNCPUExecute_C(SNCpuT *pCpu)
 		{
 			Int32	iRel;
 			SNCPU_FETCH16(iRel);
-			iRel <<=16;
-			iRel >>=16;
+				iRel = (Int32)(Int16)iRel;
 			// maintain bank
 #if 1
 			iRel+= rPC;

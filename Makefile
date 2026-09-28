@@ -82,10 +82,11 @@ endif
 SNES_DIAG_ENABLED := $(if $(filter-out 0,$(SNES_DIAGNOSTICS)),1,0)
 SNES_DIAG_DEEP := $(if $(filter 2,$(SNES_DIAGNOSTICS)),1,0)
 
-# Cache CHR fisico. OBJ usa linhas 4bpp; BG usa linhas 2bpp/4bpp e
-# compartilha a mesma invalidacao por escrita de VRAM.
-# Ambos podem ser desligados separadamente para comparacao A/B.
+# Caches independentes: OBJ e BG fisico compartilham linhas 4bpp, enquanto
+# SNES_BG_CACHE controla apenas os caches de linha BG/hires ja decodificada.
+# Cada camada pode ser desligada separadamente para comparacao A/B.
 SNES_OBJ_CACHE ?= 1
+SNES_BG_CHR_CACHE ?= 1
 SNES_BG_CACHE ?= 1
 
 # Safe host recovery: after a missed VBlank, execute the missing emulated
@@ -125,6 +126,7 @@ CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
+	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
 	-DSNESTICLE_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) \
 	-DSNESTICLE_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES)
@@ -133,6 +135,7 @@ CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fn
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
+	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
 	-DSNESTICLE_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) \
 	-DSNESTICLE_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES)
@@ -638,7 +641,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
+	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -1343,7 +1346,8 @@ help:
 	printf "  SNES_DIAGNOSTICS=1           Universal low-overhead SNES diagnostic report\n"; \
 	printf "  SNES_DIAGNOSTICS=2           Automatic deep PPU/DMA/chip capture\n"; \
 	printf "  SNES_OBJ_CACHE=0             Disable OBJ 4bpp CHR cache for A/B tests\n"; \
-	printf "  SNES_BG_CACHE=0              Disable BG 2bpp/4bpp CHR cache for A/B tests\n"; \
+	printf "  SNES_BG_CHR_CACHE=0          Disable physical BG 2bpp/4bpp cache for A/B\n"; \
+	printf "  SNES_BG_CACHE=0              Disable decoded BG/hires line caches for A/B\n"; \
 	printf "  SNES_SAFE_FRAMESKIP=0        Disable missed-VBlank video recovery for A/B\n"; \
 	printf "  SNES_MAX_CATCHUP_FRAMES=3    Maximum hidden catch-up frames per presentation\n"; \
 	printf "  OUT=/path                    Copy final ELF to this folder\n"; \

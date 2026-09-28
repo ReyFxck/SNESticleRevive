@@ -2,6 +2,7 @@
 /.build-sanitize/
 /romlab
 /romlab-sanitize
+/romlab-*
 /romlab_test
 /*.jsonl
 /*.state

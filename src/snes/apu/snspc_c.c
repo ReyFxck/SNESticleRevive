@@ -198,8 +198,7 @@ extern void SnesRomLabUnimplementedSpcOpcode(Uint32 uPC, Uint8 uOpcode);
 		SNSPC_FETCH8(iRel);			\
 		if (_bTest)					\
 			{							\
-			iRel <<=24;				\
-			iRel >>=24;				\
+				iRel = (Int32)(Int8)iRel;		\
 			rPC+= iRel;				\
 			SNSPC_SUBCYCLES(2);		\
 			}							\
@@ -209,8 +208,7 @@ extern void SnesRomLabUnimplementedSpcOpcode(Uint32 uPC, Uint8 uOpcode);
 		{								\
 		Int32	iRel;				\
 		SNSPC_FETCH8(iRel);			\
-			iRel <<=24;				\
-			iRel >>=24;				\
+				iRel = (Int32)(Int8)iRel;		\
 			rPC+= iRel;				\
 		}
 

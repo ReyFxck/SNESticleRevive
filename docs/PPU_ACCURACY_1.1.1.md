@@ -51,6 +51,14 @@ The PS2 renderer keeps even and odd dots separate. Stable lines may reuse an
 exact final 512-dot result, but any VRAM, OAM, CGRAM or visual-register change
 falls back to the complete renderer before presentation.
 
+The PS2 presentation path also keeps correctness-sensitive work out of the
+per-line hot loop: the native-hires GIF DMA chain is built once and only its
+destination Y coordinate is patched, the brightness-adjusted 256-entry palette
+is rebuilt only when CGRAM or brightness changes, and an immediately repeated
+Mode 5/6 tile pair reuses both already-decoded rows. These are exact-result
+optimizations; the host regression suite compares their output against the
+uncached/reference formulas.
+
 - **Secret of Mana** — Mode 5 menu.
 - **Seiken Densetsu 3 / Trials of Mana** — Mode 5 text boxes and menus.
 - **Dark Law: Meaning of Death** — Mode 5 text boxes, menus and status bar.

@@ -32,10 +32,10 @@ Priority:
 The PS2 frontend currently selects `SNSPCExecute_C`. This is a major target
 because the hot SPC interpreter is still C on the EE.
 
-The C core also documents correctness debt:
-- half-carry behavior is disabled/incomplete;
-- 16-bit direct-page accesses do not wrap correctly;
-- the default opcode path is retained as an unimplemented fallback.
+The previous half-carry, direct-page word wrapping and missing-opcode gaps are
+now covered by the host SPC700 suite.  The default opcode path remains only as
+an explicit detector; ROM Lab treats reaching it as a failed run instead of
+silently continuing.
 
 There is an `opspc700_mips.h` instruction macro source in the tree, but no
 active PS2 SPC ASM execution core is wired into the frontend. The plan is to
@@ -75,6 +75,11 @@ for isolated vector kernels if profiling justifies it.
 
 Known item already explicit in the source:
 - DSP-3 has no HLE implementation; its mapped interface is intentionally inert.
+
+Completed generic mapping item:
+- ExHiROM SRAM exposes the strict `$80-$BF:6000-$7FFF` window and the
+  `$20-$3F:6000-$7FFF` compatibility mirror.  Both resolve to the same SRAM;
+  a synthetic test covers `$30:7808`/`$B0:7808`.
 
 Audit all of:
 - CPU I/O $4200-$421F and mirrors/open bus;

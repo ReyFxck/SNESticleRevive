@@ -46,6 +46,20 @@ ROMLAB_SANITIZE=1 ./tools/romlab/build.sh
 ./tools/romlab/romlab-sanitize self-test
 ```
 
+O script também permite builds A/B sem mudar o fonte:
+
+```sh
+ROMLAB_DIAGNOSTICS=1 ROMLAB_BUILD_TAG=diag ./tools/romlab/build.sh
+ROMLAB_BG_CACHE=0 ROMLAB_BUILD_TAG=bg-off ./tools/romlab/build.sh
+ROMLAB_BG_CHR_CACHE=0 ROMLAB_BUILD_TAG=chr-off ./tools/romlab/build.sh
+ROMLAB_OBJ_CACHE=0 ROMLAB_BUILD_TAG=obj-off ./tools/romlab/build.sh
+```
+
+`ROMLAB_DIAGNOSTICS` aceita `0`, `1` ou `2`; o nível 2 ativa a captura
+profunda. Os três caches aceitam `0` ou `1`. `ROMLAB_BUILD_TAG` conserva cada
+executável e diretório de objetos sob um nome separado, evitando misturar os
+resultados de uma comparação.
+
 O autoteste não usa ROM comercial. Ele cria uma ROM mínima temporária e
 valida core, framebuffer, replay, save/restore, trace e repetição
 determinística.

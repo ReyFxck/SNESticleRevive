@@ -154,6 +154,10 @@ Uint32 g_DbgBGChrRows = 0;
 Uint32 g_DbgBGChrBlankRows = 0;
 Uint32 g_DbgBGChrRepeatRows = 0;
 Uint32 g_DbgBGChrRowsByDepth[3] = {0,0,0};
+Uint32 g_DbgBGChrCacheHits = 0;
+Uint32 g_DbgBGChrCacheMisses = 0;
+Uint32 g_DbgBGChrCacheBypasses = 0;
+Uint32 g_DbgBGChrCacheInvalidations = 0;
 Uint32 g_DbgBGLineCacheHits = 0;
 Uint32 g_DbgBGLineCacheMisses = 0;
 Uint32 g_DbgBGLineCacheBypasses = 0;
@@ -317,6 +321,10 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrBlankRows = 0;
 	g_DbgBGChrRepeatRows = 0;
 	memset(g_DbgBGChrRowsByDepth, 0, sizeof(g_DbgBGChrRowsByDepth));
+	g_DbgBGChrCacheHits = 0;
+	g_DbgBGChrCacheMisses = 0;
+	g_DbgBGChrCacheBypasses = 0;
+	g_DbgBGChrCacheInvalidations = 0;
 	g_DbgBGLineCacheHits = 0;
 	g_DbgBGLineCacheMisses = 0;
 	g_DbgBGLineCacheBypasses = 0;
@@ -2426,10 +2434,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
 			// diretamente qual rotina esta consumindo o tempo da EE.
-			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=%u obj-cache=%u",
+			DLog("[snes-diag] schema=%s level=%u session=%u window=%u inclusive-timing=1 rom-rules=0 bg-cache=%u bg-chr-cache=%u obj-cache=%u",
 				SNDBG_SCHEMA, (unsigned)(SNDBG_DEEP ? 2 : 1),
 				(unsigned)g_DbgSessionId, (unsigned)g_TmgWinFrames,
-				(unsigned)SNPPU_BG_CACHE, (unsigned)SNPPU_OBJ_CACHE);
+				(unsigned)SNPPU_BG_CACHE, (unsigned)SNPPU_BG_CHR_CACHE,
+				(unsigned)SNPPU_OBJ_CACHE);
 			DLog("[snes-frame] f=%u rom-video=%s host-target=%u budget=%u cycles min/avg/max=%u/%u/%u slow=%u threshold=%u%% capacity=%u.%u fps",
 				(unsigned)g_TmgFrameNo, bPAL ? "pal" : "ntsc",
 				(unsigned)uTargetFPS, (unsigned)uBudget,
@@ -2524,6 +2533,12 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGChrRowsByDepth[0],
 				(unsigned)g_DbgBGChrRowsByDepth[1],
 				(unsigned)g_DbgBGChrRowsByDepth[2]);
+			DLog("[snes-bg-chr-cache] enabled=%u hit/miss/bypass=%u/%u/%u invalidated-slots=%u",
+				(unsigned)SNPPU_BG_CHR_CACHE,
+				(unsigned)g_DbgBGChrCacheHits,
+				(unsigned)g_DbgBGChrCacheMisses,
+				(unsigned)g_DbgBGChrCacheBypasses,
+				(unsigned)g_DbgBGChrCacheInvalidations);
 			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u",
 				(unsigned)g_DbgBGLineCacheHits,
 				(unsigned)g_DbgBGLineCacheMisses,
@@ -2540,7 +2555,13 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			DLog("[snes-obj-cache] enabled=%u hit/miss=%u/%u",
 				(unsigned)SNPPU_OBJ_CACHE, (unsigned)g_DbgObjCacheHits,
 				(unsigned)g_DbgObjCacheMisses);
-			DLog("[snes-obj-cache] bytes=149504 invalidated-slots=%u bg-path=direct",
+			DLog("[snes-chr-cache] bytes=%u bg-2bpp=%u shared-4bpp=%u",
+				(unsigned)(SNPPU_BG_CHR_CACHE ? 448512u :
+					(SNPPU_OBJ_CACHE ? 149504u : 0u)),
+				(unsigned)(SNPPU_BG_CHR_CACHE ? 299008u : 0u),
+				(unsigned)((SNPPU_BG_CHR_CACHE || SNPPU_OBJ_CACHE) ?
+					149504u : 0u));
+			DLog("[snes-obj-cache] invalidated-slots=%u",
 				(unsigned)g_DbgObjCacheInvalidations);
 			DLog("[snes-audio] samples=%u avg/frame=%u mix calls/zero=%u/%u min/max=%u/%u",
 				(unsigned)g_DbgAudioSamples,

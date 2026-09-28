@@ -26,6 +26,14 @@
 #define SNPPU_OBJ_CACHE 1
 #endif
 
+#ifndef SNPPU_BG_CACHE
+#define SNPPU_BG_CACHE 1
+#endif
+
+#ifndef SNPPU_BG_CHR_CACHE
+#define SNPPU_BG_CHR_CACHE 1
+#endif
+
 #if SNDBG_DEEP && !SNDBG_LOG
 #undef SNDBG_LOG
 #define SNDBG_LOG 1
@@ -180,6 +188,10 @@ extern Uint32 g_DbgBGChrRows;
 extern Uint32 g_DbgBGChrBlankRows;
 extern Uint32 g_DbgBGChrRepeatRows;
 extern Uint32 g_DbgBGChrRowsByDepth[3];
+extern Uint32 g_DbgBGChrCacheHits;
+extern Uint32 g_DbgBGChrCacheMisses;
+extern Uint32 g_DbgBGChrCacheBypasses;
+extern Uint32 g_DbgBGChrCacheInvalidations;
 extern Uint32 g_DbgBGLineCacheHits;
 extern Uint32 g_DbgBGLineCacheMisses;
 extern Uint32 g_DbgBGLineCacheBypasses;

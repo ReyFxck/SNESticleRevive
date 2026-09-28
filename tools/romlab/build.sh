@@ -6,13 +6,39 @@ OUT="$ROOT/tools/romlab"
 CC=${CC:-cc}
 CXX=${CXX:-c++}
 SANITIZE=${ROMLAB_SANITIZE:-0}
+DIAGNOSTICS=${ROMLAB_DIAGNOSTICS:-0}
+BG_CACHE=${ROMLAB_BG_CACHE:-1}
+BG_CHR_CACHE=${ROMLAB_BG_CHR_CACHE:-1}
+OBJ_CACHE=${ROMLAB_OBJ_CACHE:-1}
+BUILD_TAG=${ROMLAB_BUILD_TAG:-}
+
+if [[ "$BG_CACHE" != 0 && "$BG_CACHE" != 1 ]]; then
+    echo "ROMLAB_BG_CACHE must be 0 or 1" >&2
+    exit 2
+fi
+if [[ "$DIAGNOSTICS" != 0 && "$DIAGNOSTICS" != 1 && "$DIAGNOSTICS" != 2 ]]; then
+    echo "ROMLAB_DIAGNOSTICS must be 0, 1 or 2" >&2
+    exit 2
+fi
+if [[ "$BG_CHR_CACHE" != 0 && "$BG_CHR_CACHE" != 1 ]]; then
+    echo "ROMLAB_BG_CHR_CACHE must be 0 or 1" >&2
+    exit 2
+fi
+if [[ "$OBJ_CACHE" != 0 && "$OBJ_CACHE" != 1 ]]; then
+    echo "ROMLAB_OBJ_CACHE must be 0 or 1" >&2
+    exit 2
+fi
+if [[ -n "$BUILD_TAG" && ! "$BUILD_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "ROMLAB_BUILD_TAG contains unsupported characters" >&2
+    exit 2
+fi
 
 if [[ "$SANITIZE" == 1 ]]; then
-    BUILD="$OUT/.build-sanitize"
-    TARGET="$OUT/romlab-sanitize"
+    BUILD="$OUT/.build-sanitize${BUILD_TAG:+-$BUILD_TAG}"
+    TARGET="$OUT/romlab-sanitize${BUILD_TAG:+-$BUILD_TAG}"
 else
-    BUILD="$OUT/.build"
-    TARGET="$OUT/romlab"
+    BUILD="$OUT/.build${BUILD_TAG:+-$BUILD_TAG}"
+    TARGET="$OUT/romlab${BUILD_TAG:+-$BUILD_TAG}"
 fi
 
 mkdir -p "$BUILD"
@@ -21,11 +47,12 @@ DEFS=(
     -DCODE_PLATFORM=1
     -DCODE_DEBUG=0
     -DCODE_PROFILE=0
-    -DSNDBG_LOG=0
-    -DSNDBG_DEEP=0
+    -DSNDBG_LOG="$([[ "$DIAGNOSTICS" == 0 ]] && echo 0 || echo 1)"
+    -DSNDBG_DEEP="$([[ "$DIAGNOSTICS" == 2 ]] && echo 1 || echo 0)"
     -DSNESTICLE_ROMLAB=1
-    -DSNPPU_OBJ_CACHE=1
-    -DSNPPU_BG_CACHE=1
+    -DSNPPU_OBJ_CACHE="$OBJ_CACHE"
+    -DSNPPU_BG_CHR_CACHE="$BG_CHR_CACHE"
+    -DSNPPU_BG_CACHE="$BG_CACHE"
 )
 
 INCLUDES=(

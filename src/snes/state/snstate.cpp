@@ -225,6 +225,7 @@ void SnesPPU::RestoreState(struct SNStatePPUT *pState)
 {
 	m_Regs = pState->Regs;
 	memcpy(m_CGRAM,   pState->m_CGRAM, sizeof(m_CGRAM));
+	m_pRender->InvalidateHiresPalette();
 	memcpy(m_VRAM,    pState->m_VRAM,  sizeof(m_VRAM));
 	m_OAM = pState->m_OAM;
 	m_OAMLatch = 0;

@@ -1,10 +1,41 @@
-# Trials of Mana SPC700 Investigation - Closed
+# Trials of Mana gameplay-start investigation - Resolved
 
-This document records the closed investigation of the **Trials of Mana / Seiken Densetsu 3** gameplay-start hang observed on the PS2 build.
+This document records the investigation of the **Trials of Mana / Seiken
+Densetsu 3** gameplay-start hang observed on the PS2 build.  The original
+SPC700 hypotheses are kept below because they explain which tempting changes
+must not be reintroduced, but the root cause has now been isolated outside the
+SPC700.
 
 The goal is to preserve what was tested, what was disproven, which experiments regressed behavior, and which SPC700 fixes were considered safe enough to merge.
 
-The investigation is intentionally closed without a game-specific workaround.
+The fix is a generic ExHiROM address-map correction, not a game-specific
+workaround.
+
+## Resolution
+
+The translated 6 MiB cartridge actively accesses SRAM through
+`$20-$3F:6000-$7FFF` (the captured path includes `$30:7808-$30:780F`).  The
+old ExHiROM map exposed only `$80-$BF:6000-$7FFF`, so those writes were dropped
+and reads returned open bus.  The corrupted/missing game state later led the
+CPU into the APUIO wait at `E8:C26F-E8:C27B`; the final `0F/7F` pair was a
+downstream symptom, not proof of an SPC700 fault.
+
+The generic ExHiROM map now exposes both compatibility windows and maps them to
+the same physical SRAM.  ROM Lab has a synthetic regression that writes
+`$30:7808`, reads the corresponding byte through `$B0:7808`, and verifies the
+underlying SRAM offset.
+
+A deterministic reset-to-fight replay of the affected ROM established:
+
+- without the low mirror, the first divergence is frame 1395 in SRAM, the run
+  accumulates 14,265 unmapped accesses under `$30:6000-$30:7FFF`, and frame
+  7200 ends at CPU `E8:C27B` with SPC-to-CPU ports `00/02/0F/7F`;
+- with the corrected map, there are no unhandled accesses, frame 7200 reaches
+  the fight at CPU `C0:AF94`, and a repeated 7,200-frame run is deterministic.
+
+This proves the gameplay-start failure represented by this trace.  A real-PS2
+retest is still required for presentation/performance issues, which are
+independent from this resolved address-map bug.
 
 ## Test target
 
@@ -352,22 +383,25 @@ These diagnostics were intentionally not merged into main.
 
 The branch may be kept as historical evidence if the investigation is resumed later.
 
-## Closed status
+## Resolved status
 
-Status: **closed / unresolved root cause**
+Status: **resolved in the portable core / pending real-PS2 validation**
 
-Reason for closing:
+Evidence:
 
-- the hang is reproducible
-- the final bad handshake state is well characterized
-- multiple plausible causes were tested and rejected
-- no remaining hypothesis was strong enough to justify another behavioral change
-- continuing by forcing values, adding per-game conditions, or changing timing without a reference would risk introducing regressions
+- the old hang remains reproducible when only the ExHiROM low SRAM mirror is
+  disabled;
+- restoring that generic mirror is sufficient for the same input replay to
+  pass the former APUIO wait and enter gameplay;
+- the synthetic mirror test and whole-core deterministic replay protect both
+  the address semantics and the observed game path.
 
-If this issue is reopened, the next investigation should start from a new external correctness oracle or a more cycle-accurate DSP/SPC comparison, not by repeating the experiments listed above.
+If a future build again reaches `E8:C27B`, first check the active cartridge map
+and SRAM payload before reopening the rejected SPC timing experiments.
 
 ## Integration rule
 
-Main must remain on the verified SPC700 core work only.
+Main may take the verified SPC700 core work and the generic ExHiROM mapping
+correction.
 
 Do not merge the later Trials-specific experimental commits unless a future test proves a generic hardware-correct behavior change across multiple games.

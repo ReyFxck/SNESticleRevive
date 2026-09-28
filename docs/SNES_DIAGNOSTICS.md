@@ -57,9 +57,11 @@ throughput ceiling instead of making the logger itself steal frame time:
 | `[snes-ppu-layers]` | Main-screen, sub-screen and actually fetched BG1-BG4 lines. |
 | `[snes-ppu-features]` | Mosaic, offset, windows, color math, direct color, interlace, overscan, hires and EXTBG usage. |
 | `[snes-bg-depth]` | Decoded BG rows split into 2, 4 and 8 bpp. |
+| `[snes-bg-chr-cache]` | Physical BG CHR hit, miss, bypass and invalidation totals. |
 | `[snes-bg-line-cache]` | Exact Mode 1/5 decoded-line hits, misses and conservative bypasses. |
 | `[snes-hires-line-cache]` | Final Mode 5 512-dot line reuse; a hit requires identical VRAM/OAM/CGRAM generation and visual register state. |
-| `[snes-obj]` / `[snes-obj-cache]` | OAM work, hardware range/time limits, OBJ pixels in deep mode and OBJ-only cache efficiency. |
+| `[snes-obj]` / `[snes-obj-cache]` | OAM work, hardware range/time limits, OBJ pixels in deep mode and physical 4-bpp cache efficiency. |
+| `[snes-chr-cache]` | Actual physical cache footprint and its 2-bpp/shared 4-bpp split. |
 | `[snes-sync]` / `[snes-dma]` / `[snes-hdma]` | PPU queue pressure and transfer destinations, modes, size and wrapping. |
 | `[snes-audio]` | Mixer requests, sample range and zero-sample anomalies; this is not an audsrv underrun claim. |
 | `[snes-cart]` | Video type, mapping, flags and DSP/GSU/OBC1/CX4/S-DD1/S-RTC register traffic. |
@@ -103,11 +105,15 @@ DMAs/remaps, eight OBJ records on each of the two sampled scanlines and 64
 
 ## Renderer cache policy
 
-BG tiles always use the direct decoder. The experimental BG cache and its
-2-bpp table were removed rather than hidden behind a switch. The remaining
-physical cache is OBJ-only 4-bpp data: 149,504 bytes instead of 448,512 bytes,
-saving 299,008 bytes and reducing VRAM invalidation to 16-word OBJ tile
-boundaries. `SNES_OBJ_CACHE=0` remains available only for controlled A/B tests.
+The renderer exposes three independent A/B switches. `SNES_OBJ_CACHE=0`
+disables OBJ physical 4-bpp reuse. `SNES_BG_CHR_CACHE=0` bypasses physical BG
+2/4-bpp reuse but retains the decoded Mode 1/5 BG-line and Mode 5 output-line
+caches. `SNES_BG_CACHE=0` disables those decoded line caches without changing
+physical CHR reuse. When both physical users are enabled the shared structure
+occupies 448,512 bytes: 299,008 bytes of BG-only 2-bpp rows plus 149,504 bytes
+of 4-bpp rows shared by BG and OBJ. The rolling report prints the actual build
+configuration, footprint and hit/miss/bypass totals so a speed result cannot
+be attributed to the wrong cache layer.
 
 This framework makes failures comparable across the catalog; it does not by
 itself claim that every ROM is already correct. Fixes found with it still

@@ -46,6 +46,8 @@ class SNPPUBlendGS : public ISNPPUBlend
     Bool m_bDmaListHasIntensity;
 	Bool m_bDmaListDirectMain;
 	Uint128 m_HiresDmaList[32] _ALIGN(16);
+	Uint64 *m_pHiresTrxPos;
+	Bool m_bHiresDmaListReady;
 	Uint32 m_uPaletteDirty[8];
 	Uint32 m_nPaletteDirty;
 

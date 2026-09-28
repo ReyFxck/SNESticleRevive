@@ -1005,6 +1005,7 @@ void SnesPPU::Reset()
 
 	memset(&m_Regs, 0, sizeof(m_Regs));
 	memset(&m_CGRAM, 0, sizeof(m_CGRAM));
+	m_pRender->InvalidateHiresPalette();
 	memset(&m_VRAM, 0, sizeof(m_VRAM));
 	memset(&m_OAM, 0, sizeof(m_OAM));
 	m_pRender->UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);

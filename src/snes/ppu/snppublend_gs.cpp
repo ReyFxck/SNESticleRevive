@@ -132,7 +132,13 @@ static void _SNPPUGSValidateStage(const SNPPUBlendInfoT *pInfo)
 
 #define SNPPUBLEND_PAL32 (TRUE)
 
-static Uint32 _SNPPUBlend_AttribMainPal[8] _ALIGN(16) =
+/* GPPrimUploadTexture sends a complete 16x16 PSMCT32 CSM1 palette (1 KiB).
+   Keep a complete DMA source here as well.  The old eight-word objects made
+   the GIF DMA read 992 bytes beyond each array; those bytes happened to be
+   ignored for valid attribute indices, but the out-of-bounds transfer was
+   neither deterministic nor safe on the EE's real memory/cache path.  The
+   unused CSM1 entries are intentionally zero-filled by static initialization. */
+static Uint32 _SNPPUBlend_AttribMainPal[16 * 16] _ALIGN(64) =
 {                   // HSM
     0x00000000,     // 000
     0x80000000,     // 001
@@ -144,7 +150,7 @@ static Uint32 _SNPPUBlend_AttribMainPal[8] _ALIGN(16) =
     0x40000000,     // 111
 };
 
-static Uint32 _SNPPUBlend_AttribSubPal[8] _ALIGN(16) =
+static Uint32 _SNPPUBlend_AttribSubPal[16 * 16] _ALIGN(64) =
 {                   // HSM
     0x00000000,     // 000
     0x00000000,     // 001
@@ -156,9 +162,17 @@ static Uint32 _SNPPUBlend_AttribSubPal[8] _ALIGN(16) =
     0x40000000,     // 111
 };
 
-static void _PlanarTo3(Uint8 *pDest, SNMaskT *pSrc0, SNMaskT *pSrc1, SNMaskT *pSrc2)
+typedef char SNPPUAttribPaletteSizeCheck[
+	(sizeof(_SNPPUBlend_AttribMainPal) == 16 * 16 * sizeof(Uint32) &&
+	 sizeof(_SNPPUBlend_AttribSubPal) == 16 * 16 * sizeof(Uint32)) ? 1 : -1];
+
+static void _PlanarTo3(Uint8 *pDest, const SNMaskT *pSrc0,
+	const SNMaskT *pSrc1, const SNMaskT *pSrc2)
 {
 	Uint32 nBytes = 256 / 8;
+	const Uint8 *pPlane0 = (const Uint8 *)pSrc0;
+	const Uint8 *pPlane1 = (const Uint8 *)pSrc1;
+	const Uint8 *pPlane2 = (const Uint8 *)pSrc2;
 	SnesChrLookupT *pPlaneLookup =
 		(SnesChrLookupT *)PS2MEM_SNES_LOOKUP_ADDR;
 	SnesChrLookup64T *pLookup64 =
@@ -169,13 +183,13 @@ static void _PlanarTo3(Uint8 *pDest, SNMaskT *pSrc0, SNMaskT *pSrc1, SNMaskT *pS
 	{
 		Uint64 uData;
 
-		uData  = (*pLookup64)[pSrc0->uMask8[0]] << 0;
-		uData |= (*pLookup64)[pSrc1->uMask8[0]] << 1;
-		uData |= (*pLookup64)[pSrc2->uMask8[0]] << 2;
+		uData  = (*pLookup64)[pPlane0[0]] << 0;
+		uData |= (*pLookup64)[pPlane1[0]] << 1;
+		uData |= (*pLookup64)[pPlane2[0]] << 2;
 
-		pSrc0  = (SNMaskT *) (((Uint8 *)pSrc0) + 1);
-		pSrc1  = (SNMaskT *) (((Uint8 *)pSrc1) + 1);
-		pSrc2  = (SNMaskT *) (((Uint8 *)pSrc2) + 1);
+		pPlane0++;
+		pPlane1++;
+		pPlane2++;
 
 		pDest64[0] = uData;
 		pDest64+=1;
@@ -349,7 +363,9 @@ void SNPPUBlendGS::UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 
 
 #endif
 
-static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfmt, void *tex, int wpxls, int hpxls)
+static void _GPFifoUploadTextureTracked(int TBP, int TBW, int xofs,
+	int yofs, int pxlfmt, void *tex, int wpxls, int hpxls,
+	Uint64 **ppTrxPos)
 {
     int numq;
 
@@ -366,6 +382,8 @@ static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfm
     GSGifTagOpenAD();
 
     GSGifRegAD(GS_REG_BITBLTBUF,GS_SET_BITBLTBUF( 0, (TBW/64), pxlfmt,  (TBP/256), (TBW/64), pxlfmt));
+	if (ppTrxPos)
+		*ppTrxPos = (Uint64 *)GSListGetUncachedPtr();
     GSGifRegAD(GS_REG_TRXPOS,GS_SET_TRXPOS(0,0,xofs,yofs,0));
     GSGifRegAD(GS_REG_TRXREG,GS_SET_TRXREG(wpxls, hpxls));
     GSGifRegAD(GS_REG_TRXDIR,GS_SET_TRXDIR(0));
@@ -383,6 +401,13 @@ static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfm
 
     // start new dma cnt
     GSDmaCntOpen();
+}
+
+static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs,
+	int pxlfmt, void *tex, int wpxls, int hpxls)
+{
+	_GPFifoUploadTextureTracked(TBP, TBW, xofs, yofs, pxlfmt, tex,
+		wpxls, hpxls, NULL);
 }
 
 static void _SNPPURenderTexLineWH(Int32 iDestLine, Int32 iSrcLine,
@@ -485,13 +510,8 @@ void SNPPUBlendGS::Begin(CRenderSurface *pTarget)
        TBP units, so drop the * 0x100 that converted to bytes for the
        legacy call.
 
-       Note: only 8 Uint32 of source are valid but the upload size is
-       16 x 16 PSMCT32 (1024 bytes). The blender uses CSM1 which
-       expects the palette to be laid out in a 16x16 PSMCT32 tile, so
-       we keep the same dimensions as the legacy upload. The 992
-       bytes past the end of _SNPPUBlend_AttribMainPal are unused by
-       the blender (TEXCLUT only reads the first eight entries) so
-       the over-read is benign and matches pre-Fase-3 behaviour. */
+       Both source arrays are complete 16 x 16 PSMCT32 tiles.  Attribute
+       indices are only 0..7; the remaining entries are deterministic zeroes. */
     if (!m_bAttribPalettesUploaded)
     {
         GPPrimUploadTexture(
@@ -865,6 +885,8 @@ SNPPUBlendGS::SNPPUBlendGS(Uint32 uVramAddr, Uint32 uOutAddr)
     m_bAttribPalettesUploaded = FALSE;
     m_bDmaListHasIntensity = FALSE;
 	m_bDmaListDirectMain = FALSE;
+	m_pHiresTrxPos = NULL;
+	m_bHiresDmaListReady = FALSE;
 
     pList->uPalAddr        = uVramAddr + 0x000;
     pList->uInputAddr      = uVramAddr + 0x080 ;
@@ -1045,6 +1067,23 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor3
 
 }
 
+static void _SNPPUBlendBuildHiresList(Uint128 *pDmaList,
+	Uint32 nDmaQwords, Uint32 uOutAddr, Uint64 **ppTrxPos)
+{
+	*ppTrxPos = NULL;
+
+	GSListBegin(pDmaList, nDmaQwords, NULL);
+	GSDmaCntOpen();
+	_GPFifoUploadTextureTracked(
+		uOutAddr * 0x100,
+		512, 0, 0, GS_PSMCT16,
+		(void *)(SNPPU_DMA_HIRES_ADDR | 0x80000000),
+		512, 1, ppTrxPos);
+	GSDmaCntClose();
+	GSDmaEnd();
+	GSListEnd();
+}
+
 void SNPPUBlendGS::ExecHires512(const Uint16 *pLine512, Int32 iLine)
 {
 	Uint16 *pStage = (Uint16 *)SNPPU_DMA_HIRES_ADDR;
@@ -1069,17 +1108,22 @@ void SNPPUBlendGS::ExecHires512(const Uint16 *pLine512, Int32 iLine)
 
 	memcpy(pStage, pLine512, SNPPU_DMA_HIRES_BYTES);
 
-	GSListBegin(m_HiresDmaList,
-		sizeof(m_HiresDmaList) / sizeof(m_HiresDmaList[0]), NULL);
-	GSDmaCntOpen();
-	_GPFifoUploadTexture(
-		m_DmaList.uOutAddr * 0x100,
-		512, 0, iLine, GS_PSMCT16,
-		(void *)(((Uint32)pStage) | 0x80000000),
-		512, 1);
-	GSDmaCntClose();
-	GSDmaEnd();
-	GSListEnd();
+	/* The upload source, format and destination texture never change.  Build
+	   the GIF/DMA chain once, then patch only TRXPOS.DSAY for each line. */
+	if (!m_bHiresDmaListReady)
+	{
+		_SNPPUBlendBuildHiresList(m_HiresDmaList,
+			sizeof(m_HiresDmaList) / sizeof(m_HiresDmaList[0]),
+			m_DmaList.uOutAddr, &m_pHiresTrxPos);
+
+		/* GSList writes through the cached alias.  Publish the immutable chain
+		   once; subsequent line patches use the uncached address captured above. */
+		FlushCache(0);
+		m_bHiresDmaListReady = TRUE;
+	}
+
+	*m_pHiresTrxPos = GS_SET_TRXPOS(0, 0, 0, iLine, 0);
+	__asm__ __volatile__ ("sync.l");
 
 #if SNDBG_LOG
 	{

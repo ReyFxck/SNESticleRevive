@@ -235,6 +235,7 @@ public:
 	void UpdateVRAMRange(Uint32 uVramAddr, Uint32 nWords);
 	void UpdateOAM();
 	void UpdateCGRAM(Uint32 uAddr, Uint16 uData);
+	void InvalidateHiresPalette();
 };
 
 void SnesPPUInvalidateOutputCache();

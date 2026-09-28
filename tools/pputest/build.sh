@@ -49,6 +49,33 @@ ROOT=../..
 "${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
     -Wl,--gc-sections \
     -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
+    -DSNPPU_BG_CHR_CACHE=0 -DSNPPU_OBJ_CACHE=1 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/snes/ppu" \
+    chrcache_test.cpp -o chrcache_obj_only_test
+
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/common/render" \
+    -I "$ROOT/src/common/debug" \
+    -I "$ROOT/src/snes/ppu" \
+    -I "$ROOT/src/snes/core" \
+    -I "$ROOT/src/snes" \
+    -I "$ROOT/src" \
+    bglinecache_test.cpp -o bglinecache_test
+
+"${CXX:-g++}" -O1 -fsanitize=undefined -fno-sanitize-recover=undefined \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/snes/core" \
+    mask_alignment_test.cpp "$ROOT/src/snes/core/snmask128.cpp" \
+    -o mask_alignment_test
+
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
     -I "$ROOT/src/common/base" \
     -I "$ROOT/src/common/render" \
     -I "$ROOT/src/common/debug" \
@@ -142,4 +169,4 @@ ROOT=../..
     "$ROOT/src/snes/ppu/snppucolor.cpp" \
     -o brightness_test
 
-echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test && ./brightness_test"
+echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./chrcache_obj_only_test && ./bglinecache_test && ./mask_alignment_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test && ./brightness_test"
