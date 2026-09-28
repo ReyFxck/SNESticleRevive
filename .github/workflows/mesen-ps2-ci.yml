@@ -467,6 +467,138 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Latch P1 only after ROM selection
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("work/port/platform/Ps2Input.cpp")
+          s = p.read_text()
+          s = s.replace(
+              "#include <loadfile.h>\n",
+              "#include <loadfile.h>\n#include <kernel.h>\n#include <unistd.h>\n",
+              1
+          )
+
+          s = s.replace(
+              "namespace {\nstatic bool IsNesPad(ControllerType type)\n{\n",
+              """namespace {
+          alignas(64) static unsigned char gPadSamplerStack[4096];
+          static volatile int gPadSamplerRun = 0;
+          static int gPadSamplerThread = -1;
+          static volatile uint32_t gPadCurrent = 0;
+          static volatile uint32_t gPadLatched = 0;
+
+          static void PadSampler(void*)
+          {
+              while(__atomic_load_n(&gPadSamplerRun, __ATOMIC_RELAXED)) {
+                  int state = padGetState(0, 0);
+                  if(state == PAD_STATE_STABLE || state == PAD_STATE_FINDCTP1) {
+                      padButtonStatus status = {};
+                      if(padRead(0, 0, &status)) {
+                          uint32_t pressed = (uint16_t)~status.btns;
+                          __atomic_store_n(&gPadCurrent, pressed, __ATOMIC_RELAXED);
+                          __atomic_fetch_or(&gPadLatched, pressed, __ATOMIC_RELAXED);
+                      }
+                  }
+                  usleep(3000);
+              }
+              ExitThread();
+          }
+
+          static bool IsNesPad(ControllerType type)
+          {
+          """,
+              1
+          )
+
+          marker = "}\n\nbool Ps2Input::Initialize()"
+          starter = r'''}
+          
+          void Ps2InputEnableAsyncSampler()
+          {
+              if(gPadSamplerThread >= 0) return;
+              __atomic_store_n(&gPadCurrent, 0u, __ATOMIC_RELAXED);
+              __atomic_store_n(&gPadLatched, 0u, __ATOMIC_RELAXED);
+              __atomic_store_n(&gPadSamplerRun, 1, __ATOMIC_RELAXED);
+
+              ee_thread_t t = {};
+              t.func = (void*)PadSampler;
+              t.stack = gPadSamplerStack;
+              t.stack_size = sizeof(gPadSamplerStack);
+              t.gp_reg = &_gp;
+              t.initial_priority = 80;
+              t.attr = 0;
+              t.option = 0;
+
+              gPadSamplerThread = CreateThread(&t);
+              if(gPadSamplerThread < 0 || StartThread(gPadSamplerThread, nullptr) < 0) {
+                  if(gPadSamplerThread >= 0) DeleteThread(gPadSamplerThread);
+                  gPadSamplerThread = -1;
+                  __atomic_store_n(&gPadSamplerRun, 0, __ATOMIC_RELAXED);
+                  printf("[pad] game sampler failed; direct polling remains\n");
+              } else {
+                  printf("[pad] game sampler enabled\n");
+              }
+          }
+
+          bool Ps2Input::Initialize()'''
+          if marker not in s:
+              raise RuntimeError("Initialize anchor missing")
+          s = s.replace(marker, starter, 1)
+
+          direct = '''    const int state = padGetState(port, 0);
+              if(state != PAD_STATE_STABLE && state != PAD_STATE_FINDCTP1) return;
+
+              padButtonStatus status = {};
+              if(!padRead(port, 0, &status)) return;
+              _buttons[port] = (uint16_t)~status.btns;'''
+          latched = '''    if(port == 0 && gPadSamplerThread >= 0) {
+                  uint32_t current = __atomic_load_n(&gPadCurrent, __ATOMIC_RELAXED);
+                  uint32_t latched = __atomic_exchange_n(&gPadLatched, 0u, __ATOMIC_RELAXED);
+                  _buttons[port] = (uint16_t)(current | latched);
+                  return;
+              }
+
+              const int state = padGetState(port, 0);
+              if(state != PAD_STATE_STABLE && state != PAD_STATE_FINDCTP1) return;
+
+              padButtonStatus status = {};
+              if(!padRead(port, 0, &status)) return;
+              _buttons[port] = (uint16_t)~status.btns;'''
+          if direct not in s:
+              raise RuntimeError("PollPort block missing")
+          s = s.replace(direct, latched, 1)
+
+          shutdown = "void Ps2Input::Shutdown()\n{\n"
+          repl = """void Ps2Input::Shutdown()
+          {
+              __atomic_store_n(&gPadSamplerRun, 0, __ATOMIC_RELAXED);
+              if(gPadSamplerThread >= 0) {
+                  usleep(6000);
+                  TerminateThread(gPadSamplerThread);
+                  DeleteThread(gPadSamplerThread);
+                  gPadSamplerThread = -1;
+              }
+          """
+          if shutdown not in s:
+              raise RuntimeError("Shutdown anchor missing")
+          s = s.replace(shutdown, repl, 1)
+          p.write_text(s)
+
+          m = Path("work/port/main.cpp")
+          ms = m.read_text()
+          inc = '#include "platform/Ps2Input.h"\n'
+          if inc not in ms:
+              raise RuntimeError("main input include missing")
+          ms = ms.replace(inc, inc + 'extern void Ps2InputEnableAsyncSampler();\n', 1)
+          reg = "    emulator.RegisterInputProvider(&input);\n"
+          if reg not in ms:
+              raise RuntimeError("input registration missing")
+          ms = ms.replace(reg, "    Ps2InputEnableAsyncSampler();\n" + reg, 1)
+          m.write_text(ms)
+          PY
+
       - name: Build NES PS2 ELF
         run: |
           set -euo pipefail
