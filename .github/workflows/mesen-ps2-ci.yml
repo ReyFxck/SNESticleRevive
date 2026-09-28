@@ -446,16 +446,101 @@ jobs:
           EE_LIBS += -lstdc++ -lsupc++ -latomic
           EOF
 
-      - name: Inspect PS2 emulation loop
+      - name: Optimize NES PS2 hot path
         run: |
-          echo '--- PERF_SOURCE_BEGIN ---'
-          echo '=== EmulatorPs2.cpp ==='
-          sed -n '1,1200p' work/port/src/Core/Shared/EmulatorPs2.cpp
-          echo '=== Ps2Video.cpp ==='
-          sed -n '1,1200p' work/port/platform/Ps2Video.cpp
-          echo '=== Timer.cpp ==='
-          sed -n '1,800p' work/port/src/Utilities/Timer.cpp
-          echo '--- PERF_SOURCE_END ---'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # The first working port used -O1 only to get through the R5900 GCC
+          # bring-up.  Keep BaseControlDevice's explicit -O0 workaround, but
+          # build the rest of the NES core with -O2.
+          mk = Path("work/port/Makefile")
+          m = mk.read_text()
+          m += """
+          # Performance build: all normal C++ translation units at -O2.
+          EE_CXXFLAGS := $(filter-out -O0 -O1 -O2 -O3 -Os -Ofast,$(EE_CXXFLAGS)) -O2
+          """
+          mk.write_text(m)
+
+          p = Path("work/port/platform/Ps2Video.cpp")
+          s = p.read_text()
+
+          # Packets are rewritten every frame. UCAB keeps packet writes coherent
+          # without flushing the entire EE data cache.
+          s = s.replace(
+              "_drawPacket = packet_init(64, PACKET_NORMAL);",
+              "_drawPacket = packet_init(64, PACKET_UCAB);",
+              1,
+          )
+
+          old = '''    // Convert Mesen's 9-bit NES palette index into GS RGBA.  Fill the unused
+              // bottom 16 texture rows with black so stale data can never leak onscreen.
+              for(uint32_t y = 0; y < height; y++) {
+                  const uint16_t* src = nesPixels + y * sourceStride;
+                  uint32_t* dst = _pixels + y * TextureWidth;
+                  for(uint32_t x = 0; x < width; x++) {
+                      dst[x] = _palette[src[x] & 0x01FF];
+                  }
+                  for(uint32_t x = width; x < TextureWidth; x++) dst[x] = 0x80000000;
+              }
+              for(uint32_t y = height; y < TextureHeight; y++) {
+                  memset(_pixels + y * TextureWidth, 0, TextureWidth * sizeof(uint32_t));
+              }
+
+              // Upload the 256x256 texture. draw_texture_transfer creates a DMA chain
+              // that references the aligned CPU buffer, so the packet itself stays tiny.
+              packet_t* transfer = packet_init(64, PACKET_NORMAL);
+              if(!transfer) return;
+              qword_t* tq = transfer->data;
+              tq = draw_texture_transfer(tq, _pixels, TextureWidth, TextureHeight, GS_PSM_32, _texture->address, _texture->width);
+              tq = draw_texture_flush(tq);
+              // Source-chain DMA does not write back the EE data cache. The texture is
+              // rebuilt by the CPU every frame, so flush before the GIF DMA reads it.
+              FlushCache(0);
+              dma_wait_fast();
+              dma_channel_send_chain(DMA_CHANNEL_GIF, transfer->data, tq - transfer->data, 0, 0);
+              dma_wait_fast();
+              packet_free(transfer);
+          '''
+          new = '''    // Convert only the visible NES area.  The textured rectangle never samples
+              // padding, so clearing the remaining 16 rows / right side every frame was
+              // wasted EE work.
+              for(uint32_t y = 0; y < height; y++) {
+                  const uint16_t* src = nesPixels + y * sourceStride;
+                  uint32_t* dst = _pixels + y * TextureWidth;
+                  for(uint32_t x = 0; x < width; x++) {
+                      dst[x] = _palette[src[x] & 0x01FF];
+                  }
+              }
+
+              // Reuse one uncached DMA packet instead of malloc/free every frame.
+              static packet_t* transfer = nullptr;
+              if(!transfer) {
+                  transfer = packet_init(64, PACKET_UCAB);
+                  if(!transfer) return;
+              }
+              qword_t* tq = transfer->data;
+              tq = draw_texture_transfer(tq, _pixels, TextureWidth, TextureHeight, GS_PSM_32, _texture->address, _texture->width);
+              tq = draw_texture_flush(tq);
+
+              // Flush only the pixel range DMA will read, not the entire EE D-cache.
+              SyncDCache(_pixels, (uint8_t*)_pixels + TextureWidth * height * sizeof(uint32_t));
+              dma_wait_fast();
+              dma_channel_send_chain(DMA_CHANNEL_GIF, transfer->data, tq - transfer->data, 0, 0);
+              dma_wait_fast();
+          '''
+          if old not in s:
+              raise RuntimeError("Ps2Video hot path block not found")
+          s = s.replace(old, new, 1)
+
+          # While the core is below real-time, blocking on every VBlank quantizes
+          # slow frames to 16.67 ms multiples (the ~66.7 ms spikes seen in NetherSX2).
+          # This performance build lets the core run flat-out; once it reaches >60,
+          # we'll restore a deadline-aware limiter instead of unconditional VSync.
+          s = s.replace("    graph_wait_vsync();\n", "", 1)
+
+          p.write_text(s)
+          PY
 
       - name: Build NES PS2 ELF
         run: |
