@@ -59,6 +59,12 @@ jobs:
           echo "291c03a14cc60e771c55b43b90bf2439b75b24c3e1b6f9938ac1f63f0a3ba51e  /tmp/rombrowser.tar.xz" | sha256sum -c -
           tar -xJf /tmp/rombrowser.tar.xz -C work/port
 
+      - name: Inspect ROM browser source
+        run: |
+          echo '--- FRONTEND_MAIN_BEGIN ---'
+          sed -n '1,1200p' work/port/main.cpp
+          echo '--- FRONTEND_MAIN_END ---'
+
       - name: Fix EE GCC compatibility
         run: |
           python3 - <<'PY'
