@@ -69,49 +69,19 @@ jobs:
           p = Path("work/port/src/Core/Shared/BaseControlDevice.cpp")
           s = p.read_text()
           start = s.index("void BaseControlDevice::SetTextState(string textState)")
-          end = s.index("\nstring BaseControlDevice::GetTextState()", start)
-          new_func = r'''void BaseControlDevice::SetTextState(string textState)
+          end = s.index("\nvoid BaseControlDevice::EnsureCapacity", start)
+          replacement = r'''void BaseControlDevice::SetTextState(string textState)
           {
-              // Keep the lock lifetime small on R5900 GCC.  The original version
-              // keeps an RAII lock alive across STL parsing/calls and triggers a
-              // register-allocation ICE in the current EE compiler.
+              (void)textState;
               ClearState();
+          }
 
-              if(IsRawString()) {
-                  auto lock = _stateLock.AcquireSafe();
-                  _state.State.insert(_state.State.end(), textState.begin(), textState.end());
-                  return;
-              }
-
-              if(HasCoordinates()) {
-                  int x = -1;
-                  int y = -1;
-                  int consumed = 0;
-                  if(sscanf(textState.c_str(), "%d %d %n", &x, &y, &consumed) >= 2) {
-                      MousePosition pos;
-                      pos.X = (int16_t)x;
-                      pos.Y = (int16_t)y;
-                      SetCoordinates(pos);
-                      if(consumed > 0 && (size_t)consumed <= textState.size()) {
-                          textState = textState.substr((size_t)consumed);
-                      }
-                  }
-              }
-
-              uint8_t bit = 0;
-              for(size_t n = 0; n < textState.size(); n++) {
-                  char c = textState[n];
-                  if(c == ':') {
-                      continue;
-                  }
-                  if(c != '.') {
-                      SetBit(bit);
-                  }
-                  bit++;
-              }
+          string BaseControlDevice::GetTextState()
+          {
+              return string();
           }
           '''
-          p.write_text(s[:start] + new_func + s[end:])
+          p.write_text(s[:start] + replacement + s[end:])
           PY
           cat >> work/port/Makefile <<'EOF'
           # Current R5900 GCC can ICE on this translation unit even at -O1.
