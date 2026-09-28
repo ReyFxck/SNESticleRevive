@@ -37,7 +37,25 @@ ROOT=../..
     -I "$ROOT/src/snes" \
     -I "$ROOT/src" \
     oam_test.cpp "$ROOT/src/snes/ppu/snppu.cpp" \
+    "$ROOT/src/snes/core/snesreg.cpp" \
     "$ROOT/src/snes/core/sndma.cpp" -o oam_test
+
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
+    -I "$ROOT/src/common/base" \
+    -I "$ROOT/src/common/system" \
+    -I "$ROOT/src/common/render" \
+    -I "$ROOT/src/common/debug" \
+    -I "$ROOT/src/app" \
+    -I "$ROOT/src/snes/apu" \
+    -I "$ROOT/src/snes/ppu" \
+    -I "$ROOT/src/snes/core" \
+    -I "$ROOT/src/snes/cpu" \
+    -I "$ROOT/src/snes" \
+    -I "$ROOT/src" \
+    io_register_test.cpp "$ROOT/src/snes/core/snio.cpp" \
+    "$ROOT/src/snes/core/sndma.cpp" -o io_register_test
 
 "${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
     -Wl,--gc-sections \
@@ -169,4 +187,4 @@ ROOT=../..
     "$ROOT/src/snes/ppu/snppucolor.cpp" \
     -o brightness_test
 
-echo "OK -> ./obj_test && ./oam_test && ./chrcache_test && ./chrcache_obj_only_test && ./bglinecache_test && ./mask_alignment_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test && ./brightness_test"
+echo "OK -> ./obj_test && ./oam_test && ./io_register_test && ./chrcache_test && ./chrcache_obj_only_test && ./bglinecache_test && ./mask_alignment_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test && ./brightness_test"

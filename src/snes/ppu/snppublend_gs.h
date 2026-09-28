@@ -49,6 +49,7 @@ class SNPPUBlendGS : public ISNPPUBlend
     Bool m_bAttribPalettesUploaded;
     Bool m_bDmaListHasIntensity;
 	Bool m_bDmaListDirectMain;
+	Bool m_bDmaListFixedSub;
 	Uint128 m_HiresDmaList[32] _ALIGN(16);
 	Uint128 m_SparsePaletteDmaList[
 		SNPPU_SPARSE_PALETTE_LIST_QWORDS] _ALIGN(64);
@@ -68,7 +69,9 @@ public:
     SNPPUBlendGS(Uint32 uVramAddr, Uint32 uOutAddr);
 
     virtual void Begin(class CRenderSurface *pTarget);
-    virtual void Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub, Uint32 uIntensity);
+    virtual void Exec(SNPPUBlendInfoT *pInfo, Int32 iLine,
+        Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub,
+        Uint32 uIntensity, Bool bFixedSub=FALSE);
     virtual void ExecHires512(const Uint16 *pLine512, Int32 iLine);
     virtual void Clear(SNPPUBlendInfoT *pInfo, Int32 iLine);
     virtual void End();

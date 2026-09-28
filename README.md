@@ -940,9 +940,15 @@ Release notes are published directly on the [GitHub Releases](https://github.com
   setup before the issue is marked fixed.
 - **Trials of Mana / Seiken Densetsu 3** — the former post-intro APUIO wait was
   traced to the missing ExHiROM SRAM compatibility mirror at
-  `$20-$3F:6000-$7FFF`. A deterministic host replay now reaches gameplay with
-  no unhandled access; sprite/presentation speed still needs a new PS2 build
-  retest.
+  `$20-$3F:6000-$7FFF`. The base-register audit additionally completes the PPU
+  read ports, VRAM prefetch, CPU-I/O direction and DMA register mirrors. A
+  deterministic host replay now completes the full three-minute intro and a
+  later gameplay capture with no unhandled base-console access; presentation
+  speed still needs a new PS2 build retest.
+- **Top Gear / normal-resolution color math** — fixed-color lines no longer
+  build, copy, upload or draw an unused sub screen on PS2. This is a generic
+  `CGWSEL` optimization, not a game check; real PS2/NetherSX2 measurements are
+  still required before claiming a stable 60 fps.
 - Some large / special‑chip titles may still freeze or misbehave.
 - **SuperFX (GSU)** remains experimental in v1.0.7: r15 corrects cache-window
   rotation, executable RAM banks `$60-$7F`, byte MMIO and the hot loop, but

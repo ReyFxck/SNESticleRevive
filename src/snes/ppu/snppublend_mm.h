@@ -15,7 +15,9 @@
 class SNPPUBlendMM : public SNPPUBlendC
 {
 public:
-    virtual void Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub, Uint32 uIntensity);
+    virtual void Exec(SNPPUBlendInfoT *pInfo, Int32 iLine,
+        Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub,
+        Uint32 uIntensity, Bool bFixedSub=FALSE);
 };
 
 #endif

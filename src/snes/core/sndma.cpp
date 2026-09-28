@@ -158,7 +158,7 @@ static Uint32 _SNDmaHashBytes(const Uint8 *pData, Uint32 nBytes)
 }
 #endif
 
-Uint8 SnesDMAC::Read8(Uint32 uChan, Uint32 uAddr)
+Uint8 SnesDMAC::Read8(Uint32 uChan, Uint32 uAddr, Uint8 uOpenBus)
 {
 	SnesDMAChT *pChan;
 	pChan = &m_Channels[uChan];
@@ -203,7 +203,9 @@ Uint8 SnesDMAC::Read8(Uint32 uChan, Uint32 uAddr)
 		return pChan->unknown;
 
 	default:
-		return 0x00;
+		/* $43xC-$43xE are not backed by DMA state.  They leave the CPU data
+		   bus visible instead of manufacturing zero. */
+		return uOpenBus;
 	}
 }
 

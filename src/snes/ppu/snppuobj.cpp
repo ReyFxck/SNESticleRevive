@@ -405,17 +405,30 @@ Int32 SnesPPURender::CheckOBJ(Uint8 *pObjList, Int32 iLine)
 
 void SnesPPURender::UpdateOBJVisibility(Uint8 *pObjY, Uint8 *pObjSize, Int32 iObj, Int32 nObjs)
 {
+	Uint8 nObjTilesLine[SNPPU_MAXLINE];
+
     memset(m_nObjLine, 0, sizeof(m_nObjLine));
+	memset(m_ObjRangeOverLine, 0, sizeof(m_ObjRangeOverLine));
+	memset(m_ObjTimeOverLine, 0, sizeof(m_ObjTimeOverLine));
+	memset(nObjTilesLine, 0, sizeof(nObjTilesLine));
 
 	while (nObjs > 0)
 	{
 		Uint32 uObjY, uObjSize;
+		Int32 iObjectX;
+		Int32 iFirstTile;
+		Int32 nObjectTiles;
 
 		iObj &= 0x7F;
 
 		// get pointer to object
         uObjSize = pObjSize[iObj];
 		uObjY    = pObjY[iObj];
+		iObjectX = (Int32)(m_Objs[iObj].uPosX & 0x1FF);
+		if (iObjectX & 0x100)
+			iObjectX -= 512;
+		_SnesPPUOBJCountedTileRange(m_Objs[iObj].uPosX, iObjectX,
+			m_Objs[iObj].uWidth, &iFirstTile, &nObjectTiles);
 
 		if (_SnesPPUOBJVisibleX(m_Objs[iObj].uPosX,
 		                           m_Objs[iObj].uWidth))
@@ -427,7 +440,23 @@ void SnesPPURender::UpdateOBJVisibility(Uint8 *pObjY, Uint8 *pObjSize, Int32 iOb
                 {
                     m_ObjLine[uObjY][m_nObjLine[uObjY]] = (Uint8)iObj;
                     m_nObjLine[uObjY]++;
+					if ((Uint32)nObjTilesLine[uObjY] +
+					    (Uint32)nObjectTiles > SNPPU_MAXOBJCHR)
+					{
+						m_ObjTimeOverLine[uObjY] = TRUE;
+						nObjTilesLine[uObjY] = SNPPU_MAXOBJCHR + 1;
+					}
+					else
+					{
+						nObjTilesLine[uObjY] += (Uint8)nObjectTiles;
+					}
                 }
+				else
+				{
+					/* The 33rd vertically/X-visible OBJ raises range-over even
+					   though it is not admitted to the line buffer. */
+					m_ObjRangeOverLine[uObjY] = TRUE;
+				}
             }
 
             uObjY++;

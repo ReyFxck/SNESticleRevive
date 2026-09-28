@@ -180,7 +180,16 @@ SnesIO::SnesIO()
 void SnesIO::Reset()
 {
 	memset(this, 0, sizeof(*this));
-	m_Regs.rdnmi  =  SNIO_VERSION_5A22;
+
+	/* These are 5A22 power-on values, not ordinary zero-initialized RAM.
+	   WRIO.7 being high matters: reads of $2137 are allowed to latch the
+	   live PPU counters, and a later high-to-low transition latches them too.
+	   Starting the IRQ compare registers at $1FF also keeps an unwritten
+	   H/V timer outside the visible picture, as on hardware. */
+	m_Regs.rdnmi = SNIO_VERSION_5A22;
+	m_Regs.wrio = 0xFF;
+	m_Regs.htime.w = 0x01FF;
+	m_Regs.vtime.w = 0x01FF;
 }
 
 void SnesIO::LatchInput(Emu::SysInputT  *pInput)

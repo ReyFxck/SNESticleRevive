@@ -81,15 +81,54 @@ Completed generic mapping item:
   `$20-$3F:6000-$7FFF` compatibility mirror.  Both resolve to the same SRAM;
   a synthetic test covers `$30:7808`/`$B0:7808`.
 
-Audit all of:
-- CPU I/O $4200-$421F and mirrors/open bus;
-- PPU $2100-$213F read/write semantics and latch side effects;
-- APUIO $2140-$217F mirroring and timing;
-- WRAM ports $2180-$2183;
-- DMA/HDMA $4300-$437F modes, wrapping and edge timing;
-- joypad/auto-read registers;
-- LoROM/HiROM/ExLoROM/ExHiROM mirrors;
-- DSP1/2/3/4, SuperFX, CX4, S-DD1, S-RTC and OBC1 mappings.
+### Base-register pass completed
+
+The base-console address pass now decodes every register window instead of
+treating valid open-bus traffic as a missing implementation:
+
+| Area | Implemented behavior |
+|---|---|
+| `$2100-$2133` | Complete write decode; write-only reads use the correct PPU1 or CPU-bus class. |
+| `$2134-$213F` | Mode-7 product, OAM/VRAM/CGRAM data reads, H/V latch toggles, PPU1/PPU2 retained-bus bits, chip revisions, region/field and sticky OBJ range/time flags. |
+| VRAM ports | 15-bit VMADDR, remapping, increment-port selection and the word prefetch/dummy-read sequence. Writes no longer corrupt the read buffer. |
+| `$2140-$217F` | Four APUIO ports mirrored throughout the complete window, with the existing CPU/SPC synchronization. |
+| `$2180-$2183` | WRAM data/address ports and 17-bit wrapping; `$2184-$21FF` is decoded as open bus/ignored writes without the former game-specific exception. |
+| `$4200-$421F` | Write-only/read-only direction, WRIO readback and counter-latch edge, NMI/IRQ status side effects, multiplication/division result ports, H/V IRQ registers and joypad result ports. |
+| `$4300-$437F` | All eight DMA channel images, including the `$43xB/$43xF` storage mirror and open-bus `$43xC-$43xE`. |
+| Base expansion space | Device-less `$2000-$20FF`, `$2200-$3FFF`, `$4000-$5FFF` and `$00-$3F/$80-$BF:6000-$7FFF` probes no longer generate false missing-address reports. Cartridge handlers still replace these windows when a board decodes them. |
+
+The register tests cover power-on values, DMA mirrors/open bus, PPU retained
+buses and status side effects, Mode-7 multiplication, counter latching,
+CGRAM/OAM ports and VRAM dummy reads. ROM Lab additionally completed
+deterministic runs of the full three-minute Trials of Mana intro, a later
+Trials gameplay state, the Top Gear attract/race path and a Super Mario RPG
+SA-1 boot path without an unhandled base-console access.
+
+These remaining items are deliberately recorded as approximations rather than
+being hidden behind per-game values:
+
+- the 65816 hot path does not yet retain one global CPU open-bus byte on every
+  memory access; trap pages return a deterministic approximation while the two
+  independent PPU buses are retained exactly;
+- 5A22 multiply/divide results are currently produced immediately instead of
+  after the hardware's 8/16-cycle delay;
+- auto-joy completion, active-display OAM/VRAM/CGRAM access restrictions and
+  several NMI/IRQ edge windows are scanline-level rather than master-cycle
+  exact;
+- native interlace and OBJ interlace presentation still need broader visual
+  verification;
+- special-chip completeness remains a separate audit. The base-register pass
+  does not claim that every DSP/GSU/CX4/S-DD1/S-RTC/OBC1 behavior is complete.
+
+### Measured PS2 rendering change
+
+Top Gear's profiled normal-resolution lines select fixed color as the second
+color-math operand (`CGWSEL.1=0`). On those lines the EE renderer now stops
+after main-screen composition, and the GS chain omits the unused 256-byte sub
+screen copy, texture upload and draw. Window, add/subtract, half-color and
+brightness behavior remain in the same GS chain. Brightness or palette changes
+do not create additional SNES sprites; they change color math, so this path
+removes color-composition work rather than altering OAM or sprite count.
 
 ## Work order
 

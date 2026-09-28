@@ -362,8 +362,8 @@ static void _SnesPPUBuildNativeHires512(
 
 void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 {
-	SnesRender8pInfoT *pRenderInfo;
-	SNPPUBlendInfoT *pBlendInfo;
+	SnesRender8pInfoT *pRenderInfo = m_pRenderInfo;
+	SNPPUBlendInfoT *pBlendInfo = &pRenderInfo->BlendInfo;
 	const SnesPPURegsT *pRegs  = m_pPPU->GetRegs();
 	const Uint8 uBGMode = (Uint8)pRegs->bgmode & 7u;
 	const Bool bPseudoHiresSimple =
@@ -413,6 +413,46 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 	}
 #endif
 
+	/* OAM evaluation is part of PPU behavior even at brightness zero. Decode
+	   changed OAM before the black-line shortcut and expose the sticky
+	   STAT77 range/time-over flags for the line. Forced blank suppresses
+	   sprite evaluation on hardware. */
+	if (m_UpdateFlags & SNESPPURENDER_UPDATE_OBJ)
+	{
+#if SNDBG_LOG
+		Uint32 _tObjUpdate = ProfCtrGetCycle();
+#endif
+		UpdateOBJ(pRenderInfo->uObjY, pRenderInfo->uObjSize);
+		PROF_ENTER("UpdateOBJVisibility");
+		UpdateOBJVisibility(pRenderInfo->uObjY, pRenderInfo->uObjSize,
+			pRegs->oampri.w, SNESPPU_OBJ_NUM);
+		PROF_LEAVE("UpdateOBJVisibility");
+#if SNDBG_LOG
+		{
+			Uint32 _dObjUpdate = ProfCtrGetCycle() - _tObjUpdate;
+			g_TmgCycObj += _dObjUpdate;
+			g_TmgCycObjUpdate += _dObjUpdate;
+		}
+#endif
+		m_UpdateFlags &= ~SNESPPURENDER_UPDATE_OBJ;
+	}
+	if (!(pRegs->inidisp & 0x80u) &&
+	    iLine >= 0 && iLine < SNPPU_MAXLINE)
+	{
+		m_pPPU->SetOBJStatus(m_ObjRangeOverLine[iLine],
+		                     m_ObjTimeOverLine[iLine]);
+	}
+
+	/* Forced blank and master brightness zero both produce the same exact
+	   black scanline. OAM evaluation above is retained for STAT77; BG,
+	   window, palette and color-math dirty state is consumed on the first
+	   later visible line, so fades cannot expose stale pixels. */
+	if ((pRegs->inidisp & 0x80u) || !(pRegs->inidisp & 0x0Fu))
+	{
+		m_pBlend->Clear(&m_pRenderInfo->BlendInfo, iLine);
+		return;
+	}
+
 #if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE
 	/* The expensive native-hires path is reused only for exact, fully stable
 	   Mode 5 lines.  Memory writes advance OutputGeneration; every visual PPU
@@ -455,9 +495,6 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 #endif
 #endif
 
-	pRenderInfo = m_pRenderInfo;
-    pBlendInfo = &pRenderInfo->BlendInfo;
-
 #if CODE_DEBUG && CODE_PLATFORM==CODE_PS2
 static Bool bPrint = TRUE;
 	if (bPrint)
@@ -472,40 +509,16 @@ static Bool bPrint = TRUE;
 	}
 #endif
 
-	if (pRegs->inidisp & 0x80)
-	{
-        m_pBlend->Clear(pBlendInfo, iLine);
-	} else
 	{
 		SNMaskT ColorMask[3];
 		Bool bDirectMain = FALSE;
+		Bool bFixedSub = FALSE;
 
 		if (m_UpdateFlags & SNESPPURENDER_UPDATE_PAL)
 		{
             m_pBlend->UpdatePalette(pBlendInfo, m_pPPU->GetCGData(), m_pPPU->GetIntensity());
 
 			m_UpdateFlags &= ~SNESPPURENDER_UPDATE_PAL;
-		}
-
-		if (m_UpdateFlags & SNESPPURENDER_UPDATE_OBJ)
-		{
-#if SNDBG_LOG
-			Uint32 _tObjUpdate = ProfCtrGetCycle();
-#endif
-			UpdateOBJ(pRenderInfo->uObjY, pRenderInfo->uObjSize);
-
-            PROF_ENTER("UpdateOBJVisibility");
-            UpdateOBJVisibility(pRenderInfo->uObjY, pRenderInfo->uObjSize, pRegs->oampri.w, SNESPPU_OBJ_NUM);
-            PROF_LEAVE("UpdateOBJVisibility");
-#if SNDBG_LOG
-			{
-				Uint32 _dObjUpdate = ProfCtrGetCycle() - _tObjUpdate;
-				g_TmgCycObj += _dObjUpdate;
-				g_TmgCycObjUpdate += _dObjUpdate;
-			}
-#endif
-
-			m_UpdateFlags &= ~SNESPPURENDER_UPDATE_OBJ;
 		}
 
 		/* Tiles and decoded character rows are cached across scanlines. A VRAM
@@ -547,6 +560,12 @@ static Bool bPrint = TRUE;
 		              (pRegs->cgadsub & 0x3F) == 0 &&
 		              (pRegs->cgwsel & 0xC0) == 0 &&
 		              m_pPPU->GetIntensity() == 15;
+		/* CGWSEL.1 clear selects the fixed colour as the colour-math
+		   operand.  In normal-resolution modes TS is not part of the picture,
+		   so the PS2 backend can omit its empty texture while retaining the
+		   exact window/add/sub masks. */
+		bFixedSub = !bPseudoHiresSimple && !bMode56HiresSimple &&
+		            !bDirectMain && !(pRegs->cgwsel & 0x02u);
 #endif
 
 		// determine color window mask for main screen
@@ -644,7 +663,8 @@ static Bool bPrint = TRUE;
 #else
 			m_pBlend->Exec(
 				pBlendInfo, iLine, pRegs->coldata, ColorMask,
-				(pRegs->cgadsub & 0x80), m_pPPU->GetIntensity());
+				(pRegs->cgadsub & 0x80), m_pPPU->GetIntensity(),
+				FALSE);
 #endif
 		}
 		else if (bPseudoHiresSimple)
@@ -663,7 +683,7 @@ static Bool bPrint = TRUE;
 				pBlendInfo, PseudoCGRAM, m_pPPU->GetIntensity());
 			m_pBlend->Exec(
 				pBlendInfo, iLine, 0, NULL, FALSE,
-				m_pPPU->GetIntensity());
+				m_pPPU->GetIntensity(), FALSE);
 			/* Do not upload the real CGRAM again on every pseudo-hires line.
 			   Mark it dirty instead; the normal path restores it only when a
 			   subsequent non-pseudo line actually needs it. */
@@ -677,7 +697,8 @@ static Bool bPrint = TRUE;
 				pRegs->coldata,
 				bDirectMain ? NULL : ColorMask,
 				(pRegs->cgadsub & 0x80),
-				m_pPPU->GetIntensity()
+				m_pPPU->GetIntensity(),
+				bFixedSub
 				);
 		}
 #if SNDBG_LOG

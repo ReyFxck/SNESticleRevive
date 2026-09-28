@@ -202,6 +202,8 @@ private:
 
     Uint8           m_nObjLine[SNPPU_MAXLINE];
     Uint8           m_ObjLine[SNPPU_MAXLINE][SNPPU_MAXOBJ];
+	Uint8           m_ObjRangeOverLine[SNPPU_MAXLINE];
+	Uint8           m_ObjTimeOverLine[SNPPU_MAXLINE];
 
     ISNPPUBlend    *m_pBlend;
 

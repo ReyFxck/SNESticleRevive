@@ -227,6 +227,56 @@ static void CheckMode4VRAMAddressDataDMA()
 	Check("mode4 final address", ppu.GetRegs()->vmaddr.w, 0x5679);
 }
 
+static void CheckReadRegisterSemantics()
+{
+	SnesPPU ppu;
+	TestRender render;
+
+	ppu.SetPPURender(&render);
+	render.SetPPU(&ppu);
+	ppu.Reset();
+
+	/* The common 5C78 revision reports version 3. */
+	Check("STAT78 version", ppu.Read8(0x213F, 0x00, TRUE) & 0x0F, 0x03);
+
+	/* 16 * ($0100 >> 8) = 16. A PPU1 result is retained by the
+	   documented write-only aliases and by STAT77 bit 4. */
+	ppu.Write8(0x211B, 0x10);
+	ppu.Write8(0x211B, 0x00);
+	ppu.Write8(0x211C, 0x00);
+	ppu.Write8(0x211C, 0x01);
+	Check("Mode7 product low", ppu.Read8(0x2134), 0x10);
+	Check("PPU1 write-only alias", ppu.Read8(0x2104, 0xA5), 0x10);
+	Check("CPU bus on other write-only port", ppu.Read8(0x2100, 0xA5), 0xA5);
+	Check("STAT77 PPU1 bit", ppu.Read8(0x213E), 0x11);
+	ppu.SetOBJStatus(TRUE, FALSE);
+	Check("STAT77 range-over", ppu.Read8(0x213E) & 0xC0, 0x40);
+	ppu.SetOBJStatus(FALSE, TRUE);
+	Check("STAT77 sticky time-over", ppu.Read8(0x213E) & 0xC0, 0xC0);
+	ppu.BeginFrame();
+	Check("STAT77 flags clear at frame", ppu.Read8(0x213E) & 0xC0, 0x00);
+
+	/* Latching keeps the current high/low phase. High counter reads expose
+	   only bit 0 and retain bits 1-7 from PPU2. */
+	ppu.LatchCounters(0x0100, 0x0180);
+	Check("latched H low", ppu.Read8(0x213C), 0x00);
+	Check("latched H high PPU2", ppu.Read8(0x213C), 0x01);
+	Check("latched V low", ppu.Read8(0x213D), 0x80);
+	Check("latched V high PPU2", ppu.Read8(0x213D), 0x81);
+	Check("STAT78 latch flag", ppu.Read8(0x213F, 0x00, FALSE) & 0x40, 0x40);
+	Check("STAT78 enabled read sees latch", ppu.Read8(0x213F, 0x00, TRUE) & 0x40, 0x40);
+	Check("STAT78 enabled read clears latch", ppu.Read8(0x213F, 0x00, FALSE) & 0x40, 0x00);
+
+	/* The low CGRAM byte becomes PPU2 open bus; bit 7 is consequently
+	   preserved in the following 15-bit high-byte read. */
+	ppu.Write8(0x2121, 0x00);
+	ppu.WriteCGDATA(0x80);
+	ppu.WriteCGDATA(0x12);
+	ppu.Write8(0x2121, 0x00);
+	Check("CGRAM read low", ppu.Read8(0x213B), 0x80);
+	Check("CGRAM read high PPU2 bit", ppu.Read8(0x213B), 0x92);
+}
+
 int main()
 {
 	SnesPPU ppu;
@@ -236,6 +286,7 @@ int main()
 	CheckVRAMBlockEquivalence();
 	CheckScrollAndMode7Latches();
 	CheckMode4VRAMAddressDataDMA();
+	CheckReadRegisterSemantics();
 
 	ppu.SetPPURender(&render);
 	render.SetPPU(&ppu);
@@ -360,7 +411,7 @@ int main()
 		Check("VRAM block word 1", ppu.GetVramPtr(0x1235)[0], 0x4433);
 		Check("VRAM block word 2", ppu.GetVramPtr(0x1236)[0], 0x6655);
 		Check("VRAM block address", ppu.GetRegs()->vmaddr.w, 0x1237);
-		Check("VRAM block read latch", ppu.GetRegs()->vmreadlatch.w, 0x1236);
+		Check("VRAM writes preserve read buffer", ppu.GetRegs()->vmreadlatch.w, 0x0000);
 		Check("VRAM block range calls", render.uRangeCalls, 1);
 		Check("VRAM block invalidate address", render.uFirstAddress, 0x1234);
 		Check("VRAM block invalidate words", render.nLastWords, 3);
@@ -404,10 +455,37 @@ int main()
 		Check("VRAM low-increment low", ppu.GetVramPtr(0x30)[0], 0x0012);
 		Check("VRAM low-increment high", ppu.GetVramPtr(0x31)[0], 0x3400);
 		Check("VRAM low-increment address", ppu.GetRegs()->vmaddr.w, 0x31);
-		Check("VRAM low-increment latch", ppu.GetRegs()->vmreadlatch.w, 0x31);
+		Check("VRAM low-increment preserves read buffer", ppu.GetRegs()->vmreadlatch.w, 0x0000);
 		Check("VRAM low-increment invalidates both", render.uSingleCalls, 2);
 		Check("VRAM low-increment first invalidation", render.uFirstAddress, 0x30);
 		Check("VRAM low-increment last invalidation", render.uLastAddress, 0x31);
+	}
+
+	// $2139/$213A expose the word prefetch buffer, not VMADDR directly.
+	// The incrementing port reloads the current word before incrementing,
+	// which is why sequential software performs one dummy access first.
+	{
+		ppu.Reset();
+		ppu.GetVramPtr(0x10)[0] = 0x2211;
+		ppu.GetVramPtr(0x11)[0] = 0x4433;
+		ppu.Write8(0x2115, 0x80); // increment on high read
+		ppu.Write8(0x2116, 0x10);
+		ppu.Write8(0x2117, 0x00);
+		Check("VRAM prefetched low", ppu.Read8(0x2139), 0x11);
+		Check("VRAM prefetched high", ppu.Read8(0x213A), 0x22);
+		Check("VRAM read address increments", ppu.GetRegs()->vmaddr.w, 0x11);
+		Check("VRAM dummy low repeats", ppu.Read8(0x2139), 0x11);
+		Check("VRAM dummy high repeats", ppu.Read8(0x213A), 0x22);
+		Check("VRAM next word low", ppu.Read8(0x2139), 0x33);
+		Check("VRAM next word high", ppu.Read8(0x213A), 0x44);
+
+		ppu.Write8(0x2115, 0x00); // increment on low read
+		ppu.Write8(0x2116, 0x10);
+		ppu.Write8(0x2117, 0x00);
+		Check("VRAM low-increment first low", ppu.Read8(0x2139), 0x11);
+		Check("VRAM low-increment first high", ppu.Read8(0x213A), 0x22);
+		Check("VRAM low-increment dummy low", ppu.Read8(0x2139), 0x11);
+		Check("VRAM low-increment next high", ppu.Read8(0x213A), 0x44);
 	}
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);

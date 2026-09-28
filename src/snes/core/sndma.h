@@ -53,7 +53,8 @@ public:
 	void                        BeginHDMA();
 	void                        ProcessHDMA(Uint32 uLine);
 
-	Uint8                       Read8(Uint32 uChan, Uint32 uAddr);
+	Uint8                       Read8(Uint32 uChan, Uint32 uAddr,
+	                                 Uint8 uOpenBus = 0);
 	void                        Write8(Uint32 uChan, Uint32 uAddr, Uint8 uData);
 	void                        SetMDMAEnable(Uint8 uData);
 	void                        SetHDMAEnable(Uint8 uData);

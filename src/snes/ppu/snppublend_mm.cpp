@@ -162,8 +162,11 @@ static void _ColorSub(Uint32 *pDest, Uint32 *pMain, Uint32 *pSub, Uint32 nPixels
 	}
 }
 
-void SNPPUBlendMM::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub, Uint32 uIntensity)
+void SNPPUBlendMM::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine,
+	Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub,
+	Uint32 uIntensity, Bool bFixedSub)
 {
+	(void)bFixedSub;
     Uint32 uSaveColor;
     PaletteT *pPal = pInfo->Pal;
 

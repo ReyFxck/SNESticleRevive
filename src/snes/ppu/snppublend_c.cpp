@@ -253,8 +253,11 @@ void SNPPUBlendC::UpdatePaletteEntry(SNPPUBlendInfoT *pInfo, Uint32 uAddr, Uint3
 	}
 }
 
-void SNPPUBlendC::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine, Uint32 uFixedColor16, SNMaskT *pColorMask, Bool bAddSub, Uint32 uIntensity)
+void SNPPUBlendC::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine,
+	Uint32 uFixedColor16, SNMaskT *pColorMask, Bool bAddSub,
+	Uint32 uIntensity, Bool bFixedSub)
 {
+    (void)bFixedSub;
     Uint32 uSaveColor;
     PaletteT *pPalMain = &pInfo->Pal[2];
 

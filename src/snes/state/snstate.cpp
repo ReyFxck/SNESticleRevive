@@ -234,6 +234,9 @@ void SnesPPU::RestoreState(struct SNStatePPUT *pState)
 	   as the safest reconstruction without changing the on-disk format. */
 	m_CGRAMLatch = (Uint8)(m_CGRAM[(m_Regs.cgadd.w >> 1) &
 	                              (SNESPPU_CGRAM_NUM - 1)] & 0xFF);
+	m_PPU1OpenBus = 0;
+	m_PPU2OpenBus = 0;
+	m_bCountersLatched = FALSE;
 	m_pRender->UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
 	UpdateOAMPriority();
 }

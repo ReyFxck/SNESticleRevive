@@ -2469,6 +2469,17 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		PROF_LEAVE("RenderBG");
 		return;
 	}
+
+	/* With CGWSEL.1 clear, normal-resolution colour math always uses COLdata
+	   as its second operand.  TS was already removed from uFetchLayers above;
+	   leave its half-colour eligibility fully enabled, then let the GS fixed-
+	   colour chain avoid clearing and transporting a dead 256-byte line. */
+	if (!bPseudoHires && !bNativeHires && !(pRegs->cgwsel & 0x02u))
+	{
+		SNMaskSet(pSubAddSubMask);
+		PROF_LEAVE("RenderBG");
+		return;
+	}
 #endif
 
 #if SNDBG_LOG

@@ -120,7 +120,7 @@ struct SnesPPURegsT
 
 	SnesReg8T   	        vmain;
 	SnesReg16T   	        vmaddr;
-	SnesReg16T   	        vmreadlatch;
+	SnesReg16T   	        vmreadlatch; // word-sized VRAM prefetch data
 	Uint8			        vminc[2];
 
 	SnesReg8T   	        m7sel;
@@ -185,7 +185,7 @@ public:
 	const SnesPPURegsT *    GetRegs() const                             {return &m_Regs;}
 	SnesOAMT *              GetOAM()                                    {return &m_OAM;}
 	Uint16 *                GetVramPtr(Uint32 uVramAddr)                {return &m_VRAM[uVramAddr & 0x7FFF];}
-	Bool                    IsForceBlank() const                        {return !(m_Regs.inidisp & 0x80);}
+	Bool                    IsForceBlank() const                        {return (m_Regs.inidisp & 0x80) != 0;}
 	Bool                    InVBlank() const                            {return m_bVBlank;}
 	Uint32                  GetIntensity()  const                       {return m_Regs.inidisp & 0xF;}
 	Uint32                  GetFrameVisibleLines() const                {return m_uFrameVisibleLines;}
@@ -223,7 +223,17 @@ public:
 	void                    WriteVMDATALH(Uint8 uDataL, Uint8 uDataH);
 	void                    WriteVMDATABlock(const Uint8 *pData, Int32 nBytes);
 	void                    Write8(Uint32 uAddr, Uint8 uData);
-	Uint8                   Read8(Uint32 uAddr);
+	/* Read-side PPU bus state is independent from the CPU data bus.  The
+	   caller supplies the current CPU open-bus value for write-only ports and
+	   tells us whether the external H/V latch line ($4201.7) is high. */
+	Uint8                   Read8(Uint32 uAddr, Uint8 uCpuOpenBus = 0,
+	                             Bool bCounterLatchEnabled = TRUE);
+	void                    LatchCounters(Uint16 uHCounter, Uint16 uVCounter);
+	void                    SetOBJStatus(Bool bRangeOver, Bool bTimeOver)
+	{
+		if (bRangeOver) m_Regs.stat77 |= 0x40;
+		if (bTimeOver)  m_Regs.stat77 |= 0x80;
+	}
 	Uint8                   ReadOAMDATA();
 	Uint8                   ReadCGDATA();
 	Uint8                   ReadVMDATAL();
@@ -251,6 +261,12 @@ private:
     SnesOAMT		        m_OAM;
 	Uint8                   m_OAMLatch;
 	Uint8                   m_CGRAMLatch;
+	/* 5C77 and 5C78 retain separate values on their read buses.  These are
+	   transient electrical latches, not part of the long-standing save-state
+	   image; restore reconstructs a deterministic idle value. */
+	Uint8                   m_PPU1OpenBus;
+	Uint8                   m_PPU2OpenBus;
+	Bool                    m_bCountersLatched;
 
     ISnesPPURender *        m_pRender;
 

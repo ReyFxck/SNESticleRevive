@@ -1,5 +1,6 @@
 obj_test
 oam_test
+io_register_test
 mode7_test
 chrcache_test
 chrcache_obj_only_test

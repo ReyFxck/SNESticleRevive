@@ -28,12 +28,17 @@ jobs:
         run: |
           ./tools/pputest/obj_test
           ./tools/pputest/oam_test
+          ./tools/pputest/io_register_test
           ./tools/pputest/chrcache_test
+          ./tools/pputest/chrcache_obj_only_test
+          ./tools/pputest/bglinecache_test
+          ./tools/pputest/mask_alignment_test
           ./tools/pputest/hires_test
           ./tools/pputest/audioschedule_test
           ./tools/pputest/mode7_test
           ./tools/pputest/queue_test
           ./tools/pputest/spcio_test
+          ./tools/pputest/spc700_test
           ./tools/pputest/safe_frameskip_test
           ./tools/pputest/regioncadence_test
           ./tools/pputest/diag_test
