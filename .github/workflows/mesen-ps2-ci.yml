@@ -232,6 +232,142 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Fix ROM launch and ZIP loading
+        run: |
+          set -euo pipefail
+          cp work/base/Utilities/miniz.cpp work/port/src/Utilities/miniz.cpp
+          cp work/base/Utilities/miniz.h work/port/src/Utilities/miniz.h
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("work/port/main.cpp")
+          s = p.read_text()
+
+          inc = '#include "Utilities/VirtualFile.h"\n'
+          assert inc in s
+          s = s.replace(inc, inc + '#include "Utilities/miniz.h"\n', 1)
+
+          marker = "void ConfigureSaveFolder(const std::string& romPath)\n"
+          assert marker in s
+          helper = r'''
+          bool IsZipName(const std::string& path)
+          {
+              const char* dot = strrchr(path.c_str(), '.');
+              return dot && strcasecmp(dot, ".zip") == 0;
+          }
+
+          std::string ForceNesExtensionLower(std::string name)
+          {
+              if(name.size() >= 4 && strcasecmp(name.c_str() + name.size() - 4, ".nes") == 0) {
+                  name.replace(name.size() - 4, 4, ".nes");
+              }
+              return name;
+          }
+
+          bool ExtractFirstNesFromZip(const std::vector<uint8_t>& zipData,
+                                      std::vector<uint8_t>& nesData,
+                                      std::string& nesName)
+          {
+              nesData.clear();
+              nesName.clear();
+              if(zipData.empty()) return false;
+
+              mz_zip_archive archive = {};
+              if(!mz_zip_reader_init_mem(&archive, zipData.data(), zipData.size(), 0)) {
+                  return false;
+              }
+
+              bool ok = false;
+              const int count = (int)mz_zip_reader_get_num_files(&archive);
+              for(int i = 0; i < count; i++) {
+                  mz_zip_archive_file_stat st = {};
+                  if(!mz_zip_reader_file_stat(&archive, i, &st) || !st.m_filename) continue;
+
+                  std::string candidate = st.m_filename;
+                  if(candidate.size() < 4 ||
+                     strcasecmp(candidate.c_str() + candidate.size() - 4, ".nes") != 0) {
+                      continue;
+                  }
+
+                  size_t outSize = 0;
+                  void* out = mz_zip_reader_extract_file_to_heap(
+                      &archive, st.m_filename, &outSize, 0);
+                  if(out && outSize > 0) {
+                      nesData.assign((uint8_t*)out, (uint8_t*)out + outSize);
+                      mz_free(out);
+                      nesName = ForceNesExtensionLower(candidate);
+                      ok = true;
+                      break;
+                  }
+                  if(out) mz_free(out);
+              }
+
+              mz_zip_reader_end(&archive);
+              return ok;
+          }
+
+          '''
+          s = s.replace(marker, helper + marker, 1)
+
+          old_audio = '''    Ps2Audio audio;
+              const bool audioReady = audio.Initialize();
+              if(audioReady) {
+                  emulator.GetSoundMixer()->RegisterAudioDevice(&audio);
+              } else {
+                  emulator.GetSettings()->GetAudioConfig().EnableAudio = false;
+              }'''
+          new_audio = '''    Ps2Audio audio;
+              // Do not let audsrv.irx/HostFS block ROM startup.  Get video+core
+              // booting first; audio can be re-enabled once the IRX path is fixed.
+              const bool audioReady = false;
+              emulator.GetSettings()->GetAudioConfig().EnableAudio = false;'''
+          assert old_audio in s
+          s = s.replace(old_audio, new_audio, 1)
+          s = s.replace("    audio.Shutdown();", "    if(audioReady) audio.Shutdown();")
+
+          old_rom = '''    std::vector<uint8_t> hostRomData;
+              VirtualFile rom;
+              if(IsHostPath(romPath)) {
+                  if(ReadHostRom(romPath, hostRomData)) {
+                      rom = VirtualFile(hostRomData.data(), hostRomData.size(), romPath);
+                  }
+              } else {
+                  rom = VirtualFile(romPath);
+              }'''
+          new_rom = '''    std::vector<uint8_t> hostRomData;
+              std::vector<uint8_t> extractedRomData;
+              VirtualFile rom;
+              if(IsHostPath(romPath)) {
+                  if(ReadHostRom(romPath, hostRomData)) {
+                      if(IsZipName(romPath)) {
+                          std::string innerName;
+                          if(ExtractFirstNesFromZip(hostRomData, extractedRomData, innerName)) {
+                              printf("[zip] extracted %s (%u bytes)\\n",
+                                     innerName.c_str(), (unsigned)extractedRomData.size());
+                              rom = VirtualFile(extractedRomData.data(), extractedRomData.size(), innerName);
+                          } else {
+                              printf("[zip] no .nes inside archive or extraction failed\\n");
+                          }
+                      } else {
+                          std::string virtualName = ForceNesExtensionLower(romPath);
+                          rom = VirtualFile(hostRomData.data(), hostRomData.size(), virtualName);
+                      }
+                  }
+              } else {
+                  rom = VirtualFile(romPath);
+              }'''
+          assert old_rom in s
+          s = s.replace(old_rom, new_rom, 1)
+
+          p.write_text(s)
+
+          mk = Path("work/port/Makefile")
+          m = mk.read_text()
+          if "src/Utilities/miniz.o" not in m:
+              m += "\nEE_OBJS += src/Utilities/miniz.o\n"
+          mk.write_text(m)
+          PY
+
       - name: Fix EE GCC compatibility
         run: |
           python3 - <<'PY'
