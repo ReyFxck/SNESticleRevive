@@ -164,35 +164,26 @@ jobs:
           s = s.replace(old_ext, new_ext, 1)
           s = s.replace("HasNesExtension(", "HasBrowserRomExtension(")
 
-          old_host_scan = r'''            std::string child = JoinPath(folder, leaf);
-              if(HasBrowserRomExtension(leaf.c_str())) {
-                  entries.push_back({leaf, child, false});
-                  continue;
-              }
-
-              int childDir = fioDopen(child.c_str());
-              if(childDir >= 0) {
-                  fioDclose(childDir);
-                  entries.push_back({leaf, child, true});
-              }'''
+          host_block = s.index("    if(IsHostPath(folder)) {")
+          scan_start = s.index("            std::string child = JoinPath(folder, leaf);", host_block)
+          scan_end = s.index("        }\n        fioDclose(dfd);", scan_start)
           new_host_scan = r'''            std::string child = JoinPath(folder, leaf);
 
-              // Do not probe every child with dopen().  NetherSX2's SAF HostFS
-              // accepts dopen("host:") but rejects host:<child> probes even for
-              // entries that were just returned by dread.  Trust dread's mode
-              // bits instead, like a normal directory iterator.
+              // NetherSX2 SAF can enumerate host: but rejects dopen(host:<child>)
+              // probes. Trust the mode returned by the root dread instead.
               const unsigned mode = de.stat.mode;
               const bool isDir =
-                  ((mode & 0x0038u) == 0x0020u) ||   // legacy ioman
-                  ((mode & 0xF000u) == 0x1000u);     // iomanX-style mode
+                  ((mode & 0x0038u) == 0x0020u) ||
+                  ((mode & 0xF000u) == 0x1000u);
 
               if(isDir) {
                   entries.push_back({leaf, child, true});
               } else if(HasBrowserRomExtension(leaf.c_str())) {
                   entries.push_back({leaf, child, false});
-              }'''
-          assert old_host_scan in s
-          s = s.replace(old_host_scan, new_host_scan, 1)
+              }
+          '''
+          s = s[:scan_start] + new_host_scan + s[scan_end:]
+
 
           # Start directly in host:. No device chooser and no assumed ROMS folder.
           old_start = '''    std::vector<std::string> pathStack;
