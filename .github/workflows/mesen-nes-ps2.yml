@@ -1,0 +1,67 @@
+name: Mesen NES PS2 build
+
+on:
+  push:
+    branches:
+      - ci/mesen-ps2-fixed-20260928
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-nes-ps2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore NES-only source bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat .ci/mesen-nes-ps2.part* | base64 -d > /tmp/mesen-nes-ps2.tar.xz
+          mkdir -p /tmp/mesen-build
+          tar -xJf /tmp/mesen-nes-ps2.tar.xz -C /tmp/mesen-build
+          test -f /tmp/mesen-build/ps2/Makefile
+
+      - name: Cache PS2DEV
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/ps2dev
+          key: ps2dev-${{ runner.os }}-${{ runner.arch }}-v2
+
+      - name: Install PS2DEV
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export PS2DEV="$HOME/.local/ps2dev"
+          mkdir -p "$PS2DEV"
+          if [ ! -x "$PS2DEV/ee/bin/mips64r5900el-ps2-elf-g++" ] && [ ! -x "$PS2DEV/ee/bin/ee-g++" ]; then
+            curl -L --retry 3 -o /tmp/ps2dev.tar.gz               https://github.com/ps2dev/ps2dev/releases/download/latest/ps2dev-ubuntu-latest.tar.gz
+            tar -xf /tmp/ps2dev.tar.gz --strip-components 1 -C "$PS2DEV"
+          fi
+
+      - name: Build MesenCE NES core for PS2
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export PS2DEV="$HOME/.local/ps2dev"
+          export PS2SDK="$PS2DEV/ps2sdk"
+          export GSKIT="$PS2DEV/gsKit"
+          export PATH="$PS2DEV/bin:$PS2DEV/ee/bin:$PS2DEV/iop/bin:$PS2DEV/dvp/bin:$PS2SDK/bin:$PATH"
+          cd /tmp/mesen-build/ps2
+          make -j2 PS2DEV="$PS2DEV" PS2SDK="$PS2SDK"
+          test -s mesence-ps2.elf
+          file mesence-ps2.elf
+          ls -lh mesence-ps2.elf audsrv.irx || true
+
+      - name: Upload ELF
+        uses: actions/upload-artifact@v4
+        with:
+          name: MesenCE-NES-PS2-${{ github.sha }}
+          path: |
+            /tmp/mesen-build/ps2/mesence-ps2.elf
+            /tmp/mesen-build/ps2/audsrv.irx
+          if-no-files-found: error
