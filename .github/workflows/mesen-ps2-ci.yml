@@ -36,20 +36,23 @@ jobs:
           mkdir -p work/overlay work/base work/port
           tar -xJf /tmp/mesen-overlay.tar.xz -C work/overlay
 
-      - name: Fetch exact MesenCE 2.2.1 base
+      - name: Fetch MesenCE base
         run: |
           set -euo pipefail
           curl -L --fail --retry 3             https://github.com/nesdev-org/MesenCE/archive/20ba206cef5ba207c21203176d02cb9f43dda9fb.tar.gz             | tar -xz --strip-components=1 -C work/base
+          cat ci/mesen/basefix.part* | base64 -d > /tmp/mesen-basefix.tar.xz
+          echo "11678e378bbe4fcf874b424b43485754bfbde1cdb54b69af485b2b766f8169fb  /tmp/mesen-basefix.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/mesen-basefix.tar.xz -C work/base
           git -C work/base init -q
 
-      - name: Apply PS2 port
+      - name: Apply NES PS2 port
         run: |
           set -euo pipefail
           cd work/overlay
           chmod +x setup.sh
           ./setup.sh "$GITHUB_WORKSPACE/work/base" "$GITHUB_WORKSPACE/work/port"
 
-      - name: Build PS2 ELF
+      - name: Build NES PS2 ELF
         run: |
           set -euo pipefail
           export PS2DEV="$HOME/.local/ps2dev"
