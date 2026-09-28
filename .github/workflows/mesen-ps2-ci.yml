@@ -362,7 +362,14 @@ jobs:
           mk = Path("work/port/Makefile")
           m = mk.read_text()
           if "src/Utilities/miniz.o" not in m:
-              m += "\nEE_OBJS += src/Utilities/miniz.o\n"
+              lines = m.splitlines()
+              for i, line in enumerate(lines):
+                  if "Makefile.eeglobal" in line and line.lstrip().startswith("include"):
+                      lines.insert(i, "EE_OBJS += src/Utilities/miniz.o")
+                      break
+              else:
+                  raise RuntimeError("Makefile.eeglobal include not found")
+              m = "\n".join(lines) + "\n"
           mk.write_text(m)
           PY
 
