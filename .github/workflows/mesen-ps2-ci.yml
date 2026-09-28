@@ -67,13 +67,27 @@ jobs:
           assert old1 in s and old2 in s
           p.write_text(s.replace(old1, new1).replace(old2, new2))
 
+          # The R5900 ABI/backend has trouble passing this desktop-oriented
+          # structure by value when it contains two extra doubles.  The PS2
+          # frontend only consumes the integer X/Y coordinates.
+          p = Path("work/port/src/Core/Shared/Interfaces/IKeyManager.h")
+          s = p.read_text()
+          old = "\tdouble RelativeX;\n\tdouble RelativeY;\n"
+          new = "#ifndef PS2_PORT\n\tdouble RelativeX;\n\tdouble RelativeY;\n#endif\n"
+          assert old in s
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path("work/port/src/Core/Shared/KeyManager.cpp")
+          s = p.read_text()
+          old = "\t_mousePosition.RelativeX = x;\n\t_mousePosition.RelativeY = y;\n"
+          assert old in s
+          p.write_text(s.replace(old, "", 1))
+
           p = Path("work/port/src/Core/Shared/BaseControlDevice.cpp")
           s = p.read_text()
 
-          # PS2 frontend is single-threaded on EE.  The PS2 SimpleLock is only a
-          # re-entrant counter, and its RAII handler trips the R5900 GCC reload
-          # allocator in several functions in this TU.  Drop those redundant
-          # guards in the PS2-only build.
+          # Single EE thread: remove redundant RAII guards that stress the
+          # current R5900 GCC reload allocator in this translation unit.
           s = re.sub(
               r"^[ \t]*auto lock = _stateLock\.AcquireSafe\(\);\n",
               "",
@@ -81,8 +95,7 @@ jobs:
               flags=re.MULTILINE,
           )
 
-          # Text controller-state helpers are only used by desktop movie/netplay
-          # style paths, not normal PS2 pad input.
+          # Desktop movie/netplay text-state helpers are unused by PS2 pad input.
           start = s.index("void BaseControlDevice::SetTextState(string textState)")
           end = s.index("\nvoid BaseControlDevice::EnsureCapacity", start)
           replacement = r'''void BaseControlDevice::SetTextState(string textState)
