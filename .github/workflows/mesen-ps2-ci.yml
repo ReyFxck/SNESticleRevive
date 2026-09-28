@@ -122,7 +122,7 @@ jobs:
           # Keep this troublesome TU conservative on the current R5900 GCC.
           src/Core/Shared/BaseControlDevice.o: EE_CXXFLAGS := $(filter-out -O0 -O1 -O2 -O3 -Os -Ofast,$(EE_CXXFLAGS)) -O0
           # Makefile.eeglobal links with EE_CC, so explicitly add the C++ runtime.
-          EE_LIBS += -lstdc++ -lsupc++
+          EE_LIBS += -lstdc++ -lsupc++ -latomic
           EOF
 
       - name: Build NES PS2 ELF
