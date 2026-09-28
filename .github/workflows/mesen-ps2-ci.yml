@@ -59,11 +59,187 @@ jobs:
           echo "291c03a14cc60e771c55b43b90bf2439b75b24c3e1b6f9938ac1f63f0a3ba51e  /tmp/rombrowser.tar.xz" | sha256sum -c -
           tar -xJf /tmp/rombrowser.tar.xz -C work/port
 
-      - name: Inspect ROM browser source
+      - name: Fix HostFS root browser
         run: |
-          echo '--- FRONTEND_MAIN_BEGIN ---'
-          sed -n '1,1200p' work/port/main.cpp
-          echo '--- FRONTEND_MAIN_END ---'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path("work/port/main.cpp")
+          s = p.read_text()
+
+          # Keep the launcher URI so host: files can be reopened through
+          # NetherSX2's SAF namespace when plain host:<name> is rejected.
+          s = s.replace(
+              "constexpr int VisibleRows = 19;\n",
+              "constexpr int VisibleRows = 19;\nstd::string gBootPath;\n",
+              1,
+          )
+
+          marker = """std::string HostEntryLeaf(const char* rawName)
+          {
+              if(!rawName) return {};
+              const char* leaf = rawName;
+              for(const char* p = rawName; *p; p++) {
+                  if(*p == '/' || *p == '\\\\') leaf = p + 1;
+              }
+              return leaf;
+          }
+          """
+          helper = marker + r'''
+          bool BuildHostIoPath(const std::string& guestPath, std::string& out)
+          {
+              if(!IsHostPath(guestPath) || gBootPath.rfind("host:content://", 0) != 0) {
+                  return false;
+              }
+
+              std::string uri = gBootPath.substr(5);
+              size_t sep = uri.rfind("%2F");
+              if(sep == std::string::npos) sep = uri.rfind("%2f");
+              if(sep == std::string::npos) return false;
+
+              std::string rel = guestPath.substr(5);
+              while(!rel.empty() && (rel.front() == '/' || rel.front() == '\\')) {
+                  rel.erase(rel.begin());
+              }
+
+              static const char hex[] = "0123456789ABCDEF";
+              out = "host:" + uri.substr(0, sep) + "%2F";
+              for(unsigned char ch : rel) {
+                  if(ch == '/' || ch == '\\') {
+                      out += "%2F";
+                  } else if((ch >= 'A' && ch <= 'Z') ||
+                            (ch >= 'a' && ch <= 'z') ||
+                            (ch >= '0' && ch <= '9') ||
+                            ch == '-' || ch == '_' || ch == '.' || ch == '~') {
+                      out.push_back((char)ch);
+                  } else {
+                      out.push_back('%');
+                      out.push_back(hex[(ch >> 4) & 15]);
+                      out.push_back(hex[ch & 15]);
+                  }
+              }
+              return true;
+          }
+
+          int OpenHostFile(const std::string& path)
+          {
+              int fd = fioOpen(path.c_str(), FIO_O_RDONLY);
+              if(fd >= 0) return fd;
+
+              std::string uriPath;
+              if(BuildHostIoPath(path, uriPath)) {
+                  fd = fioOpen(uriPath.c_str(), FIO_O_RDONLY);
+              }
+              return fd;
+          }
+          '''
+          assert marker in s
+          s = s.replace(marker, helper, 1)
+
+          s = s.replace(
+              "int fd = fioOpen(path.c_str(), FIO_O_RDONLY);\n    if(fd < 0) return false;\n    fioClose(fd);\n    return true;",
+              "int fd = OpenHostFile(path);\n    if(fd < 0) return false;\n    fioClose(fd);\n    return true;",
+              1,
+          )
+
+          old_ext = r'''bool HasNesExtension(const char* name)
+          {
+              if(!name) return false;
+              const char* dot = strrchr(name, '.');
+              if(!dot || strlen(dot) != 4) return false;
+              return tolower((unsigned char)dot[1]) == 'n' &&
+                     tolower((unsigned char)dot[2]) == 'e' &&
+                     tolower((unsigned char)dot[3]) == 's' &&
+                     dot[4] == '\0';
+          }'''
+          new_ext = r'''bool HasBrowserRomExtension(const char* name)
+          {
+              if(!name) return false;
+              const char* dot = strrchr(name, '.');
+              if(!dot) return false;
+              return strcasecmp(dot, ".nes") == 0 || strcasecmp(dot, ".zip") == 0;
+          }'''
+          assert old_ext in s
+          s = s.replace(old_ext, new_ext, 1)
+          s = s.replace("HasNesExtension(", "HasBrowserRomExtension(")
+
+          old_host_scan = r'''            std::string child = JoinPath(folder, leaf);
+              if(HasBrowserRomExtension(leaf.c_str())) {
+                  entries.push_back({leaf, child, false});
+                  continue;
+              }
+
+              int childDir = fioDopen(child.c_str());
+              if(childDir >= 0) {
+                  fioDclose(childDir);
+                  entries.push_back({leaf, child, true});
+              }'''
+          new_host_scan = r'''            std::string child = JoinPath(folder, leaf);
+
+              // Do not probe every child with dopen().  NetherSX2's SAF HostFS
+              // accepts dopen("host:") but rejects host:<child> probes even for
+              // entries that were just returned by dread.  Trust dread's mode
+              // bits instead, like a normal directory iterator.
+              const unsigned mode = de.stat.mode;
+              const bool isDir =
+                  ((mode & 0x0038u) == 0x0020u) ||   // legacy ioman
+                  ((mode & 0xF000u) == 0x1000u);     // iomanX-style mode
+
+              if(isDir) {
+                  entries.push_back({leaf, child, true});
+              } else if(HasBrowserRomExtension(leaf.c_str())) {
+                  entries.push_back({leaf, child, false});
+              }'''
+          assert old_host_scan in s
+          s = s.replace(old_host_scan, new_host_scan, 1)
+
+          # Start directly in host:. No device chooser and no assumed ROMS folder.
+          old_start = '''    std::vector<std::string> pathStack;
+              std::vector<BrowserEntry> entries = BuildRootEntries(argc, argv);'''
+          new_start = '''    std::vector<std::string> pathStack = {"host:"};
+              std::vector<BrowserEntry> entries = ListDirectory("host:");'''
+          assert old_start in s
+          s = s.replace(old_start, new_start, 1)
+
+          old_back = '''            if(!pathStack.empty()) {
+                          pathStack.pop_back();
+                          entries = pathStack.empty() ? BuildRootEntries(argc, argv) : ListDirectory(pathStack.back());
+                          selected = 0;
+                      }'''
+          new_back = '''            if(pathStack.size() > 1) {
+                          pathStack.pop_back();
+                          entries = ListDirectory(pathStack.back());
+                          selected = 0;
+                      }'''
+          assert old_back in s
+          s = s.replace(old_back, new_back, 1)
+
+          # Rescans also remain rooted at host:.
+          s = s.replace(
+              "entries = pathStack.empty() ? BuildRootEntries(argc, argv) : ListDirectory(pathStack.back());",
+              "entries = ListDirectory(pathStack.empty() ? std::string(\"host:\") : pathStack.back());"
+          )
+
+          # Reopen ROMs through the SAF URI fallback when direct host:<name> fails.
+          s = s.replace(
+              "int fd = fioOpen(path.c_str(), FIO_O_RDONLY);\n    if(fd < 0) return false;",
+              "int fd = OpenHostFile(path);\n    if(fd < 0) return false;",
+              1,
+          )
+
+          s = s.replace(
+              "    fioInit();\n",
+              "    fioInit();\n    if(argc > 0 && argv && argv[0]) gBootPath = argv[0];\n",
+              1,
+          )
+
+          # UI text should describe what the browser actually accepts.
+          s = s.replace("NO .NES FILES OR FOLDERS", "NO NES/ZIP FILES OR FOLDERS")
+          s = s.replace("TRY MASS:/ROMS OR CDFS:/", "HOST: ROOT IS EMPTY")
+
+          p.write_text(s)
+          PY
 
       - name: Fix EE GCC compatibility
         run: |
