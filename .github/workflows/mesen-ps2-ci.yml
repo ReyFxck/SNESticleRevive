@@ -56,6 +56,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path("work/port/src/Core/NES/Mappers/Homebrew/Rainbow.cpp")
           s = p.read_text()
@@ -68,6 +69,20 @@ jobs:
 
           p = Path("work/port/src/Core/Shared/BaseControlDevice.cpp")
           s = p.read_text()
+
+          # PS2 frontend is single-threaded on EE.  The PS2 SimpleLock is only a
+          # re-entrant counter, and its RAII handler trips the R5900 GCC reload
+          # allocator in several functions in this TU.  Drop those redundant
+          # guards in the PS2-only build.
+          s = re.sub(
+              r"^[ \t]*auto lock = _stateLock\.AcquireSafe\(\);\n",
+              "",
+              s,
+              flags=re.MULTILINE,
+          )
+
+          # Text controller-state helpers are only used by desktop movie/netplay
+          # style paths, not normal PS2 pad input.
           start = s.index("void BaseControlDevice::SetTextState(string textState)")
           end = s.index("\nvoid BaseControlDevice::EnsureCapacity", start)
           replacement = r'''void BaseControlDevice::SetTextState(string textState)
@@ -84,7 +99,7 @@ jobs:
           p.write_text(s[:start] + replacement + s[end:])
           PY
           cat >> work/port/Makefile <<'EOF'
-          # Current R5900 GCC can ICE on this translation unit even at -O1.
+          # Keep this troublesome TU conservative on the current R5900 GCC.
           src/Core/Shared/BaseControlDevice.o: EE_CXXFLAGS := $(filter-out -O0 -O1 -O2 -O3 -Os -Ofast,$(EE_CXXFLAGS)) -O0
           EOF
 
