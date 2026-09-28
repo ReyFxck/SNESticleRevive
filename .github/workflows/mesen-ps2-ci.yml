@@ -176,10 +176,12 @@ jobs:
                   ((mode & 0x0038u) == 0x0020u) ||
                   ((mode & 0xF000u) == 0x1000u);
 
-              if(isDir) {
-                  entries.push_back({leaf, child, true});
-              } else if(HasBrowserRomExtension(leaf.c_str())) {
+              if(HasBrowserRomExtension(leaf.c_str())) {
+                  // Extensions win over unreliable HostFS mode bits. NetherSX2
+                  // may report .nes/.zip entries with directory-like mode flags.
                   entries.push_back({leaf, child, false});
+              } else if(isDir) {
+                  entries.push_back({leaf, child, true});
               }
           '''
           s = s[:scan_start] + new_host_scan + s[scan_end:]
