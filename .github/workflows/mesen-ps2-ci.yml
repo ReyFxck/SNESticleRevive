@@ -52,7 +52,7 @@ jobs:
           chmod +x setup.sh
           ./setup.sh "$GITHUB_WORKSPACE/work/base" "$GITHUB_WORKSPACE/work/port"
 
-      - name: Fix EE GCC overloads
+      - name: Fix EE GCC compatibility
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -65,6 +65,10 @@ jobs:
           assert old1 in s and old2 in s
           p.write_text(s.replace(old1, new1).replace(old2, new2))
           PY
+          cat >> work/port/Makefile <<'EOF'
+          # Current R5900 GCC can ICE on this translation unit at -O1.
+          src/Core/Shared/BaseControlDevice.o: EE_CXXFLAGS := $(filter-out -O0 -O1 -O2 -O3 -Os -Ofast,$(EE_CXXFLAGS)) -O0
+          EOF
 
       - name: Build NES PS2 ELF
         run: |
