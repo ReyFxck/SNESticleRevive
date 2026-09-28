@@ -56,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           base64 -d ci/mesen/rombrowser.b64 > /tmp/rombrowser.tar.xz
-          echo "e7076b048b666acb05a5fceb0434797ef912f342fee77139bef5f1636f7bd078  /tmp/rombrowser.tar.xz" | sha256sum -c -
+          echo "291c03a14cc60e771c55b43b90bf2439b75b24c3e1b6f9938ac1f63f0a3ba51e  /tmp/rombrowser.tar.xz" | sha256sum -c -
           tar -xJf /tmp/rombrowser.tar.xz -C work/port
 
       - name: Fix EE GCC compatibility
