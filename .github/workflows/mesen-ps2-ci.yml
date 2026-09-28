@@ -52,6 +52,20 @@ jobs:
           chmod +x setup.sh
           ./setup.sh "$GITHUB_WORKSPACE/work/base" "$GITHUB_WORKSPACE/work/port"
 
+      - name: Fix EE GCC overloads
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("work/port/src/Core/NES/Mappers/Homebrew/Rainbow.cpp")
+          s = p.read_text()
+          old1 = "HexUtilities::ToHex(ctrl.FpgaRamSrc * 0x400)"
+          new1 = "HexUtilities::ToHex(static_cast<uint16_t>(ctrl.FpgaRamSrc * 0x400))"
+          old2 = "HexUtilities::ToHex(0x2000 + i * 0x400)"
+          new2 = "HexUtilities::ToHex(static_cast<uint16_t>(0x2000 + i * 0x400))"
+          assert old1 in s and old2 in s
+          p.write_text(s.replace(old1, new1).replace(old2, new2))
+          PY
+
       - name: Build NES PS2 ELF
         run: |
           set -euo pipefail
