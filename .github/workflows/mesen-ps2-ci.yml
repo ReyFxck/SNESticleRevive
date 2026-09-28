@@ -52,6 +52,13 @@ jobs:
           chmod +x setup.sh
           ./setup.sh "$GITHUB_WORKSPACE/work/base" "$GITHUB_WORKSPACE/work/port"
 
+      - name: Install ROM browser frontend
+        run: |
+          set -euo pipefail
+          base64 -d ci/mesen/rombrowser.b64 > /tmp/rombrowser.tar.xz
+          echo "e7076b048b666acb05a5fceb0434797ef912f342fee77139bef5f1636f7bd078  /tmp/rombrowser.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/rombrowser.tar.xz -C work/port
+
       - name: Fix EE GCC compatibility
         run: |
           python3 - <<'PY'
