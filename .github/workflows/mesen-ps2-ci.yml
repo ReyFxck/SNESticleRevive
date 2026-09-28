@@ -465,14 +465,9 @@ jobs:
           p = Path("work/port/platform/Ps2Video.cpp")
           s = p.read_text()
 
-          # Packets are rewritten every frame. UCAB keeps packet writes coherent
-          # without flushing the entire EE data cache.
-          s = s.replace(
-              "_drawPacket = packet_init(64, PACKET_NORMAL);",
-              "_drawPacket = packet_init(64, PACKET_UCAB);",
-              1,
-          )
-
+          # Keep GIF packets in normal cached RAM. dma_channel_send_chain()
+          # expects a normal EE address; feeding it a PACKET_UCAB pointer makes
+          # NetherSX2 raise GIF BUSERR before the first frame.
           old = '''    // Convert Mesen's 9-bit NES palette index into GS RGBA.  Fill the unused
               // bottom 16 texture rows with black so stale data can never leak onscreen.
               for(uint32_t y = 0; y < height; y++) {
@@ -516,7 +511,7 @@ jobs:
               // Reuse one uncached DMA packet instead of malloc/free every frame.
               static packet_t* transfer = nullptr;
               if(!transfer) {
-                  transfer = packet_init(64, PACKET_UCAB);
+                  transfer = packet_init(64, PACKET_NORMAL);
                   if(!transfer) return;
               }
               qword_t* tq = transfer->data;
