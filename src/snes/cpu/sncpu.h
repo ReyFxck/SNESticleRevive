@@ -84,6 +84,10 @@ typedef struct SNCpu_t
 	   timer IRQ.  This occupies the final byte of the original 4-byte signal
 	   word, so SNCpuT's PS2 assembly offsets remain unchanged. */
 	Uint8				uIrqPending;
+	/* Last value driven on the 5A22 CPU data bus.  Keep it immediately
+	   before Bank[] so sn65816.S can update it with one cheap byte store. */
+	Uint8				uOpenBus;
+	Uint8				uOpenBusPad[3];
 
 #if defined(SNCPU_TEST) && SNCPU_TEST
 	/* Host-only instruction-vector accounting.  Kept out of release builds so
