@@ -299,7 +299,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 		Uint32 _dpCycles = (R_DPMASK >> 16) & 0xFF;	\
 		pCpu->Cycles -= _dpCycles;					\
 		if (_dpCycles) {							\
-			SNCPU_COUNTCYCLES(1)					\
+			SNCPU_COUNTCYCLES(1);					\
 		}									\
 	} while (0);
 
