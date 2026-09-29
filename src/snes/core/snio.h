@@ -12,6 +12,7 @@
 #include "emuinput.h"
 #include "snesreg.h"
 #include "snspctimer.h"
+#include "sncpu.h"
 
 #define SNESIO_JOY_R		0x0010
 #define SNESIO_JOY_L		0x0020
@@ -60,8 +61,17 @@ class SnesIO
 {
 	Emu::SysInputT	m_Input;
 
+	/* 5A22 multiply/divide unit. The result registers live in m_Regs; these
+	   fields are the in-flight shift/add state MesenCE models cycle-by-cycle. */
+	Uint8			m_uMultCounter;
+	Uint8			m_uDivCounter;
+	Uint16			m_uAluPad;
+	Uint32			m_uAluShift;
+	Uint32			m_uAluPrevCpuCycle;
+
 	Uint8			ReadSerialPad(Uint32 uPad);
 	void			ShiftSerialPad(Uint32 uPad);
+	void			RunALU(SNCpuT *pCpu, Bool bReadPhase);
 
 public:
 	SnesIORegsT		m_Regs;
@@ -78,6 +88,10 @@ public:
 	Uint8	ReadSerial0();
 	Uint8	ReadSerial1();
 	void	UpdateJoyPads();
+
+	Uint8	ReadALU(SNCpuT *pCpu, Uint32 uAddr);
+	void	WriteALU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
+	void	ResetALUTiming(Uint32 uCpuCycle = 0);
 };
 
 #endif
