@@ -638,10 +638,9 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 				(Uint16)pSnes->m_uLine);
 		}
 
-		/* Full CPU open-bus tracking is kept out of the 65816 hot path for
-		   now. $21 is the existing deterministic approximation used by this
-		   trap page; PPU1/PPU2 retained-bus bits are modeled exactly. */
-		Uint8 uData = pSnes->m_PPU.Read8(uAddr, (Uint8)(uAddr >> 8),
+		/* Write-only PPU ports expose the byte currently retained by the 5A22
+		   CPU data bus. PPU1/PPU2 keep their own independent retained buses. */
+		Uint8 uData = pSnes->m_PPU.Read8(uAddr, pCpu->uOpenBus,
 		                                    bCounterLatchEnabled);
 #if SNESTICLE_ROMLAB && ROMLAB_TRACE_HANDLED_IO
 		static Uint32 s_uTracePPUReads = 0;
@@ -668,17 +667,15 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 
 	default:
 		/* $2181-$21FF has no readable B-bus register.  The WRAM address
-		   ports and the undecoded tail both expose CPU open bus; keep the
-		   trap page's deterministic approximation instead of diagnosing
-		   valid software as missing MMIO. */
+		   ports and the undecoded tail both expose the retained CPU bus. */
 		if (uAddr >= 0x2181 && uAddr <= 0x21FF)
-			return (Uint8)(uAddr >> 8);
+			return pCpu->uOpenBus;
 
 		/* The remaining $2000-$3FFF area is genuinely open bus on a base
 		   console.  Cartridge devices which own part of it (SA-1, S-RTC and
 		   SuperFX above, or their dedicated map handlers) must be dispatched
 		   before this fallback. */
-		return (Uint8)(uAddr >> 8);
+		return pCpu->uOpenBus;
 	}
 }
 
@@ -846,7 +843,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 	{
 		// read from DMA controller
 		return pSnes->m_DMAC.Read8((uAddr>>4) & 7, uAddr & 0xF,
-		                              (Uint8)(uAddr >> 8));
+		                              pCpu->uOpenBus);
 	} else
 	if (pSnes->m_bSDD1 && uAddr >= 0x4800 && uAddr <= 0x4807)
 	{
@@ -937,14 +934,13 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 	default:
 		break;
 	}
-	/* $4200-$420F are decoded write-only CPU registers. Reads return the
-	   CPU data bus; keep the existing trap-page approximation without
-	   falsely classifying them as missing addresses. */
+	/* $4200-$420F are decoded write-only CPU registers. Reads expose the
+	   byte retained on the CPU data bus. */
 	if (uAddr >= 0x4200 && uAddr <= 0x420F)
-		return (Uint8)(uAddr >> 8);
+		return pCpu->uOpenBus;
 	/* Undecoded CPU-I/O and expansion locations in this trap page expose
-	   open bus. Cartridge devices (such as S-DD1) are dispatched above. */
-	return uAddr >> 8;
+	   the same retained bus. Cartridge devices (such as S-DD1) are above. */
+	return pCpu->uOpenBus;
 }
 
 #if SNES_DEBUG
@@ -1159,14 +1155,14 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadMem(SNCpuT *pCpu, Uint32 uAddr)
 	   therefore valid open-bus probes, not a missing mapper. */
 	if ((uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF)) &&
 	    uLow >= 0x6000 && uLow <= 0x7FFF)
-		return 0;
+		return pCpu->uOpenBus;
 
 	ROMLAB_UNHANDLED(pCpu, uAddr & 0xFFFFFF, 0, 0);
 	#if SNES_DEBUG
     if (Snes_bDebugUnhandledIO)
 	SnesDebugRead(uAddr);
 	#endif
-	return 0;
+	return pCpu->uOpenBus;
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
