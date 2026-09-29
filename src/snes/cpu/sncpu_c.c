@@ -140,7 +140,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 
 // i/o macros
 
-#define SNCPU_COUNTCYCLES(_nCycles) pCpu->uCpuCycleCount += (_nCycles)
+#define SNCPU_COUNTCYCLES(_nCycles) do { pCpu->uCpuCycleCount += (_nCycles); } while (0)
 
 #define SNCPU_SUBCYCLES(_nCycles) \
 	do { \
