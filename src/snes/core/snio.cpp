@@ -190,6 +190,127 @@ void SnesIO::Reset()
 	m_Regs.wrio = 0xFF;
 	m_Regs.htime.w = 0x01FF;
 	m_Regs.vtime.w = 0x01FF;
+	/* Power-on values of the 5A22 ALU input latches. */
+	m_Regs.wrmpya = 0xFF;
+	m_Regs.wrdiv.w = 0xFFFF;
+	ResetALUTiming(0);
+}
+
+void SnesIO::ResetALUTiming(Uint32 uCpuCycle)
+{
+	m_uMultCounter = 0;
+	m_uDivCounter = 0;
+	m_uAluShift = 0;
+	m_uAluPrevCpuCycle = uCpuCycle;
+}
+
+void SnesIO::RunALU(SNCpuT *pCpu, Bool bReadPhase)
+{
+	Uint32 uCpuCycle = pCpu ? pCpu->uCpuCycleCount : 0;
+	Uint32 nCycles;
+
+	/* On the real 5A22 a read samples before the write point of the current
+	   machine cycle. MesenCE represents that by advancing the ALU to C-1 for
+	   reads (and the first phase of writes), then to C for writes. */
+	if (bReadPhase && uCpuCycle)
+		uCpuCycle--;
+
+	nCycles = uCpuCycle - m_uAluPrevCpuCycle;
+	while (nCycles-- && (m_uMultCounter || m_uDivCounter))
+	{
+		if (m_uMultCounter)
+		{
+			m_uMultCounter--;
+			if (m_Regs.rddiv.w & 1)
+				m_Regs.rdmpy.w =
+					(Uint16)(m_Regs.rdmpy.w + (Uint16)m_uAluShift);
+			m_uAluShift <<= 1;
+			m_Regs.rddiv.w >>= 1;
+		}
+
+		if (m_uDivCounter)
+		{
+			m_uDivCounter--;
+			m_uAluShift >>= 1;
+			m_Regs.rddiv.w = (Uint16)(m_Regs.rddiv.w << 1);
+			if ((Uint32)m_Regs.rdmpy.w >= m_uAluShift)
+			{
+				m_Regs.rdmpy.w =
+					(Uint16)((Uint32)m_Regs.rdmpy.w - m_uAluShift);
+				m_Regs.rddiv.w |= 1;
+			}
+		}
+	}
+
+	m_uAluPrevCpuCycle = uCpuCycle;
+}
+
+Uint8 SnesIO::ReadALU(SNCpuT *pCpu, Uint32 uAddr)
+{
+	RunALU(pCpu, TRUE);
+	switch (uAddr & 0xFFFF)
+	{
+	case 0x4214: return m_Regs.rddiv.b.l;
+	case 0x4215: return m_Regs.rddiv.b.h;
+	case 0x4216: return m_Regs.rdmpy.b.l;
+	case 0x4217: return m_Regs.rdmpy.b.h;
+	default: return 0;
+	}
+}
+
+void SnesIO::WriteALU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
+{
+	Bool bBlockWrite;
+
+	RunALU(pCpu, TRUE);
+	/* A unit that was active at the read point of this cycle blocks a new
+	   operation even when its final shift completes at the write point. */
+	bBlockWrite = (m_uDivCounter || m_uMultCounter) ? TRUE : FALSE;
+	RunALU(pCpu, FALSE);
+
+	switch (uAddr & 0xFFFF)
+	{
+	case 0x4202:
+		m_Regs.wrmpya = uData;
+		break;
+
+	case 0x4203:
+		m_Regs.rdmpy.w = 0;
+		if (!bBlockWrite)
+		{
+			m_uMultCounter = 8;
+			m_Regs.wrmpyb = uData;
+			m_Regs.rddiv.w =
+				(Uint16)(((Uint16)uData << 8) | m_Regs.wrmpya);
+			m_uAluShift = uData;
+		}
+		else if (!m_uDivCounter && !m_uMultCounter)
+		{
+			/* Last-cycle write: operand reaches the quotient shift register,
+			   but hardware does not launch another multiplication. */
+			m_Regs.rddiv.w =
+				(Uint16)(((Uint16)uData << 8) | m_Regs.wrmpya);
+		}
+		break;
+
+	case 0x4204:
+		m_Regs.wrdiv.b.l = uData;
+		break;
+
+	case 0x4205:
+		m_Regs.wrdiv.b.h = uData;
+		break;
+
+	case 0x4206:
+		m_Regs.rdmpy.w = m_Regs.wrdiv.w;
+		if (!bBlockWrite)
+		{
+			m_uDivCounter = 16;
+			m_Regs.wrdivb = uData;
+			m_uAluShift = (Uint32)uData << 16;
+		}
+		break;
+	}
 }
 
 void SnesIO::LatchInput(Emu::SysInputT  *pInput)
