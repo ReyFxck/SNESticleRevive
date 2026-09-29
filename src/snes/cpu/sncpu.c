@@ -223,8 +223,10 @@ typedef char SNCpuIrqPendingOffsetMustStay51[
 	(offsetof(SNCpuT, uIrqPending) == 51) ? 1 : -1];
 typedef char SNCpuOpenBusOffsetMustStay52[
 	(offsetof(SNCpuT, uOpenBus) == 52) ? 1 : -1];
-typedef char SNCpuBankOffsetMustStay56[
-	(offsetof(SNCpuT, Bank) == 56) ? 1 : -1];
+typedef char SNCpuCycleCountOffsetMustStay56[
+	(offsetof(SNCpuT, uCpuCycleCount) == 56) ? 1 : -1];
+typedef char SNCpuBankOffsetMustStay60[
+	(offsetof(SNCpuT, Bank) == 60) ? 1 : -1];
 #endif
 
 #define SNCPU_FASTREADMEM TRUE
@@ -294,6 +296,7 @@ void SNCPUReset(SNCpuT *pCpu, Bool bHardReset)
 	pCpu->uNmiDmaDelay = 0;
 	pCpu->uIrqPending = 0;
 	pCpu->uOpenBus = 0;
+	pCpu->uCpuCycleCount = 0;
 
 	// set cpu flags to default state
 	pCpu->Regs.rP  = SNCPU_FLAG_M | SNCPU_FLAG_X |  SNCPU_FLAG_I;
