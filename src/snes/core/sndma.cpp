@@ -102,7 +102,11 @@ static _INLINE Uint8 SnesHDMARead8(SNCpuT *pCPU, Uint32 uAddr)
 {
 	SNCpuBankT *pBank = &pCPU->Bank[uAddr >> SNCPU_BANK_SHIFT];
 	Uint8 *pMem = pBank->pMem;
-	return pMem ? pMem[uAddr] : pBank->pReadTrapFunc(pCPU, uAddr);
+	Uint8 uData = pMem ? pMem[uAddr] : pBank->pReadTrapFunc(pCPU, uAddr);
+	/* HDMA bypasses SNCPURead8 for speed, but it still drives the same A-bus
+	   byte seen by subsequent open-bus reads. */
+	pCPU->uOpenBus = uData;
+	return uData;
 }
 
 #if SNDBG_DEEP
@@ -455,6 +459,11 @@ void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
 
 void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 {
+	/* Optimized PPU block writers bypass SNCPUWrite8. Remember the final
+	   byte now, before the loops advance pData/nBytes, and publish it after
+	   the transfer just like the byte-wise DMA path does. */
+	Uint8 uLastBus = nBytes > 0 ? pData[nBytes - 1] : m_pCPU->uOpenBus;
+
     SNCPUConsumeCycles(m_pCPU,  SNCPU_CYCLE_SLOW * nBytes);
 
     // special case simple transfer mode llll
@@ -548,6 +557,9 @@ void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 			nBytes--;
 		}
 	}
+
+	if (nBytes >= 0)
+		m_pCPU->uOpenBus = uLastBus;
 }
 
 void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
