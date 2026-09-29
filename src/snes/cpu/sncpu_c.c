@@ -545,18 +545,20 @@ static __inline Uint8 __SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
 	if (pBankMem)
-	{
-		return pBankMem[Addr];
-	}
+		uData = pBankMem[Addr];
 	else
-	{
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
-	}
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
+
+	/* The trap sees the previously-driven byte; the new read value reaches
+	   the CPU data bus only after the device has answered. */
+	pCpu->uOpenBus = uData;
+	return uData;
 }
 
 static Uint8 _SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
@@ -619,19 +621,18 @@ static __inline Uint8 __SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
 	if (pBankMem)
-	{
-		return pBankMem[Addr];
-	}
+		uData = pBankMem[Addr];
 	else
-	{
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
 
-	}
+	pCpu->uOpenBus = uData;
+	return uData;
 }
 
 static Uint8 _SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
@@ -673,6 +674,8 @@ static __inline void  __SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 	Uint8 *pBankMem;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
+	/* A write drives the CPU data bus before the addressed device reacts. */
+	pCpu->uOpenBus = Data;
 
 	if (pCpu->Bank[iBank].bRAM)
 	{
