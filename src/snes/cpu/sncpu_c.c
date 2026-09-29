@@ -140,21 +140,17 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 
 // i/o macros
 
-#if defined(SNCPU_TEST) && SNCPU_TEST
-#define SNCPU_TESTCYCLES(_nCycles) pCpu->uTestCycles += (_nCycles);
-#else
-#define SNCPU_TESTCYCLES(_nCycles)
-#endif
+#define SNCPU_COUNTCYCLES(_nCycles) pCpu->uCpuCycleCount += (_nCycles)
 
 #define SNCPU_SUBCYCLES(_nCycles) \
 	do { \
 		pCpu->Cycles-=(_nCycles)*SNCPU_CYCLE_FAST; \
-		SNCPU_TESTCYCLES(_nCycles) \
+		SNCPU_COUNTCYCLES(_nCycles) \
 	} while (0);
 #define SNCPU_SUBCYCLESSLOW(_nCycles) \
 	do { \
 		pCpu->Cycles-=(_nCycles)*SNCPU_CYCLE_SLOW; \
-		SNCPU_TESTCYCLES(_nCycles) \
+		SNCPU_COUNTCYCLES(_nCycles) \
 	} while (0);
 #define SNCPU_SUBMEMCYCLES(_Addr, _nBytes) \
 	do { \
@@ -162,7 +158,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 		Uint32 _uPenalty=(pCpu==_SNCPU_pSA1TimingCpu)?SNCPUSA1BusPenalty(pCpu,(_Addr),_uMemCycles):0; \
 		pCpu->Cycles-=_uMemCycles*(_nBytes)+_uPenalty; \
 		SNCPUSA1BusRecord(pCpu,(_Addr),_uMemCycles,(_nBytes)); \
-		SNCPU_TESTCYCLES(_nBytes) \
+		SNCPU_COUNTCYCLES(_nBytes) \
 	} while (0);
 
 #define SNCPU_INC_PC(_Bytes) \
@@ -303,7 +299,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 		Uint32 _dpCycles = (R_DPMASK >> 16) & 0xFF;	\
 		pCpu->Cycles -= _dpCycles;					\
 		if (_dpCycles) {							\
-			SNCPU_TESTCYCLES(1)					\
+			SNCPU_COUNTCYCLES(1)					\
 		}									\
 	} while (0);
 
