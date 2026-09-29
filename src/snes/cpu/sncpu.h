@@ -88,16 +88,18 @@ typedef struct SNCpu_t
 	   before Bank[] so sn65816.S can update it with one cheap byte store. */
 	Uint8				uOpenBus;
 	Uint8				uOpenBusPad[3];
-
-#if defined(SNCPU_TEST) && SNCPU_TEST
-	/* Host-only instruction-vector accounting.  Kept out of release builds so
-	   the hand-written PS2 assembly layout remains unchanged. */
-	Uint32				uTestCycles;
-#endif
+	/* Monotonic 5A22 machine-cycle counter. Unlike master clocks, this advances
+	   once per CPU bus/internal cycle and is used by timed internal hardware. */
+	Uint32				uCpuCycleCount;
 
 	SNCpuBankT			Bank[SNCPU_BANK_NUM];			// cpu memory banks
 
 } SNCpuT;
+
+/* Old host tests used this name for the same machine-cycle quantity. */
+#if defined(SNCPU_TEST) && SNCPU_TEST
+#define uTestCycles uCpuCycleCount
+#endif
 
 void SNCPUNew(SNCpuT *pCpu);
 void SNCPUDelete(SNCpuT *pCpu);
