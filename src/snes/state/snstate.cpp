@@ -107,6 +107,9 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_Cpu.uSignal    = pState->CPU.uSignal;
 	m_Cpu.uNmiDmaDelay = 0;
 	m_Cpu.uIrqPending = 0;
+	/* Legacy states have no CPU data-bus or 5A22 machine-cycle timestamp. */
+	m_Cpu.uOpenBus = 0;
+	m_Cpu.uCpuCycleCount = 0;
 
 	m_Spc.Regs = pState->SPC.Regs;
 	m_Spc.Cycles = pState->SPC.Cycles;
@@ -181,6 +184,9 @@ void SnesIO::RestoreState(struct SNStateIOT *pState)
 {
 	m_Input = pState->Input;
 	m_Regs = pState->Regs;
+	/* The existing state format predates in-flight ALU timing. Preserve its
+	   binary size: restored result/input latches remain, pending work stops. */
+	ResetALUTiming(0);
 }
 
 void SNSpcIO::SaveState(struct SNStateSPCIOT *pState)
