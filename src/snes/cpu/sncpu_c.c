@@ -145,12 +145,12 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 #define SNCPU_SUBCYCLES(_nCycles) \
 	do { \
 		pCpu->Cycles-=(_nCycles)*SNCPU_CYCLE_FAST; \
-		SNCPU_COUNTCYCLES(_nCycles) \
+		SNCPU_COUNTCYCLES(_nCycles); \
 	} while (0);
 #define SNCPU_SUBCYCLESSLOW(_nCycles) \
 	do { \
 		pCpu->Cycles-=(_nCycles)*SNCPU_CYCLE_SLOW; \
-		SNCPU_COUNTCYCLES(_nCycles) \
+		SNCPU_COUNTCYCLES(_nCycles); \
 	} while (0);
 #define SNCPU_SUBMEMCYCLES(_Addr, _nBytes) \
 	do { \
@@ -158,7 +158,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 		Uint32 _uPenalty=(pCpu==_SNCPU_pSA1TimingCpu)?SNCPUSA1BusPenalty(pCpu,(_Addr),_uMemCycles):0; \
 		pCpu->Cycles-=_uMemCycles*(_nBytes)+_uPenalty; \
 		SNCPUSA1BusRecord(pCpu,(_Addr),_uMemCycles,(_nBytes)); \
-		SNCPU_COUNTCYCLES(_nBytes) \
+		SNCPU_COUNTCYCLES(_nBytes); \
 	} while (0);
 
 #define SNCPU_INC_PC(_Bytes) \
