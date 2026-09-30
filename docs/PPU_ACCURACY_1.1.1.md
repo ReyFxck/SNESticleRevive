@@ -21,13 +21,13 @@ Reference projects:
 | Area | Status in this branch | Notes |
 |---|---|---|
 | Mode 4 | Implemented / needs regression testing | BG1 8bpp + BG2 2bpp; Mode 4 one-word H/V offset-per-tile behavior retained. |
-| Mode 5 | Implemented / needs regression testing | BG1 4bpp + BG2 2bpp; separate even/odd hi-res phases are decoded in the 256-wide PS2 carrier. |
-| Mode 6 | Implemented / needs regression testing | Corrected BG1 from 8bpp to 4bpp; horizontal hi-res and separate H/V offset-per-tile paths added. |
+| Mode 5 | Implemented / needs PS2 regression testing | BG1 4bpp + BG2 2bpp; separate even/odd hi-res phases are decoded, and screen-interlaced fields fetch distinct even/odd vertical source rows. |
+| Mode 6 | Implemented / needs PS2 regression testing | Corrected BG1 from 8bpp to 4bpp; horizontal hi-res, H/V offset-per-tile and field-aware interlaced vertical fetch are implemented. |
 | Pseudo-hires | Implemented as PS2 presentation path | Main/sub alternating dots are collapsed to the 256-wide carrier for CRT-like blending. |
 | Overscan | Implemented / needs timing tests | SETINI 224/239 visible-line selection is latched per frame and the visible loop follows it. |
-| Interlace timing | Implemented first pass | Field bit now changes at vertical wrap; NTSC/PAL field lengths and the extra interlace line are accounted for. |
+| Interlace timing | Implemented / host-tested | Field bit changes at vertical wrap; NTSC/PAL 262/263 and 312/313 field lengths are modeled, plus the 1360-master-clock odd-field line 240 in non-interlace mode. |
 | Native 448/478-line interlace picture | Pending | Revive's current PS2 output texture is still 256x256, so true double-height presentation needs a deeper GS/output change. |
-| OBJ interlace | Partial | SETINI state is tracked and OBJ data is invalidated on changes; full interlaced OBJ vertical semantics still need dedicated work. |
+| OBJ interlace | Implemented / host-tested | Visibility height is halved and source Y is doubled with current-field parity before vertical mirroring, matching the MesenCE sprite-selection/fetch model. |
 
 ## Useful game tests
 
@@ -72,6 +72,12 @@ uncached/reference formulas.
 - **Breath of Fire II** — shading in the intro town.
 
 ### Mode 6 / interlace
+
+Mode 5/6 now preserve field parity in vertical tile/CHR fetches, including
+mosaic: mosaic first selects the logical SNES scanline, then interlace expands
+that row to the even or odd physical source row. The PS2 still presents one
+field in the existing 256-high carrier; native 448/478-line output remains a
+separate GS/output task.
 
 - **Lufia II: Rise of the Sinistrals** — Mode 6 with interlace during the end credits.
 
