@@ -145,6 +145,21 @@ static void CheckAutoJoypadTiming()
 	Check("autojoy disabled before busy", io.IsAutoJoypadActive(), 0);
 }
 
+static void CheckDMATimingMath()
+{
+	/* MesenCE aligns DMA ownership to the next multiple of 8 master clocks. */
+	Check("DMA start sync @0", SnesDMAC::CalcStartSync(0), 8);
+	Check("DMA start sync @2", SnesDMAC::CalcStartSync(2), 6);
+	Check("DMA start sync @6", SnesDMAC::CalcStartSync(6), 2);
+	Check("DMA start sync @8", SnesDMAC::CalcStartSync(8), 8);
+
+	/* DMA resumes on the next boundary of the CPU clock that was paused. */
+	Check("DMA end sync slow aligned", SnesDMAC::CalcEndSync(16, 8), 8);
+	Check("DMA end sync slow +2", SnesDMAC::CalcEndSync(18, 8), 6);
+	Check("DMA end sync fast +2", SnesDMAC::CalcEndSync(14, 6), 4);
+	Check("DMA end sync xslow +4", SnesDMAC::CalcEndSync(20, 12), 4);
+}
+
 static void CheckDMARegisterMap()
 {
 	SnesDMAC dma;
@@ -179,6 +194,7 @@ int main()
 	CheckPowerOnRegisters();
 	CheckTimedALU();
 	CheckAutoJoypadTiming();
+	CheckDMATimingMath();
 	CheckDMARegisterMap();
 
 	if (g_Failures)
