@@ -579,9 +579,12 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 		   changes underneath a playing voice. Indices below zero intentionally
 		   refer to the previous-row tail maintained by FetchBlock(). */
 		Int32 iSampleIndex = pChannel->iPhase >> 16;
-		pBlockData[13] = pBlockData[iSampleIndex - 1];
-		pBlockData[14] = pBlockData[iSampleIndex + 0];
-		pBlockData[15] = pBlockData[iSampleIndex + 1];
+		Int16 iPrevSample = pBlockData[iSampleIndex - 1];
+		Int16 iCurrentSample = pBlockData[iSampleIndex + 0];
+		Int16 iNextSample = pBlockData[iSampleIndex + 1];
+		pBlockData[13] = iPrevSample;
+		pBlockData[14] = iCurrentSample;
+		pBlockData[15] = iNextSample;
 
 		// trigger decode, retain fractional component
 		pChannel->iPhase &= 0xFFFF;
