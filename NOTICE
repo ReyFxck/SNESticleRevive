@@ -65,8 +65,10 @@ listed in this section:
   interlace behavior.
 - SNESticle Aurora (itsveenee/SNESticleAurora), by Vinícius Nunes
   (@itsveenee), GNU GPL v2: PS2-oriented behavioral/comparison reference for
-  the same PPU work. SNESticle Revive uses its own name/branding and keeps the
-  v1.1.1 implementation independently maintained.
+  the same PPU work and for PS2-side mouse/input integration research.
+  SNESticle Revive uses its own independently implemented SNES Mouse/Super
+  Scope protocol code, its own name/branding, and keeps the v1.1.1
+  implementation independently maintained.
 
 This NOTICE supplements LICENSE; it does not replace any per-file or
 third-party license notice.
