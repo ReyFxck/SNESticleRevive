@@ -69,6 +69,13 @@ listed in this section:
   SNESticle Revive uses its own independently implemented SNES Mouse/Super
   Scope protocol code, its own name/branding, and keeps the v1.1.1
   implementation independently maintained.
+- ares (ares-emulator/ares), ISC: behavioral reference for the S-SMP/S-DSP
+  voice pipeline, including PMON ordering and analytical construction of the
+  Gaussian interpolation coefficient table.
+- snes_spc / SPC_DSP by Shay Green (as carried by bsnes), LGPL 2.1 or later:
+  independent accuracy cross-check for the four-tap Gaussian interpolation,
+  its 16-bit intermediate wrap, saturation and forced-even output. No source
+  from this module is bundled by merely listing it as a reference here.
 
 This NOTICE supplements LICENSE; it does not replace any per-file or
 third-party license notice.
