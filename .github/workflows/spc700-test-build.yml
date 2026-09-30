@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - feature/spc700-complete-mesence
-      - fix/hdma-start-timing-dkc
   workflow_dispatch:
 
 permissions:
@@ -20,6 +19,8 @@ jobs:
         include:
           - variant: normal
             diagnostics: 0
+          - variant: diag2
+            diagnostics: 2
 
     steps:
       - name: Checkout
