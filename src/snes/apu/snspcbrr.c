@@ -86,20 +86,30 @@ Uint8 SNSpcBRRDecode(Uint8 *pBRRBlock, Int16 *pOut, Int32 iPrev0, Int32 iPrev1)
 	uHeader = *pBRRBlock++;
 	uRange = uHeader >> 4;
 
-	// adjust range if invalid
-	if (uRange > 12)
-	{
-		uRange-=4;
-	}
-
-	// decode 16 samples to temp buffer
+	/* Decode 16 signed nybbles. For invalid scales 13-15 the S-DSP does not
+	   alias to a lower scale: positive nybbles become zero and negative
+	   nybbles become -2048 before filtering. _SNSpcBRRFilter3 halves this
+	   temporary input first, so feed -4096 to produce that hardware value. */
 	pDecode = Decode;
 	for (iByte=0; iByte< 8; iByte++)
 	{
 		Int32 iData = *pBRRBlock++;
-		pDecode[0] = ((iData << 24) >> 28) << uRange; // upper nibble
-		pDecode[1] = ((iData << 28) >> 28) << uRange; // lower nibble
-		pDecode+=2;
+		Int32 iHi = (iData >> 4) & 0x0F;
+		Int32 iLo = iData & 0x0F;
+		if (iHi & 8) iHi -= 16;
+		if (iLo & 8) iLo -= 16;
+
+		if (uRange <= 12)
+		{
+			pDecode[0] = (Int16)(iHi * (1 << uRange));
+			pDecode[1] = (Int16)(iLo * (1 << uRange));
+		}
+		else
+		{
+			pDecode[0] = (iHi < 0) ? -4096 : 0;
+			pDecode[1] = (iLo < 0) ? -4096 : 0;
+		}
+		pDecode += 2;
 	}
 
 	// apply filter
