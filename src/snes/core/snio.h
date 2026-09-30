@@ -69,6 +69,15 @@ class SnesIO
 	Uint32			m_uAluShift;
 	Uint32			m_uAluPrevCpuCycle;
 
+	/* Auto-joypad sequencer. Clocks are absolute S-CPU master clocks; unsigned
+	   subtraction keeps comparisons correct across 32-bit wrap. */
+	Uint32			m_uAutoReadClockStart;
+	Uint32			m_uAutoReadNextClock;
+	Uint8			m_uAutoReadPort1Value;
+	Uint8			m_uAutoReadPort2Value;
+	Bool			m_bAutoReadActive;
+	Bool			m_bAutoReadDisabled;
+
 	Uint8			ReadSerialPad(Uint32 uPad);
 	void			ShiftSerialPad(Uint32 uPad);
 	void			RunALU(SNCpuT *pCpu, Bool bReadPhase);
@@ -88,6 +97,11 @@ public:
 	Uint8	ReadSerial0();
 	Uint8	ReadSerial1();
 	void	UpdateJoyPads();
+
+	void	BeginAutoJoypad(Uint32 uMasterClock);
+	void	ProcessAutoJoypad(Uint32 uMasterClock);
+	void	PrepareAutoJoypadEnableChange(Uint32 uMasterClock, Bool bEnable);
+	Bool	IsAutoJoypadActive() const { return m_bAutoReadActive; }
 
 	Uint8	ReadALU(SNCpuT *pCpu, Uint32 uAddr);
 	void	WriteALU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
