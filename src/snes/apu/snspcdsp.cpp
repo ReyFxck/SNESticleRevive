@@ -146,9 +146,9 @@ Uint16 SNSpcDsp::GetSampleDir(Uint8 uSrcN, Uint32 uOffset)
 	uSampleDir =  m_Regs[SNSPCDSP_REG_DIR] * 0x100 + uSrcN * 0x04;
 	uSampleDir+= uOffset;
 
-	// read word from sample directory
-	uData = m_pMem[uSampleDir + 0] << 0;
-	uData|= m_pMem[uSampleDir + 1] << 8;
+	// read word from sample directory; APURAM wraps at 16 bits.
+	uData = m_pMem[uSampleDir] << 0;
+	uData|= m_pMem[(Uint16)(uSampleDir + 1)] << 8;
 	return uData;
 }
 
