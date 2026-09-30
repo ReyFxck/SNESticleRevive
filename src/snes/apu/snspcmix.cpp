@@ -1100,7 +1100,7 @@ void SNSpcDspMixSilent::Mix(CMixBuffer *pMixBuf)
 	Uint32 nSampleRate, nSampleChannels, nSampleBits;
 	(void)nSampleChannels;
 	(void)nSampleBits;
-	Uint8 Envelope[SNSPCDSP_SAMPLERATE / 60];
+	Uint16 Envelope[SNSPCDSP_SAMPLERATE / 60];
 	Int32 iChannel;
 
 	nSampleRate = SNSPCDSP_SAMPLERATE;
@@ -1108,23 +1108,15 @@ void SNSpcDspMixSilent::Mix(CMixBuffer *pMixBuf)
 	nSampleChannels = 0;
 	nTotalSamples = SNSPCDSP_SAMPLERATE / 60;
 
-	// build envelope lookup tables based on sample rate
-	if (nSampleRate!=m_nSampleRate)
-	{
-		BuildLookupTables(nSampleRate);
-		m_nSampleRate = nSampleRate;
-	}
+	m_nSampleRate = nSampleRate;
 
 	if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40)) // check mute
 	{
 		for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 		{
-			// calculate envelope values for channel
-			if (OutputEnvelope(iChannel, Envelope, nTotalSamples))
-			{
-					// output sample data
+			if (OutputEnvelope(iChannel, Envelope, nTotalSamples, m_uDspCounter))
 				OutputSample(iChannel, nTotalSamples, nSampleRate);
-			}
 		}
 	}
+	m_uDspCounter = SNSpcDspCounterAdvance(m_uDspCounter, nTotalSamples);
 }
