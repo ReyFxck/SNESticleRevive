@@ -648,12 +648,12 @@ static void _FetchCHR4(Uint16 *pVram, Uint32 uBaseAddr, SnesRenderTileT *pTiles,
 static void _FetchCHR(Uint8 *pLine, SnesPPU *pPPU, SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTiles, Int32 nTiles, Int32 iLine,Uint8 *pMask)
 {
 	Uint32 uScrollY;
+	const SnesPPURegsT *pRegs = pPPU->GetRegs();
 
-	if (pBGInfo->uMosaic > 0)
-	{
-		iLine /= pBGInfo->uMosaic + 1;
-		iLine *= pBGInfo->uMosaic + 1;
-	}
+	iLine = _SnesPPUVerticalFetchLine(
+		iLine, pBGInfo->uMosaic, (Uint8)(pRegs->bgmode & 7),
+		(pRegs->setini & SNESPPU_SETINI_INTERLACE) ? TRUE : FALSE,
+		pPPU->GetField());
 
 	uScrollY = pBGInfo->uScrollY + iLine;
 	switch (pBGInfo->uBitDepth)
@@ -1121,14 +1121,14 @@ static void _FetchCHRHiresPair_64(
 	Int32 iLine, Uint8 *pMainMask, Uint8 *pSubMask, Bool bOffset)
 {
 	Uint32 uScrollY = 0;
-	const Uint8 uBGMode = (Uint8)(pPPU->GetRegs()->bgmode & 7);
+	const SnesPPURegsT *pRegs = pPPU->GetRegs();
+	const Uint8 uBGMode = (Uint8)(pRegs->bgmode & 7);
 	const Bool bMosaic = pBGInfo->uMosaic > 0;
 
-	if (pBGInfo->uMosaic > 0)
-	{
-		iLine /= pBGInfo->uMosaic + 1;
-		iLine *= pBGInfo->uMosaic + 1;
-	}
+	iLine = _SnesPPUVerticalFetchLine(
+		iLine, pBGInfo->uMosaic, uBGMode,
+		(pRegs->setini & SNESPPU_SETINI_INTERLACE) ? TRUE : FALSE,
+		pPPU->GetField());
 	if (!bOffset)
 		uScrollY = pBGInfo->uScrollY + iLine;
 
@@ -1310,11 +1310,10 @@ static void _FetchCHR_64(Uint8 *pLine, SnesPPU *pPPU, SnesBGInfoT *pBGInfo,
 	const Uint8 uBGMode = (Uint8)(pRegs->bgmode & 7);
 	const Bool bMosaic = pBGInfo->uMosaic > 0;
 
-	if (pBGInfo->uMosaic > 0)
-	{
-		iLine /= pBGInfo->uMosaic + 1;
-		iLine *= pBGInfo->uMosaic + 1;
-	}
+	iLine = _SnesPPUVerticalFetchLine(
+		iLine, pBGInfo->uMosaic, uBGMode,
+		(pRegs->setini & SNESPPU_SETINI_INTERLACE) ? TRUE : FALSE,
+		pPPU->GetField());
 
 	if (!bOffset)
 		uScrollY = pBGInfo->uScrollY + iLine;
