@@ -48,7 +48,7 @@ This review concerns the **audio SPC700/S-DSP**, not cartridge DSP-1/2/3/4.
 | BRR edge cases | `snspcbrr.c` approximates invalid range values, and `FetchBlock` reads nine consecutive bytes without masking each 16-bit APURAM byte address. | ares `dsp/brr.cpp` decodes invalid ranges according to DSP behavior and wraps APURAM addresses. Correctness change needs regression fixtures before MMI optimization. |
 | Envelope/noise timing | Tables with millisecond approximations and a chunked output mixer. | ares `dsp/envelope.cpp` and `counter.cpp` tick actual DSP rate phases. |
 
-## PS2 performance verification before merging
+## PS2 performance verification
 
 1. Build the branch and run host `spc700_test`, `dspmix_test`, `spcio_test`
    and the existing broad suite; inspect PS2 link to ensure the new
@@ -60,8 +60,8 @@ This review concerns the **audio SPC700/S-DSP**, not cartridge DSP-1/2/3/4.
 3. For bit-exact comparison, run a deterministic buffer test of the MIPS
    kernel and scalar fallback on actual EE hardware (different volumes,
    negative samples, 0/1/odd block sizes and negative accumulators).
-4. Keep the new backend on a branch until those checks pass. The existing
-   128-bit `_MixEcho` is left unchanged.
+4. The existing 128-bit `_MixEcho` is left unchanged. Real-PS2 A/B testing
+   remains the final performance/audio-quality check after CI validation.
 
 ## Sources
 
