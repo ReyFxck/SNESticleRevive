@@ -1883,6 +1883,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 void SnesSystem::ExecuteLine()
 {
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+	m_DMAC.SetVideoLine(m_uLine);
 	m_nSA1LineClock = 0;
 	if (m_bSA1) {
 		SNCPUSA1BusBeginLine();
