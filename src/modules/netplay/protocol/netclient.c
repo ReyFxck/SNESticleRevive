@@ -19,6 +19,7 @@
 #include "netprint.h"
 #include "netclient.h"
 #include "netpacket.h"
+#include "netinput_codec.h"
 
 #define NETCLIENT_DEBUG_XMIT (FALSE)
 #define NETCLIENT_DEBUG_ENQUEUE (FALSE)
@@ -194,7 +195,10 @@ static int _NetClientSocketRead(NetSocketT *pSocket, NetClientT *pClient)
 				for (i=0; i < pStartGame->uLatency; i++) 
 				{
 					// enqueue input into send queue for peer
-					NetClientEnqueueInput(pClient, 0);
+					{
+                        NetPlayFrameInputT Neutral = {{0, 0, 0xFFFF, 0xFFFF, 0xFFFF}};
+                        NetClientEnqueueInput(pClient, &Neutral);
+                    }
 				}
 
 				NetClientTransmit(pClient);
@@ -468,108 +472,36 @@ Bool NetClientCheckOutputLimit(NetClientT *pClient, Int32 nCount)
 //
 
 
-static Uint32 _NetClientCalcRunLength(Uint32 *pData, Int32 nData)
-{
-	Uint32 uLength=0;
-	Uint32 uRunData;
-
-	if (nData==0) return 0;
-
-	// fetch data run to compare against
-	uRunData = *pData;
-
-	// calculate run length
-	do
-	{
-		pData++;
-		nData--;
-		uLength++;
-	}	while (nData > 0 && *pData == uRunData);
-
-	return uLength;
-}
-
-static Uint32 _NetClientEncodeData(Uint32 *pEncode, Uint32 *pData, Int32 nData, Uint32 nMaxEncode)
-{
-	Uint32 nEncode = 0;
-
-	while (nData > 0 && nEncode < nMaxEncode)
-	{
-		Uint32 uLength;
-
-		uLength = _NetClientCalcRunLength(pData, nData);
-
-		// write length/data
-		*pEncode++ = uLength;
-		*pEncode++ = *pData;
-		nEncode+=2;
-
-		// advance data pointer
-		pData+=uLength;
-		nData-=uLength;
-	}
-
-	return nEncode;
-}
-
-static Uint32 _NetClientDecodeData(Uint32 *pDecode, Uint32 *pEncode, Int32 nEncode)
-{
-	Uint32 *pDecodeStart = pDecode;
-
-	while (nEncode > 0)
-	{
-		Int32 nLength;
-		Uint32 uRunData;
-
-		nLength  = *pEncode++;
-		uRunData = *pEncode++;
-		nEncode-=2;
-
-		while (nLength > 0)
-		{
-			*pDecode++ = uRunData;
-			nLength--;
-		}
-	}
-	return (Uint32)(pDecode - pDecodeStart);
-}
-
 static void _NetClientPeerTransmit(NetClientT *pClient, Int32 peerid)
 {
-	NetClientPeerT *pPeer = &pClient->Peers[peerid];
-	NetQueueElementT Elements[64];
-	Uint32 uStart, uEnd;
-	Int32 nElements;
+    NetClientPeerT *pPeer = &pClient->Peers[peerid];
+    NetQueueElementT Elements[64];
+    Uint32 uStart = pPeer->OutputQueue.uHead;
+    Uint32 uEnd = pPeer->OutputQueue.uTail;
+    Int32 nElements = NetQueueFetchRange(&pPeer->OutputQueue,
+        uStart, uEnd, Elements, 64);
 
-	// transmit contents of outputqueue
-	uStart = pPeer->OutputQueue.uHead;
-	uEnd   = pPeer->OutputQueue.uTail;
+    if (nElements > 0)
+    {
+        NetPacketInputDataT Packet;
+        Uint32 nConsumed = 0;
+        Uint32 nRuns;
+        Packet.uAckPos = pPeer->InputQueue.uTail;
+        Packet.uStartPos = uStart;
+        nRuns = NetInputEncodeRuns(Packet.Runs, NETPACKET_INPUT_RUNS_MAX,
+            Elements, (Uint32)nElements, &nConsumed);
+        if (!nRuns || !nConsumed)
+            return;
 
-	// fetch range of elements
-	nElements = NetQueueFetchRange(&pPeer->OutputQueue, uStart, uEnd, Elements, 64);
-	if (nElements > 0)
-	{
-		NetPacketInputDataT Packet;
-		Uint32 nEncode;
-		Uint32 nMaxEncode = sizeof(Packet.EncodeData) / sizeof(Uint32);
-
-		// make packet
-		Packet.uAckPos   = pPeer->InputQueue.uTail;	// send ack 
-		Packet.uStartPos = uStart;					// send start position
-
-		// encode input stream
-		nEncode = _NetClientEncodeData(Packet.EncodeData, Elements, nElements, nMaxEncode);
-
-		// setup packet header
-		NetPacketSet(&Packet.Hdr, NETPACKET_TYPE_INPUTDATA, (nEncode + 3 ) * 4);
+        NetPacketSet(&Packet.Hdr, NETPACKET_TYPE_INPUTDATA,
+            12u + nRuns * (Uint32)sizeof(NetPacketInputRunT));
 
 #if NETCLIENT_DEBUG_XMIT
-		NetPrintf("NetUDP: xmit %d->%d to peer %d (%d bytes)\n",  uStart, uEnd - 1, peerid, Packet.Hdr.uPacketLen);
+        NetPrintf("NetUDP: xmit %d->%d to peer %d (%d bytes)\n",
+            uStart, uStart + nConsumed - 1, peerid, Packet.Hdr.uPacketLen);
 #endif
-
-		// send packet
-		NetClientSendUDP(pClient, peerid, &Packet.Hdr);
-	}
+        NetClientSendUDP(pClient, peerid, &Packet.Hdr);
+    }
 }
 
 static int _NetClientPeerThrottle(NetClientT *pClient, int peerid, NetPacketThrottleT *pPacket)
@@ -580,59 +512,47 @@ static int _NetClientPeerThrottle(NetClientT *pClient, int peerid, NetPacketThro
 }
 
 
-static int _NetClientPeerInputData(NetClientT *pClient, int peerid, NetPacketInputDataT *pPacket)
+static int _NetClientPeerInputData(NetClientT *pClient, int peerid,
+    NetPacketInputDataT *pPacket)
 {
-	NetClientPeerT *pPeer = &pClient->Peers[peerid];
-	NetQueueElementT Elements[256];
-	NetQueueElementT *pElement;
-	Uint32 uStart;
-	Uint32 nDecode;
+    NetClientPeerT *pPeer = &pClient->Peers[peerid];
+    NetQueueElementT Elements[NETQUEUE_SIZE];
+    Uint32 uStart = pPacket->uStartPos;
+    Uint32 nDecoded = 0;
+    Uint32 nRuns;
 
-	if (pPacket->uAckPos <= pPeer->OutputQueue.uTail)
-	{
-		// set position of last ack'd packet
-		pPeer->OutputQueue.uHead = pPacket->uAckPos;
-	} else
-	{
-		// received ack for data we haven't sent yet!
-	}
+    /* Header is 12 bytes. Accept only complete 16-byte RLE records; never
+       reinterpret a 0x100 packet as one of the extended 0x101 frames. */
+    if (pPacket->Hdr.uPacketLen < 12u ||
+        pPacket->Hdr.uPacketLen > NETPACKET_MAX_SIZE ||
+        ((pPacket->Hdr.uPacketLen - 12u) % sizeof(NetPacketInputRunT)))
+        return -1;
 
-	uStart = pPacket->uStartPos;
-	if (uStart > pPeer->InputQueue.uTail)
-	{
-		// we missed a packet!
-	}
+    nRuns = (pPacket->Hdr.uPacketLen - 12u) /
+        (Uint32)sizeof(NetPacketInputRunT);
+    if (!NetInputDecodeRuns(Elements, NETQUEUE_SIZE,
+            pPacket->Runs, nRuns, &nDecoded))
+        return -1;
 
-	// decode data
-	nDecode = _NetClientDecodeData(Elements, pPacket->EncodeData, (pPacket->Hdr.uPacketLen / sizeof(Uint32)) - 3);
+    if (pPacket->uAckPos >= pPeer->OutputQueue.uHead &&
+        pPacket->uAckPos <= pPeer->OutputQueue.uTail)
+        pPeer->OutputQueue.uHead = pPacket->uAckPos;
+
+    if (uStart > pPeer->InputQueue.uTail)
+        return 0;
 
 #if NETCLIENT_DEBUG_XMIT
-	NetPrintf("NetUDP: recv %d->%d from peer %d (%d bytes)\n", uStart, uStart + nDecode - 1, peerid, pPacket->Hdr.uPacketLen);
+    NetPrintf("NetUDP: recv %d->%d from peer %d (%d bytes)\n",
+        uStart, uStart + nDecoded - 1, peerid, pPacket->Hdr.uPacketLen);
 #endif
 
-	// enqueue elements
-	pElement = Elements;
-	while (nDecode > 0)
-	{
-		if (NetQueueEnqueueAt(&pPeer->InputQueue, uStart, pElement))
-		{
-#if NETCLIENT_DEBUG_ENQUEUE
-			if (*pElement!=0)
-			NetPrintf("NetPeer%d: enqueue %d %X\n", peerid, uStart, (Uint32)*pElement);
-#endif
-		} 
-
-		uStart++;
-		nDecode--;
-		pElement++;
-	}
-	return 0;
+    for (Uint32 i = 0; i < nDecoded; i++, uStart++)
+        NetQueueEnqueueAt(&pPeer->InputQueue, uStart, &Elements[i]);
+    return 0;
 }
 
 
-
-
-Bool NetClientEnqueueInput(NetClientT *pClient, Uint32 uInput)
+Bool NetClientEnqueueInput(NetClientT *pClient, const NetPlayFrameInputT *pInput)
 {
 	if (pClient->eStatus == NETPLAY_STATUS_CONNECTED && pClient->eGameState == NETPLAY_GAMESTATE_PLAY)
 	{
@@ -642,7 +562,7 @@ Bool NetClientEnqueueInput(NetClientT *pClient, Uint32 uInput)
 			NetQueueElementT Element;
 			Int32 iPeer;
 
-			Element = uInput;
+			Element = *pInput;
 	
 			for (iPeer=0; iPeer < NETCLIENT_MAXPEERS; iPeer++)
 			{
@@ -786,7 +706,7 @@ static void _NetClientUpdateThrottle(NetClientT *pClient)
 
 
 
-Bool NetClientProcess(NetClientT *pClient, Uint32 uInputSend, Int32 nInputRecv, Uint32 *pInputRecv)
+Bool NetClientProcess(NetClientT *pClient, const NetPlayFrameInputT *pInputSend, Int32 nInputRecv, NetPlayFrameInputT *pInputRecv)
 {
 	Bool bResult = FALSE;
 
@@ -798,7 +718,7 @@ Bool NetClientProcess(NetClientT *pClient, Uint32 uInputSend, Int32 nInputRecv, 
 			if (pClient->iThrottle >= 0)
 			{
 				// enqueue input only if input was available
-				NetClientEnqueueInput(pClient, uInputSend);
+				NetClientEnqueueInput(pClient, pInputSend);
 			} else
 			{
 				// skip enqueue to reduce latency
@@ -812,7 +732,7 @@ Bool NetClientProcess(NetClientT *pClient, Uint32 uInputSend, Int32 nInputRecv, 
 		while (pClient->iThrottle > 0)
 		{
 			// pad output to increase latency
-			NetClientEnqueueInput(pClient, uInputSend);
+			NetClientEnqueueInput(pClient, pInputSend);
 			pClient->iThrottle--;
 		}
 
@@ -842,7 +762,7 @@ Bool NetClientProcess(NetClientT *pClient, Uint32 uInputSend, Int32 nInputRecv, 
 
 
 
-Bool NetClientRecvInput(NetClientT *pClient, Int32 nInputs, Uint32 *pInputs)
+Bool NetClientRecvInput(NetClientT *pClient, Int32 nInputs, NetPlayFrameInputT *pInputs)
 {
 	if (nInputs < NETCLIENT_MAXPEERS) return FALSE;
 
@@ -867,7 +787,7 @@ Bool NetClientRecvInput(NetClientT *pClient, Int32 nInputs, Uint32 *pInputs)
 				} else
 				{
 					// peer not active
-					pInputs[iPeer] = 0xFFFFFFFF;
+					memset(&pInputs[iPeer], 0xFF, sizeof(pInputs[iPeer]));
 				}
 			}
 
