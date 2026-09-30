@@ -27,6 +27,18 @@ extern "C" {
 
 extern "C" int list_title_db(char *pPath);
 
+static char _MainLoopSnesInputEntry[64] = "SNES Input: Standard Pad";
+
+static void _MainLoopSnesInputEntryRefresh()
+{
+	snprintf(
+		_MainLoopSnesInputEntry,
+		sizeof(_MainLoopSnesInputEntry),
+		"SNES Input: %s",
+		_MainLoopSnesInputModeName()
+	);
+}
+
 int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 {
         switch (Type)
@@ -93,6 +105,22 @@ int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                                         MAINLOOP_SYSTEM_POWEROFF
                                                 );
                                                 break;
+                                        case 11:
+                                                _MainLoopSnesInputCycleMode();
+                                                _MainLoopSnesInputEntryRefresh();
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        0,
+                                                        _MainLoopSnesInputModeName()
+                                                );
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        1,
+                                                        "Mouse: stick + X/O"
+                                                );
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        2,
+                                                        "Scope: stick + X/Square/R1/Triangle"
+                                                );
+                                                return 1;
                                         default:
                                                 return 0;
                                 }
@@ -887,6 +915,7 @@ const char *_MainLoopMenuEntries[]=
         (char *)"Dump mc0:title.db -> tty0:",
         (char *)"Copy rom0:libsd -> host:",
         (char *)"Power Off PS2",
+        _MainLoopSnesInputEntry,
         NULL
 };
 
