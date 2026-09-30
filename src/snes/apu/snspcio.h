@@ -9,6 +9,8 @@
 #ifndef _SNSPCIO_H
 #define _SNSPCIO_H
 
+#include <string.h>
+
 #include "snspctimer.h"
 #include "snesreg.h"
 #include "snqueue.h"
@@ -67,6 +69,28 @@ public:
 
 	void	SaveState(struct SNStateSPCIOT *pState);
 	void	RestoreState(struct SNStateSPCIOT *pState);
+	void	CopyPendingCpuPorts(Uint8 *pMask, Uint8 pData[4],
+		Uint32 pCycle[4]) const
+	{
+		*pMask = m_uCpuPendingMask;
+		memcpy(pData, m_CpuPendingData, sizeof(m_CpuPendingData));
+		memcpy(pCycle, m_CpuPendingCycle, sizeof(m_CpuPendingCycle));
+	}
+	void	RestorePendingCpuPorts(Uint8 uMask, const Uint8 pData[4],
+		const Uint32 pCycle[4])
+	{
+		m_uCpuPendingMask = uMask & 0x0F;
+		memcpy(m_CpuPendingData, pData, sizeof(m_CpuPendingData));
+		memcpy(m_CpuPendingCycle, pCycle, sizeof(m_CpuPendingCycle));
+	}
+	Int32	CopyWriteQueue(SNQueueElementT *pOut, Int32 nMax) const
+	{
+		return m_Queue.CopyPending(pOut, nMax);
+	}
+	void	RestoreWriteQueue(const SNQueueElementT *pIn, Int32 nCount)
+	{
+		m_Queue.RestorePending(pIn, nCount);
+	}
 
 	#if SNSPCIO_WRITEQUEUE
 	Bool	EnqueueWrite(Uint32 uCycle, Uint32 uAddr, Uint8 uData);
