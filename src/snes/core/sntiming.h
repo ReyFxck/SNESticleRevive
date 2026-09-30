@@ -12,6 +12,10 @@
 #define SNES_CYCLESPERLINE (1364)
 #define SNES_SHORTLINE_CYCLES (1360)
 #define SNES_VISIBLE_CYCLES (1024)
+/* Hardware raster/DMA landmarks in master clocks.  HBlank begins at H=274
+   and HDMA is requested at H=276; each dot is four master clocks. */
+#define SNES_HBLANK_START_CYCLES (1096)
+#define SNES_HDMA_START_CYCLES   (1104)
 #define SNES_SHORTLINE_INDEX (240)
 #define SNES_VBLANK_START_LINE (225)
 
