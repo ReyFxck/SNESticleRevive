@@ -61,11 +61,137 @@ SnesDMAC::SnesDMAC()
 	m_HDMAEnable = 0;
 	m_HDMAEnded = 0;
 	m_HDMADoTransfer = 0;
+	m_MDMAStartedMask = 0;
+	m_bDMATimingActive = FALSE;
+	m_uDMAClockCounter = 0;
 	m_uVideoLine = 0;
 	m_pCPU = NULL;
 	m_pPPU = NULL;
 	m_pSDD1 = NULL;
 	m_pSA1 = NULL;
+}
+
+void SnesDMAC::ConsumeMasterClocks(Int32 nClocks)
+{
+	if (nClocks <= 0)
+		return;
+	ConsumeMasterClocks(nClocks);
+	if (m_bDMATimingActive)
+		m_uDMAClockCounter += (Uint32)nClocks;
+}
+
+Uint32 SnesDMAC::GetPausedCpuSpeed() const
+{
+	if (!m_pCPU)
+		return SNCPU_CYCLE_SLOW;
+	Uint32 uPC = m_pCPU->Regs.rPC & 0xFFFFFFu;
+	Uint32 uSpeed = m_pCPU->Bank[uPC >> SNCPU_BANK_SHIFT].uBankCycle;
+	if (uSpeed != 6u && uSpeed != 8u && uSpeed != 12u)
+		uSpeed = SNCPU_CYCLE_SLOW;
+	return uSpeed;
+}
+
+void SnesDMAC::BeginDMATiming()
+{
+	if (m_bDMATimingActive || !m_pCPU)
+		return;
+	m_bDMATimingActive = TRUE;
+	m_uDMAClockCounter = 0;
+	/* After the CPU pause, DMA waits until the next 8-master-clock boundary.
+	   Since S-CPU clocks are even this is the documented 2/4/6/8 clocks. */
+	ConsumeMasterClocks((Int32)CalcStartSync(
+		(Uint32)SNCPUGetCounter(m_pCPU, SNCPU_COUNTER_TOTAL)));
+}
+
+void SnesDMAC::EndDMATiming()
+{
+	if (!m_bDMATimingActive)
+		return;
+	/* Resume on the next boundary of the CPU clock that was paused. */
+	ConsumeMasterClocks((Int32)CalcEndSync(
+		m_uDMAClockCounter, GetPausedCpuSpeed()));
+	m_bDMATimingActive = FALSE;
+	m_uDMAClockCounter = 0;
+}
+
+Bool SnesDMAC::IsABusForbidden(Uint32 uAddr) const
+{
+	Uint32 uBank = (uAddr >> 16) & 0xFF;
+	Uint32 uLow = uAddr & 0xFFFF;
+	Bool bSystemBank =
+		(uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF)) ? TRUE : FALSE;
+	if (!bSystemBank)
+		return FALSE;
+	if (uLow >= 0x2100 && uLow <= 0x21FF)
+		return TRUE;
+	if (uLow == 0x420B || uLow == 0x420C ||
+	    (uLow >= 0x4300 && uLow <= 0x437F))
+		return TRUE;
+	return FALSE;
+}
+
+Bool SnesDMAC::IsWorkRAMAddress(Uint32 uAddr) const
+{
+	Uint32 uBank = (uAddr >> 16) & 0xFF;
+	Uint32 uLow = uAddr & 0xFFFF;
+	if (uBank == 0x7E || uBank == 0x7F)
+		return TRUE;
+	return ((uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF)) &&
+	        uLow < 0x2000) ? TRUE : FALSE;
+}
+
+Uint8 SnesDMAC::ReadABus(Uint32 uAddr)
+{
+	if (IsABusForbidden(uAddr))
+		return m_pCPU->uOpenBus;
+	return SnesHDMARead8(m_pCPU, uAddr);
+}
+
+void SnesDMAC::WriteABus(Uint32 uAddr, Uint8 uData)
+{
+	/* DMA writes always drive the data bus, even when a CPU/DMA-controller
+	   register rejects the A-bus access. */
+	if (IsABusForbidden(uAddr))
+	{
+		m_pCPU->uOpenBus = uData;
+		return;
+	}
+	SNCPUWrite8(m_pCPU, uAddr, uData);
+}
+
+void SnesDMAC::CopyDMABusByte(Uint32 uAddrA, Uint32 uAddrB,
+	Bool bBToA, Uint32 uHClock)
+{
+	/* $2180 and WRAM share the same physical WRAM bus. Hardware cannot use
+	   both ends of that bus in one DMA byte. */
+	if ((uAddrB & 0xFFFF) == 0x2180 && IsWorkRAMAddress(uAddrA))
+	{
+		if (bBToA)
+			WriteABus(uAddrA, 0xFF);
+		/* A->B performs no read and no write; open bus remains unchanged. */
+		ConsumeMasterClocks(8);
+		return;
+	}
+
+	if (bBToA)
+	{
+		Uint8 uData;
+		if ((uAddrB & 0xFFC0u) == 0x2100u)
+			uData = m_pPPU->ReadTimed(uAddrB, m_pCPU->uOpenBus, TRUE,
+			                         m_uVideoLine, uHClock + 4u);
+		else
+			uData = SNCPURead8(m_pCPU, uAddrB);
+		WriteABus(uAddrA, uData);
+	}
+	else
+	{
+		Uint8 uData = ReadABus(uAddrA);
+		if ((uAddrB & 0xFFC0u) == 0x2100u)
+			m_pPPU->WriteTimed(uAddrB, uData, m_uVideoLine, uHClock + 8u);
+		else
+			SNCPUWrite8(m_pCPU, uAddrB, uData);
+	}
+	ConsumeMasterClocks(8);
 }
 
 void SnesDMAWritePPUPort(SnesPPU *pPPU, Uint32 uPort, Uint8 uData)
@@ -447,7 +573,7 @@ void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
 		pChan->dasx--;
 
         // decrement cpu clock cycles
-        SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW * 1);
+        ConsumeMasterClocks(SNCPU_CYCLE_SLOW * 1);
 	}
 	/* Finish the four-byte B-bus pattern once a slice starts.  Otherwise a
 	   scheduler boundary after byte 1/2/3 restarts the next slice at phase 0
@@ -472,7 +598,7 @@ void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 	Bool bVRAMAllowed = m_pPPU->CanAccessVRAM(m_uVideoLine);
 	Bool bActive = m_pPPU->IsActiveDisplay(m_uVideoLine);
 
-	SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW * nBytes);
+	ConsumeMasterClocks(SNCPU_CYCLE_SLOW * nBytes);
 
 	/* Keep the bulk paths for the overwhelmingly common VBlank/forced-blank
 	   uploads. Active-display transfers must visit each bus byte because OAM
@@ -783,7 +909,7 @@ void SnesDMAC::BeginHDMA()
 
 	/* Mesen: HDMA initialization has one 8-clock global overhead, then
 	   initializes every enabled channel before the first scanline transfer. */
-	SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+	ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 
 	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{
@@ -799,7 +925,7 @@ void SnesDMAC::BeginHDMA()
 		pChan->a2ax = pChan->a1tx;
 		pChan->ntlrx = SnesHDMARead8(m_pCPU,
 			(Uint16)pChan->a2ax | (pChan->a1bx << 16));
-		SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+		ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 		pChan->a2ax++;
 
 		bStopped = pChan->ntlrx == 0;
@@ -810,7 +936,7 @@ void SnesDMAC::BeginHDMA()
 		{
 			uLow = SnesHDMARead8(m_pCPU,
 				(Uint16)pChan->a2ax | (pChan->a1bx << 16));
-			SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+			ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 			pChan->a2ax++;
 
 			if (bStopped)
@@ -823,7 +949,7 @@ void SnesDMAC::BeginHDMA()
 			{
 				pChan->dasx = uLow | (SnesHDMARead8(m_pCPU,
 					(Uint16)pChan->a2ax | (pChan->a1bx << 16)) << 8);
-				SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+				ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 				pChan->a2ax++;
 			}
 		}
@@ -887,7 +1013,7 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 			pChan->dasx++;
 		else
 			pChan->a2ax++;
-		SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+		ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 	}
 }
 
@@ -926,7 +1052,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 	/* Mesen performs every channel's data phase first, followed by every
 	   channel's counter/table phase.  Interleaving those phases changes both
 	   B-bus side effects and the point at which IRQ/NMI can be observed. */
-	SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+	ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{
 		Uint8 uMask = (Uint8)(1 << uChan);
@@ -968,7 +1094,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 		   value is discarded until the seven-bit line counter reaches zero. */
 		uNewCounter = SnesHDMARead8(m_pCPU,
 			(Uint16)pChan->a2ax | (pChan->a1bx << 16));
-		SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+		ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 
 		if ((pChan->ntlrx & 0x7F) == 0)
 		{
@@ -984,7 +1110,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 
 				uLow = SnesHDMARead8(m_pCPU,
 					(Uint16)pChan->a2ax | (pChan->a1bx << 16));
-				SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+				ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 				pChan->a2ax++;
 
 				if (uNewCounter == 0 && bLastActive)
@@ -998,7 +1124,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 					pChan->dasx = uLow | (SnesHDMARead8(m_pCPU,
 						(Uint16)pChan->a2ax |
 						(pChan->a1bx << 16)) << 8);
-					SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW);
+					ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 					pChan->a2ax++;
 				}
 			}
@@ -1020,4 +1146,7 @@ void SnesDMAC::Reset()
 	m_HDMAEnable = 0;
 	m_HDMAEnded = 0;
 	m_HDMADoTransfer = 0;
+	m_MDMAStartedMask = 0;
+	m_bDMATimingActive = FALSE;
+	m_uDMAClockCounter = 0;
 }
