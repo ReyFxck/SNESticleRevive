@@ -2125,6 +2125,15 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_PPURender.BeginRender(pTarget);
 	m_PPU.BeginFrame();
 
+	/* A Super Scope receiver asserts the external latch when the CRT beam
+	   crosses the aim point. The PS2 has no CRT light sensor, so the virtual
+	   peripheral supplies one deterministic coordinate latch per frame. */
+	{
+		Uint16 uScopeX, uScopeY;
+		if (m_IO.GetSuperScopePosition(&uScopeX, &uScopeY))
+			m_PPU.LatchCounters(uScopeX, uScopeY);
+	}
+
 	/* SETINI overscan is latched by BeginFrame(). Keep CPU/HDMA visible
 	   scanlines and the renderer on the same 224/239-line boundary. */
 	const Uint32 uVisibleLines = m_PPU.GetFrameVisibleLines();
