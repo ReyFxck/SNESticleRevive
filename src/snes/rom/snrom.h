@@ -135,6 +135,12 @@ public:
 	void SetCartInfo(SNRomInfoT *pCartInfo);
 
 	static SNRomHdrTypeE SNRomGetHdrType(SNRomHdrU *pRomHdr);
+	/* Type-2 cannot be identified reliably from the cartridge header because
+	   its first 64 KiB (including $7FC0) may remain in place.  Expose an
+	   explicit loader override, matching the safe behavior of reference
+	   emulators instead of guessing and corrupting a clean dump. */
+	static void SetForceType2(Bool bEnable);
+	static Bool GetForceType2();
 
 	virtual Uint32  GetNumExts();
 	virtual Char    *GetExtName(Uint32 uExt);
