@@ -371,6 +371,49 @@ static void Test24MbitBoardDetection(void)
 	}
 }
 
+static void Test128KSramBoardDetection(void)
+{
+	static const char *titles[] = {
+		"THOROUGHBRED BREEDER3",
+		"RPG-TCOOL 2"
+	};
+
+	for (Uint32 i = 0; i < sizeof(titles) / sizeof(titles[0]); i++)
+	{
+		std::vector<Uint8> rom(0x400000, 0xFF);
+		PutHeader(rom, 0x7FC0, titles[i], 0x20, (Uint16)(0x6200 + i),
+			0x8000, 0x0000);
+		((SNRomInfoT *)&rom[0x7FC0])->RomSize = 0x0C;
+		((SNRomInfoT *)&rom[0x7FC0])->SRAMSize = 7; /* 128 KiB */
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"128-KiB SRAM board fixture must load");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_SRAM128K_SPECIAL) != 0,
+			"known 128-KiB SRAM title must select special board map");
+		CHECK(snesRom.GetSRAMBytes() == 128u * 1024u,
+			"special SRAM board must keep 128 KiB physical save size");
+	}
+
+	{
+		std::vector<Uint8> rom(0x400000, 0xFF);
+		PutHeader(rom, 0x7FC0, "ORDINARY 128K SRAM", 0x20, 0x6333,
+			0x8000, 0x0000);
+		((SNRomInfoT *)&rom[0x7FC0])->RomSize = 0x0C;
+		((SNRomInfoT *)&rom[0x7FC0])->SRAMSize = 7;
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"ordinary 128-KiB SRAM fixture must load");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_SRAM128K_SPECIAL) == 0,
+			"SRAM size alone must not select the rare board map");
+	}
+}
+
 static void TestType2ExplicitRecovery(void)
 {
 	std::vector<Uint8> linear(0x100000, 0xFF);
@@ -437,6 +480,7 @@ int main(void)
 	TestPinocchioFalseType1Regression();
 	TestRealType1StillWorks();
 	Test24MbitBoardDetection();
+	Test128KSramBoardDetection();
 	TestType2ExplicitRecovery();
 
 	if (g_Failures)
