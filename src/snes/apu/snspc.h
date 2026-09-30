@@ -52,7 +52,9 @@ typedef struct SNSpc_t
 	Uint8		ShadowMem[SNSPC_ROM_SIZE];
 
 	Bool		bRomEnable;
-	Uint8		uPad;
+	/* $F0 TEST latch. Kept in the old one-byte padding slot so SNSpcT layout
+	   stays stable for the existing PS2 code. Power-on value is $0A. */
+	Uint8		uTestReg;
 } SNSpcT;
 
 void SNSPCNew(SNSpcT *pCpu);
@@ -93,5 +95,44 @@ static _INLINE Int32 SNSPCGetCounter(SNSpcT *pCpu, Int32 iCounter)
 }
 
 Uint32 SNSPCMemChecksum(SNSpcT *pCpu);
+
+#define SNSPC_TEST_TIMERS_DISABLE 0x01u
+#define SNSPC_TEST_RAM_WRITABLE   0x02u
+#define SNSPC_TEST_RAM_DISABLE    0x04u
+#define SNSPC_TEST_TIMERS_ENABLE  0x08u
+
+static _INLINE Bool SNSPCRamDisabled(const SNSpcT *pCpu)
+{
+	return (pCpu->uTestReg & SNSPC_TEST_RAM_DISABLE) ? TRUE : FALSE;
+}
+
+static _INLINE Bool SNSPCRamWritable(const SNSpcT *pCpu)
+{
+	return ((pCpu->uTestReg & SNSPC_TEST_RAM_WRITABLE) &&
+	        !(pCpu->uTestReg & SNSPC_TEST_RAM_DISABLE)) ? TRUE : FALSE;
+}
+
+/* Raw APURAM access used by the interpreter. IPL ROM remains readable while
+   RAM is disabled, matching the S-SMP memory bus. */
+static _INLINE Uint8 SNSPCReadRAM(const SNSpcT *pCpu, Uint32 uAddr)
+{
+	uAddr &= 0xFFFFu;
+	if (uAddr >= SNSPC_ROM_ADDR && pCpu->bRomEnable)
+		return pCpu->Mem[uAddr];
+	if (SNSPCRamDisabled(pCpu))
+		return 0x5A;
+	return pCpu->Mem[uAddr];
+}
+
+static _INLINE void SNSPCWriteRAM(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
+{
+	uAddr &= 0xFFFFu;
+	if (!SNSPCRamWritable(pCpu))
+		return;
+	if (uAddr >= SNSPC_ROM_ADDR && pCpu->bRomEnable)
+		pCpu->ShadowMem[uAddr & (SNSPC_ROM_SIZE - 1)] = uData;
+	else
+		pCpu->Mem[uAddr] = uData;
+}
 
 #endif
