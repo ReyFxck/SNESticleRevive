@@ -77,7 +77,8 @@ void SNSpcDspMix::KeyOn(Int32 iChannel)
 	pChannel->nEnvCount = 0;
 	pChannel->iPhase = 0;
 	pChannel->uBlockAddr = m_pDsp->GetSampleDir(pRegs->srcn, 0);
-	pChannel->uOldBlockAddr = 0;
+	/* KON owns this address change; do not treat it as an external SRCN jump. */
+	pChannel->uOldBlockAddr = pChannel->uBlockAddr;
 	pChannel->envx = 0;
 	pChannel->outx = 0;
 	pChannel->endx = FALSE;
@@ -145,7 +146,7 @@ Int32 SNSpcDspMix::OutputEnvelope(
 		   the real 11-bit envelope occupies only bits 0-10. */
 		if (pChannel->pad)
 		{
-			pOut[i] = 0x8000u;
+			pOut[i] = (Uint16)(0x8000u | pChannel->pad);
 			iEnvelope = 0;
 			iPending = 0;
 			if (--pChannel->pad == 0)
@@ -178,7 +179,9 @@ Int32 SNSpcDspMix::OutputEnvelope(
 		}
 		else
 		{
-			Int32 iNext = iEnvelope;
+			/* Hardware evolves the hidden _envelope candidate every sample,
+			   even when the rate counter does not commit it to ENVX. */
+			Int32 iNext = iPending;
 			Uint32 uRate;
 
 			if (pRegs->adsr1 & 0x80)
@@ -418,7 +421,12 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut,
 
 		if (pEnvelopeState && (*pEnvelopeState & 0x8000u))
 		{
-			/* KON setup: no BRR decode, interpolation or pitch advance. */
+			Uint16 uKeyDelay = *pEnvelopeState & 7u;
+			/* The real DSP starts BRR decoding on the delay=4 sample, but pitch
+			   still stays at zero until KON setup ends. Revive decodes one whole
+			   block at once, so prepare it here and keep output silent. */
+			if (uKeyDelay == 4u && pChannel->uBlockAddr != 0)
+				FetchBlock(iChannel);
 			*pOut++ = 0;
 			pEnvelopeState++;
 			if (pPitchMod) pPitchMod++;
