@@ -23,15 +23,16 @@ This review concerns the **audio SPC700/S-DSP**, not cartridge DSP-1/2/3/4.
 1. **16-bit SPC700 fetch wrap:** `_SNSPCFetch8/16` now wrap operands at
    `$ffff -> $0000`, including opcodes placed at the end of ARAM.
    Host tests cover an immediate, a 16-bit JMP operand and a branch.
-2. **One envelope multiply per voice output:** `BuildVoiceOutput` already
-   creates hardware-even, envelope-adjusted samples for PMON/OUTX; main/echo
-   mixing now consumes that buffer instead of multiplying PCM by the
-   envelope a second time. This also aligns the mixing inputs with the
-   even-output S-DSP latch seen in `ares/sfc/dsp/voice.cpp`. This can
-   change low-order output bits compared with the old approximation.
+2. **Preserved mixer math:** the first prototype reused the hardware-even
+   PMON/OUTX latch for main/echo mixing, but audit showed that this changed
+   low output bits versus the pre-optimization Revive path. That prototype
+   was corrected. Main/echo still use exactly `(PCM * envelope) >> 7`
+   before per-channel volume, while PMON/OUTX retain their separate
+   clamped/even latch.
 3. **PS2 MIPS stereo voice accumulator:** new standalone
-   `snspcmix_voice_ps2.S`, for the EE only; all non-PS2 builds continue
-   using scalar C. This is **not** a full MIPS SPC700 interpreter.
+   `snspcmix_voice_ps2.S`, for the EE only; it implements the same legacy
+   scalar mix formula in assembly. All non-PS2 builds continue using C.
+   This is **not** a full MIPS SPC700 interpreter.
    PS2 assembly build success alone does not establish speedup or
    runtime/audio equivalence on real hardware.
 
