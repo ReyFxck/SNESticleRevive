@@ -65,6 +65,27 @@ public:
 		return m_nCount > 0 ? &m_Elements[m_iHead] : NULL;
 	}
 
+	inline Int32 CopyPending(SNQueueElementT *pOut, Int32 nMax) const
+	{
+		Int32 nCopy = m_nCount < nMax ? m_nCount : nMax;
+		Int32 iIndex = m_iHead;
+		for (Int32 i = 0; i < nCopy; ++i)
+		{
+			pOut[i] = m_Elements[iIndex];
+			if (++iIndex == t_nSize) iIndex = 0;
+		}
+		return nCopy;
+	}
+
+	inline void RestorePending(const SNQueueElementT *pIn, Int32 nCount)
+	{
+		Reset();
+		if (nCount < 0) nCount = 0;
+		if (nCount > t_nSize) nCount = t_nSize;
+		for (Int32 i = 0; i < nCount; ++i)
+			Enqueue(pIn[i].uCycle, pIn[i].uAddr, pIn[i].uData);
+	}
+
 	inline SNQueueElementT	*Dequeue(Uint32 uCycle)
 	{
 		// dequeue element only if it is earlier than cycle time given
