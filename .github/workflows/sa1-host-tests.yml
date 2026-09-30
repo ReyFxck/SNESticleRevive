@@ -48,6 +48,10 @@ jobs:
         run: ./tools/romtest/build.sh
       - name: Run ROM loader tests
         run: ./tools/romtest/rom_test
+      - name: Build netplay codec tests
+        run: bash ./tools/netplaytest/build.sh
+      - name: Run netplay codec tests
+        run: ./tools/netplaytest/netplay_test
       - name: Build deterministic ROM Lab
         run: ./tools/romlab/build.sh
       - name: Run ROM Lab integration self-test
