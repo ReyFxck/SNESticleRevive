@@ -2006,11 +2006,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	Int32 nObjLine;
 	const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
 	const Uint8 uBGMode = pRegs->bgmode & 7;
-	const Bool bScreenInterlace =
-		(pRegs->setini & SNESPPU_SETINI_INTERLACE) ? TRUE : FALSE;
 	const Bool bOddField = m_pPPU->GetField();
-	const Int32 iFetchLine = _SnesPPUInterlaceFetchLine(
-		iLine, uBGMode, bScreenInterlace, bOddField);
 	Uint8 tm = pRegs->tm & _tm;
 	Uint8 tmw = pRegs->tmw & _tmw;
 	Uint32 cgadsub =  (pRegs->cgadsub & 0x3F);
@@ -2163,7 +2159,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			{
 				// fetch BGline with offset
 				PROF_ENTER("FetchBGOffset");
-				uBGFlags[iBG] = FetchBGOffset(&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iFetchLine, pOffset, (0x2000 << iBG), ((pRegs->bgmode&7)==4 ? TRUE : FALSE));
+				uBGFlags[iBG] = FetchBGOffset(&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iLine, pOffset, (0x2000 << iBG), ((pRegs->bgmode&7)==4 ? TRUE : FALSE));
 				PROF_LEAVE("FetchBGOffset");
 
 				// invalidate cache
@@ -2172,7 +2168,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			{
 				// fetch line without offset
 				PROF_ENTER("FetchBG");
-				uBGFlags[iBG] = FetchBG(&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iFetchLine, pRenderInfo->uBGVramAddr[iBG]);
+				uBGFlags[iBG] = FetchBG(&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iLine, pRenderInfo->uBGVramAddr[iBG]);
 				PROF_LEAVE("FetchBG");
 			}
 		}
@@ -2309,7 +2305,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						(Uint8 *)pRenderInfo->BGPlanes[iBG],
 						(Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
 						m_pPPU, &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33,
-						iFetchLine, TempMask[0], SubMask[0],
+						iLine, TempMask[0], SubMask[0],
 						(uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET));
 
 					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
@@ -2337,7 +2333,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				{
 					_FetchCHR_64((Uint8 *)pRenderInfo->BGPlanes[iBG],
 						m_pPPU, &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33,
-						iFetchLine, TempMask[0],
+						iLine, TempMask[0],
 						(uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET), FALSE);
 					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 						TempMask[0], (BGInfo[iBG].uScrollX & 7));
@@ -2353,7 +2349,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				}
 #else
 				_FetchCHR((Uint8 *)pRenderInfo->BGPlanes[iBG], m_pPPU,
-					&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iFetchLine,
+					&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iLine,
 					TempMask[0], (uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET));
 				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 					TempMask[0], (BGInfo[iBG].uScrollX & 7));
