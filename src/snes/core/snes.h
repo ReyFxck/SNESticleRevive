@@ -170,6 +170,7 @@ private:
 	void	MapMem(SNRomMappingE eRomMapping, Uint32 uFlags);
 	void	MapMemExLoRom(void);
 	void	MapMemLoRom24MBit(void);
+	void	MapMemLoRomSRAM128K(void);
 	void	RemapSA1ROM(Uint32 uWhich, Uint8 uMap);
 	void	RemapSDD1(void);   // (re)mapeia $C0-$FF conforme $4804-$4807
 	void	DumpMemMap();
