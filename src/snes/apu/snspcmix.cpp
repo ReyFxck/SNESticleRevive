@@ -510,7 +510,9 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 	Uint8 uFlags = 0;
 
-	// copy previous samples
+	// Keep the three decoded samples immediately before the new BRR block.
+	// Gaussian interpolation at phase -2 needs [-3,-2,-1,0].
+	pChannel->BlockData[0][13] = pChannel->BlockData[1][13];
 	pChannel->BlockData[0][14] = pChannel->BlockData[1][14];
 	pChannel->BlockData[0][15] = pChannel->BlockData[1][15];
 
@@ -573,9 +575,13 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 	// fix to keep interpolation correct
 	if (pChannel->uBlockAddr!= pChannel->uOldBlockAddr)
 	{
-		// this is done to ensure interpolation is correct from old sample to new sample
-		pBlockData[14] = pBlockData[(pChannel->iPhase >> 16) + 0];
-		pBlockData[15] = pBlockData[(pChannel->iPhase >> 16) + 1];
+		/* Preserve a complete Gaussian history window when SRCN/sample address
+		   changes underneath a playing voice. Indices below zero intentionally
+		   refer to the previous-row tail maintained by FetchBlock(). */
+		Int32 iSampleIndex = pChannel->iPhase >> 16;
+		pBlockData[13] = pBlockData[iSampleIndex - 1];
+		pBlockData[14] = pBlockData[iSampleIndex + 0];
+		pBlockData[15] = pBlockData[iSampleIndex + 1];
 
 		// trigger decode, retain fractional component
 		pChannel->iPhase &= 0xFFFF;
