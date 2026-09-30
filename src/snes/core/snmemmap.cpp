@@ -751,7 +751,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 
 		// mode 20h
 		case SNROM_MAPPING_LOROM:
-			if (uFlags & SNROM_FLAG_SRAM512K_SPECIAL)
+			if (uFlags & SNROM_FLAG_SRAM128K_SPECIAL)
 			{
 				MapMemLoRomSRAM128K();
 				break;
