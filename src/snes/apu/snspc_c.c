@@ -239,13 +239,14 @@ extern void SnesRomLabUnimplementedSpcOpcode(Uint32 uPC, Uint8 uOpcode);
    $ffff must wrap to $0000, including an opcode fetched at $ffff. */
 static __inline Uint8 _SNSPCFetch8(SNSpcT *pCpu, Uint32 uAddr)
 {
-	return pCpu->Mem[uAddr & 0xFFFFu];
+	return SNSPCReadRAM(pCpu, uAddr);
 }
 
 static __inline Uint16 _SNSPCFetch16(SNSpcT *pCpu, Uint32 uAddr)
 {
 	Uint32 uPC = uAddr & 0xFFFFu;
-	return pCpu->Mem[uPC] | (pCpu->Mem[(uPC + 1) & 0xFFFFu] << 8);
+	return SNSPCReadRAM(pCpu, uPC) |
+	      (SNSPCReadRAM(pCpu, (uPC + 1) & 0xFFFFu) << 8);
 }
 
 static __inline Uint8 __SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
@@ -255,7 +256,7 @@ static __inline Uint8 __SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 		return pCpu->pReadTrapFunc(pCpu, uAddr);
 	} else
 	{
-		return pCpu->Mem[uAddr];
+		return SNSPCReadRAM(pCpu, uAddr);
 	}
 }
 
@@ -285,27 +286,11 @@ static Uint16 _SNSPCRead16DP(SNSpcT *pCpu, Uint32 Addr)
 
 static __inline void  __SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
 {
-	// don't write to rom area
-	if (uAddr < SNSPC_ROM_ADDR)
-	{
-		pCpu->Mem[uAddr] = uData;
-	}
-	else
-	if (!pCpu->bRomEnable)
-	{
-		// rom is disabled
-		pCpu->Mem[uAddr] = uData;
-//		pCpu->pWriteTrapFunc(pCpu, uAddr, uData);
-	} else
-	{
-		// rom is enabled
-		pCpu->ShadowMem[uAddr & (SNSPC_ROM_SIZE -1)] = uData;
-	}
+	uAddr &= 0xFFFFu;
+	SNSPCWriteRAM(pCpu, uAddr, uData);
 
 	if (uAddr >= 0xF0 && uAddr < 0x100)
-	{
 		pCpu->pWriteTrapFunc(pCpu, uAddr, uData);
-	}
 }
 
 static void  _SNSPCWrite8(SNSpcT *pCpu, Uint32 Addr, Uint8 Data)
@@ -328,31 +313,31 @@ static void _SNSPCWrite16DP(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
 
 static void _SNSPCPush8(SNSpcT *pCpu, Uint8 Data)
 {
-	pCpu->Mem[r_SP + 0x100] = Data;
+	SNSPCWriteRAM(pCpu, r_SP + 0x100, Data);
 	r_SP--;
 }
 
 static void _SNSPCPush16(SNSpcT *pCpu, Uint16 Data)
 {
-	pCpu->Mem[r_SP + 0x100] = (Uint8)(Data >> 8);
+	SNSPCWriteRAM(pCpu, r_SP + 0x100, (Uint8)(Data >> 8));
 	r_SP--;
-	pCpu->Mem[r_SP + 0x100] = (Uint8)(Data & 0xFF);
+	SNSPCWriteRAM(pCpu, r_SP + 0x100, (Uint8)(Data & 0xFF));
 	r_SP--;
 }
 
 static Uint8 _SNSPCPop8(SNSpcT *pCpu)
 {
 	r_SP++;
-	return pCpu->Mem[r_SP + 0x100];
+	return SNSPCReadRAM(pCpu, r_SP + 0x100);
 }
 
 static Uint16 _SNSPCPop16(SNSpcT *pCpu)
 {
 	Uint32 uData;
 	r_SP++;
-	uData = pCpu->Mem[r_SP + 0x100];
+	uData = SNSPCReadRAM(pCpu, r_SP + 0x100);
 	r_SP++;
-	uData|= pCpu->Mem[r_SP + 0x100] << 8;
+	uData|= SNSPCReadRAM(pCpu, r_SP + 0x100) << 8;
 	return uData;
 }
 
