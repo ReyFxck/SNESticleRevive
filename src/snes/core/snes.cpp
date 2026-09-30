@@ -523,6 +523,30 @@ void SnesSystem::RefreshSCPUIRQ()
 	SNCPUSignalIRQ(&m_Cpu, bPending ? 1 : 0);
 }
 
+Uint32 SnesSystem::GetSCPUMasterClock() const
+{
+	return (Uint32)SNCPUGetCounter((SNCpuT *)&m_Cpu, SNCPU_COUNTER_TOTAL);
+}
+
+Uint32 SnesSystem::GetSCPULineClock() const
+{
+	Int32 nClock = SNCPUGetCounter((SNCpuT *)&m_Cpu, SNCPU_COUNTER_LINE);
+	if (nClock < 0)
+		return 0;
+	if (nClock >= SNES_CYCLESPERLINE)
+		return SNES_CYCLESPERLINE - 1;
+	return (Uint32)nClock;
+}
+
+void SnesSystem::AssertTimerIRQ()
+{
+	if (!(m_IO.m_Regs.timeup & 0x80))
+		m_uIrqFlagSetClock = GetSCPUMasterClock();
+	m_IO.m_Regs.timeup |= 0x80;
+	SNCPUSetIRQDelay(&m_Cpu, 0);
+	RefreshSCPUIRQ();
+}
+
 inline void SnesSystem::SyncPPU()
 {
 #if SNDBG_LOG
@@ -866,34 +890,54 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
     // 42XX
     case 0x4210:	// RDNMI
         {
-            Uint8 uData = pIO->m_Regs.rdnmi;
+			Uint32 uHClock = pSnes->GetSCPULineClock();
+			Uint32 uNmiLine = pSnes->m_PPU.GetFrameVisibleLines() + 1u;
+            Uint8 uData = (Uint8)((pIO->m_Regs.rdnmi & 0x82) |
+			                      (pCpu->uOpenBus & 0x70));
 
-            // clear RDNMI on read
-            pIO->m_Regs.rdnmi &= ~0x80;
-
-            // set new nmi signal
-            SNCPUSignalNMI(pCpu, pIO->m_Regs.rdnmi & pIO->m_Regs.nmitimen & 0x80);
+			/* The 5A22 forces RDNMI high from H=2 through H=5 on the NMI
+			   scanline. A read in that four-clock window observes bit 7 but
+			   cannot clear it; clearing becomes possible at H=6. */
+			if ((pIO->m_Regs.rdnmi & 0x80) &&
+			    (pSnes->m_uLine != uNmiLine || uHClock >= 6u))
+			{
+				pIO->m_Regs.rdnmi &= (Uint8)~0x80;
+				SNCPUSignalNMI(pCpu,
+					pIO->m_Regs.rdnmi & pIO->m_Regs.nmitimen & 0x80);
+			}
             return uData;
         }
 
     case 0x4211:	// TIMEUP
         {
-            Uint8 uData = pIO->m_Regs.timeup;
-            pIO->m_Regs.timeup &= ~0x80;
-            pSnes->RefreshSCPUIRQ();
+			Uint32 uNow = pSnes->GetSCPUMasterClock();
+            Uint8 uData = (Uint8)((pIO->m_Regs.timeup & 0x80) |
+			                      (pCpu->uOpenBus & 0x7F));
+			/* TIMEUP is likewise forced high for four master clocks after
+			   assertion. Reads during that window do not clear it. */
+			if ((pIO->m_Regs.timeup & 0x80) &&
+			    (Uint32)(uNow - pSnes->m_uIrqFlagSetClock) >= 4u)
+			{
+				pIO->m_Regs.timeup &= (Uint8)~0x80;
+				pSnes->RefreshSCPUIRQ();
+			}
             return uData;
         }
     case 0x4212:	// HVBJOY
         {
-            /* Aero the Acro-Bat 2 polls VBlank around the frame wrap.
-               Line 0 is not part of VBlank even though the PPU does not draw
-               it.  Derive bit 7 from the live vertical counter so a stale
-               latched status (for example after restoring state) cannot keep
-               the game waiting forever. */
-            Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0x80;
-            if (SNES_LINE_IN_VBLANK(pSnes->m_uLine))
-                uData |= 0x80;
-            return uData;
+			Uint32 uMaster = pSnes->GetSCPUMasterClock();
+			Uint32 uHClock = pSnes->GetSCPULineClock();
+			Uint32 uNmiLine = pSnes->m_PPU.GetFrameVisibleLines() + 1u;
+			Uint8 uData = (Uint8)(pCpu->uOpenBus & 0x3E);
+			pIO->ProcessAutoJoypad(uMaster);
+			if (pSnes->m_uLine >= uNmiLine)
+				uData |= 0x80;
+			/* CPU HBLANK status is low from H=4 through H=1096 inclusive. */
+			if (uHClock < 4u || uHClock > 1096u)
+				uData |= 0x40;
+			if (pIO->IsAutoJoypadActive())
+				uData |= 0x01;
+			return uData;
         }
 
     case 0x4213:	// RDIO
@@ -906,24 +950,25 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 		return pIO->ReadALU(pCpu, uAddr);
 
 	case 0x4218:	// JOY1L
-		return pIO->m_Regs.joy1.b.l;
 	case 0x4219:	// JOY1H
-		return pIO->m_Regs.joy1.b.h;
-
 	case 0x421A:	// JOY2L
-		return pIO->m_Regs.joy2.b.l;
 	case 0x421B:	// JOY2H
-		return pIO->m_Regs.joy2.b.h;
-
 	case 0x421C:	// JOY3L
-		return pIO->m_Regs.joy3.b.l;
 	case 0x421D:	// JOY3H
-		return pIO->m_Regs.joy3.b.h;
-
 	case 0x421E:	// JOY4L
-		return pIO->m_Regs.joy4.b.l;
 	case 0x421F:	// JOY4H
-		return pIO->m_Regs.joy4.b.h;
+		pIO->ProcessAutoJoypad(pSnes->GetSCPUMasterClock());
+		switch (uAddr)
+		{
+		case 0x4218: return pIO->m_Regs.joy1.b.l;
+		case 0x4219: return pIO->m_Regs.joy1.b.h;
+		case 0x421A: return pIO->m_Regs.joy2.b.l;
+		case 0x421B: return pIO->m_Regs.joy2.b.h;
+		case 0x421C: return pIO->m_Regs.joy3.b.l;
+		case 0x421D: return pIO->m_Regs.joy3.b.h;
+		case 0x421E: return pIO->m_Regs.joy4.b.l;
+		default:     return pIO->m_Regs.joy4.b.h;
+		}
 
 	default:
 		break;
@@ -986,6 +1031,8 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
         case 0x4200:	// nmitimen
         {
 			Uint8 uOldNmitimen = pIO->m_Regs.nmitimen;
+			pIO->PrepareAutoJoypadEnableChange(
+				pSnes->GetSCPUMasterClock(), (uData & 0x01) ? TRUE : FALSE);
             pIO->m_Regs.nmitimen = uData;
 
             // unconfirmed:
@@ -1021,6 +1068,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		}
 
         case 0x4201:	// wrio (programmable i/o port)
+			pIO->ProcessAutoJoypad(pSnes->GetSCPUMasterClock());
 			/* A high-to-low transition on OUT1 drives the external PPU counter
 			   latch, the same latch exposed by a $2137 read while OUT1 is high. */
 			if ((pIO->m_Regs.wrio & 0x80) && !(uData & 0x80))
@@ -1347,6 +1395,8 @@ SnesSystem::SnesSystem()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_uNmiFlagSetClock = 0;
+	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
 
 	// setup spc
@@ -1448,6 +1498,8 @@ void SnesSystem::Reset()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_uNmiFlagSetClock = 0;
+	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
 #if SNDBG_LOG
 	SnesDbgResetSession();
@@ -1734,9 +1786,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 				m_nLineIRQCycle = -1;
 				if (m_bLineIRQInstant)
 				{
-					m_IO.m_Regs.timeup |= 0x80;
-					SNCPUSetIRQDelay(&m_Cpu, 0);
-					SNCPUSignalIRQ(&m_Cpu, 1);
+					AssertTimerIRQ();
 #if SNDBG_LOG
 					g_TmgIrqInstant++;
 #endif
@@ -1795,9 +1845,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 			{
 				m_bLineIRQFired = TRUE;
 				m_nLineIRQCycle = -1;
-				m_IO.m_Regs.timeup |= 0x80;
-				SNCPUSetIRQDelay(&m_Cpu, 0);
-				SNCPUSignalIRQ(&m_Cpu, 1);
+				AssertTimerIRQ();
 			}
 		}
 
@@ -1810,29 +1858,8 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
         // execute up to h-irq
         ExecuteCPU(nIRQCycles);
 
-        // set irq flag
-        m_IO.m_Regs.timeup |= 0x80;
-
-		/* Aero the Acro-Bat 2 waits for $4212.VBlank to clear while its
-		   V-only timer targets line 0.  The real timer edge occurs inside an
-		   opcode; entering the handler before that polling opcode retires
-		   leaves the game in the black-screen loop after the intro.  Snes9x's
-		   opcode core uses the same two-opcode deferral for this title. */
-		const char *pTitle = m_pRom ? m_pRom->GetRomTitle() : NULL;
-		if (m_uLine == 0 &&
-			(m_IO.m_Regs.nmitimen & 0x30) == 0x20 &&
-			m_IO.m_Regs.vtime.w == 0 &&
-			pTitle &&
-			(strcmp(pTitle, "Aero the AcroBat 2") == 0 ||
-			 strcmp(pTitle, "AERO THE ACROBAT 2") == 0))
-		{
-			SNCPUSetIRQDelay(&m_Cpu, 2);
-		}
-		else
-		{
-			SNCPUSetIRQDelay(&m_Cpu, 0);
-		}
-        SNCPUSignalIRQ(&m_Cpu, 1);
+        // Timer source becomes visible here; no title-specific delay.
+		AssertTimerIRQ();
 
         // execute rest of way
         ExecuteCPU(nCycles - nIRQCycles);
@@ -1974,6 +2001,7 @@ void SnesSystem::ExecuteLine()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = SNES_CYCLESPERLINE;
+	m_IO.ProcessAutoJoypad(GetSCPUMasterClock());
 	PROF_LEAVE("ExecLine");
 }
 
@@ -2121,26 +2149,18 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     // set vbl flag at start of vblank
     m_IO.m_Regs.hvbjoy|= 0x80;
 
-	if (m_IO.m_Regs.nmitimen & 1)
-	{
-		// set joy enable flag at start of vblank
-		m_IO.m_Regs.hvbjoy|= 0x01;
-		m_IO.UpdateJoyPads();
-	}
+	/* Auto-read is a 128-master-clock state machine, not an instantaneous
+	   copy three scanlines into VBlank. */
+	m_IO.BeginAutoJoypad(GetSCPUMasterClock());
 
-    // set 'BLANK NMI' flag at beginning of v-blank
+    // RDNMI becomes visible at H=2; the NMI input reaches the CPU around H=6.
+    m_uNmiFlagSetClock = GetSCPUMasterClock() + 2u;
     m_IO.m_Regs.rdnmi |= 0x80;
     SNCPUSignalNMI(&m_Cpu, m_IO.m_Regs.rdnmi & m_IO.m_Regs.nmitimen & 0x80);
 
     for ( ; m_uLine < uFrameLines; m_uLine++)
 	{
 		ExecuteLine();
-
-		if (m_uLine==uVisibleLines+3) // auto-joy read completes ~3 scanlines into VBlank
-		{
-			// done reading joypad
-			m_IO.m_Regs.hvbjoy&= ~0x01;
-		}
 	}
 
     // clear 'BLANK NMI' flag at end of v-blank
