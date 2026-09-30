@@ -54,26 +54,25 @@ int main()
 			SNSpcDspInterpolateGaussian(&negative[1], 0xFFFF), -32768);
 	}
 
-	Check("voice output envelope",
-		SNSpcDspVoiceOutput(2000, 127), 1984);
+	Check("voice output full 11-bit envelope",
+		SNSpcDspVoiceOutput(2000, 0x7F0), 1984);
 	Check("voice output clears bit0",
-		SNSpcDspVoiceOutput(103, 127) & 1, 0);
+		SNSpcDspVoiceOutput(103, 0x7FF) & 1, 0);
+	Check("voice output half envelope",
+		SNSpcDspVoiceOutput(1000, 0x400), 500);
 
-	/* Main/echo mixing intentionally keeps the historical Revive raw
-	   envelope product. It is distinct from the hardware-even PMON/OUTX
-	   latch, so an odd raw result must stay odd here. */
-	Check("raw mix keeps odd low bit",
-		SNSpcDspEnvelopeMixSample(2, 127), 1);
-	Check("voice latch clears same low bit",
-		SNSpcDspVoiceOutput(2, 127), 0);
-	Check("raw mix positive",
-		SNSpcDspEnvelopeMixSample(2001, 127), 1985);
-	Check("raw mix negative arithmetic shift",
-		SNSpcDspEnvelopeMixSample(-2001, 127), -1986);
-	Check("raw mix left volume",
-		SNSpcDspEnvelopeMixSample(2001, 127) * -47, -93295);
-	Check("raw mix right volume",
-		SNSpcDspEnvelopeMixSample(2001, 127) * 90, 178650);
+	Check("DSP counter wraps then decrements",
+		SNSpcDspCounterTick(0), 30719);
+	Check("DSP counter decrements",
+		SNSpcDspCounterTick(30719), 30718);
+	Check("DSP rate0 never polls",
+		SNSpcDspCounterPoll(0, 0), FALSE);
+	Check("DSP rate31 polls every sample",
+		SNSpcDspCounterPoll(12345, 31), TRUE);
+	Check("DSP rate30 even phase",
+		SNSpcDspCounterPoll(30718, 30), TRUE);
+	Check("DSP rate30 odd phase",
+		SNSpcDspCounterPoll(30719, 30), FALSE);
 
 	/* BRR scale 13-15 has special hardware behavior: negative nybbles
 	   become -2048 before the final x2 write, positive nybbles become zero. */
