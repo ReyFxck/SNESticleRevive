@@ -101,6 +101,9 @@ void SNSPCResetRegs(SNSpcT *pCpu)
 
 void SNSPCSetRomEnable(SNSpcT *pCpu, Bool bEnable)
 {
+	/* Bool is an unsigned byte in the recovered core. Normalize callers such
+	   as CONTROL.7 (0x80) before comparing against the stored 0/1 state. */
+	bEnable = bEnable ? TRUE : FALSE;
 	if (bEnable != pCpu->bRomEnable)
 	{
 		if (bEnable)
