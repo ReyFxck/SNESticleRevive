@@ -515,4 +515,12 @@ void SnesPPURender::UpdateOBJ(Uint8 *pObjY, Uint8 *pObjSize)
 	_DecodeOBJEX(pOAM->ObjEx, m_Objs, SNESPPU_OBJ_NUM,
 	             (pRegs->obsel >> 5) & 7);
 	_DecodeOBJ(pOAM->Objs, m_Objs, SNESPPU_OBJ_NUM, pObjY, pObjSize);
+
+	/* OBJ interlace halves the number of scanlines for which a sprite is
+	   selected. The full decoded height remains in m_Objs for CHR row math. */
+	if (m_pPPU->IsObjInterlace())
+	{
+		for (Int32 i = 0; i < SNESPPU_OBJ_NUM; i++)
+			pObjSize[i] = _SnesPPUOBJVisibleHeight(pObjSize[i], TRUE);
+	}
 }
