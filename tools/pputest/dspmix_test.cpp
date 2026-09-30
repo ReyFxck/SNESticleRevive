@@ -4,6 +4,7 @@
 #include <cstdio>
 #include "types.h"
 #include "snspcmath.h"
+#include "snspcbrr.h"
 
 static int g_Failures;
 
@@ -74,6 +75,22 @@ int main()
 	Check("raw mix right volume",
 		SNSpcDspEnvelopeMixSample(2001, 127) * 90, 178650);
 
+	/* BRR scale 13-15 has special hardware behavior: negative nybbles
+	   become -2048 before the final x2 write, positive nybbles become zero. */
+	{
+		Uint8 block[9] = { 0xD0, 0x87, 0, 0, 0, 0, 0, 0, 0 };
+		Int16 out[16] = {};
+		SNSpcBRRDecode(block, out, 0, 0);
+		Check("BRR invalid range negative", out[0], -4096);
+		Check("BRR invalid range positive", out[1], 0);
+	}
+	{
+		Uint8 block[9] = { 0x00, 0x8F, 0, 0, 0, 0, 0, 0, 0 };
+		Int16 out[16] = {};
+		SNSpcBRRDecode(block, out, 0, 0);
+		Check("BRR scale0 negative eight", out[0], -8);
+		Check("BRR scale0 negative one", out[1], -2);
+	}
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
