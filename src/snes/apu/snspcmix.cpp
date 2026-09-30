@@ -1413,7 +1413,6 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 					_SNSpcDspMemset64((Uint64 *)m_iVoiceOutput,
 						(sizeof(Int16) * nSamples + 7) / 8);
 			}
-		}
 
 			if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x20))
 			{
