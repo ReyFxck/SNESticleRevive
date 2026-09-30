@@ -48,7 +48,7 @@ static void _SNSpcDspBuildVoiceOutput(
 	const Uint16 *pEnvelope, Int32 nSamples)
 {
 	while (nSamples-- > 0)
-		*pOut++ = SNSpcDspVoiceOutput(*pIn++, *pEnvelope++);
+		*pOut++ = SNSpcDspVoiceOutput(*pIn++, (Uint16)(*pEnvelope++ & 0x07FFu));
 }
 
 /*
@@ -72,7 +72,7 @@ void SNSpcDspMix::KeyOn(Int32 iChannel)
 	SNSpcChannelT *pChannel = &m_Channels[iChannel];
 	const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
 
-	pChannel->eEnvState = SNSPCDSP_ENVSTATE_ATTACK;
+	pChannel->eEnvState = SNSPCDSP_ENVSTATE_KEYON;
 	pChannel->iEnvelope = 0;
 	pChannel->nEnvCount = 0;
 	pChannel->iPhase = 0;
@@ -81,7 +81,8 @@ void SNSpcDspMix::KeyOn(Int32 iChannel)
 	pChannel->envx = 0;
 	pChannel->outx = 0;
 	pChannel->endx = FALSE;
-	pChannel->pad = 0;
+	/* Hardware KON setup lasts five native DSP samples. */
+	pChannel->pad = 5;
 	memset(pChannel->BlockData, 0, sizeof(pChannel->BlockData));
 }
 
@@ -138,6 +139,20 @@ Int32 SNSpcDspMix::OutputEnvelope(
 	{
 		Uint16 uPollCounter =
 			(iChannel == 0) ? SNSpcDspCounterTick(uCounter) : uCounter;
+
+		/* During KON setup the envelope is held at zero and BRR/pitch must not
+		   advance. Bit15 is an internal per-chunk marker consumed by OutputSample;
+		   the real 11-bit envelope occupies only bits 0-10. */
+		if (pChannel->pad)
+		{
+			pOut[i] = 0x8000u;
+			iEnvelope = 0;
+			iPending = 0;
+			if (--pChannel->pad == 0)
+				pChannel->eEnvState = SNSPCDSP_ENVSTATE_ATTACK;
+			uCounter = SNSpcDspCounterTick(uCounter);
+			continue;
+		}
 
 		/* voice3 uses the committed envelope for this sample; envelopeRun()
 		   computes the value that becomes visible on a later sample. */
