@@ -84,15 +84,21 @@ class SnesIO
 
 	Uint32			m_uMouseSerial;
 	Uint16			m_uScopeSerial;
+	Uint32			m_uJustifierSerial;
 	Uint8			m_uMouseSensitivity;
+	Uint8			m_uJustifierActive;
 	Uint8			m_uPeripheralPad;
 
 	Bool			IsMouseMode() const;
 	Bool			IsSuperScopeMode() const;
+	Bool			IsJustifierMode() const;
+	Bool			IsDualJustifierMode() const;
 	void			LatchMouseSerial();
 	void			LatchScopeSerial();
+	void			LatchJustifierSerial();
 	Uint8			ReadMouseSerial();
 	Uint8			ReadScopeSerial();
+	Uint8			ReadJustifierSerial();
 
 public:
 	SnesIORegsT		m_Regs;
@@ -115,6 +121,8 @@ public:
 	void	PrepareAutoJoypadEnableChange(Uint32 uMasterClock, Bool bEnable);
 	Bool	IsAutoJoypadActive() const { return m_bAutoReadActive; }
 	Bool	GetSuperScopePosition(Uint16 *pX, Uint16 *pY) const;
+	Bool	GetJustifierPosition(Uint16 *pX, Uint16 *pY) const;
+	Bool	GetLightGunPosition(Uint16 *pX, Uint16 *pY) const;
 
 	Uint8	ReadALU(SNCpuT *pCpu, Uint32 uAddr);
 	void	WriteALU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
