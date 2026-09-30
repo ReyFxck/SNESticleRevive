@@ -57,6 +57,8 @@ enum SNRomMappingE
 #define SNROM_FLAG_DSP1_ORIGINAL_OP28      0x4000
 #define SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ 0x8000
 #define SNROM_FLAG_SA1                       0x10000
+#define SNROM_FLAG_ROM24MBS                  0x20000
+#define SNROM_FLAG_SRAM128K_SPECIAL          0x40000
 
 struct SNRomInfoT
 {
@@ -135,6 +137,12 @@ public:
 	void SetCartInfo(SNRomInfoT *pCartInfo);
 
 	static SNRomHdrTypeE SNRomGetHdrType(SNRomHdrU *pRomHdr);
+	/* Type-2 cannot be identified reliably from the cartridge header because
+	   its first 64 KiB (including $7FC0) may remain in place.  Expose an
+	   explicit loader override, matching the safe behavior of reference
+	   emulators instead of guessing and corrupting a clean dump. */
+	static void SetForceType2(Bool bEnable);
+	static Bool GetForceType2();
 
 	virtual Uint32  GetNumExts();
 	virtual Char    *GetExtName(Uint32 uExt);

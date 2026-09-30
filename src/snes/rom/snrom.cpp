@@ -463,6 +463,88 @@ static Bool _SNRomDeinterleaveType1(Uint8 *pRom, Uint32 uRomBytes)
 	return TRUE;
 }
 
+/*
+ * Convert the odd 64 KiB block ordering historically seen in some SuperFX
+ * copier images ("interleaved type 2") back to linear ROM order.
+ *
+ * Modern Snes9x/snes9x2010 use the same low-nibble permutation:
+ *   0,4,8,C,1,5,9,D,2,6,A,E,3,7,B,F
+ * within each 1 MiB group.  Reimplement the permutation here rather than
+ * copying another emulator's routine.
+ *
+ * Only power-of-two 1/2/4/8 MiB images are accepted.  Those are the layouts
+ * for which the permutation is complete and bounds-safe; rejecting odd sizes
+ * is preferable to damaging a legitimate dump.
+ */
+static Bool _SNRomDeinterleaveType2(Uint8 *pRom, Uint32 uRomBytes)
+{
+	Uint8 Blocks[128];
+	Uint8 *pTmp;
+	Uint32 nBlocks;
+	Uint32 i;
+
+	if (!pRom || uRomBytes < 0x100000u || uRomBytes > 0x800000u)
+		return FALSE;
+	if (uRomBytes & (uRomBytes - 1u))
+		return FALSE;
+	if (uRomBytes & 0xFFFFu)
+		return FALSE;
+
+	nBlocks = uRomBytes >> 16; /* 64 KiB blocks */
+	if (nBlocks < 16 || nBlocks > 128)
+		return FALSE;
+
+	for (i = 0; i < nBlocks; i++)
+	{
+		Uint32 uPermuted =
+			(i & ~0x0Fu) |
+			((i & 0x03u) << 2) |
+			((i & 0x0Cu) >> 2);
+		if (uPermuted >= nBlocks)
+			return FALSE;
+		Blocks[i] = (Uint8)uPermuted;
+	}
+
+	pTmp = (Uint8 *)malloc(0x10000);
+	if (!pTmp)
+		return FALSE;
+
+	for (i = 0; i < nBlocks; i++)
+	{
+		Uint32 j;
+		for (j = i; j < nBlocks; j++)
+		{
+			if (Blocks[j] == i)
+			{
+				Uint8 uBlock;
+				memcpy(pTmp, pRom + (Uint32)Blocks[j] * 0x10000u, 0x10000);
+				memmove(pRom + (Uint32)Blocks[j] * 0x10000u,
+				        pRom + (Uint32)Blocks[i] * 0x10000u, 0x10000);
+				memcpy(pRom + (Uint32)Blocks[i] * 0x10000u, pTmp, 0x10000);
+				uBlock = Blocks[j];
+				Blocks[j] = Blocks[i];
+				Blocks[i] = uBlock;
+				break;
+			}
+		}
+	}
+
+	free(pTmp);
+	return TRUE;
+}
+
+static Bool _SNRomForceType2 = FALSE;
+
+void SnesRom::SetForceType2(Bool bEnable)
+{
+	_SNRomForceType2 = bEnable ? TRUE : FALSE;
+}
+
+Bool SnesRom::GetForceType2()
+{
+	return _SNRomForceType2;
+}
+
 SnesRom::SnesRom()
 {
 	m_bLoaded	= false;
@@ -745,6 +827,26 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			}
 		}
 
+		/* Two LoROM titles use a 512-Kbit SRAM PCB with bank-wide windows in
+		   $70-$73 instead of the standard LoROM SRAM decode. Current Snes9x
+		   still selects this layout by internal title. */
+		if (!strncmp((const char *)m_Name, "THOROUGHBRED BREEDER3", 21) ||
+		    !strncmp((const char *)m_Name, "RPG-TCOOL 2", 11))
+		{
+			m_Flags |= SNROM_FLAG_SRAM128K_SPECIAL;
+		}
+
+		/* Two Nintendo BSC 24-Mbit LoROM boards use a non-standard 3 MiB
+		   wiring where $80-$9F selects the third MiB while $A0-$BF mirrors
+		   the second. This board layout is still handled explicitly by current
+		   Snes9x; ordinary 24-Mbit carts must keep the generic LoROM map. */
+		if (m_uRomBytes == 0x300000u &&
+		    (!strncmp((const char *)m_Name, "SOUND NOVEL-TCOOL", 17) ||
+		     !strncmp((const char *)m_Name, "DERBY STALLION 96", 17)))
+		{
+			m_Flags |= SNROM_FLAG_ROM24MBS;
+		}
+
 		// S-RTC (Daikaijuu Monogatari II): relogio de tempo real. Detectado
 		// pelo nibble alto do tipo de cartucho (0x5x = S-RTC). E' um jogo
 		// HiROM com bateria.
@@ -892,6 +994,18 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 			Unload();
 			return LOADERROR_READFILE;
 		}
+	}
+
+	/* Type-2 is deliberately opt-in. Historical Snes9x documentation notes
+	   that odd SuperFX Type-2 dumps are not safely distinguishable from a
+	   normal image by header inspection alone. */
+	if (_SNRomForceType2)
+	{
+		Bool bConverted = _SNRomDeinterleaveType2(m_pRomData, m_uRomBytes);
+#if SNDBG_LOG
+		DLog("[rom-map] forced type2=%d bytes=%u", bConverted ? 1 : 0,
+		     (unsigned)m_uRomBytes);
+#endif
 	}
 
 	SNRomInfoT *pCartInfo;

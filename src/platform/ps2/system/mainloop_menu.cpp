@@ -20,12 +20,37 @@
 #include "mainloop_ui.h"
 #include "embedded_irx.h"
 #include "memcard.h"
+#include "snrom.h"
 
 extern "C" {
 #include "audio.h"
 }
 
 extern "C" int list_title_db(char *pPath);
+
+static char _MainLoopSnesInputEntry[64] = "SNES Input: Standard Pad";
+
+static void _MainLoopSnesInputEntryRefresh()
+{
+	snprintf(
+		_MainLoopSnesInputEntry,
+		sizeof(_MainLoopSnesInputEntry),
+		"SNES Input: %s",
+		_MainLoopSnesInputModeName()
+	);
+}
+
+static char _MainLoopSnesRomFormatEntry[64] = "SNES ROM Format: Auto";
+
+static void _MainLoopSnesRomFormatEntryRefresh()
+{
+	snprintf(
+		_MainLoopSnesRomFormatEntry,
+		sizeof(_MainLoopSnesRomFormatEntry),
+		"SNES ROM Format: %s",
+		SnesRom::GetForceType2() ? "Type-2" : "Auto"
+	);
+}
 
 int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
 {
@@ -93,6 +118,42 @@ int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                                         MAINLOOP_SYSTEM_POWEROFF
                                                 );
                                                 break;
+                                        case 11:
+                                                _MainLoopSnesInputCycleMode();
+                                                _MainLoopSnesInputEntryRefresh();
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        0,
+                                                        _MainLoopSnesInputModeName()
+                                                );
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        1,
+                                                        "Mouse: stick + X/O"
+                                                );
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        2,
+                                                        "Scope: stick + X/Square/R1/Triangle"
+                                                );
+                                                return 1;
+                                        case 12:
+                                                SnesRom::SetForceType2(
+                                                        !SnesRom::GetForceType2()
+                                                );
+                                                _MainLoopSnesRomFormatEntryRefresh();
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        0,
+                                                        SnesRom::GetForceType2()
+                                                                ? "SNES ROM: Type-2 forced"
+                                                                : "SNES ROM: automatic"
+                                                );
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        1,
+                                                        "Applies to the next SNES ROM load"
+                                                );
+                                                _MainLoop_pMenuScreen->SetText(
+                                                        2,
+                                                        "Use Type-2 only for odd legacy dumps"
+                                                );
+                                                return 1;
                                         default:
                                                 return 0;
                                 }
@@ -887,6 +948,8 @@ const char *_MainLoopMenuEntries[]=
         (char *)"Dump mc0:title.db -> tty0:",
         (char *)"Copy rom0:libsd -> host:",
         (char *)"Power Off PS2",
+        _MainLoopSnesInputEntry,
+        _MainLoopSnesRomFormatEntry,
         NULL
 };
 

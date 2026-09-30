@@ -113,7 +113,7 @@ struct SNSpcChannelT
 	Uint8			endx;
 	Uint8			pad;
 
-	Int16			BlockData[2][16];	// decoded data of current block plus previous 2 samples
+	Int16			BlockData[2][16];	// current BRR block; previous row tail [13..15] is Gaussian history
 };
 
 struct SNSpcFIRFilterT

@@ -46,6 +46,7 @@ Bool   InputIsPadConnected(Uint32 uPad);
    pad data so the analog stick can drive both menu navigation and the
    in-game SNES d-pad. */
 Uint32 InputGetPadDpadFromAnalog(Uint32 uPad);
+Uint32 InputGetPadAnalog(Uint32 uPad);
 
 #ifdef __cplusplus
 }

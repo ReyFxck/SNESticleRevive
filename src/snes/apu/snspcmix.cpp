@@ -12,6 +12,7 @@
 #include "prof.h"
 #include "snspcdsp.h"
 #include "snspcmix.h"
+#include "snspcmath.h"
 #include "console.h"
 #include "mixbuffer.h"
 #include "sntiming.h"
@@ -33,6 +34,14 @@ Uint32 _ChMask=0xFF;
 
 typedef Int16 SNSpcEchoSampleT;
 typedef Int32 SNSpcMixSampleT;
+
+static void _SNSpcDspBuildVoiceOutput(
+	Int16 *pOut, const Int16 *pIn,
+	const Uint8 *pEnvelope, Int32 nSamples)
+{
+	while (nSamples-- > 0)
+		*pOut++ = SNSpcDspVoiceOutput(*pIn++, *pEnvelope++);
+}
 
 /*
 SPC Timing:
@@ -456,7 +465,7 @@ void SNSpcDspMixFull::Reset()
 	m_uNoiseGen   = 1;
 }
 
-Int32 SNSpcDspMixFull::OutputNoise(Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate)
+Int32 SNSpcDspMixFull::OutputNoise(Int16 *pOut, Int32 nSamples, Int32 nSampleRate)
 {
 	Uint32 uNoiseFreq;
 	Int32 iNoisePhase;
@@ -487,11 +496,7 @@ Int32 SNSpcDspMixFull::OutputNoise(Int16 *pOut, Uint16 *pFrac, Int32 nSamples, I
 
 		iNoisePhase+=iNoisePhaseInc;
 
-		pOut[0] = uNoiseGen;
-		pOut[1] = uNoiseGen;
-		pFrac[0] = 0;
-		pOut+=2;
-		pFrac++;
+		*pOut++ = (Int16)uNoiseGen;
 		nSamples--;
 	}
 
@@ -505,7 +510,9 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 	Uint8 uFlags = 0;
 
-	// copy previous samples
+	// Keep the three decoded samples immediately before the new BRR block.
+	// Gaussian interpolation at phase -2 needs [-3,-2,-1,0].
+	pChannel->BlockData[0][13] = pChannel->BlockData[1][13];
 	pChannel->BlockData[0][14] = pChannel->BlockData[1][14];
 	pChannel->BlockData[0][15] = pChannel->BlockData[1][15];
 
@@ -542,7 +549,7 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	}
 }
 
-Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate)
+Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples, Int32 nSampleRate, const Int16 *pPitchMod)
 {
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 	const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
@@ -568,9 +575,16 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 	// fix to keep interpolation correct
 	if (pChannel->uBlockAddr!= pChannel->uOldBlockAddr)
 	{
-		// this is done to ensure interpolation is correct from old sample to new sample
-		pBlockData[14] = pBlockData[(pChannel->iPhase >> 16) + 0];
-		pBlockData[15] = pBlockData[(pChannel->iPhase >> 16) + 1];
+		/* Preserve a complete Gaussian history window when SRCN/sample address
+		   changes underneath a playing voice. Indices below zero intentionally
+		   refer to the previous-row tail maintained by FetchBlock(). */
+		Int32 iSampleIndex = pChannel->iPhase >> 16;
+		Int16 iPrevSample = pBlockData[iSampleIndex - 1];
+		Int16 iCurrentSample = pBlockData[iSampleIndex + 0];
+		Int16 iNextSample = pBlockData[iSampleIndex + 1];
+		pBlockData[13] = iPrevSample;
+		pBlockData[14] = iCurrentSample;
+		pBlockData[15] = iNextSample;
 
 		// trigger decode, retain fractional component
 		pChannel->iPhase &= 0xFFFF;
@@ -590,29 +604,31 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 	while (nSamples > 0)
 	{
 		Int16 *pSample;
-//		Int32 iFrac;
-		Int32 iSample0, iSample1;
 
 		if (iPhase >= (14 << 16))
 		{
-			// fetch next block
+			/* Fetch two samples early. BlockData[0][14..15] is physically
+			   adjacent to BlockData[1][0..15], so the Gaussian window can safely
+			   address pSample[-1..2] across a BRR block boundary. */
 			FetchBlock(iChannel);
-
 			iPhase -= (16<<16);
 		}
 
 		pSample = &pBlockData[iPhase>>16];
-		iSample0 = pSample[0];
-		iSample1 = pSample[1];
-		// write samples to be filtered later
-		pFrac[0]= (Uint16)iPhase;  // phase = 0.15,  % of interpolation,   0000 = Sample0  FFFF = Sample1
-		pFrac++;
-		pOut[0] = iSample0;
-		pOut[1] = iSample1;
-		pOut+=2;
+		*pOut++ = SNSpcDspInterpolateGaussian(pSample, (Uint16)iPhase);
 
-		// next sample
-		iPhase+= iPhaseInc;
+		// next sample. PMON uses the previous voice's output from the same
+		// sample time. Channels without PMON retain the old constant-step path.
+		Int32 iStepPhaseInc = iPhaseInc;
+		if (pPitchMod)
+		{
+			Uint32 uModPitch =
+				SNSpcDspApplyPitchMod(uPitch, *pPitchMod++);
+			iStepPhaseInc =
+				(Int32)(uModPitch * SNSPCDSP_SAMPLERATE / nSampleRate);
+			iStepPhaseInc <<= 4;
+		}
+		iPhase += iStepPhaseInc;
 
 		nSamples--;
 	}
@@ -624,283 +640,55 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 		pChannel->endx = TRUE;
 	}
 
-	// set outx to be envx for now
-	pChannel->outx = pChannel->envx;
-
 	pChannel->uOldBlockAddr = pChannel->uBlockAddr;
 	pChannel->iPhase = iPhase;
 	PROF_LEAVE("SNSpcDspOutputSample");
 	return 1;
 }
 
-#if SNSPCDSP_MIXASM
-
-__attribute__((noinline))
-void _MixChannel(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pIn, Uint8 *pEnvelope, Uint16 *pFrac, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
+static _INLINE Int32 _SNSpcDspMixVoiceSample(
+	Int16 iSample, Uint8 uEnvelope)
 {
-	__asm__ (
-		"pcpyh       %0,%0           \n"
-		"pcpyld      %0,%0,%0           \n"
-		"pcpyh       %1,%1           \n"
-		"pcpyld      %1,%1,%1           \n"
-
-		: "+r" (iVolLeft), "+r" (iVolRight)
-		);
-
-	__asm__ __volatile__ (
-		".set noreorder \n"
-		".align 3           \n"
-		"_MixChannelPS2_Loop:         \n"
-		"lq         $10,0x00(%1)     \n"    // $10 = 8x frac bits (0.0.16)
-		"lq          $8,0x00(%0)     \n"    // $8  = 4x sample pairs (1.15.0)
-		"pnor       $11,$10,$0       \n"    // $11 = inv frac bits
-		"lq          $9,0x10(%0)     \n"    // $9  = 4x sample pairs (1.15.0)
-		"pextlh     $12,$10,$11      \n"    // $12 = invfrac, frac x 4  0.0.16
-		"pextuh     $13,$10,$11      \n"    // $13 = invfrac, frac x 4  0.0.16
-
-		"psrlh      $12,$12,1        \n"    // $12 = invfrace frac x 4  1.0.15
-		"psrlh      $13,$13,1        \n"    // $13 = invfrace frac x 4  1.0.15
-
-		"ld         $10,0x00(%4)     \n"    // $10 = 8x8 envelope 0.1.7
-
-		"phmadh     $8,$8,$12        \n"    // $8  = 4 interpolated samplse 2.15.15
-		"pextlb     $10,$0,$10       \n"    // $10 =  8x8 envelope  8.1.7
-		"phmadh     $9,$9,$13        \n"    // $9  = 4 interpolated samplse 2.15.15
-
-		"pextuh     $11,$0,$10       \n"    // $11 = 4x16 envelope 24.1.7
-		"pextlh     $10,$0,$10       \n"    // $10 = 4x16 envelope 24.1.7
-
-		"psraw      $8,$8,15         \n"    // $8 = 32-bit interpolated samples 17.15.0
-		"pmulth     $8,$8,$10        \n"    // $8 = 32-bit sample * envelope  10.15.7
-
-		"psraw      $9,$9,15         \n"    // $9 = 32-bit interpolated samples 17.15.0
-		"pmulth     $9,$9,$11        \n"    // $9 = 32-bit sample * envelope  10.15.7
-
-		"addiu      %0,%0,0x20       \n"    // pInn+=16
-		"addiu      %1,%1,0x10       \n"    // pFrac+=8
-		"addiu      %4,%4,0x08       \n"    // pEnvelope+=8
-
-		"psraw      $8,$8,7          \n"    // $8 = 32-bit sample * envelope 17.15.0
-		"pmulth     $10,$8,%6        \n"    // $10= right  32-bit sample * envelope * volr  .15.14
-		"psraw      $9,$9,7          \n"    // $9 = 32-bit sample * envelope 17.15.0
-		"pmulth     $11,$9,%6        \n"    // $11= right  32-bit sample * envelope * volr  .15.14
-
-		"pmulth     $8,$8,%5        \n"     // $8 = left   32-bit sample * envelope * voll  .15.14
-		"lq         $12,0x00(%2)     \n"    // $12 = outl0
-		"pmulth     $9,$9,%5        \n"     // $9 = left   32-bit sample * envelope * voll  .15.14
-		"lq         $13,0x10(%2)     \n"    // $13 = outl1
-		"lq         $14,0x00(%3)     \n"    // $14 = outr0
-		"lq         $15,0x10(%3)     \n"    // $15 = outr1
-
-		"paddsw		$12,$12,$8       \n"
-		"paddsw		$13,$13,$9       \n"
-		"paddsw		$14,$14,$10      \n"
-		"paddsw		$15,$15,$11      \n"
-
-		"sq         $12,0x00(%2)     \n"    // $12 = outl0
-		"sq         $13,0x10(%2)     \n"    // $13 = outl1
-		"sq         $14,0x00(%3)     \n"    // $12 = outr0
-		"sq         $15,0x10(%3)     \n"    // $12 = outr1
-
-		"addiu      %7,%7,-8         \n"
-		"addiu      %2,%2,0x20       \n"
-
-		"bgtz       %7,_MixChannelPS2_Loop \n"
-		"addiu      %3,%3,0x20       \n"
-
-		".set reorder \n"
-
-		:
-	: "r" (pIn), "r" (pFrac), "r" (pOutLeft), "r" (pOutRight), "r" (pEnvelope), "r" (iVolLeft), "r" (iVolRight), "r" (nSamples)
-		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
-		);
+	return ((Int32)iSample * (Int32)uEnvelope) >> 7;
 }
 
-__attribute__((noinline))
-void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pEchoLeft, Int16 *pEchoRight, Int16 *pIn, Uint8 *pEnvelope, Uint16 *pFrac, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
+static void _MixChannel(
+	Int32 *pOutLeft, Int32 *pOutRight,
+	const Int16 *pIn, const Uint8 *pEnvelope,
+	Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
-	__asm__ (
-		"pcpyh       %0,%0           \n"
-		"pcpyld      %0,%0,%0           \n"
-		"pcpyh       %1,%1           \n"
-		"pcpyld      %1,%1,%1           \n"
-
-		: "+r" (iVolLeft), "+r" (iVolRight)
-		);
-
-	__asm__ __volatile__ (
-		".set noreorder \n"
-		".align 3           \n"
-		"_MixChannelEchoPS2_Loop:         \n"
-		"lq         $10,0x00(%1)     \n"    // $10 = 8x frac bits (0.0.16)
-		"lq          $8,0x00(%0)     \n"    // $8  = 4x sample pairs (1.15.0)
-		"pnor       $11,$10,$0       \n"    // $11 = inv frac bits
-		"lq          $9,0x10(%0)     \n"    // $9  = 4x sample pairs (1.15.0)
-		"pextlh     $12,$10,$11      \n"    // $12 = invfrac, frac x 4  0.0.16
-		"pextuh     $13,$10,$11      \n"    // $13 = invfrac, frac x 4  0.0.16
-
-		"psrlh      $12,$12,1        \n"    // $12 = invfrace frac x 4  1.0.15
-		"psrlh      $13,$13,1        \n"    // $13 = invfrace frac x 4  1.0.15
-
-		"ld         $10,0x00(%4)     \n"    // $10 = 8x8 envelope 0.1.7
-
-		"phmadh     $8,$8,$12        \n"    // $8  = 4 interpolated samplse 2.15.15
-		"pextlb     $10,$0,$10       \n"    // $10 =  8x8 envelope  8.1.7
-		"phmadh     $9,$9,$13        \n"    // $9  = 4 interpolated samplse 2.15.15
-
-		"pextuh     $11,$0,$10       \n"    // $11 = 4x16 envelope 24.1.7
-		"pextlh     $10,$0,$10       \n"    // $10 = 4x16 envelope 24.1.7
-
-		"psraw      $8,$8,15         \n"    // $8 = 32-bit interpolated samples 17.15.0
-		"pmulth     $8,$8,$10        \n"    // $8 = 32-bit sample * envelope  10.15.7
-
-		"psraw      $9,$9,15         \n"    // $9 = 32-bit interpolated samples 17.15.0
-		"pmulth     $9,$9,$11        \n"    // $9 = 32-bit sample * envelope  10.15.7
-
-		"addiu      %0,%0,0x20       \n"    // pInn+=16
-		"addiu      %1,%1,0x10       \n"    // pFrac+=8
-		"addiu      %4,%4,0x08       \n"    // pEnvelope+=8
-
-		"psraw      $8,$8,7          \n"    // $8 = 32-bit sample * envelope 17.15.0
-		"pmulth     $10,$8,%6        \n"    // $10= right  32-bit sample * envelope * volr  .15.14
-		"psraw      $9,$9,7          \n"    // $9 = 32-bit sample * envelope 17.15.0
-		"pmulth     $11,$9,%6        \n"    // $11= right  32-bit sample * envelope * volr  .15.14
-
-		"pmulth     $8,$8,%5        \n"     // $8 = left   32-bit sample * envelope * voll  .15.14
-		"lq         $12,0x00(%2)     \n"    // $12 = outl0
-		"pmulth     $9,$9,%5        \n"     // $9 = left   32-bit sample * envelope * voll  .15.14
-		"lq         $13,0x10(%2)     \n"    // $13 = outl1
-		"lq         $14,0x00(%3)     \n"    // $14 = outr0
-		"lq         $15,0x10(%3)     \n"    // $15 = outr1
-
-		"paddsw		$12,$12,$8       \n"
-		"paddsw		$13,$13,$9       \n"
-		"paddsw		$14,$14,$10      \n"
-		"paddsw		$15,$15,$11      \n"
-
-		"sq         $12,0x00(%2)     \n"    // $12 = outl0
-		"sq         $13,0x10(%2)     \n"    // $13 = outl1
-		"sq         $14,0x00(%3)     \n"    // $12 = outr0
-		"sq         $15,0x10(%3)     \n"    // $12 = outr1
-
-		"psraw      $10,$10,7        \n"    // $10 = 32-bit sample * envelope * volr  17.15.0
-		"psraw      $11,$11,7        \n"    // $11 = 32-bit sample * envelope * volr  17.15.0
-		"psraw      $8,$8,7          \n"    // $8  = 32-bit sample * envelope * voll  17.15.0
-		"psraw      $9,$9,7          \n"    // $9  = 32-bit sample * envelope * voll  17.15.0
-
-		"lq         $12,0x00(%8)     \n"    // $12 = outl
-		"lq         $13,0x00(%9)     \n"    // $13 = outr
-		"ppach      $8,$9,$8         \n"    // $8 = left   1.15.0
-		"ppach      $9,$11,$10       \n"    // $9 = right  1.15.0
-		"paddsh     $12,$12,$8       \n"    // $12 = outl + samples
-		"paddsh     $13,$13,$9       \n"    // $13 = outr + samples
-		"sq         $12,0x00(%8)     \n"    // store outl
-		"sq         $13,0x00(%9)     \n"    // store outr
-		"addiu      %8,%8,0x10       \n"
-		"addiu      %9,%9,0x10       \n"
-
-		"addiu      %7,%7,-8         \n"
-		"addiu      %2,%2,0x20       \n"
-
-		"bgtz       %7,_MixChannelEchoPS2_Loop \n"
-		"addiu      %3,%3,0x20       \n"
-
-		".set reorder \n"
-
-		:
-	: "r" (pIn), "r" (pFrac), "r" (pOutLeft), "r" (pOutRight), "r" (pEnvelope), "r" (iVolLeft), "r" (iVolRight), "r" (nSamples), "r" (pEchoLeft), "r" (pEchoRight)
-		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
-		);
-}
-
-#else
-
-void _MixChannel(Int32 *pOutLeft, Int32 *pOutRight, Int16 *pIn, Uint8 *pEnvelope, Uint16 *pFrac, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
-{
-	while (nSamples > 0)
+	while (nSamples-- > 0)
 	{
-		Int32 iSample1;
-		Int32 iFrac0, iFrac1;
-		Int32 iSample, iSampleLeft, iSampleRight;
-		Int32 iEnvelope;
-
-		iSample  = pIn[0];
-		iSample1 = pIn[1];
-
-		iFrac0   = pFrac[0] >> 1;
-		iFrac1   = iFrac0 ^ 0x7FFF;
-
-		iSample  =  iSample * iFrac1 + iSample1 * iFrac0;
-		iSample >>= 15;
-
-		iEnvelope = *pEnvelope;
-		iSample *= iEnvelope;
-		iSample >>= 7;
-
-		iSampleLeft  = iSample * iVolLeft;
-		iSampleRight = iSample * iVolRight;
-
-		*pOutLeft  += iSampleLeft;
-		*pOutRight += iSampleRight;
-
-		pEnvelope++;
-		pOutLeft++;
-		pOutRight++;
-		pIn+=2;
-		pFrac++;
-		nSamples--;
+		Int32 iSample = _SNSpcDspMixVoiceSample(*pIn++, *pEnvelope++);
+		*pOutLeft++  += iSample * iVolLeft;
+		*pOutRight++ += iSample * iVolRight;
 	}
 }
 
-void _MixChannelEcho(Int32 *pOutLeft, Int32 *pOutRight, SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight, Int16 *pIn, Uint8 *pEnvelope, Uint16 *pFrac, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
+static void _MixChannelEcho(
+	Int32 *pOutLeft, Int32 *pOutRight,
+	SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight,
+	const Int16 *pIn, const Uint8 *pEnvelope,
+	Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
-	while (nSamples > 0)
+	while (nSamples-- > 0)
 	{
-		Int32 iSample1;
-		Int32 iFrac0, iFrac1;
-		Int32 iSample, iSampleLeft, iSampleRight;
-		Int32 iEnvelope;
+		Int32 iSample = _SNSpcDspMixVoiceSample(*pIn++, *pEnvelope++);
+		Int32 iSampleLeft = iSample * iVolLeft;
+		Int32 iSampleRight = iSample * iVolRight;
+		Int32 iEchoLeft;
+		Int32 iEchoRight;
 
-		iSample  = pIn[0];
-		iSample1 = pIn[1];
+		*pOutLeft++  += iSampleLeft;
+		*pOutRight++ += iSampleRight;
 
-		iFrac0   = pFrac[0] >> 1;
-		iFrac1   = iFrac0 ^ 0x7FFF;
-
-		iSample  =  iSample * iFrac1 + iSample1 * iFrac0;
-		iSample >>= 15;
-
-		iEnvelope = *pEnvelope;
-		iSample *= iEnvelope;
-		iSample >>= 7;
-
-		iSampleLeft  = iSample * iVolLeft;
-		iSampleRight = iSample * iVolRight;
-
-		*pOutLeft  += iSampleLeft;
-		*pOutRight += iSampleRight;
-		iSampleLeft >>= 7;
-		iSampleRight >>= 7;
-
-		iSampleLeft += *pEchoLeft;
-		iSampleRight += *pEchoRight;
-
-		*pEchoLeft  = iSampleLeft;
-		*pEchoRight = iSampleRight;
-
-		pEchoLeft++;
-		pEchoRight++;
-
-		pEnvelope++;
-		pOutLeft++;
-		pOutRight++;
-		pIn+=2;
-		pFrac++;
-		nSamples--;
+		iEchoLeft  = (iSampleLeft >> 7) + *pEchoLeft;
+		iEchoRight = (iSampleRight >> 7) + *pEchoRight;
+		*pEchoLeft++  = (Int16)SNSpcDspClamp16(iEchoLeft);
+		*pEchoRight++ = (Int16)SNSpcDspClamp16(iEchoRight);
 	}
 }
 
-#endif
 
 static void _SNSpcDspMemset64(Uint64 *pDest, Int32 nDwords)
 {
@@ -1150,8 +938,10 @@ static Int32 _FilterEchoStereo(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pE
 
 struct SNSpcDspDataT
 {
-	Int16 iSampleData[SNSPCDSP_BUFFERSIZE*2] _ALIGN(16);
-	Uint16 FracData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
+	/* Gaussian interpolation happens while walking the BRR block, so the hot
+	   scratchpad keeps one final sample per output point instead of a linear
+	   pair plus a separate fraction array. */
+	Int16 iSampleData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 	Uint8 EnvData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 
 	SNSpcMixSampleT  Main[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
@@ -1305,15 +1095,21 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		if (m_pDsp->GetReg(SNSPCDSP_REG_NOV))
 		{
 			PROF_ENTER("SNSpcDspOutputNoise");
-			OutputNoise(m_iNoiseSample, m_iNoiseFrac, nSamples, nSampleRate);
+			OutputNoise(m_iNoiseSample, nSamples, nSampleRate);
 			PROF_LEAVE("SNSpcDspOutputNoise");
 		}
 
 		// check mute
 		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40))
 		{
+			/* The DSP evaluates voices in order. Voice N can therefore use the
+			   same-sample output of voice N-1 as its PMON input. */
+			_SNSpcDspMemset64((Uint64 *)m_iVoiceOutput,
+				(sizeof(Int16) * nSamples + 7) / 8);
+
 			for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 			{
+				Bool bVoiceOutputReady = FALSE;
 				#if CODE_DEBUG
 				if (_ChMask & (1<<iChannel))
 				#endif
@@ -1323,22 +1119,18 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 				{
 					Bool bMix;
 					Int16 *pSampleData;
-					Uint16 *pFracData;
+					const Int16 *pPitchMod = NULL;
 
 					pSampleData = pData->iSampleData;
-					pFracData   = pData->FracData;
 
-					if (m_pDsp->GetReg(SNSPCDSP_REG_PMON) & (1<<iChannel))
-					{
-						// output sample data (pitch modulation!)
-						bMix = OutputSample(iChannel, pSampleData, pFracData, nSamples, nSampleRate);
-						#if CODE_DEBUG
-						#endif
-					} else
-					{
-						// output sample data
-						bMix = OutputSample(iChannel, pSampleData, pFracData, nSamples, nSampleRate);
-					}
+					/* PMON bit 0 is ignored by hardware. For voices 1-7, the
+					   previous voice output already lives in VoiceOutput. */
+					if (iChannel > 0 &&
+					    (m_pDsp->GetReg(SNSPCDSP_REG_PMON) & (1<<iChannel)))
+						pPitchMod = m_iVoiceOutput;
+
+					bMix = OutputSample(iChannel, pSampleData,
+						nSamples, nSampleRate, pPitchMod);
 
 					if (bMix)
 					{
@@ -1349,36 +1141,44 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						{
 							// use pre-generated noise channel data instead of pcm data
 							pSampleData = m_iNoiseSample;
-							pFracData   = m_iNoiseFrac;
 						}
 
-						// mix channel into main and echo buffers
+						/* Build the unscaled voice output once. It feeds both OUTX
+						   and the following voice's PMON path. */
+						_SNSpcDspBuildVoiceOutput(
+							m_iVoiceOutput, pSampleData,
+							pData->EnvData, nSamples);
+						GetChannel(iChannel)->outx =
+							(Uint8)(m_iVoiceOutput[nSamples - 1] >> 8);
+						bVoiceOutputReady = TRUE;
 
+						// mix channel into main and echo buffers
 						PROF_ENTER("SNSpcDspMixStereo");
 						if ( uEchoEnable & (1<<iChannel) )
 						{
-							// Echo is enabled, so mix channel into both the main and the echo buffers
-							// mix using channel volume
 							_MixChannelEcho(
 								pData->Main[0], pData->Main[1],
 								pData->Echo[0], pData->Echo[1],
-								pSampleData, pData->EnvData, pFracData, nSamples,
+								pSampleData, pData->EnvData, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						} else
 						{
-							// Echo is not enabled, so mix channel into the main channel only
-							// mix using channel volume
 							_MixChannel(
 								pData->Main[0], pData->Main[1],
-								pSampleData, pData->EnvData, pFracData, nSamples,
+								pSampleData, pData->EnvData, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						}
-
 						PROF_LEAVE("SNSpcDspMixStereo");
 					}
 				}
+
+				/* A silent/ended voice modulates the next voice with zero, not
+				   stale output from the previous channel. */
+				if (!bVoiceOutputReady)
+					_SNSpcDspMemset64((Uint64 *)m_iVoiceOutput,
+						(sizeof(Int16) * nSamples + 7) / 8);
 			}
 
 			if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x20))

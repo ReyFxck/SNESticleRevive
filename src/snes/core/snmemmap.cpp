@@ -514,6 +514,37 @@ void SnesSystem::DumpMemMap()
 }
 #endif
 
+/* LoROM CPU/PPU/WRAM decode without cartridge SRAM. Special boards
+   install their own RAM windows after the ROM wiring is laid out. */
+static SnesMemMapT _SnesMemMap_LoRom_CoreOnly[]=
+{
+	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
+	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x00, 0x3F, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0x80, 0xBF, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x80, 0xBF, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x80, 0xBF, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
+};
+
+/* System side of a LoROM board without installing any generic ROM
+   windows. Used by special PCB layouts whose address-line wiring differs from
+   the normal LoROM decoder. */
+static SnesMemMapT _SnesMemMap_LoRom_SysOnly[]=
+{
+	{0x70, 0x7D, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xF0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
+	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x00, 0x3F, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0x80, 0xBF, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
+	{0x80, 0xBF, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
+	{0x80, 0xBF, 0x4000, 0x5FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU1},
+	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
+};
+
 /* Areas de sistema (SRAM/WRAM/LoRAM/PPU) do ExLoROM - iguais ao LoROM.
    Aplicadas DEPOIS do mapeamento de ROM para sobrepor (WRAM em $7E-$7F
    tem que vencer a ROM que a regiao $40-$7F mapeia ali). */
@@ -578,6 +609,78 @@ void SnesSystem::MapMemExLoRom(void)
 
 	// areas de sistema por cima
 	MapMem(_SnesMemMap_ExLoRom_Sys);
+}
+
+void SnesSystem::MapMemLoRom24MBit(void)
+{
+	SNCpuT *pCpu = &m_Cpu;
+	Uint8 *pRom = m_pRom->GetData();
+	Uint32 uRomBytes = m_pRom->GetBytes();
+
+	if (!pRom || uRomBytes != 0x300000u)
+	{
+		/* Never approximate this wiring on another size. Falling back to the
+		   standard mapper is safer for hacks/translations that retained the
+		   original internal title but changed the physical ROM geometry. */
+		MapMem(_SnesMemMap_LoRom);
+		return;
+	}
+
+	/* Nintendo BSC-1A5M-01 / BSC-1A7M-10 24-Mbit wiring, expressed as
+	   32-KiB LoROM windows:
+	     $00-$1F -> MiB 0
+	     $20-$3F -> MiB 1
+	     $80-$9F -> MiB 2
+	     $A0-$BF -> MiB 1 (mirror)
+	   The remaining cartridge banks are not ordinary ROM windows on this PCB. */
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0x00, 0x1F, FALSE, 0x000000);
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0x20, 0x3F, FALSE, 0x100000);
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0x80, 0x9F, FALSE, 0x200000);
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0xA0, 0xBF, FALSE, 0x100000);
+
+	MapMem(_SnesMemMap_LoRom_SysOnly);
+}
+
+void SnesSystem::MapMemLoRomSRAM128K(void)
+{
+	SNCpuT *pCpu = &m_Cpu;
+	Uint8 *pRom = m_pRom->GetData();
+	Uint32 uRomBytes = m_pRom->GetBytes();
+	Uint32 uBank;
+
+	if (!pRom || !uRomBytes)
+	{
+		MapMem(_SnesMemMap_LoRom);
+		return;
+	}
+
+	/* Same ROM decode as an ordinary LoROM, but without the normal
+	   $70-$7D/$F0-$FF SRAM overlays. Current Snes9x keeps full ROM banks in
+	   $40-$7D and $C0-$FF for this board. */
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0x00, 0x3F, FALSE, 0x000000);
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0x40, 0x7D, TRUE,  0x200000);
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0x80, 0xBF, FALSE, 0x000000);
+	_MapExLoRomRegion(pCpu, pRom, uRomBytes, 0xC0, 0xFF, TRUE,  0x200000);
+
+	/* Also initializes m_uSramSize from the cartridge header while installing
+	   WRAM and the ordinary CPU/PPU windows. */
+	MapMem(_SnesMemMap_LoRom_CoreOnly);
+
+	/* Nose000/Snes9x 128-KiB SRAM layout:
+	     $70:0000-$FFFF -> SRAM + $00000
+	     $71:0000-$FFFF -> SRAM + $08000
+	     $72:0000-$FFFF -> SRAM + $10000
+	     $73:0000-$FFFF -> SRAM + $18000
+	   The windows deliberately overlap by 32 KiB. Revive's 256-KiB backing
+	   store is large enough for the final window ($18000-$27FFF); save-file
+	   size remains the cartridge header's physical SRAM size. */
+	for (uBank = 0x70; uBank <= 0x73; uBank++)
+	{
+		Uint32 uOffset = (uBank - 0x70u) * 0x8000u;
+		Uint32 uAddr = uBank << 16;
+		SNCPUSetMemSpeed(pCpu, uAddr, 0x10000u, SNCPU_CYCLE_SLOW);
+		SNCPUSetBank(pCpu, uAddr, 0x10000u, m_SRam + uOffset, TRUE);
+	}
 }
 
 void SnesSystem::RemapSA1ROM(Uint32 uWhich, Uint8 uMap)
@@ -648,6 +751,16 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 
 		// mode 20h
 		case SNROM_MAPPING_LOROM:
+			if (uFlags & SNROM_FLAG_SRAM128K_SPECIAL)
+			{
+				MapMemLoRomSRAM128K();
+				break;
+			}
+			if (uFlags & SNROM_FLAG_ROM24MBS)
+			{
+				MapMemLoRom24MBit();
+				break;
+			}
 			MapMem(_SnesMemMap_LoRom);
 			if (m_pRom->GetSRAMBytes() > 0 &&
 			    m_pRom->GetBytes() < 0x200000u)

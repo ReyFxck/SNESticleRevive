@@ -272,6 +272,13 @@ Uint32 InputGetPadData(Uint32 uPad)
     return _Input_PadData[uPad];
 }
 
+Uint32 InputGetPadAnalog(Uint32 uPad)
+{
+    if (!InputIsPadConnected(uPad))
+        return 0x80808080U;
+    return _Input_PadAnalog[uPad];
+}
+
 Uint32 InputGetPadDpadFromAnalog(Uint32 uPad)
 {
     Uint32 packed;

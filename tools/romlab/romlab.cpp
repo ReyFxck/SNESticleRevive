@@ -814,11 +814,149 @@ static bool CheckExHiRomSramMirrors()
     return SNCPURead8(system.GetCpu(), 0x307FFF) == 0xA5;
 }
 
+static bool CheckSRAM128KBoardMap()
+{
+    std::vector<uint8_t> image(0x400000, 0xFF);
+    image[0x0000] = 0x78; // SEI
+
+    SNRomInfoT *header = (SNRomInfoT *)&image[0x7FC0];
+    memset(header, 0, sizeof(*header));
+    memset(header->Title, ' ', sizeof(header->Title));
+    memcpy(header->Title, "RPG-TCOOL 2", 11);
+    header->RomMakeup = 0x20;
+    header->RomType = 0x02;
+    header->RomSize = 0x0C;
+    header->SRAMSize = 7; // 1 Mbit = 128 KiB
+    header->Country = 1;
+    header->License = 0x33;
+    header->Checksum = 0x2468;
+    header->InverseChecksum = (uint16_t)~header->Checksum;
+    image[0x7FFC] = 0x00;
+    image[0x7FFD] = 0x80;
+
+    /* These low-half addresses must remain ROM on the special board. */
+    image[0x3A0123] = 0xC7; // CPU $74:0123
+    image[0x380456] = 0xD9; // CPU $F0:0456
+
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE ||
+        !(rom.m_Flags & SNROM_FLAG_SRAM128K_SPECIAL))
+        return false;
+
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+
+    if (system.GetSRAMBytes() != 0x20000)
+        return false;
+
+    memset(system.GetSRAMData(), 0, SNES_SRAMSIZE);
+
+    SNCPUWrite8(system.GetCpu(), 0x700123, 0x11);
+    SNCPUWrite8(system.GetCpu(), 0x710123, 0x22);
+    SNCPUWrite8(system.GetCpu(), 0x720123, 0x33);
+    SNCPUWrite8(system.GetCpu(), 0x730123, 0x44);
+
+    if (system.GetSRAMData()[0x00123] != 0x11 ||
+        system.GetSRAMData()[0x08123] != 0x22 ||
+        system.GetSRAMData()[0x10123] != 0x33 ||
+        system.GetSRAMData()[0x18123] != 0x44)
+        return false;
+
+    /* Adjacent 64-KiB windows overlap by 32 KiB. */
+    SNCPUWrite8(system.GetCpu(), 0x709000, 0x5A);
+    if (SNCPURead8(system.GetCpu(), 0x711000) != 0x5A)
+        return false;
+
+    /* Unlike generic LoROM SRAM decode, these regions are ROM. */
+    if (SNCPURead8(system.GetCpu(), 0x740123) != 0xC7 ||
+        SNCPURead8(system.GetCpu(), 0xF00456) != 0xD9)
+        return false;
+
+    return true;
+}
+
+static bool CheckDezaemonStandardSramMap()
+{
+    std::vector<uint8_t> image(0x200000, 0xFF);
+
+    SNRomInfoT *header = (SNRomInfoT *)&image[0x7FC0];
+    memset(header, 0, sizeof(*header));
+    memset(header->Title, ' ', sizeof(header->Title));
+    memcpy(header->Title, "DEZAEMON  ", 10);
+    header->RomMakeup = 0x20;
+    header->RomType = 0x02;
+    header->RomSize = 0x0B;
+    header->SRAMSize = 7; // 128 KiB
+    header->Country = 1;
+    header->License = 0x33;
+    header->Checksum = 0x2D5A;
+    header->InverseChecksum = (uint16_t)~header->Checksum;
+    image[0x7FFC] = 0x00;
+    image[0x7FFD] = 0x80;
+
+    /* Standard LoROM keeps the upper half as ROM even on 128-KiB SRAM carts. */
+    image[0x180123] = 0xC3;
+
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE ||
+        rom.m_eMapping != SNROM_MAPPING_LOROM ||
+        (rom.m_Flags & SNROM_FLAG_SRAM128K_SPECIAL))
+        return false;
+
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+    if (system.GetSRAMBytes() != 0x20000)
+        return false;
+
+    memset(system.GetSRAMData(), 0, SNES_SRAMSIZE);
+
+    /* Four 32-KiB slices span the physical 128 KiB, then repeat. */
+    SNCPUWrite8(system.GetCpu(), 0x700123, 0x11);
+    SNCPUWrite8(system.GetCpu(), 0x710123, 0x22);
+    SNCPUWrite8(system.GetCpu(), 0x720123, 0x33);
+    SNCPUWrite8(system.GetCpu(), 0x730123, 0x44);
+    if (system.GetSRAMData()[0x00123] != 0x11 ||
+        system.GetSRAMData()[0x08123] != 0x22 ||
+        system.GetSRAMData()[0x10123] != 0x33 ||
+        system.GetSRAMData()[0x18123] != 0x44)
+        return false;
+
+    /* $74 repeats the first 32-KiB slice, and the $F0 mirror starts there too. */
+    if (SNCPURead8(system.GetCpu(), 0x740123) != 0x11 ||
+        SNCPURead8(system.GetCpu(), 0xF00123) != 0x11)
+        return false;
+
+    /* Upper halves remain cartridge ROM, unlike the old dead Dezaemon hack. */
+    if (SNCPURead8(system.GetCpu(), 0x708123) != 0xC3 ||
+        SNCPURead8(system.GetCpu(), 0xF08123) != 0xC3)
+        return false;
+
+    return true;
+}
+
 static int SelfTestCommand()
 {
     if (!CheckExHiRomSramMirrors())
     {
         fprintf(stderr, "ROM Lab self-test: ExHiROM SRAM mirrors failed\n");
+        return 1;
+    }
+
+    if (!CheckSRAM128KBoardMap())
+    {
+        fprintf(stderr, "ROM Lab self-test: 128-KiB SRAM board map failed\n");
+        return 1;
+    }
+
+    if (!CheckDezaemonStandardSramMap())
+    {
+        fprintf(stderr, "ROM Lab self-test: Dezaemon standard LoROM SRAM map failed\n");
         return 1;
     }
 

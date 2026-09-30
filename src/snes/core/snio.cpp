@@ -13,6 +13,99 @@
 
 #define SNIO_VERSION_5A22 (0x02)
 
+static Uint8 _SnesMouseMotion(Int8 iDelta)
+{
+	Int32 iValue = (Int32)iDelta;
+	if (iValue < 0)
+	{
+		iValue = -iValue;
+		if (iValue > 127) iValue = 127;
+		return (Uint8)(0x80 | iValue);
+	}
+	if (iValue > 127) iValue = 127;
+	return (Uint8)iValue;
+}
+
+Bool SnesIO::IsMouseMode() const
+{
+	return m_Input.uPad[4] == EMUSYS_SNES_SPECIAL_MOUSE ? TRUE : FALSE;
+}
+
+Bool SnesIO::IsSuperScopeMode() const
+{
+	return m_Input.uPad[4] == EMUSYS_SNES_SPECIAL_SUPERSCOPE ? TRUE : FALSE;
+}
+
+void SnesIO::LatchMouseSerial()
+{
+	Int8 iDX = (Int8)(m_Input.uPad[2] & 0xFF);
+	Int8 iDY = (Int8)((m_Input.uPad[2] >> 8) & 0xFF);
+	Uint16 uButtons = m_Input.uPad[3];
+	Uint8 uStatus = (Uint8)(0x01 | ((m_uMouseSensitivity & 3) << 4));
+
+	if (uButtons & EMUSYS_SNES_MOUSE_LEFT)  uStatus |= 0x40;
+	if (uButtons & EMUSYS_SNES_MOUSE_RIGHT) uStatus |= 0x80;
+
+	m_uMouseSerial =
+		((Uint32)uStatus << 16) |
+		((Uint32)_SnesMouseMotion(iDY) << 8) |
+		(Uint32)_SnesMouseMotion(iDX);
+}
+
+void SnesIO::LatchScopeSerial()
+{
+	Uint16 uButtons = m_Input.uPad[3];
+	Uint16 uReport = 0x00FF;
+
+	if (uButtons & EMUSYS_SNES_SCOPE_FIRE)   uReport |= 0x8000;
+	if (uButtons & EMUSYS_SNES_SCOPE_CURSOR) uReport |= 0x4000;
+	if (uButtons & EMUSYS_SNES_SCOPE_TURBO)  uReport |= 0x2000;
+	if (uButtons & EMUSYS_SNES_SCOPE_PAUSE)  uReport |= 0x1000;
+
+	/* Noise/null remain clear: the emulated pointer always represents an
+	   on-screen receiver hit. */
+	m_uScopeSerial = uReport;
+}
+
+Uint8 SnesIO::ReadMouseSerial()
+{
+	Uint8 uData = (Uint8)((m_uMouseSerial >> 31) & 1);
+
+	if (m_Regs.joydata & 1)
+	{
+		/* The original mouse cycles sensitivity when clocked while OUT0 is
+		   high. Rebuild the report immediately so the next normal read sees
+		   the new sensitivity bits. */
+		m_uMouseSensitivity = (Uint8)((m_uMouseSensitivity + 1) % 3);
+		LatchMouseSerial();
+	}
+	else
+	{
+		/* Official mouse reports ones forever after its 32 data bits. */
+		m_uMouseSerial = (m_uMouseSerial << 1) | 1u;
+	}
+	return uData;
+}
+
+Uint8 SnesIO::ReadScopeSerial()
+{
+	Uint8 uData = (Uint8)((m_uScopeSerial >> 15) & 1);
+	if (!(m_Regs.joydata & 1))
+		m_uScopeSerial = (Uint16)((m_uScopeSerial << 1) | 1u);
+	return uData;
+}
+
+Bool SnesIO::GetSuperScopePosition(Uint16 *pX, Uint16 *pY) const
+{
+	if (!IsSuperScopeMode())
+		return FALSE;
+
+	if (pX) *pX = (Uint16)(m_Input.uPad[2] & 0xFF);
+	if (pY) *pY = (Uint16)((m_Input.uPad[2] >> 8) & 0xFF);
+	return TRUE;
+}
+
+
 Uint8 SnesIO::ReadSerialPad(Uint32 uPad)
 {
 	// read top-most joypad bit
@@ -36,6 +129,9 @@ Uint8 SnesIO::ReadSerial0()
 {
 	Uint32 uData;
 
+	if (IsMouseMode())
+		return ReadMouseSerial();
+
 	uData  = ReadSerialPad(0) << 0;
 
 	// confirmed:
@@ -52,6 +148,20 @@ Uint8 SnesIO::ReadSerial0()
 Uint8 SnesIO::ReadSerial1()
 {
 	Uint32 uData;
+
+	if (IsSuperScopeMode())
+		return (Uint8)(ReadScopeSerial() | 0x1C);
+
+	// Special peripherals and multitap cannot coexist on real hardware.
+	// Mouse mode therefore keeps port 2 as a direct standard controller even
+	// though uPad[2]/uPad[3] carry the mouse payload.
+	if (IsMouseMode())
+	{
+		uData = ReadSerialPad(1);
+		if (!(m_Regs.joydata & 1))
+			ShiftSerialPad(1);
+		return (Uint8)(uData | 0x1C);
+	}
 
 	// if joypads 2,3,4 are all disconnected then assume no multitap is installed
 	if (
@@ -133,6 +243,11 @@ void SnesIO::WriteSerial(Uint8 uData)
 				m_Regs.joyserial[iPad] = 0;
 			}
 		}
+
+		if (IsMouseMode())
+			LatchMouseSerial();
+		if (IsSuperScopeMode())
+			LatchScopeSerial();
 	}
 
 	m_Regs.joydata = uData;
@@ -147,6 +262,24 @@ void SnesIO::UpdateJoyPads()
 	WriteSerial(0);
 	WriteSerial(1);
 	WriteSerial(0);
+
+	if (IsMouseMode() || IsSuperScopeMode())
+	{
+		m_Regs.joy1.w = 0;
+		m_Regs.joy2.w = 0;
+		m_Regs.joy3.w = 0;
+		m_Regs.joy4.w = 0;
+		for (int i=0; i<16; i++)
+		{
+			Uint8 uPort0 = ReadSerial0();
+			Uint8 uPort1 = ReadSerial1();
+			m_Regs.joy1.w = (Uint16)((m_Regs.joy1.w << 1) | (uPort0 & 1));
+			m_Regs.joy3.w = (Uint16)((m_Regs.joy3.w << 1) | ((uPort0 >> 1) & 1));
+			m_Regs.joy2.w = (Uint16)((m_Regs.joy2.w << 1) | (uPort1 & 1));
+			m_Regs.joy4.w = (Uint16)((m_Regs.joy4.w << 1) | ((uPort1 >> 1) & 1));
+		}
+		return;
+	}
 
 	m_Regs.joy1.w = m_Regs.joyserial[0];
 	m_Regs.joy2.w = m_Regs.joyserial[1];

@@ -195,6 +195,12 @@ void SnesIO::RestoreState(struct SNStateIOT *pState)
 	m_uAutoReadPort2Value = 0;
 	m_bAutoReadActive = FALSE;
 	m_bAutoReadDisabled = TRUE;
+	/* Keep the historical state-file size unchanged. Peripheral reports are
+	   re-latched on the next OUT0 strobe after restore. */
+	m_uMouseSerial = 0xFFFFFFFFu;
+	m_uScopeSerial = 0xFFFFu;
+	m_uMouseSensitivity = 0;
+	m_uPeripheralPad = 0;
 }
 
 void SNSpcIO::SaveState(struct SNStateSPCIOT *pState)
