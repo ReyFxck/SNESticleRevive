@@ -79,6 +79,21 @@ int main()
 	Init(cpu); PutOp(cpu, 0xBA); cpu.Mem[0x0201] = 0xFF; cpu.Mem[0x00FF] = 0x34; cpu.Mem[0x0000] = 0x12; cpu.Mem[0x0100] = 0x99; Run(cpu, 5);
 	Check("DP wrap low", cpu.Regs.rA, 0x34); Check("DP wrap high", cpu.Regs.rY, 0x12);
 
+	/* The SPC700 PC is 16-bit: instruction bytes wrap at $ffff.
+	   Check opcode+operand, a two-byte operand, and a negative branch. */
+	Init(cpu); cpu.Regs.rPC = 0xFFFF; cpu.Mem[0xFFFF] = 0xE8;
+	cpu.Mem[0x0000] = 0x42; Run(cpu, 2);
+	Check("fetch8 wraps operand", cpu.Regs.rA, 0x42);
+	Check("fetch8 wraps PC", cpu.Regs.rPC, 0x0001);
+
+	Init(cpu); cpu.Regs.rPC = 0xFFFE; cpu.Mem[0xFFFE] = 0x5F;
+	cpu.Mem[0xFFFF] = 0x56; cpu.Mem[0x0000] = 0x34; Run(cpu, 3);
+	Check("fetch16 wraps operand", cpu.Regs.rPC, 0x3456);
+
+	Init(cpu); cpu.Regs.rPC = 0xFFFF; cpu.Mem[0xFFFF] = 0x2F;
+	cpu.Mem[0x0000] = 0x80; Run(cpu, 4);
+	Check("branch wraps PC", cpu.Regs.rPC, 0xFF81);
+
 	Init(cpu); PutOp(cpu, 0xEF); Run(cpu, 3); Check("SLEEP holds PC", cpu.Regs.rPC, 0x0200);
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
