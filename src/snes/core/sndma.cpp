@@ -61,6 +61,7 @@ SnesDMAC::SnesDMAC()
 	m_HDMAEnable = 0;
 	m_HDMAEnded = 0;
 	m_HDMADoTransfer = 0;
+	m_uVideoLine = 0;
 	m_pCPU = NULL;
 	m_pPPU = NULL;
 	m_pSDD1 = NULL;
@@ -87,8 +88,13 @@ void SnesDMAWritePPUPort(SnesPPU *pPPU, Uint32 uPort, Uint8 uData)
 static _INLINE Bool SnesHDMATryQueuePPUWrite(
 	SnesPPU *pPPU, Uint32 uLine, Uint8 uPortB, Uint8 uData)
 {
+	/* Memory ports require the original H/V position. Let the fallback route
+	   those through SnesSystem::Write2000 instead of losing timing in the
+	   scanline-only queue. */
+	if (uPortB == 0x04 || uPortB == 0x16 || uPortB == 0x17 ||
+	    uPortB == 0x18 || uPortB == 0x19 || uPortB == 0x22)
+		return FALSE;
 	if (uPortB < 0x40)
-		/* O fallback generico contabiliza a unica falha real da fila. */
 		return pPPU->EnqueueWrite(
 			uLine, 0x2100u | uPortB, uData, FALSE);
 	return FALSE;
