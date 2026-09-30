@@ -61,6 +61,16 @@ public:
 	void                        SetHDMAEnable(Uint8 uData);
 	Uint8                       GetMDMAEnable() {return m_MDMAEnable;}
 	Uint8                       GetHDMAEnable() {return m_HDMAEnable;}
+	static Uint32               CalcStartSync(Uint32 uMasterClock)
+	{
+		return 8u - (uMasterClock & 7u);
+	}
+	static Uint32               CalcEndSync(Uint32 uDmaClocks, Uint32 uCpuSpeed)
+	{
+		if (uCpuSpeed != 6u && uCpuSpeed != 8u && uCpuSpeed != 12u)
+			uCpuSpeed = 8u;
+		return uCpuSpeed - (uDmaClocks % uCpuSpeed);
+	}
 
 private:
 	SnesDMAChT	                m_Channels[SNESDMAC_CHANNEL_NUM];
@@ -68,7 +78,10 @@ private:
 	Uint8		                m_HDMAEnable;		// hdma channel enable
 	Uint8		                m_HDMAEnded;		// channels stopped for this frame
 	Uint8		                m_HDMADoTransfer;	// repeat/first-line transfer latch
-	Uint32                      m_uVideoLine;
+	Uint8                        m_MDMAStartedMask;
+	Bool                         m_bDMATimingActive;
+	Uint32                       m_uDMAClockCounter;
+	Uint32                       m_uVideoLine;
 
 	SNCpu_t	*                   m_pCPU;
 	SnesPPU	*                   m_pPPU;
@@ -79,6 +92,16 @@ private:
 	void                        ProcessMDMAChRead(Uint32 uChan);
 	void                        ProcessMDMAChFast(Uint32 uChan);
 	void                        ProcessHDMACh(Uint32 uChan, Uint32 uLine);
+	void                        ConsumeMasterClocks(Int32 nClocks);
+	void                        BeginDMATiming();
+	void                        EndDMATiming();
+	Uint32                      GetPausedCpuSpeed() const;
+	Bool                        IsABusForbidden(Uint32 uAddr) const;
+	Bool                        IsWorkRAMAddress(Uint32 uAddr) const;
+	Uint8                       ReadABus(Uint32 uAddr);
+	void                        WriteABus(Uint32 uAddr, Uint8 uData);
+	void                        CopyDMABusByte(Uint32 uAddrA, Uint32 uAddrB,
+	                                           Bool bBToA, Uint32 uHClock);
 
     //Uint32 ProcessMDMACh(Uint32 uChan);
 };
