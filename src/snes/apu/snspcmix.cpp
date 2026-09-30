@@ -12,6 +12,7 @@
 #include "prof.h"
 #include "snspcdsp.h"
 #include "snspcmix.h"
+#include "snspcmath.h"
 #include "console.h"
 #include "mixbuffer.h"
 #include "sntiming.h"
@@ -33,6 +34,18 @@ Uint32 _ChMask=0xFF;
 
 typedef Int16 SNSpcEchoSampleT;
 typedef Int32 SNSpcMixSampleT;
+
+static void _SNSpcDspBuildVoiceOutput(
+	Int16 *pOut, const Int16 *pIn, const Uint16 *pFrac,
+	const Uint8 *pEnvelope, Int32 nSamples)
+{
+	while (nSamples-- > 0)
+	{
+		*pOut++ = SNSpcDspVoiceOutput(
+			pIn[0], pIn[1], *pFrac++, *pEnvelope++);
+		pIn += 2;
+	}
+}
 
 /*
 SPC Timing:
@@ -542,7 +555,7 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	}
 }
 
-Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate)
+Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate, const Int16 *pPitchMod)
 {
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 	const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
@@ -611,8 +624,18 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 		pOut[1] = iSample1;
 		pOut+=2;
 
-		// next sample
-		iPhase+= iPhaseInc;
+		// next sample. PMON uses the previous voice's output from the same
+		// sample time. Channels without PMON retain the old constant-step path.
+		Int32 iStepPhaseInc = iPhaseInc;
+		if (pPitchMod)
+		{
+			Uint32 uModPitch =
+				SNSpcDspApplyPitchMod(uPitch, *pPitchMod++);
+			iStepPhaseInc =
+				(Int32)(uModPitch * SNSPCDSP_SAMPLERATE / nSampleRate);
+			iStepPhaseInc <<= 4;
+		}
+		iPhase += iStepPhaseInc;
 
 		nSamples--;
 	}
@@ -623,9 +646,6 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, 
 		pChannel->eEnvState = SNSPCDSP_ENVSTATE_SILENCE;
 		pChannel->endx = TRUE;
 	}
-
-	// set outx to be envx for now
-	pChannel->outx = pChannel->envx;
 
 	pChannel->uOldBlockAddr = pChannel->uBlockAddr;
 	pChannel->iPhase = iPhase;
@@ -1153,6 +1173,7 @@ struct SNSpcDspDataT
 	Int16 iSampleData[SNSPCDSP_BUFFERSIZE*2] _ALIGN(16);
 	Uint16 FracData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 	Uint8 EnvData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
+	Int16 VoiceOutput[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 
 	SNSpcMixSampleT  Main[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 	SNSpcEchoSampleT Echo[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
@@ -1312,8 +1333,14 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		// check mute
 		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40))
 		{
+			/* The DSP evaluates voices in order. Voice N can therefore use the
+			   same-sample output of voice N-1 as its PMON input. */
+			_SNSpcDspMemset64((Uint64 *)pData->VoiceOutput,
+				(sizeof(Int16) * nSamples + 7) / 8);
+
 			for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 			{
+				Bool bVoiceOutputReady = FALSE;
 				#if CODE_DEBUG
 				if (_ChMask & (1<<iChannel))
 				#endif
@@ -1324,21 +1351,19 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 					Bool bMix;
 					Int16 *pSampleData;
 					Uint16 *pFracData;
+					const Int16 *pPitchMod = NULL;
 
 					pSampleData = pData->iSampleData;
 					pFracData   = pData->FracData;
 
-					if (m_pDsp->GetReg(SNSPCDSP_REG_PMON) & (1<<iChannel))
-					{
-						// output sample data (pitch modulation!)
-						bMix = OutputSample(iChannel, pSampleData, pFracData, nSamples, nSampleRate);
-						#if CODE_DEBUG
-						#endif
-					} else
-					{
-						// output sample data
-						bMix = OutputSample(iChannel, pSampleData, pFracData, nSamples, nSampleRate);
-					}
+					/* PMON bit 0 is ignored by hardware. For voices 1-7, the
+					   previous voice output already lives in VoiceOutput. */
+					if (iChannel > 0 &&
+					    (m_pDsp->GetReg(SNSPCDSP_REG_PMON) & (1<<iChannel)))
+						pPitchMod = pData->VoiceOutput;
+
+					bMix = OutputSample(iChannel, pSampleData, pFracData,
+						nSamples, nSampleRate, pPitchMod);
 
 					if (bMix)
 					{
@@ -1352,13 +1377,19 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 							pFracData   = m_iNoiseFrac;
 						}
 
-						// mix channel into main and echo buffers
+						/* Build the unscaled voice output once. It feeds both OUTX
+						   and the following voice's PMON path. */
+						_SNSpcDspBuildVoiceOutput(
+							pData->VoiceOutput, pSampleData, pFracData,
+							pData->EnvData, nSamples);
+						GetChannel(iChannel)->outx =
+							(Uint8)(pData->VoiceOutput[nSamples - 1] >> 8);
+						bVoiceOutputReady = TRUE;
 
+						// mix channel into main and echo buffers
 						PROF_ENTER("SNSpcDspMixStereo");
 						if ( uEchoEnable & (1<<iChannel) )
 						{
-							// Echo is enabled, so mix channel into both the main and the echo buffers
-							// mix using channel volume
 							_MixChannelEcho(
 								pData->Main[0], pData->Main[1],
 								pData->Echo[0], pData->Echo[1],
@@ -1367,19 +1398,23 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 								);
 						} else
 						{
-							// Echo is not enabled, so mix channel into the main channel only
-							// mix using channel volume
 							_MixChannel(
 								pData->Main[0], pData->Main[1],
 								pSampleData, pData->EnvData, pFracData, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						}
-
 						PROF_LEAVE("SNSpcDspMixStereo");
 					}
 				}
+
+				/* A silent/ended voice modulates the next voice with zero, not
+				   stale output from the previous channel. */
+				if (!bVoiceOutputReady)
+					_SNSpcDspMemset64((Uint64 *)pData->VoiceOutput,
+						(sizeof(Int16) * nSamples + 7) / 8);
 			}
+		}
 
 			if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x20))
 			{
