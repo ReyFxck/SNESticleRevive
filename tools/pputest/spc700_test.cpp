@@ -26,6 +26,7 @@ static void Init(SNSpcT &cpu)
 	cpu.pReadTrapFunc = TestRead;
 	cpu.pWriteTrapFunc = TestWrite;
 	cpu.bRomEnable = FALSE;
+	cpu.uTestReg = 0x0A;
 }
 static void PutOp(SNSpcT &cpu, Uint8 op) { cpu.Regs.rPC = 0x0200; cpu.Mem[0x0200] = op; }
 static void Run(SNSpcT &cpu, int nSpcCycles) { cpu.Cycles = nSpcCycles * SNSPC_CYCLE; SNSPCExecute_C(&cpu); }
@@ -93,6 +94,17 @@ int main()
 	Init(cpu); cpu.Regs.rPC = 0xFFFF; cpu.Mem[0xFFFF] = 0x2F;
 	cpu.Mem[0x0000] = 0x80; Run(cpu, 4);
 	Check("branch wraps PC", cpu.Regs.rPC, 0xFF81);
+
+	/* TEST controls APURAM visibility and write permission. */
+	Init(cpu); cpu.Mem[0x0300] = 0x12;
+	SNSPCWrite8(&cpu, 0x0300, 0x34);
+	Check("TEST default RAM writable", cpu.Mem[0x0300], 0x34);
+	cpu.uTestReg = SNSPC_TEST_TIMERS_ENABLE; /* RAM writable=0 */
+	SNSPCWrite8(&cpu, 0x0300, 0x56);
+	Check("TEST RAM write disable", cpu.Mem[0x0300], 0x34);
+	cpu.uTestReg = SNSPC_TEST_TIMERS_ENABLE | SNSPC_TEST_RAM_WRITABLE |
+		SNSPC_TEST_RAM_DISABLE;
+	Check("TEST RAM read disable", SNSPCRead8(&cpu, 0x0300), 0x5A);
 
 	Init(cpu); PutOp(cpu, 0xEF); Run(cpu, 3); Check("SLEEP holds PC", cpu.Regs.rPC, 0x0200);
 
