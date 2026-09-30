@@ -72,7 +72,8 @@ listed in this section:
 - ares (ares-emulator/ares), ISC: behavioral reference for the S-SMP/S-DSP
   voice pipeline, including PMON ordering and analytical construction of the
   Gaussian interpolation coefficient table; also used to cross-check Super
-  Scope CRT-beam detection timing and the 24-dot sensor offset.
+  Scope / Konami Justifier serial behavior, gun selection, CRT-beam detection
+  timing and the 24-dot sensor offset.
 - snes_spc / SPC_DSP by Shay Green (as carried by bsnes), LGPL 2.1 or later:
   independent accuracy cross-check for the four-tap Gaussian interpolation,
   its 16-bit intermediate wrap, saturation and forced-even output. No source
