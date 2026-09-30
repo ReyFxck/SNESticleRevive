@@ -143,7 +143,15 @@ Int32 SNSpcDspMix::OutputEnvelope(
 		   computes the value that becomes visible on a later sample. */
 		pOut[i] = (Uint16)iEnvelope;
 
-		if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_RELEASE)
+		/* FLG.7 (soft reset) silences the envelope after the current voice3
+		   output and forces release; the DSP pipeline itself keeps running. */
+		if (m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x80)
+		{
+			iEnvelope = 0;
+			iPending = 0;
+			pChannel->eEnvState = SNSPCDSP_ENVSTATE_RELEASE;
+		}
+		else if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_RELEASE)
 		{
 			iEnvelope -= 0x08;
 			if (iEnvelope <= 0)
@@ -853,7 +861,6 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 
 		// get echo enable bits
 		uEchoEnable = m_pDsp->GetReg(SNSPCDSP_REG_EON);
-		if (m_pDsp->GetReg(SNSPCDSP_REG_FLG)&0x20) uEchoEnable=0;
 
 		// dont update more than samples-per-update at a time
 		nSamples = nTotalSamples;
@@ -887,8 +894,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 			nSamples, m_uDspCounter);
 		PROF_LEAVE("SNSpcDspOutputNoise");
 
-		// check mute
-		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40))
+		/* FLG.6 mutes only the DAC. Voices, envelopes, noise and echo continue. */
 		{
 			/* The DSP evaluates voices in order. Voice N can therefore use the
 			   same-sample output of voice N-1 as its PMON input. */
@@ -970,11 +976,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						(sizeof(Int16) * nSamples + 7) / 8);
 			}
 
-			if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x20))
-			{
-				// filter echo output to echo buffer
-				FilterEcho(pData->Echo[0], pData->Echo[1], nSamples, nSampleRate, FALSE);
-			}
+			FilterEcho(pData->Echo[0], pData->Echo[1], nSamples);
 		}
 
 		// mix main + echo to output buffer
@@ -984,6 +986,12 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		_MixEcho(OutRightData, pData->Main[1], pData->Echo[1], nSamples,
 			(Int8)m_pDsp->GetReg(SNSPCDSP_REG_MVOLR), (Int8)m_pDsp->GetReg(SNSPCDSP_REG_EVOLR));
 		PROF_LEAVE("SNSpcDspMixEcho");
+
+		if (m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40)
+		{
+			memset(OutLeftData, 0, sizeof(Int16) * nSamples);
+			memset(OutRightData, 0, sizeof(Int16) * nSamples);
+		}
 
 		// output buffer to sound hardware
 		if (nSampleChannels == 2)
