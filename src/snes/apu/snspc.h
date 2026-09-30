@@ -96,6 +96,9 @@ static _INLINE Int32 SNSPCGetCounter(SNSpcT *pCpu, Int32 iCounter)
 
 Uint32 SNSPCMemChecksum(SNSpcT *pCpu);
 
+#define SNSPC_HALT_SLEEP 0x01u
+#define SNSPC_HALT_STOP  0x02u
+
 #define SNSPC_TEST_TIMERS_DISABLE 0x01u
 #define SNSPC_TEST_RAM_WRITABLE   0x02u
 #define SNSPC_TEST_RAM_DISABLE    0x04u
