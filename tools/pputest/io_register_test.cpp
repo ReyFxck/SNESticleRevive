@@ -265,6 +265,12 @@ static void CheckScanlineTiming()
 	Check("odd non-interlace line 240", SNES_LINE_MASTER_CYCLES(240, TRUE, FALSE), 1360);
 	Check("odd line 239 remains normal", SNES_LINE_MASTER_CYCLES(239, TRUE, FALSE), 1364);
 	Check("interlace odd line 240 remains normal", SNES_LINE_MASTER_CYCLES(240, TRUE, TRUE), 1364);
+	Check("HBlank start clock", SNES_HBLANK_START_CYCLES, 1096);
+	Check("HDMA start clock", SNES_HDMA_START_CYCLES, 1104);
+	Check("HDMA starts 8 clocks after HBlank",
+	      SNES_HDMA_START_CYCLES - SNES_HBLANK_START_CYCLES, 8);
+	Check("software visible slice ends before HBlank",
+	      SNES_VISIBLE_CYCLES < SNES_HBLANK_START_CYCLES, 1);
 
 	/* ares models the Super Scope optical hit 24 dots after the aimed X.
 	   Verify both active-display and late-HBlank positions. */

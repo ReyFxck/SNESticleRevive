@@ -1926,7 +1926,9 @@ void SnesSystem::ExecuteLine()
 {
 	const Int32 nLineCycles = (Int32)SNES_LINE_MASTER_CYCLES(
 		m_uLine, m_PPU.GetField(), m_PPU.IsFrameInterlace());
-	const Int32 nHBlankCycles = nLineCycles - SNES_VISIBLE_CYCLES;
+	const Int32 nToHBlank = SNES_HBLANK_START_CYCLES - SNES_VISIBLE_CYCLES;
+	const Int32 nToHDMA = SNES_HDMA_START_CYCLES - SNES_HBLANK_START_CYCLES;
+	const Int32 nAfterHDMA = nLineCycles - SNES_HDMA_START_CYCLES;
 	Int32 nLineClock = 0;
 
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
@@ -1995,16 +1997,34 @@ void SnesSystem::ExecuteLine()
     ExecuteTimedSlice(SNES_VISIBLE_CYCLES, nHIRQCycles, nLineClock);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
+	_tCPU = ProfCtrGetCycle();
+#endif
+	/* The 256-pixel software renderer stops at 1024 clocks, but hardware
+	   HBlank does not begin until H=274 (1096 clocks). Keep running the
+	   S-CPU through the remaining background-fetch interval before exposing
+	   HBlank to $4212 or starting HDMA. */
+	ExecuteTimedSlice(nToHBlank, nHIRQCycles, nLineClock);
+#if SNDBG_LOG
+	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
 
 	// A free-running SA-1 can raise an interrupt without an S-CPU access.
-	// Synchronize at the visible/HBlank boundary so the S-CPU can observe it
-	// during HBlank instead of delaying every asynchronous event to line end.
+	// Synchronize at the real visible/HBlank boundary.
 	if (m_bSA1)
 		SyncSA1();
 
-	// set h-blank enable flag
-	m_IO.m_Regs.hvbjoy|= 0x40;
+	// HBlank begins at H=274.
+	m_IO.m_Regs.hvbjoy |= 0x40;
+
+#if SNDBG_LOG
+	_tCPU = ProfCtrGetCycle();
+#endif
+	/* Mesen2 schedules HDMA at H=276 (1104 master clocks), eight clocks
+	   after HBlank begins. This matters for timed PPU/CGRAM/OAM ports. */
+	ExecuteTimedSlice(nToHDMA, nHIRQCycles, nLineClock);
+#if SNDBG_LOG
+	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
+#endif
 
     // are we not in vblank?
     if ( !(m_IO.m_Regs.hvbjoy & 0x80) )
@@ -2019,11 +2039,11 @@ void SnesSystem::ExecuteLine()
 #endif
     }
 
-    // execute CPU during h-blank
+    // execute CPU for the remainder of HBlank
 #if SNDBG_LOG
 	_tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteTimedSlice(nHBlankCycles, nHIRQCycles, nLineClock);
+    ExecuteTimedSlice(nAfterHDMA, nHIRQCycles, nLineClock);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
