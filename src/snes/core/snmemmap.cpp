@@ -762,8 +762,12 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 				break;
 			}
 			MapMem(_SnesMemMap_LoRom);
-			if (m_pRom->GetSRAMBytes() > 0 &&
-			    m_pRom->GetBytes() < 0x200000u)
+			/* NoMAD1 decodes SRAM through the complete cartridge banks regardless
+			   of ROM size. Keep the legacy small-LoROM full-bank behavior as a
+			   separate compatibility path for ordinary cartridges. */
+			if ((uFlags & SNROM_FLAG_NOMAD1) ||
+			    (m_pRom->GetSRAMBytes() > 0 &&
+			     m_pRom->GetBytes() < 0x200000u))
 				MapMem(_SnesMemMap_LoRom_SRAMFullHigh);
 
 #if SNES_DSP1
