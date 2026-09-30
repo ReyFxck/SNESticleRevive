@@ -76,6 +76,26 @@ void SnesSystem::SaveState(SnesStateT *pState)
 	m_SpcIO.SaveState(&pState->SPCIO);
 	m_SA1.SaveState(&pState->SA1);
 
+	/* v2 appended DSP runtime state. The prefix above remains compatible with
+	   old saves; this block makes an in-flight audio state deterministic. */
+	pState->DspRuntime.uMagic = SNSTATE_DSP_EXT_MAGIC;
+	pState->DspRuntime.uVersion = SNSTATE_DSP_EXT_VERSION;
+	pState->DspRuntime.uFullDspCounter = m_SpcDspMixer.GetDspCounter();
+	pState->DspRuntime.uSilentDspCounter = m_SpcDspSilentMixer.GetDspCounter();
+	m_SpcDspMixer.CopyTransientState(
+		&pState->DspRuntime.Echo,
+		&pState->DspRuntime.iNoisePhase,
+		&pState->DspRuntime.uNoiseGen);
+	m_SpcDspSilentMixer.CopyChannels(pState->DspRuntime.SilentChannels);
+	pState->DspRuntime.nDspQueue = m_SpcDsp.CopyWriteQueue(
+		pState->DspRuntime.DspQueue, SNQUEUE_SIZE);
+	pState->DspRuntime.nSpcIoQueue = m_SpcIO.CopyWriteQueue(
+		pState->DspRuntime.SpcIoQueue, SNQUEUE_SIZE);
+	m_SpcIO.CopyPendingCpuPorts(
+		&pState->DspRuntime.uCpuPendingMask,
+		pState->DspRuntime.CpuPendingData,
+		pState->DspRuntime.CpuPendingCycle);
+
 	// save memory state
 	memcpy(pState->Ram, m_Ram, sizeof(pState->Ram));
 	memcpy(pState->SRam, m_SRam, sizeof(pState->SRam));
@@ -140,6 +160,36 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_SpcDsp.RestoreState(&pState->SPCDSP);
 	m_SpcDspMixer.RestoreState(&pState->SPCDSP);
 	m_SpcIO.RestoreState(&pState->SPCIO);
+
+	if (pState->DspRuntime.uMagic == SNSTATE_DSP_EXT_MAGIC &&
+	    pState->DspRuntime.uVersion == SNSTATE_DSP_EXT_VERSION)
+	{
+		m_SpcDspMixer.SetDspCounter(pState->DspRuntime.uFullDspCounter);
+		m_SpcDspMixer.RestoreTransientState(
+			&pState->DspRuntime.Echo,
+			pState->DspRuntime.iNoisePhase,
+			pState->DspRuntime.uNoiseGen);
+		m_SpcDspSilentMixer.RestoreChannels(
+			pState->DspRuntime.SilentChannels);
+		m_SpcDspSilentMixer.SetDspCounter(
+			pState->DspRuntime.uSilentDspCounter);
+		m_SpcDsp.RestoreWriteQueue(
+			pState->DspRuntime.DspQueue,
+			pState->DspRuntime.nDspQueue);
+		m_SpcIO.RestoreWriteQueue(
+			pState->DspRuntime.SpcIoQueue,
+			pState->DspRuntime.nSpcIoQueue);
+		m_SpcIO.RestorePendingCpuPorts(
+			pState->DspRuntime.uCpuPendingMask,
+			pState->DspRuntime.CpuPendingData,
+			pState->DspRuntime.CpuPendingCycle);
+	}
+	else
+	{
+		/* Legacy states did not contain transient audio state. Keep both mixers
+		   coherent and resume from a clean DSP/noise/echo/queue boundary. */
+		m_SpcDspSilentMixer.RestoreState(&pState->SPCDSP);
+	}
 
 	// Restore shared RAM before rebuilding the SA-1 maps, because BW-RAM is
 	// backed by m_SRam and the coprocessor keeps only that live pointer.
