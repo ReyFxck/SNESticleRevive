@@ -34,7 +34,8 @@ extern "C" {
    hardware-even voice sample. The other platforms retain a scalar path. */
 #if CODE_PLATFORM == CODE_PS2
 extern "C" void SNSpcMixVoicePS2(Int32 *pOutLeft, Int32 *pOutRight,
-	const Int16 *pVoiceOutput, Int32 nSamples, Int32 iVolLeft, Int32 iVolRight);
+	const Int16 *pIn, const Uint8 *pEnvelope, Int32 nSamples,
+	Int32 iVolLeft, Int32 iVolRight);
 #endif
 
 Uint32 _ChMask=0xFF;
@@ -654,23 +655,22 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 }
 
 /*
- * VoiceOutput is already the S-DSP envelope-adjusted, bit-0-cleared sample.
- * Previously both BuildVoiceOutput() and the two mixing paths multiplied
- * decoded PCM by the envelope. Reuse the same sample for main/echo and PMON:
- * this also applies the hardware's even-output quirk consistently.
+ * Keep the historical Revive main/echo mix math bit-for-bit:
+ * decoded PCM * envelope >> 7, then per-channel volume. PMON/OUTX use the
+ * separately clamped/even S-DSP voice latch and must not be substituted here.
  */
 static void _MixChannel(
 	Int32 *pOutLeft, Int32 *pOutRight,
-	const Int16 *pVoiceOutput,
+	const Int16 *pIn, const Uint8 *pEnvelope,
 	Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
 #if CODE_PLATFORM == CODE_PS2
-	SNSpcMixVoicePS2(pOutLeft, pOutRight, pVoiceOutput, nSamples,
+	SNSpcMixVoicePS2(pOutLeft, pOutRight, pIn, pEnvelope, nSamples,
 		iVolLeft, iVolRight);
 #else
 	while (nSamples-- > 0)
 	{
-		Int32 iSample = *pVoiceOutput++;
+		Int32 iSample = SNSpcDspEnvelopeMixSample(*pIn++, *pEnvelope++);
 		*pOutLeft++  += iSample * iVolLeft;
 		*pOutRight++ += iSample * iVolRight;
 	}
@@ -680,12 +680,12 @@ static void _MixChannel(
 static void _MixChannelEcho(
 	Int32 *pOutLeft, Int32 *pOutRight,
 	SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight,
-	const Int16 *pVoiceOutput,
+	const Int16 *pIn, const Uint8 *pEnvelope,
 	Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
 	while (nSamples-- > 0)
 	{
-		Int32 iSample = *pVoiceOutput++;
+		Int32 iSample = SNSpcDspEnvelopeMixSample(*pIn++, *pEnvelope++);
 		Int32 iSampleLeft = iSample * iVolLeft;
 		Int32 iSampleRight = iSample * iVolRight;
 		Int32 iEchoLeft;
@@ -1171,14 +1171,14 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 							_MixChannelEcho(
 								pData->Main[0], pData->Main[1],
 								pData->Echo[0], pData->Echo[1],
-								m_iVoiceOutput, nSamples,
+								pSampleData, pData->EnvData, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						} else
 						{
 							_MixChannel(
 								pData->Main[0], pData->Main[1],
-								m_iVoiceOutput, nSamples,
+								pSampleData, pData->EnvData, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						}
