@@ -93,9 +93,11 @@ bool LoadState(const std::string &path, const RomIdentity &rom,
     if (!ReadFile(path, &file, error))
         return false;
 
-    if (file.size() == sizeof(*state))
+    if (file.size() == sizeof(*state) ||
+        file.size() == (size_t)SNSTATE_LEGACY_BYTES)
     {
-        memcpy(state, file.data(), sizeof(*state));
+        memset(state, 0, sizeof(*state));
+        memcpy(state, file.data(), file.size());
         if (memcmp(state->Tag, "SNS", 4))
         {
             if (error) *error = "raw state has no SNS tag";
@@ -143,14 +145,19 @@ bool LoadState(const std::string &path, const RomIdentity &rom,
     }
 
     const uint8_t *stored = file.data() + header.HeaderBytes;
+    size_t decodedBytes = 0;
+    memset(state, 0, sizeof(*state));
+
     if (header.Reserved[0] == STATE_PAYLOAD_RAW)
     {
-        if (header.PayloadBytes != sizeof(*state))
+        if (header.PayloadBytes != sizeof(*state) &&
+            header.PayloadBytes != SNSTATE_LEGACY_BYTES)
         {
             if (error) *error = "raw state ABI size differs from this ROM Lab build";
             return false;
         }
-        memcpy(state, stored, sizeof(*state));
+        decodedBytes = header.PayloadBytes;
+        memcpy(state, stored, decodedBytes);
     }
     else if (header.Reserved[0] == STATE_PAYLOAD_DEFLATE)
     {
@@ -164,11 +171,14 @@ bool LoadState(const std::string &path, const RomIdentity &rom,
         int result = uncompress((Bytef *)state, &outputBytes,
                                 (const Bytef *)stored,
                                 (uLong)header.PayloadBytes);
-        if (result != Z_OK || outputBytes != sizeof(*state))
+        if (result != Z_OK ||
+            (outputBytes != sizeof(*state) &&
+             outputBytes != (uLongf)SNSTATE_LEGACY_BYTES))
         {
             if (error) *error = "cannot decompress state or state ABI size differs";
             return false;
         }
+        decodedBytes = (size_t)outputBytes;
     }
     else
     {
@@ -176,7 +186,7 @@ bool LoadState(const std::string &path, const RomIdentity &rom,
         return false;
     }
 
-    if (Hash32(state, sizeof(*state)) != header.PayloadCRC)
+    if (Hash32(state, decodedBytes) != header.PayloadCRC)
     {
         if (error) *error = "decoded state CRC is invalid";
         return false;
