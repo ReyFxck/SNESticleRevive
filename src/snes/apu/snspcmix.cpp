@@ -871,6 +871,21 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		nSamples = nTotalSamples;
 		if (nSamples > nSamplesPerUpdate) nSamples = nSamplesPerUpdate;
 
+		/* Do not let a coarse cache-sized chunk hide an SPC->DSP register write.
+		   Land on the first native sample boundary at/after the queued write;
+		   the next loop's Sync() then applies it with <1-sample latency. */
+		{
+			Uint32 uNextWrite;
+			if (m_pDsp->GetNextWriteCycle(&uNextWrite) && uNextWrite > uCycle)
+			{
+				Uint32 uDelta = uNextWrite - uCycle;
+				Int32 nToWrite = (Int32)((uDelta + uCyclesPerSample - 1) /
+					uCyclesPerSample);
+				if (nToWrite > 0 && nToWrite < nSamples)
+					nSamples = nToWrite;
+			}
+		}
+
 		// clear main and echo buffers
 		_SNSpcDspMemset64((Uint64 *)pData->Main[0], (sizeof(Int32) * nSamples+7) / 8);
 		_SNSpcDspMemset64((Uint64 *)pData->Main[1], (sizeof(Int32) * nSamples+7) / 8);
