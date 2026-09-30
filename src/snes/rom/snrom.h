@@ -58,6 +58,7 @@ enum SNRomMappingE
 #define SNROM_FLAG_PILOTWINGS_DYNAMIC_HVIRQ 0x8000
 #define SNROM_FLAG_SA1                       0x10000
 #define SNROM_FLAG_ROM24MBS                  0x20000
+#define SNROM_FLAG_SRAM512K_SPECIAL          0x40000
 
 struct SNRomInfoT
 {
