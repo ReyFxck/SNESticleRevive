@@ -30,8 +30,8 @@ extern "C" {
 
 #define SNSPCDSP_MIXASM ((CODE_PLATFORM == CODE_PS2) && 1)
 
-/* PS2 EE hot path: one multiply per side from an already enveloped,
-   hardware-even voice sample. The other platforms retain a scalar path. */
+/* PS2 EE hot path for the historical Revive voice-mix formula.
+   PMON/OUTX remain on the separate hardware-even voice-output path. */
 #if CODE_PLATFORM == CODE_PS2
 extern "C" void SNSpcMixVoicePS2(Int32 *pOutLeft, Int32 *pOutRight,
 	const Int16 *pIn, const Uint8 *pEnvelope, Int32 nSamples,
