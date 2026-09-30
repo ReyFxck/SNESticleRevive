@@ -846,12 +846,9 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 	}
 #endif
 
-	// build envelope lookup tables based on sample rate
-	if (nSampleRate!=m_nSampleRate)
-	{
-		BuildLookupTables(nSampleRate);
-		m_nSampleRate = nSampleRate;
-	}
+	/* The S-DSP state machine itself always advances at 32 kHz. Revive's SNES
+	   mix buffer is deliberately configured at that native rate. */
+	m_nSampleRate = nSampleRate;
 
 	// calculate number of cycles per sample
 	uCyclesPerSample  = 32 * SNSPC_CYCLE;
@@ -880,13 +877,12 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		_SNSpcDspMemset64((Uint64 *)pData->Echo[0], (sizeof(SNSpcEchoSampleT) * nSamples+7) / 8);
 		_SNSpcDspMemset64((Uint64 *)pData->Echo[1], (sizeof(SNSpcEchoSampleT) * nSamples+7) / 8);
 
-		// output niose
-		if (m_pDsp->GetReg(SNSPCDSP_REG_NOV))
-		{
-			PROF_ENTER("SNSpcDspOutputNoise");
-			OutputNoise(m_iNoiseSample, nSamples, nSampleRate);
-			PROF_LEAVE("SNSpcDspOutputNoise");
-		}
+		/* The noise LFSR runs even when no voice currently selects NON. Keep
+		   both pre-misc30 and voice0 post-misc30 samples for hardware ordering. */
+		PROF_ENTER("SNSpcDspOutputNoise");
+		OutputNoise(m_iNoiseSample, m_iNoiseSampleVoice0,
+			nSamples, m_uDspCounter);
+		PROF_LEAVE("SNSpcDspOutputNoise");
 
 		// check mute
 		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40))
@@ -904,7 +900,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 				#endif
 
 				// calculate envelope values for channel
-				if (OutputEnvelope(iChannel, pData->EnvData, nSamples))
+				if (OutputEnvelope(iChannel, pData->EnvData, nSamples, m_uDspCounter))
 				{
 					Bool bMix;
 					Int16 *pSampleData;
@@ -928,8 +924,9 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						// is noise enabled for this channel?
 						if (m_pDsp->GetReg(SNSPCDSP_REG_NOV) & (1<<iChannel))
 						{
-							// use pre-generated noise channel data instead of pcm data
-							pSampleData = m_iNoiseSample;
+							/* Voice 0 samples after misc30; voices 1-7 before it. */
+							pSampleData = (iChannel == 0) ?
+								m_iNoiseSampleVoice0 : m_iNoiseSample;
 						}
 
 						/* Build the unscaled voice output once. It feeds both OUTX
@@ -948,14 +945,14 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 							_MixChannelEcho(
 								pData->Main[0], pData->Main[1],
 								pData->Echo[0], pData->Echo[1],
-								pSampleData, pData->EnvData, nSamples,
+								m_iVoiceOutput, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						} else
 						{
 							_MixChannel(
 								pData->Main[0], pData->Main[1],
-								pSampleData, pData->EnvData, nSamples,
+								m_iVoiceOutput, nSamples,
 								pRegs->vol_l, pRegs->vol_r
 								);
 						}
@@ -994,7 +991,10 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		// decrement total sample count
 		nTotalSamples -= nSamples;
 
-		// increment cycle count
+		/* misc30 ticks the shared DSP counter once per native sample. */
+		m_uDspCounter = SNSpcDspCounterAdvance(m_uDspCounter, nSamples);
+
+		// increment SPC-cycle timestamp
 		uCycle += nSamples * uCyclesPerSample;
 	}
 
