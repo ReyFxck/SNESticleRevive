@@ -60,6 +60,11 @@ public:
 		}
 	}
 
+	inline const SNQueueElementT *Peek() const
+	{
+		return m_nCount > 0 ? &m_Elements[m_iHead] : NULL;
+	}
+
 	inline SNQueueElementT	*Dequeue(Uint32 uCycle)
 	{
 		// dequeue element only if it is earlier than cycle time given
