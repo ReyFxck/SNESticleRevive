@@ -9,7 +9,20 @@
 #pragma once
 
 #include "types.h"
+#include "emuinput.h"
 
 Uint16 _MainLoopInput(Uint32 pad);
 void _MainLoopInputProcess(Uint32 buttons);
 void _MainLoopInputSuppressUntilRelease();
+
+enum MainLoopSnesPeripheralModeE
+{
+	MAINLOOP_SNES_INPUT_STANDARD = 0,
+	MAINLOOP_SNES_INPUT_MOUSE,
+	MAINLOOP_SNES_INPUT_SUPERSCOPE,
+	MAINLOOP_SNES_INPUT_NUM
+};
+
+void _MainLoopSnesInputCycleMode();
+const char *_MainLoopSnesInputModeName();
+void _MainLoopSnesInputApply(Emu::SysInputT *pInput);
