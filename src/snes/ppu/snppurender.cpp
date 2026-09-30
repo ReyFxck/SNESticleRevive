@@ -276,6 +276,7 @@ void _DrawMask2(Uint32 *pDest, SNMaskT *pMask1, SNMaskT *pMask2, Int32 nPixels)
 
 void SnesPPURender::RenderLine(Int32 iLine)
 {
+	m_iLastRenderedLine = -1;
 	if (m_pTarget)
 	{
 		switch (m_pTarget->GetFormat()->uBitDepth)
@@ -288,7 +289,23 @@ void SnesPPURender::RenderLine(Int32 iLine)
 			break;
 
 		}
+		m_iLastRenderedLine = iLine;
 	}
+}
+
+Uint8 SnesPPURender::GetInternalCGRAMAddress(Uint32 uLine, Uint32 uHClock)
+{
+	/* Revive renders a whole scanline at once, but its 8-bit main buffer keeps
+	   the actual CGRAM index selected for every output pixel.  After SyncPPU()
+	   this is a substantially better model of the live palette bus than using
+	   the CPU CGADD register (and costs no per-pixel side buffer). */
+	if (!m_pRenderInfo || m_iLastRenderedLine != (Int32)uLine)
+		return 0;
+
+	Int32 iX = (Int32)(uHClock >> 2) - 22;
+	if (iX < 0) iX = 0;
+	if (iX > 255) iX = 255;
+	return m_pRenderInfo->BlendInfo.uMain8[iX];
 }
 
 void SnesPPURender::RenderLine16(Int32 iLine)
@@ -761,6 +778,7 @@ void SnesPPURender::BeginRender(CRenderSurface *pTarget)
 	#endif
 
 	m_pTarget = pTarget;
+	m_iLastRenderedLine = -1;
 	if (pTarget)
 	{
 		pTarget->Lock();
