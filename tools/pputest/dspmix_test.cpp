@@ -58,16 +58,21 @@ int main()
 	Check("voice output clears bit0",
 		SNSpcDspVoiceOutput(103, 127) & 1, 0);
 
-	/* Both PMON and main/echo voice mixing now consume this same
-	   envelope-adjusted, hardware-even sample (ares DSP voice latch). */
-	Check("cached voice output odd rounds down",
-		SNSpcDspVoiceOutput(2001, 127), 1984);
-	Check("cached voice sample left volume",
-		(Int32)SNSpcDspVoiceOutput(2001, 127) * -47, -93248);
-	Check("cached voice sample right volume",
-		(Int32)SNSpcDspVoiceOutput(2001, 127) * 90, 178560);
-	Check("cached voice output sign",
-		SNSpcDspVoiceOutput(-2001, 127), -1986);
+	/* Main/echo mixing intentionally keeps the historical Revive raw
+	   envelope product. It is distinct from the hardware-even PMON/OUTX
+	   latch, so an odd raw result must stay odd here. */
+	Check("raw mix keeps odd low bit",
+		SNSpcDspEnvelopeMixSample(2, 127), 1);
+	Check("voice latch clears same low bit",
+		SNSpcDspVoiceOutput(2, 127), 0);
+	Check("raw mix positive",
+		SNSpcDspEnvelopeMixSample(2001, 127), 1985);
+	Check("raw mix negative arithmetic shift",
+		SNSpcDspEnvelopeMixSample(-2001, 127), -1986);
+	Check("raw mix left volume",
+		SNSpcDspEnvelopeMixSample(2001, 127) * -47, -93295);
+	Check("raw mix right volume",
+		SNSpcDspEnvelopeMixSample(2001, 127) * 90, 178650);
 
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
