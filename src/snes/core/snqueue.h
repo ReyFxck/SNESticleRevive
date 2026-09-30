@@ -52,6 +52,7 @@ public:
 			pElement->uCycle = uCycle;
 			pElement->uAddr  = uAddr;
 			pElement->uData = uData;
+			pElement->uPad = 0;
 			return TRUE;
 		} else
 		{
