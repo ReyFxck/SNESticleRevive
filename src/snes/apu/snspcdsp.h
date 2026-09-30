@@ -125,8 +125,11 @@ struct SNSpcFIRFilterT
 
 struct SNSpcEchoT
 {
-	SNSpcFIRFilterT	Filter[2];		// filter for left/right
-	Uint16			uEchoAddr;
+	SNSpcFIRFilterT	Filter[2];		// FIR history for left/right
+	Uint16			uEchoAddr;		// byte offset from latched ESA page
+	Uint16			uEchoSize;		// latched EDL length in bytes
+	Uint8			uEchoPage;		// one-sample-late ESA latch
+	Uint8			bReadOnly;		// FLG.5 write-disable latch
 };
 
 class    SNSpcDsp
