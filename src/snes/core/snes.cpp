@@ -664,8 +664,9 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 
 		/* Write-only PPU ports expose the byte currently retained by the 5A22
 		   CPU data bus. PPU1/PPU2 keep their own independent retained buses. */
-		Uint8 uData = pSnes->m_PPU.Read8(uAddr, pCpu->uOpenBus,
-		                                    bCounterLatchEnabled);
+		Uint8 uData = pSnes->m_PPU.ReadTimed(
+			uAddr, pCpu->uOpenBus, bCounterLatchEnabled,
+			pSnes->m_uLine, pSnes->GetSCPULineClock());
 #if SNESTICLE_ROMLAB && ROMLAB_TRACE_HANDLED_IO
 		static Uint32 s_uTracePPUReads = 0;
 		if (s_uTracePPUReads++ < 512)
@@ -786,23 +787,29 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	if (uAddr >= 0x2100 && uAddr < 0x2140)
 	{
-		/* Only the decoded $2100-$213F B-bus window reaches the PPU.
-		   $2000-$20FF is open bus on the base console; putting those writes
-		   into the raster queue wasted EE time and could force a false sync. */
-		// enqueue write to ppu, if it fails (full) then force a sync
-		#if SNPPU_WRITEQUEUE
-		while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
+		/* Memory data ports need the live H/V position. Flush older queued
+		   control/address writes, then perform this bus transaction now so
+		   active-display restrictions are decided at the original access. */
+		if (uAddr == 0x2104 || uAddr == 0x2116 || uAddr == 0x2117 ||
+		    uAddr == 0x2118 || uAddr == 0x2119 || uAddr == 0x2122)
 		{
-			// sync ppu
+#if SNPPU_WRITEQUEUE
 			pSnes->SyncPPU();
+#endif
+			pSnes->m_PPU.WriteTimed(
+				uAddr, uData, pSnes->m_uLine, pSnes->GetSCPULineClock());
 		}
-		#else
-		// sync ppu before writing to it
-		pSnes->SyncPPU();
-
-		// ppu write
-		pSnes->m_PPU.Write8(uAddr, uData);
-		#endif
+		else
+		{
+			/* Other decoded PPU writes keep the low-cost scanline queue. */
+#if SNPPU_WRITEQUEUE
+			while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
+				pSnes->SyncPPU();
+#else
+			pSnes->SyncPPU();
+			pSnes->m_PPU.Write8(uAddr, uData);
+#endif
+		}
 	} else
 	{
 		switch(uAddr)
