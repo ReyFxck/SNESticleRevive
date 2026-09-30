@@ -1882,6 +1882,10 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 
 void SnesSystem::ExecuteLine()
 {
+	const Int32 nLineCycles = (Int32)SNES_LINE_MASTER_CYCLES(
+		m_uLine, m_PPU.GetField(), m_PPU.IsFrameInterlace());
+	const Int32 nHBlankCycles = nLineCycles - SNES_VISIBLE_CYCLES;
+
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
 	m_DMAC.SetVideoLine(m_uLine);
 	m_nSA1LineClock = 0;
@@ -1945,7 +1949,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	Uint32 _tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(SNES_CYCLESPERLINE - SNES_HBLANKCYCLES, nHIRQCycles);
+    ExecuteWithIRQ(SNES_VISIBLE_CYCLES, nHIRQCycles);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
@@ -1976,7 +1980,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	_tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(SNES_HBLANKCYCLES, nHIRQCycles);
+    ExecuteWithIRQ(nHBlankCycles, nHIRQCycles);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
@@ -1984,7 +1988,7 @@ void SnesSystem::ExecuteLine()
 	// Bring the SA-1 to the exact end of the scanline. Shared register,
 	// I-RAM and BW-RAM accesses may have synchronized it earlier in the line.
 	if (m_bSA1)
-		SyncSA1To(SNES_CYCLESPERLINE);
+		SyncSA1To(nLineCycles);
 
 	// O hardware GSU roda em paralelo com o 65816. Este emulador sincroniza
 	// os dois uma vez por scanline, como uma aproximacao de baixo custo para
@@ -2008,7 +2012,7 @@ void SnesSystem::ExecuteLine()
 	m_bLineIRQReschedule = FALSE;
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
-	m_nLineIRQClock = SNES_CYCLESPERLINE;
+	m_nLineIRQClock = nLineCycles;
 	m_IO.ProcessAutoJoypad(GetSCPUMasterClock());
 	PROF_LEAVE("ExecLine");
 }
