@@ -16,8 +16,9 @@
 #define SNSPCDSP_MAXMIXERS (2)
 
 #define SNSPCDSP_CHANNEL_NUM 8
-#define SNSPCDSP_ENVELOPE_BITS (23)
-#define SNSPCDSP_ENVELOPE_MAX (1 << SNSPCDSP_ENVELOPE_BITS)
+/* Native S-DSP envelope is an 11-bit value, $000-$7ff. */
+#define SNSPCDSP_ENVELOPE_BITS (11)
+#define SNSPCDSP_ENVELOPE_MAX (0x7FF)
 #define SNSPCDSP_ENVELOPE_MIN (0)
 #define SNSPCDSP_SAMPLERATE (32000)
 
@@ -101,8 +102,8 @@ struct SNSpcVoiceRegsT
 struct SNSpcChannelT
 {
 	SNSpcEnvStateE	eEnvState;		// envelope state
-	Int32			iEnvelope;		// envelope position 16.16
-	Int32			nEnvCount;		// number of ticks until next envelope update (16.16)
+	Int32			iEnvelope;		// committed 11-bit hardware envelope
+	Int32			nEnvCount;		// pending envelope candidate (_envelope in ares)
 
 	Int32			iPhase;			// sample position within current block (16.16?)
 	Uint16			uBlockAddr;		// address in spc mem of next block
@@ -111,7 +112,7 @@ struct SNSpcChannelT
 	Uint8			envx;
 	Uint8			outx;
 	Uint8			endx;
-	Uint8			pad;
+	Uint8			pad;			// reserved for key-on pipeline delay
 
 	Int16			BlockData[2][16];	// current BRR block; previous row tail [13..15] is Gaussian history
 };
