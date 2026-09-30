@@ -221,8 +221,12 @@ Uint32 SNCPUSA1BusGetDroppedEvents(void){return g_SNCPU_SA1BusDroppedEvents;}
 #if defined(__mips__)
 typedef char SNCpuIrqPendingOffsetMustStay51[
 	(offsetof(SNCpuT, uIrqPending) == 51) ? 1 : -1];
-typedef char SNCpuBankOffsetMustStay52[
-	(offsetof(SNCpuT, Bank) == 52) ? 1 : -1];
+typedef char SNCpuOpenBusOffsetMustStay52[
+	(offsetof(SNCpuT, uOpenBus) == 52) ? 1 : -1];
+typedef char SNCpuCycleCountOffsetMustStay56[
+	(offsetof(SNCpuT, uCpuCycleCount) == 56) ? 1 : -1];
+typedef char SNCpuBankOffsetMustStay60[
+	(offsetof(SNCpuT, Bank) == 60) ? 1 : -1];
 #endif
 
 #define SNCPU_FASTREADMEM TRUE
@@ -291,6 +295,8 @@ void SNCPUReset(SNCpuT *pCpu, Bool bHardReset)
 	pCpu->uSignal = 0;
 	pCpu->uNmiDmaDelay = 0;
 	pCpu->uIrqPending = 0;
+	pCpu->uOpenBus = 0;
+	pCpu->uCpuCycleCount = 0;
 
 	// set cpu flags to default state
 	pCpu->Regs.rP  = SNCPU_FLAG_M | SNCPU_FLAG_X |  SNCPU_FLAG_I;
@@ -506,6 +512,7 @@ Uint8 SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
@@ -517,16 +524,16 @@ Uint8 SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 	uLastAddr[0] = Addr;*/
 	if (pBankMem)
 	{
-
 //		char str[64];
-		return pBankMem[Addr];
+		uData = pBankMem[Addr];
 	}
 	else
 	{
-		//call trap function
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
-
+		// call trap while it can still observe the previous bus value
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
 	}
+	pCpu->uOpenBus = uData;
+	return uData;
 }
 
 Uint16 SNCPURead16(SNCpuT *pCpu, Uint32 Addr)
@@ -587,6 +594,8 @@ void SNCPUReadMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 *pBuffer, Uint32 nTotalBytes
 		{
 			// copy data directly from bank memory
 			memcpy(pBuffer, pBankMem + uAddr, nBytes);
+			if (nBytes)
+				pCpu->uOpenBus = pBuffer[nBytes - 1];
 
 			pBuffer += nBytes;
 			nTotalBytes -= nBytes;
@@ -596,8 +605,9 @@ void SNCPUReadMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 *pBuffer, Uint32 nTotalBytes
 			// trapped memory space
 			while (nBytes > 0)
 			{
-				// call trap function
+				// call trap function, then latch the returned byte on the CPU bus
 				*pBuffer = pCpu->Bank[iBank].pReadTrapFunc(pCpu, uAddr);
+				pCpu->uOpenBus = *pBuffer;
 
 				pBuffer++;
 				nBytes--;
@@ -615,6 +625,9 @@ void  SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 	Uint8 *pBankMem;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
+	/* CPU writes drive the data bus even when the addressed device ignores
+	   the write, so trapped write handlers must see the newly driven byte. */
+	pCpu->uOpenBus = Data;
 
 //	uBankWrite[iBank]++;
 

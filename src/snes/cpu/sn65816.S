@@ -29,6 +29,7 @@
 #endif
 
 		.set noreorder
+		.set noat
 
 //
 // cpu structure offsets
@@ -56,8 +57,10 @@
 #define SNCPU_uSignal       49(R_pCpu)
 #define SNCPU_uNmiDmaDelay  50(R_pCpu)
 #define SNCPU_uIrqPending   51(R_pCpu)
+#define SNCPU_uOpenBus      52(R_pCpu)
+#define SNCPU_uCpuCycleCount 56(R_pCpu)
 
-#define SNCPU_MemIO			52
+#define SNCPU_MemIO			60
 
 #define SNCPU_pMem			(SNCPU_MemIO+0)
 #define SNCPU_ReadTrap		(SNCPU_MemIO+4)
@@ -135,6 +138,7 @@
 #define R_DPMASK		$25
 
 #define R_PCCycles		$30
+#define R_CpuCycle		$1
 
 //
 //
@@ -148,6 +152,7 @@
 #define SNCPU_OPTABLE_END()
 
 #define SNCPU_SUBCYCLES(_nCycles)		\
+		addiu	R_CpuCycle,R_CpuCycle,_nCycles	;\
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)
 //#define SNCPU_SUBCYCLES(_nCycles)
 
@@ -324,6 +329,7 @@
 		addiu		t2,zr,SNCPU_SA1_BUS_ROM		;\
 		bne		t1,t2,88f				;\
 		nop						;\
+		addiu		R_CpuCycle,R_CpuCycle,1		;\
 		addiu		R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST	;\
 88:
 
@@ -340,12 +346,14 @@
 		addiu		t2,zr,SNCPU_SA1_BUS_ROM		;\
 		bne		t1,t2,87f				;\
 		nop						;\
+		addiu		R_CpuCycle,R_CpuCycle,1		;\
 		addiu		R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST	;\
 87:
 
 #endif /* SA-1-side penalty variant */
 
 #define SNCPU_ENDOP(_nCycles)		\
+		addiu	R_CpuCycle,R_CpuCycle,_nCycles	;\
 		j		_SNCPUExecute_Loop	;	\
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)	\
 
@@ -412,6 +420,8 @@
 #define SNCPU_DP_PENALTY() \
 		srl		t0,R_DPMASK,16		;\
 		andi	t0,t0,0x00FF		;\
+		sltu	t1,zr,t0			;\
+		addu	R_CpuCycle,R_CpuCycle,t1	;\
 		subu	R_Cycles,R_Cycles,t0
 
 #define SNCPU_INDEX_READ_PENALTY(_base,_index) \
@@ -422,7 +432,8 @@
 		andi	t0,t0,0xFF00			;\
 		beq		t0,zr,2f			;\
 		nop							;\
-1:		addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST ;\
+1:		addiu	R_CpuCycle,R_CpuCycle,1		;\
+		addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST ;\
 2:
 
 #define SNCPU_ADC8(_dest,_src)					\
@@ -585,6 +596,7 @@
 		sltu	t0,zr,t0						;\
 		lbu		t1,SNCPU_rE						;\
 		and		t0,t0,t1						;\
+		addu	R_CpuCycle,R_CpuCycle,t0			;\
 		sll		t1,t0,1						;\
 		addu	t0,t0,t1						;\
 		sll		t0,t0,1						;\
@@ -659,6 +671,7 @@
 		nop					;\
 		addu		t0,t0,_addr			;\
 		lbu		_data,0(t0)			;\
+		addiu	R_CpuCycle,R_CpuCycle,1	;\
 		addiu		t2,zr,SNCPU_CYCLE_FAST		;\
 		subu		R_Cycles,R_Cycles,t2		;\
 		SNCPU_SA1_IRAM_PENALTY()		;\
@@ -683,7 +696,8 @@
 		nop					;\
 		addu		t0,t0,_addr			;\
 		sb		_data,0(t0)			;\
-96:		addiu		t2,zr,SNCPU_CYCLE_FAST		;\
+96:		addiu	R_CpuCycle,R_CpuCycle,1	;\
+		addiu		t2,zr,SNCPU_CYCLE_FAST		;\
 		subu		R_Cycles,R_Cycles,t2		;\
 		SNCPU_SA1_IRAM_PENALTY()		;\
 		b		97f				;\
@@ -865,6 +879,7 @@
         sh		R_DP, SNCPU_rDP			   ; \
         sw		R_DB, SNCPU_rDB			   ; \
         sb		R_P, SNCPU_rP			   ; \
+		sw		R_CpuCycle,SNCPU_uCpuCycleCount ; \
 		sw		R_Cycles, SNCPU_Cycles
 
 #define SNCPU_LOADREGSTATE()			    \
@@ -880,6 +895,7 @@
         lhu		R_DP, SNCPU_rDP			   ; \
         lwu		R_DB, SNCPU_rDB			   ; \
         lbu		R_P, SNCPU_rP			   ; \
+		lw		R_CpuCycle,SNCPU_uCpuCycleCount ; \
 		lw		R_Cycles,SNCPU_Cycles
 
 /*
@@ -897,6 +913,8 @@
 */
 
 _SNCPU_Write8:
+		addiu	R_CpuCycle,R_CpuCycle,1
+		sb		R_Data,SNCPU_uOpenBus
 #if !defined(SNCPU_ASM_VARIANT_PLAIN)
 #if !defined(SNCPU_ASM_VARIANT_SA1)
 		lw		t1,SP_SA1Exec
@@ -989,7 +1007,7 @@ _SNCPU_Write8SA1IRAMTimed:
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_IRAM_PENALTY()
 		jr		ra
-		nop
+		sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Write8SA1BWRAMWindow:
 		lui		t1,%hi(g_SNCPU_SA1BWRAMMap)
@@ -1032,7 +1050,7 @@ _SNCPU_Write8SA1BWRAMWindowTimed:
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		jr		ra
-		nop
+		sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Write8SA1BWRAM:
 		lui		t1,%hi(g_SNCPU_SA1BWRAM)
@@ -1070,7 +1088,7 @@ _SNCPU_Write8SA1BWRAMTimed:
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		jr		ra
-		nop
+		sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Write8SA1Generic:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
@@ -1183,6 +1201,7 @@ _SNCPU_Write16_Fast:
 
 		bne		t1,t2,_SNCPU_Write16_Slow				// reads from different banks? go to slow version
         addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
+		addiu	R_CpuCycle,R_CpuCycle,2
 
         lh		t2,SNCPU_uBankCycle(t0)					// t2 = bank cycle count | (bRAM << 8)
         lw		t1,SNCPU_pMem(t0)						// t1 = bank addr
@@ -1200,7 +1219,7 @@ _SNCPU_Write16_Fast:
 		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
 		jr		ra
-        nop
+        sb		t1,SNCPU_uOpenBus
 
 _SNCPU_Write16Trap:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
@@ -1220,8 +1239,10 @@ _SNCPU_Write16Trap:
 		// call trap handler
 		move	a0, R_pCpu
 		addiu	a1, R_Addr, 0
-		jalr	t1
         andi	a2,R_Data, 0xFF
+		sb		a2,SNCPU_uOpenBus
+		jalr	t1
+        nop
 
 		lw		R_Data,SP_Data0
         lw		t1, SP_SaveTrap
@@ -1230,8 +1251,10 @@ _SNCPU_Write16Trap:
 		move	a0, R_pCpu
 		addiu	a1, R_Addr, 1
         srl		a2,R_Data,8
-		jalr	t1
         andi	a2,a2, 0xFF
+		sb		a2,SNCPU_uOpenBus
+		jalr	t1
+        nop
 
 		// restore volatile and temporary registers
 		lw		ra,SP_RA1
@@ -1282,6 +1305,7 @@ _SNCPU_Write16Wrap16:
 */
 
 _SNCPU_Read8:
+		addiu	R_CpuCycle,R_CpuCycle,1
 #if !defined(SNCPU_ASM_VARIANT_PLAIN)
 #if !defined(SNCPU_ASM_VARIANT_SA1)
 		lw		t1,SP_SA1Exec
@@ -1375,7 +1399,7 @@ _SNCPU_Read8SA1BWRAMWindow:
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		jr		ra
-		nop
+		sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Read8SA1BWRAM:
 		lui		t1,%hi(g_SNCPU_SA1BWRAM)
@@ -1395,7 +1419,7 @@ _SNCPU_Read8SA1BWRAM:
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		jr		ra
-		nop
+		sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Read8SA1Generic:
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
@@ -1425,7 +1449,7 @@ _SNCPU_Read8HostStart:
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
 
 		jr		ra
-        nop
+        sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Read8SA1IRAM:
 		lui		t1,%hi(g_SNCPU_SA1IRAM)
@@ -1438,7 +1462,7 @@ _SNCPU_Read8SA1IRAM:
 		subu		R_Cycles,R_Cycles,t2
 		SNCPU_SA1_IRAM_PENALTY()
 		jr		ra
-		nop
+		sb		R_Data,SNCPU_uOpenBus
 2:
 		// Defensive fallback if the sidecar pointer was not installed.
 		srl		t0,R_Addr,SNCPU_BANK_SHIFT
@@ -1452,8 +1476,9 @@ _SNCPU_Read8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
         addiu	R_Cycles,R_Cycles,-SNCPU_CYCLE_SLOW		// zero bank is slow
         addu	t0,t0,R_Addr
-		jr		ra
         lbu		R_Data, 0(t0)							// load byte unsigned
+		jr		ra
+        sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Read8Trap:
 		sw		t0,SP_SaveTrap
@@ -1477,7 +1502,7 @@ _SNCPU_Read8Trap:
         SNCPU_LOADREGSTATE()
 
 		jr		ra
-        nop
+        sb		R_Data,SNCPU_uOpenBus
 
 /*
 //
@@ -1531,6 +1556,7 @@ _SNCPU_Read16_Fast:
 
 		bne		t1,t2,_SNCPU_Read16_Slow				// reads from different banks? go to slow version
         addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
+		addiu	R_CpuCycle,R_CpuCycle,2
 
         lw		t1,SNCPU_pMem(t0)						// t1 = bank addr
         lbu		t2,SNCPU_uBankCycle(t0)					// t2 = bank cycle count
@@ -1545,8 +1571,10 @@ _SNCPU_Read16_Fast:
         lwl		R_Data, 3(t0)
 		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
-		jr		ra
         andi	R_Data,R_Data,0xFFFF
+		srl		t0,R_Data,8
+		jr		ra
+        sb		t0,SNCPU_uOpenBus
 
 _SNCPU_Read16Trap:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for second memory access
@@ -1566,6 +1594,7 @@ _SNCPU_Read16Trap:
 		jalr	t1
 		addiu	a1, R_Addr,0
         sb		v0,SP_Data0
+        sb		v0,SNCPU_uOpenBus
 
         lw		t1, SP_SaveTrap
 
@@ -1574,6 +1603,7 @@ _SNCPU_Read16Trap:
 		jalr	t1
 		addiu	a1, R_Addr,1
         sb		v0,SP_Data1
+        sb		v0,SNCPU_uOpenBus
 
 		lw		ra,SP_RA1
         lhu		R_Data,SP_Data0
@@ -1736,6 +1766,7 @@ _SNCPU_Fetch8Fast:
 
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
+		addiu	R_CpuCycle,R_CpuCycle,1
 		lbu		R_Data,0(R_PC)
         addiu	R_PC,R_PC,1
         subu	R_Cycles,R_Cycles,R_PCCycles
@@ -1743,7 +1774,7 @@ _SNCPU_Fetch8Fast:
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
 
 		jr		ra
-        nop
+        sb		R_Data,SNCPU_uOpenBus
 
 _SNCPU_Fetch8Update:
 		lwu		t0,SP_PCBank			// restore PC to normal
@@ -1806,6 +1837,7 @@ _SNCPU_Fetch16Fast:
 		addiu	R_PCCount,R_PCCount,-2
 		blez	R_PCCount,_SNCPU_Fetch16Trap
 		nop
+		addiu	R_CpuCycle,R_CpuCycle,2
 
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
@@ -1813,20 +1845,23 @@ _SNCPU_Fetch16Fast:
 		lwr		R_Data,0(R_PC)
 		lwl		R_Data,3(R_PC)
 		addiu	R_PC,R_PC,2
+		andi	R_Data,R_Data,0xFFFF
+		srl		t0,R_Data,8
+		sb		t0,SNCPU_uOpenBus
 
 #if defined(SNCPU_ASM_VARIANT_PLAIN)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
 		jr		ra
-		andi	R_Data,R_Data,0xFFFF
+		nop
 #elif defined(SNCPU_ASM_VARIANT_SA1)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		jr		ra
-		andi	R_Data,R_Data,0xFFFF
+		nop
 #else
 		lw		t0,SP_SA1Exec
 		beq		t0,zr,_SNCPU_Fetch16HostTiming
@@ -1836,7 +1871,7 @@ _SNCPU_Fetch16Fast:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		jr		ra
-		andi	R_Data,R_Data,0xFFFF
+		nop
 #endif
 
 _SNCPU_Fetch16HostTiming:
@@ -1844,7 +1879,7 @@ _SNCPU_Fetch16HostTiming:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
 		jr		ra
-		andi	R_Data,R_Data,0xFFFF
+		nop
 
 _SNCPU_Fetch16Trap:
 		sw		ra, SP_RA0
@@ -1891,6 +1926,7 @@ _SNCPU_Fetch24Fast:
 		addiu	R_PCCount,R_PCCount,-3
 		blez	R_PCCount,_SNCPU_Fetch24Trap
 		nop
+		addiu	R_CpuCycle,R_CpuCycle,3
 
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
@@ -1899,6 +1935,8 @@ _SNCPU_Fetch24Fast:
 		addiu	R_PC,R_PC,3
 		sll		R_Data,R_Data,8
 		srl		R_Data,R_Data,8
+		srl		t0,R_Data,16
+		sb		t0,SNCPU_uOpenBus
 
 #if defined(SNCPU_ASM_VARIANT_PLAIN)
 		subu	R_Cycles,R_Cycles,R_PCCycles
@@ -2313,6 +2351,7 @@ _SNCPUExecute_Loop:
 
 		lwu		t1,SP_PCBank
 		subu	R_Addr,R_PC,t1
+		addiu	R_CpuCycle,R_CpuCycle,1
 		lbu		R_Data,0(R_PC)
 
 		blez	R_Cycles, _SNCPUExecute_Done
@@ -2722,6 +2761,7 @@ _SNCPU_SA1_MVN00_X0_Transfer:
 
 		/* Two internal clocks complete the normal 7-clock MVN byte:
 		   opcode + two operands + read + write + two internal. */
+		addiu	R_CpuCycle,R_CpuCycle,2
 		addiu	R_Cycles,R_Cycles,-(2 * SNCPU_CYCLE_FAST)
 		move	t0,R_A
 		addiu	R_A,R_A,-1
@@ -2775,6 +2815,7 @@ _SNCPU_SA1_MVN00_X0_VirtualFetch:
 		   immutable opcode/operands. This keeps SA-1/S-CPU contention timing. */
 		addiu	R_PC,R_PC,3
 		addiu	R_PCCount,R_PCCount,-3
+		addiu	R_CpuCycle,R_CpuCycle,3
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		subu	R_Cycles,R_Cycles,R_PCCycles

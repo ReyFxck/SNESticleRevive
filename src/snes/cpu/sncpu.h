@@ -84,16 +84,22 @@ typedef struct SNCpu_t
 	   timer IRQ.  This occupies the final byte of the original 4-byte signal
 	   word, so SNCpuT's PS2 assembly offsets remain unchanged. */
 	Uint8				uIrqPending;
-
-#if defined(SNCPU_TEST) && SNCPU_TEST
-	/* Host-only instruction-vector accounting.  Kept out of release builds so
-	   the hand-written PS2 assembly layout remains unchanged. */
-	Uint32				uTestCycles;
-#endif
+	/* Last value driven on the 5A22 CPU data bus.  Keep it immediately
+	   before Bank[] so sn65816.S can update it with one cheap byte store. */
+	Uint8				uOpenBus;
+	Uint8				uOpenBusPad[3];
+	/* Monotonic 5A22 machine-cycle counter. Unlike master clocks, this advances
+	   once per CPU bus/internal cycle and is used by timed internal hardware. */
+	Uint32				uCpuCycleCount;
 
 	SNCpuBankT			Bank[SNCPU_BANK_NUM];			// cpu memory banks
 
 } SNCpuT;
+
+/* Old host tests used this name for the same machine-cycle quantity. */
+#if defined(SNCPU_TEST) && SNCPU_TEST
+#define uTestCycles uCpuCycleCount
+#endif
 
 void SNCPUNew(SNCpuT *pCpu);
 void SNCPUDelete(SNCpuT *pCpu);

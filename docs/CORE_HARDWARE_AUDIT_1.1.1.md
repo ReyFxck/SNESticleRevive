@@ -104,21 +104,26 @@ deterministic runs of the full three-minute Trials of Mana intro, a later
 Trials gameplay state, the Top Gear attract/race path and a Super Mario RPG
 SA-1 boot path without an unhandled base-console access.
 
-These remaining items are deliberately recorded as approximations rather than
-being hidden behind per-game values:
+The follow-up MesenCE accuracy pass closes the former base-console timing
+approximations without per-game values:
 
-- the 65816 hot path does not yet retain one global CPU open-bus byte on every
-  memory access; trap pages return a deterministic approximation while the two
-  independent PPU buses are retained exactly;
-- 5A22 multiply/divide results are currently produced immediately instead of
-  after the hardware's 8/16-cycle delay;
-- auto-joy completion, active-display OAM/VRAM/CGRAM access restrictions and
-  several NMI/IRQ edge windows are scanline-level rather than master-cycle
-  exact;
-- native interlace and OBJ interlace presentation still need broader visual
-  verification;
-- special-chip completeness remains a separate audit. The base-register pass
-  does not claim that every DSP/GSU/CX4/S-DD1/S-RTC/OBC1 behavior is complete.
+- the 5A22 now retains a global CPU open-bus byte across ordinary accesses,
+  traps and DMA-visible bus activity, while PPU1/PPU2 retained buses remain
+  independent;
+- multiply/divide uses the hardware 8/16-cycle result latency, including
+  overlapping writes and early result reads;
+- NMI/IRQ status windows and auto-joy progression use master-clock timing;
+- active-display OAM/VRAM/CGRAM accesses use the live beam position and PPU
+  internal addresses/restrictions instead of unrestricted memory access;
+- MDMA/HDMA uses 8-master-clock synchronization, global/channel overheads,
+  per-byte timing, A/B-bus restrictions and the WRAM/$2180 conflict cases;
+- field cadence includes the non-interlace odd-field 1360-clock line 240, and
+  Mode 5/6 plus OBJ fetches now select field-correct vertical source rows.
+
+Native 448/478-line PS2 presentation is still separate from emulated PPU
+semantics because the current output carrier is 256 pixels high. Special-chip
+completeness also remains a separate audit; this pass does not claim that every
+DSP/GSU/CX4/S-DD1/S-RTC/OBC1 behavior is complete.
 
 ### Measured PS2 rendering change
 

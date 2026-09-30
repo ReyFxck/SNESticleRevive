@@ -24,6 +24,8 @@ public:
 	Uint32 uCGRAMCalls;
 	Uint32 uLastCGRAMAddress;
 	Uint16 uLastCGRAMData;
+	Uint16 uInternalOAMAddress;
+	Uint8 uInternalCGRAMAddress;
 
 	TestRender()
 	{
@@ -54,6 +56,14 @@ public:
 		uLastCGRAMAddress = uAddress;
 		uLastCGRAMData = uData;
 	}
+	Uint16 GetInternalOAMAddress(Uint32, Uint32)
+	{
+		return uInternalOAMAddress;
+	}
+	Uint8 GetInternalCGRAMAddress(Uint32, Uint32)
+	{
+		return uInternalCGRAMAddress;
+	}
 	void ClearStats()
 	{
 		uSingleCalls = 0;
@@ -64,6 +74,8 @@ public:
 		uCGRAMCalls = 0;
 		uLastCGRAMAddress = 0;
 		uLastCGRAMData = 0;
+		uInternalOAMAddress = 0xFFFF;
+		uInternalCGRAMAddress = 0;
 	}
 };
 
@@ -196,6 +208,72 @@ static void CheckScrollAndMode7Latches()
 	Check("BG1 V has independent latch", ppu.GetRegs()->bg1vofs.w, 0x0134);
 }
 
+static void CheckActiveDisplayMemoryPorts()
+{
+	SnesPPU ppu;
+	TestRender render;
+	Uint8 *pOAM;
+
+	ppu.SetPPURender(&render);
+	render.SetPPU(&ppu);
+	ppu.Reset();
+	ppu.BeginFrame();
+	pOAM = (Uint8 *)ppu.GetOAM();
+
+	/* VRAM writes are blocked during visible display, but the selected data
+	   port still performs its documented VMADDR increment. */
+	ppu.Write8(0x2115, 0x80);
+	ppu.Write8(0x2116, 0x10);
+	ppu.Write8(0x2117, 0x00);
+	ppu.WriteTimed(0x2119, 0xAB, 1, 500);
+	Check("active VRAM write blocked", ppu.GetVramPtr(0x10)[0], 0x0000);
+	Check("active VRAM write increments", ppu.GetRegs()->vmaddr.w, 0x11);
+
+	/* VMADDR writes during rendering cannot prefetch real VRAM and therefore
+	   seed the read buffer with zero. */
+	ppu.GetVramPtr(0x20)[0] = 0xBEEF;
+	ppu.WriteTimed(0x2116, 0x20, 1, 500);
+	ppu.WriteTimed(0x2117, 0x00, 1, 500);
+	Check("active VRAM prefetch blocked", ppu.GetRegs()->vmreadlatch.w, 0x0000);
+
+	/* Forced blank restores ordinary VRAM access immediately. */
+	ppu.Write8(0x2100, 0x80);
+	ppu.WriteTimed(0x2118, 0x34, 1, 500);
+	Check("forced blank VRAM write", ppu.GetVramPtr(0x20)[0] & 0xFF, 0x34);
+	ppu.Write8(0x2100, 0x00);
+
+	/* During the inaccessible CGRAM window, the palette bus address comes
+	   from the renderer rather than CGADD. The CPU phase/address still moves. */
+	render.uInternalCGRAMAddress = 5;
+	ppu.Write8(0x2121, 0x02);
+	ppu.WriteTimed(0x2122, 0x78, 1, 500);
+	ppu.WriteTimed(0x2122, 0x12, 1, 500);
+	Check("active CGRAM redirected value", ppu.GetCG(5), 0x1278);
+	Check("active CGRAM requested address untouched", ppu.GetCG(2), 0x0000);
+	Check("active CGRAM address advances", ppu.GetRegs()->cgadd.w, 6);
+
+	/* H<88 is an allowed CGRAM access window and therefore uses CGADD. */
+	ppu.Write8(0x2121, 0x03);
+	ppu.WriteTimed(0x2122, 0x56, 1, 40);
+	ppu.WriteTimed(0x2122, 0x34, 1, 40);
+	Check("early CGRAM window uses CGADD", ppu.GetCG(3), 0x3456);
+
+	/* In active display OAMDATA uses the sprite engine's OAM address. An even
+	   low-table address latches the byte and mirrors it into high OAM. */
+	render.uInternalOAMAddress = 0x10;
+	ppu.Write8(0x2102, 0x00);
+	ppu.Write8(0x2103, 0x00);
+	ppu.WriteTimed(0x2104, 0xA5, 1, 1100);
+	Check("active OAM high-table redirect", pOAM[0x201], 0xA5);
+	Check("active OAM internal address increments", ppu.GetRegs()->oamaddr.w, 1);
+
+	pOAM[0x10] = 0x5C;
+	ppu.Write8(0x2102, 0x00);
+	Check("active OAM read redirected",
+	      ppu.ReadTimed(0x2138, 0, TRUE, 1, 1100), 0x5C);
+	Check("active OAM read internal increment", ppu.GetRegs()->oamaddr.w, 1);
+}
+
 static void CheckMode4VRAMAddressDataDMA()
 {
 	SnesPPU ppu;
@@ -285,6 +363,7 @@ int main()
 
 	CheckVRAMBlockEquivalence();
 	CheckScrollAndMode7Latches();
+	CheckActiveDisplayMemoryPorts();
 	CheckMode4VRAMAddressDataDMA();
 	CheckReadRegisterSemantics();
 

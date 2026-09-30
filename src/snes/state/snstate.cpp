@@ -107,6 +107,9 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_Cpu.uSignal    = pState->CPU.uSignal;
 	m_Cpu.uNmiDmaDelay = 0;
 	m_Cpu.uIrqPending = 0;
+	/* Legacy states have no CPU data-bus or 5A22 machine-cycle timestamp. */
+	m_Cpu.uOpenBus = 0;
+	m_Cpu.uCpuCycleCount = 0;
 
 	m_Spc.Regs = pState->SPC.Regs;
 	m_Spc.Cycles = pState->SPC.Cycles;
@@ -168,6 +171,8 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	/* Per-scanline SA-1 synchronization is transient scheduler state.  A
 	   restored frame begins a fresh line slice. */
 	m_nSA1LineClock = 0;
+	m_uNmiFlagSetClock = GetSCPUMasterClock();
+	m_uIrqFlagSetClock = GetSCPUMasterClock();
 
 	return TRUE;
 }
@@ -181,6 +186,15 @@ void SnesIO::RestoreState(struct SNStateIOT *pState)
 {
 	m_Input = pState->Input;
 	m_Regs = pState->Regs;
+	/* The existing state format predates in-flight ALU timing. Preserve its
+	   binary size: restored result/input latches remain, pending work stops. */
+	ResetALUTiming(0);
+	m_uAutoReadClockStart = 0;
+	m_uAutoReadNextClock = 0;
+	m_uAutoReadPort1Value = 0;
+	m_uAutoReadPort2Value = 0;
+	m_bAutoReadActive = FALSE;
+	m_bAutoReadDisabled = TRUE;
 }
 
 void SNSpcIO::SaveState(struct SNStateSPCIOT *pState)
@@ -211,6 +225,11 @@ void SnesDMAC::RestoreState(struct SNStateDMACT *pState)
 	m_HDMADoTransfer = pState->m_HDMADoTransfer;
 	m_MDMAEnable = pState->m_MDMAEnable;
 	memcpy(m_Channels, pState->m_Channels, sizeof(m_Channels));
+	/* Legacy states do not serialize sub-cycle DMA ownership. Resume from a
+	   clean boundary and let an enabled MDMA command reacquire the bus. */
+	m_MDMAStartedMask = 0;
+	m_bDMATimingActive = FALSE;
+	m_uDMAClockCounter = 0;
 }
 
 void SnesPPU::SaveState(struct SNStatePPUT *pState)

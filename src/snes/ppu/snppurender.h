@@ -121,6 +121,41 @@ _INLINE Int32 _SnesPPUOBJSourceColumn(Int32 iTileX, Uint8 uWidth,
 	return bHFlip ? ((Int32)(uWidth >> 3) - 1 - iTileX) : iTileX;
 }
 
+_INLINE Uint8 _SnesPPUOBJVisibleHeight(Uint8 uHeight, Bool bObjInterlace)
+{
+	return bObjInterlace ? (Uint8)(uHeight >> 1) : uHeight;
+}
+
+_INLINE Uint32 _SnesPPUOBJLineY(Int32 iLine, Uint8 uPosY, Uint8 uHeight,
+	Uint8 uVXOR, Bool bObjInterlace, Bool bOddField)
+{
+	Uint32 uY = (Uint32)(iLine - (Int32)uPosY) & 0xFFu;
+	if (bObjInterlace)
+		uY = (uY << 1) | (bOddField ? 1u : 0u);
+	uY ^= uVXOR;
+	return uY & (uHeight - 1u);
+}
+
+_INLINE Int32 _SnesPPUInterlaceFetchLine(Int32 iLine, Uint8 uBGMode,
+	Bool bScreenInterlace, Bool bOddField)
+{
+	return (bScreenInterlace && (uBGMode == 5 || uBGMode == 6))
+		? ((iLine << 1) | (bOddField ? 1 : 0))
+		: iLine;
+}
+
+_INLINE Int32 _SnesPPUVerticalFetchLine(Int32 iLine, Uint8 uMosaic,
+	Uint8 uBGMode, Bool bScreenInterlace, Bool bOddField)
+{
+	if (uMosaic > 0)
+	{
+		const Int32 nBlock = (Int32)uMosaic + 1;
+		iLine = (iLine / nBlock) * nBlock;
+	}
+	return _SnesPPUInterlaceFetchLine(
+		iLine, uBGMode, bScreenInterlace, bOddField);
+}
+
 struct SnesRenderTileT
 {
 	Uint16	uTile;		// tile index
@@ -204,6 +239,7 @@ private:
     Uint8           m_ObjLine[SNPPU_MAXLINE][SNPPU_MAXOBJ];
 	Uint8           m_ObjRangeOverLine[SNPPU_MAXLINE];
 	Uint8           m_ObjTimeOverLine[SNPPU_MAXLINE];
+	Int32           m_iLastRenderedLine;
 
     ISNPPUBlend    *m_pBlend;
 
@@ -238,6 +274,8 @@ public:
 	void UpdateOAM();
 	void UpdateCGRAM(Uint32 uAddr, Uint16 uData);
 	void InvalidateHiresPalette();
+	Uint16 GetInternalOAMAddress(Uint32 uLine, Uint32 uHClock);
+	Uint8 GetInternalCGRAMAddress(Uint32 uLine, Uint32 uHClock);
 };
 
 void SnesPPUInvalidateOutputCache();

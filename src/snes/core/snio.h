@@ -12,6 +12,7 @@
 #include "emuinput.h"
 #include "snesreg.h"
 #include "snspctimer.h"
+#include "sncpu.h"
 
 #define SNESIO_JOY_R		0x0010
 #define SNESIO_JOY_L		0x0020
@@ -60,8 +61,26 @@ class SnesIO
 {
 	Emu::SysInputT	m_Input;
 
+	/* 5A22 multiply/divide unit. The result registers live in m_Regs; these
+	   fields are the in-flight shift/add state MesenCE models cycle-by-cycle. */
+	Uint8			m_uMultCounter;
+	Uint8			m_uDivCounter;
+	Uint16			m_uAluPad;
+	Uint32			m_uAluShift;
+	Uint32			m_uAluPrevCpuCycle;
+
+	/* Auto-joypad sequencer. Clocks are absolute S-CPU master clocks; unsigned
+	   subtraction keeps comparisons correct across 32-bit wrap. */
+	Uint32			m_uAutoReadClockStart;
+	Uint32			m_uAutoReadNextClock;
+	Uint8			m_uAutoReadPort1Value;
+	Uint8			m_uAutoReadPort2Value;
+	Bool			m_bAutoReadActive;
+	Bool			m_bAutoReadDisabled;
+
 	Uint8			ReadSerialPad(Uint32 uPad);
 	void			ShiftSerialPad(Uint32 uPad);
+	void			RunALU(SNCpuT *pCpu, Bool bReadPhase);
 
 public:
 	SnesIORegsT		m_Regs;
@@ -78,6 +97,15 @@ public:
 	Uint8	ReadSerial0();
 	Uint8	ReadSerial1();
 	void	UpdateJoyPads();
+
+	void	BeginAutoJoypad(Uint32 uMasterClock);
+	void	ProcessAutoJoypad(Uint32 uMasterClock);
+	void	PrepareAutoJoypadEnableChange(Uint32 uMasterClock, Bool bEnable);
+	Bool	IsAutoJoypadActive() const { return m_bAutoReadActive; }
+
+	Uint8	ReadALU(SNCpuT *pCpu, Uint32 uAddr);
+	void	WriteALU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
+	void	ResetALUTiming(Uint32 uCpuCycle = 0);
 };
 
 #endif

@@ -223,6 +223,16 @@ public:
 	void                    WriteVMDATALH(Uint8 uDataL, Uint8 uDataH);
 	void                    WriteVMDATABlock(const Uint8 *pData, Int32 nBytes);
 	void                    Write8(Uint32 uAddr, Uint8 uData);
+	/* CPU/DMA timed B-bus accessors. These preserve port-address side effects
+	   even when active display redirects or blocks the underlying memory. */
+	void                    WriteTimed(Uint32 uAddr, Uint8 uData,
+	                                   Uint32 uLine, Uint32 uHClock);
+	Uint8                   ReadTimed(Uint32 uAddr, Uint8 uCpuOpenBus,
+	                                  Bool bCounterLatchEnabled,
+	                                  Uint32 uLine, Uint32 uHClock);
+	Bool                    CanAccessVRAM(Uint32 uLine) const;
+	Bool                    CanAccessCGRAM(Uint32 uLine, Uint32 uHClock) const;
+	Bool                    IsActiveDisplay(Uint32 uLine) const;
 	/* Read-side PPU bus state is independent from the CPU data bus.  The
 	   caller supplies the current CPU open-bus value for write-only ports and
 	   tells us whether the external H/V latch line ($4201.7) is high. */
@@ -276,6 +286,16 @@ private:
 
     void                    UpdateMatMul();
 	void                    UpdateOAMPriority();
+	Uint16                  ResolveActiveOAMAddress(Uint32 uLine, Uint32 uHClock);
+	void                    WriteVMDATALTimed(Uint8 uData, Bool bAllow);
+	void                    WriteVMDATAHTimed(Uint8 uData, Bool bAllow);
+	Uint8                   ReadVMDATALTimed(Bool bAllow);
+	Uint8                   ReadVMDATAHTimed(Bool bAllow);
+	void                    WriteCGDATATimed(Uint8 uData, Uint32 uAddress);
+	Uint8                   ReadCGDATATimed(Uint32 uAddress);
+	void                    WriteOAMDATATimed(Uint8 uData, Uint32 uAddress,
+	                                         Bool bActive);
+	Uint8                   ReadOAMDATATimed(Uint32 uAddress);
 };
 
 #endif

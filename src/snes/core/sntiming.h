@@ -10,10 +10,19 @@
 #define _SNTIMING_H
 
 #define SNES_CYCLESPERLINE (1364)
+#define SNES_SHORTLINE_CYCLES (1360)
+#define SNES_VISIBLE_CYCLES (1024)
+#define SNES_SHORTLINE_INDEX (240)
 #define SNES_VBLANK_START_LINE (225)
 
+/* In non-interlace mode line 240 of the odd field is four master clocks
+   shorter. Interlace uses the normal 1364-clock line on both fields. */
+#define SNES_LINE_MASTER_CYCLES(_line, _field, _interlace) \
+	((!(_interlace) && (_field) && (_line) == SNES_SHORTLINE_INDEX) \
+		? SNES_SHORTLINE_CYCLES : SNES_CYCLESPERLINE)
+
 #define SNES_LINECYCLEDELAY (40)
-#define SNES_HBLANKCYCLES  (SNES_CYCLESPERLINE - 1024)
+#define SNES_HBLANKCYCLES  (SNES_CYCLESPERLINE - SNES_VISIBLE_CYCLES)
 
 /* The S-CPU's H/V timer compare is not visible at H=HTIME*4 immediately.
    The counter reset/compare circuit and IRQ pipeline add 14 master clocks

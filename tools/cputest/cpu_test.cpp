@@ -24,6 +24,7 @@ extern "C" {
 static Uint32 g_TrapReadAddress;
 static Uint32 g_TrapWriteAddress;
 static Uint8 g_TrapWriteData;
+static Uint8 g_TrapObservedBus;
 
 extern "C" Uint8 SNCPU_TRAPFUNC TestTrapRead(SNCpuT *, Uint32 address)
 {
@@ -36,6 +37,62 @@ extern "C" void SNCPU_TRAPFUNC TestTrapWrite(SNCpuT *, Uint32 address,
 {
 	g_TrapWriteAddress = address;
 	g_TrapWriteData = data;
+}
+
+extern "C" Uint8 SNCPU_TRAPFUNC TestOpenBusRead(SNCpuT *cpu, Uint32)
+{
+	g_TrapObservedBus = cpu->uOpenBus;
+	return cpu->uOpenBus;
+}
+
+extern "C" void SNCPU_TRAPFUNC TestOpenBusWrite(SNCpuT *cpu, Uint32, Uint8)
+{
+	g_TrapObservedBus = cpu->uOpenBus;
+}
+
+static bool CheckOpenBus(SNCpuT *cpu, Uint8 *memory)
+{
+	bool ok = true;
+	Uint8 block[3];
+
+	memory[0x1000] = 0x5A;
+	memory[0x1001] = 0xC7;
+	memory[0x1002] = 0x3D;
+	cpu->uOpenBus = 0;
+	ok &= SNCPURead8(cpu, 0x1000) == 0x5A && cpu->uOpenBus == 0x5A;
+
+	SNCPUWrite8(cpu, 0x1000, 0xA6);
+	ok &= memory[0x1000] == 0xA6 && cpu->uOpenBus == 0xA6;
+
+	SNCPUReadMem(cpu, 0x1000, block, sizeof(block));
+	ok &= block[0] == 0xA6 && block[1] == 0xC7 && block[2] == 0x3D;
+	ok &= cpu->uOpenBus == 0x3D;
+
+	/* A trapped open-bus read must observe the byte from the previous bus
+	   cycle; the generic reader latches the device response only afterwards. */
+	SNCPUSetTrap(cpu, 0x2000, SNCPU_BANK_SIZE, TestOpenBusRead, TestOpenBusWrite);
+	cpu->uOpenBus = 0x6B;
+	g_TrapObservedBus = 0;
+	ok &= SNCPURead8(cpu, 0x2345) == 0x6B;
+	ok &= g_TrapObservedBus == 0x6B && cpu->uOpenBus == 0x6B;
+
+	/* Writes drive the new byte before the addressed device handles them. */
+	g_TrapObservedBus = 0;
+	SNCPUWrite8(cpu, 0x2345, 0x9C);
+	ok &= g_TrapObservedBus == 0x9C && cpu->uOpenBus == 0x9C;
+
+	/* A normal trapped device response becomes the next open-bus value. */
+	SNCPUSetTrap(cpu, 0x2000, SNCPU_BANK_SIZE, TestTrapRead, TestTrapWrite);
+	cpu->uOpenBus = 0x11;
+	ok &= SNCPURead8(cpu, 0x2345) == 0xA5 && cpu->uOpenBus == 0xA5;
+
+	/* Restore the test RAM bank for the instruction suite. */
+	SNCPUSetBank(cpu, 0x2000, SNCPU_BANK_SIZE, memory + 0x2000, TRUE);
+	SNCPUSetMemSpeed(cpu, 0x2000, SNCPU_BANK_SIZE, SNCPU_CYCLE_FAST);
+	SNCPUMirror24BitBus(cpu);
+
+	std::printf("CPU open bus: %s\n", ok ? "PASS" : "FAIL");
+	return ok;
 }
 
 static bool Check24BitBusWrap(SNCpuT *cpu, Uint8 *memory)
@@ -387,7 +444,7 @@ int main(int argc, char **argv)
 	SNCPUSetMemSpeed(&cpu, 0, SNCPU_MEM_SIZE, SNCPU_CYCLE_FAST);
 	SNCPUMirror24BitBus(&cpu);
 	SNCPUSetExecuteFunc(SNCPUExecute_C);
-	if (!Check24BitBusWrap(&cpu, memory))
+	if (!CheckOpenBus(&cpu, memory) || !Check24BitBusWrap(&cpu, memory))
 	{
 		std::free(memory);
 		return 1;

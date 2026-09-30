@@ -140,21 +140,17 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 
 // i/o macros
 
-#if defined(SNCPU_TEST) && SNCPU_TEST
-#define SNCPU_TESTCYCLES(_nCycles) pCpu->uTestCycles += (_nCycles);
-#else
-#define SNCPU_TESTCYCLES(_nCycles)
-#endif
+#define SNCPU_COUNTCYCLES(_nCycles) do { pCpu->uCpuCycleCount += (_nCycles); } while (0)
 
 #define SNCPU_SUBCYCLES(_nCycles) \
 	do { \
 		pCpu->Cycles-=(_nCycles)*SNCPU_CYCLE_FAST; \
-		SNCPU_TESTCYCLES(_nCycles) \
+		SNCPU_COUNTCYCLES(_nCycles); \
 	} while (0);
 #define SNCPU_SUBCYCLESSLOW(_nCycles) \
 	do { \
 		pCpu->Cycles-=(_nCycles)*SNCPU_CYCLE_SLOW; \
-		SNCPU_TESTCYCLES(_nCycles) \
+		SNCPU_COUNTCYCLES(_nCycles); \
 	} while (0);
 #define SNCPU_SUBMEMCYCLES(_Addr, _nBytes) \
 	do { \
@@ -162,7 +158,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 		Uint32 _uPenalty=(pCpu==_SNCPU_pSA1TimingCpu)?SNCPUSA1BusPenalty(pCpu,(_Addr),_uMemCycles):0; \
 		pCpu->Cycles-=_uMemCycles*(_nBytes)+_uPenalty; \
 		SNCPUSA1BusRecord(pCpu,(_Addr),_uMemCycles,(_nBytes)); \
-		SNCPU_TESTCYCLES(_nBytes) \
+		SNCPU_COUNTCYCLES(_nBytes); \
 	} while (0);
 
 #define SNCPU_INC_PC(_Bytes) \
@@ -303,7 +299,7 @@ static void _SNCPUSA1TakenBranch(SNCpuT *pCpu, Uint32 uPC)
 		Uint32 _dpCycles = (R_DPMASK >> 16) & 0xFF;	\
 		pCpu->Cycles -= _dpCycles;					\
 		if (_dpCycles) {							\
-			SNCPU_TESTCYCLES(1)					\
+			SNCPU_COUNTCYCLES(1);					\
 		}									\
 	} while (0);
 
@@ -545,18 +541,20 @@ static __inline Uint8 __SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
 	if (pBankMem)
-	{
-		return pBankMem[Addr];
-	}
+		uData = pBankMem[Addr];
 	else
-	{
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
-	}
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
+
+	/* The trap sees the previously-driven byte; the new read value reaches
+	   the CPU data bus only after the device has answered. */
+	pCpu->uOpenBus = uData;
+	return uData;
 }
 
 static Uint8 _SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
@@ -619,19 +617,18 @@ static __inline Uint8 __SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
 {
 	Uint32 iBank;
 	Uint8 *pBankMem;
+	Uint8 uData;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
 	if (pBankMem)
-	{
-		return pBankMem[Addr];
-	}
+		uData = pBankMem[Addr];
 	else
-	{
-		return pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
+		uData = pCpu->Bank[iBank].pReadTrapFunc(pCpu, Addr);
 
-	}
+	pCpu->uOpenBus = uData;
+	return uData;
 }
 
 static Uint8 _SNCPUFetch8(SNCpuT *pCpu, Uint32 Addr)
@@ -673,6 +670,8 @@ static __inline void  __SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 	Uint8 *pBankMem;
 
 	iBank = Addr >> SNCPU_BANK_SHIFT;
+	/* A write drives the CPU data bus before the addressed device reacts. */
+	pCpu->uOpenBus = Data;
 
 	if (pCpu->Bank[iBank].bRAM)
 	{

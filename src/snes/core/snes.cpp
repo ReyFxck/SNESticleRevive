@@ -523,6 +523,30 @@ void SnesSystem::RefreshSCPUIRQ()
 	SNCPUSignalIRQ(&m_Cpu, bPending ? 1 : 0);
 }
 
+Uint32 SnesSystem::GetSCPUMasterClock() const
+{
+	return (Uint32)SNCPUGetCounter((SNCpuT *)&m_Cpu, SNCPU_COUNTER_TOTAL);
+}
+
+Uint32 SnesSystem::GetSCPULineClock() const
+{
+	Int32 nClock = SNCPUGetCounter((SNCpuT *)&m_Cpu, SNCPU_COUNTER_LINE);
+	if (nClock < 0)
+		return 0;
+	if (nClock >= SNES_CYCLESPERLINE)
+		return SNES_CYCLESPERLINE - 1;
+	return (Uint32)nClock;
+}
+
+void SnesSystem::AssertTimerIRQ()
+{
+	if (!(m_IO.m_Regs.timeup & 0x80))
+		m_uIrqFlagSetClock = GetSCPUMasterClock();
+	m_IO.m_Regs.timeup |= 0x80;
+	SNCPUSetIRQDelay(&m_Cpu, 0);
+	RefreshSCPUIRQ();
+}
+
 inline void SnesSystem::SyncPPU()
 {
 #if SNDBG_LOG
@@ -638,11 +662,11 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 				(Uint16)pSnes->m_uLine);
 		}
 
-		/* Full CPU open-bus tracking is kept out of the 65816 hot path for
-		   now. $21 is the existing deterministic approximation used by this
-		   trap page; PPU1/PPU2 retained-bus bits are modeled exactly. */
-		Uint8 uData = pSnes->m_PPU.Read8(uAddr, (Uint8)(uAddr >> 8),
-		                                    bCounterLatchEnabled);
+		/* Write-only PPU ports expose the byte currently retained by the 5A22
+		   CPU data bus. PPU1/PPU2 keep their own independent retained buses. */
+		Uint8 uData = pSnes->m_PPU.ReadTimed(
+			uAddr, pCpu->uOpenBus, bCounterLatchEnabled,
+			pSnes->m_uLine, pSnes->GetSCPULineClock());
 #if SNESTICLE_ROMLAB && ROMLAB_TRACE_HANDLED_IO
 		static Uint32 s_uTracePPUReads = 0;
 		if (s_uTracePPUReads++ < 512)
@@ -668,17 +692,15 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 
 	default:
 		/* $2181-$21FF has no readable B-bus register.  The WRAM address
-		   ports and the undecoded tail both expose CPU open bus; keep the
-		   trap page's deterministic approximation instead of diagnosing
-		   valid software as missing MMIO. */
+		   ports and the undecoded tail both expose the retained CPU bus. */
 		if (uAddr >= 0x2181 && uAddr <= 0x21FF)
-			return (Uint8)(uAddr >> 8);
+			return pCpu->uOpenBus;
 
 		/* The remaining $2000-$3FFF area is genuinely open bus on a base
 		   console.  Cartridge devices which own part of it (SA-1, S-RTC and
 		   SuperFX above, or their dedicated map handlers) must be dispatched
 		   before this fallback. */
-		return (Uint8)(uAddr >> 8);
+		return pCpu->uOpenBus;
 	}
 }
 
@@ -765,23 +787,29 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	if (uAddr >= 0x2100 && uAddr < 0x2140)
 	{
-		/* Only the decoded $2100-$213F B-bus window reaches the PPU.
-		   $2000-$20FF is open bus on the base console; putting those writes
-		   into the raster queue wasted EE time and could force a false sync. */
-		// enqueue write to ppu, if it fails (full) then force a sync
-		#if SNPPU_WRITEQUEUE
-		while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
+		/* Memory data ports need the live H/V position. Flush older queued
+		   control/address writes, then perform this bus transaction now so
+		   active-display restrictions are decided at the original access. */
+		if (uAddr == 0x2104 || uAddr == 0x2116 || uAddr == 0x2117 ||
+		    uAddr == 0x2118 || uAddr == 0x2119 || uAddr == 0x2122)
 		{
-			// sync ppu
+#if SNPPU_WRITEQUEUE
 			pSnes->SyncPPU();
+#endif
+			pSnes->m_PPU.WriteTimed(
+				uAddr, uData, pSnes->m_uLine, pSnes->GetSCPULineClock());
 		}
-		#else
-		// sync ppu before writing to it
-		pSnes->SyncPPU();
-
-		// ppu write
-		pSnes->m_PPU.Write8(uAddr, uData);
-		#endif
+		else
+		{
+			/* Other decoded PPU writes keep the low-cost scanline queue. */
+#if SNPPU_WRITEQUEUE
+			while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
+				pSnes->SyncPPU();
+#else
+			pSnes->SyncPPU();
+			pSnes->m_PPU.Write8(uAddr, uData);
+#endif
+		}
 	} else
 	{
 		switch(uAddr)
@@ -846,7 +874,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
 	{
 		// read from DMA controller
 		return pSnes->m_DMAC.Read8((uAddr>>4) & 7, uAddr & 0xF,
-		                              (Uint8)(uAddr >> 8));
+		                              pCpu->uOpenBus);
 	} else
 	if (pSnes->m_bSDD1 && uAddr >= 0x4800 && uAddr <= 0x4807)
 	{
@@ -869,82 +897,96 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read4000(SNCpuT *pCpu, Uint32 uAddr)
     // 42XX
     case 0x4210:	// RDNMI
         {
-            Uint8 uData = pIO->m_Regs.rdnmi;
+			Uint32 uHClock = pSnes->GetSCPULineClock();
+			Uint32 uNmiLine = pSnes->m_PPU.GetFrameVisibleLines() + 1u;
+            Uint8 uData = (Uint8)((pIO->m_Regs.rdnmi & 0x82) |
+			                      (pCpu->uOpenBus & 0x70));
 
-            // clear RDNMI on read
-            pIO->m_Regs.rdnmi &= ~0x80;
-
-            // set new nmi signal
-            SNCPUSignalNMI(pCpu, pIO->m_Regs.rdnmi & pIO->m_Regs.nmitimen & 0x80);
+			/* The 5A22 forces RDNMI high from H=2 through H=5 on the NMI
+			   scanline. A read in that four-clock window observes bit 7 but
+			   cannot clear it; clearing becomes possible at H=6. */
+			if ((pIO->m_Regs.rdnmi & 0x80) &&
+			    (pSnes->m_uLine != uNmiLine || uHClock >= 6u))
+			{
+				pIO->m_Regs.rdnmi &= (Uint8)~0x80;
+				SNCPUSignalNMI(pCpu,
+					pIO->m_Regs.rdnmi & pIO->m_Regs.nmitimen & 0x80);
+			}
             return uData;
         }
 
     case 0x4211:	// TIMEUP
         {
-            Uint8 uData = pIO->m_Regs.timeup;
-            pIO->m_Regs.timeup &= ~0x80;
-            pSnes->RefreshSCPUIRQ();
+			Uint32 uNow = pSnes->GetSCPUMasterClock();
+            Uint8 uData = (Uint8)((pIO->m_Regs.timeup & 0x80) |
+			                      (pCpu->uOpenBus & 0x7F));
+			/* TIMEUP is likewise forced high for four master clocks after
+			   assertion. Reads during that window do not clear it. */
+			if ((pIO->m_Regs.timeup & 0x80) &&
+			    (Uint32)(uNow - pSnes->m_uIrqFlagSetClock) >= 4u)
+			{
+				pIO->m_Regs.timeup &= (Uint8)~0x80;
+				pSnes->RefreshSCPUIRQ();
+			}
             return uData;
         }
     case 0x4212:	// HVBJOY
         {
-            /* Aero the Acro-Bat 2 polls VBlank around the frame wrap.
-               Line 0 is not part of VBlank even though the PPU does not draw
-               it.  Derive bit 7 from the live vertical counter so a stale
-               latched status (for example after restoring state) cannot keep
-               the game waiting forever. */
-            Uint8 uData = pIO->m_Regs.hvbjoy & (Uint8)~0x80;
-            if (SNES_LINE_IN_VBLANK(pSnes->m_uLine))
-                uData |= 0x80;
-            return uData;
+			Uint32 uMaster = pSnes->GetSCPUMasterClock();
+			Uint32 uHClock = pSnes->GetSCPULineClock();
+			Uint32 uNmiLine = pSnes->m_PPU.GetFrameVisibleLines() + 1u;
+			Uint8 uData = (Uint8)(pCpu->uOpenBus & 0x3E);
+			pIO->ProcessAutoJoypad(uMaster);
+			if (pSnes->m_uLine >= uNmiLine)
+				uData |= 0x80;
+			/* CPU HBLANK status is low from H=4 through H=1096 inclusive. */
+			if (uHClock < 4u || uHClock > 1096u)
+				uData |= 0x40;
+			if (pIO->IsAutoJoypadActive())
+				uData |= 0x01;
+			return uData;
         }
 
     case 0x4213:	// RDIO
         return pIO->m_Regs.wrio;
 
 	case 0x4214:	// RDDIVL
-		return pIO->m_Regs.rddiv.b.l;
-
 	case 0x4215:	// RDDIVH
-		return pIO->m_Regs.rddiv.b.h;
-
 	case 0x4216:	// RDMPYL
-		return pIO->m_Regs.rdmpy.b.l;
-
 	case 0x4217:	// RDMPYH
-		return pIO->m_Regs.rdmpy.b.h;
+		return pIO->ReadALU(pCpu, uAddr);
 
 	case 0x4218:	// JOY1L
-		return pIO->m_Regs.joy1.b.l;
 	case 0x4219:	// JOY1H
-		return pIO->m_Regs.joy1.b.h;
-
 	case 0x421A:	// JOY2L
-		return pIO->m_Regs.joy2.b.l;
 	case 0x421B:	// JOY2H
-		return pIO->m_Regs.joy2.b.h;
-
 	case 0x421C:	// JOY3L
-		return pIO->m_Regs.joy3.b.l;
 	case 0x421D:	// JOY3H
-		return pIO->m_Regs.joy3.b.h;
-
 	case 0x421E:	// JOY4L
-		return pIO->m_Regs.joy4.b.l;
 	case 0x421F:	// JOY4H
-		return pIO->m_Regs.joy4.b.h;
+		pIO->ProcessAutoJoypad(pSnes->GetSCPUMasterClock());
+		switch (uAddr)
+		{
+		case 0x4218: return pIO->m_Regs.joy1.b.l;
+		case 0x4219: return pIO->m_Regs.joy1.b.h;
+		case 0x421A: return pIO->m_Regs.joy2.b.l;
+		case 0x421B: return pIO->m_Regs.joy2.b.h;
+		case 0x421C: return pIO->m_Regs.joy3.b.l;
+		case 0x421D: return pIO->m_Regs.joy3.b.h;
+		case 0x421E: return pIO->m_Regs.joy4.b.l;
+		default:     return pIO->m_Regs.joy4.b.h;
+		}
 
 	default:
 		break;
 	}
-	/* $4200-$420F are decoded write-only CPU registers. Reads return the
-	   CPU data bus; keep the existing trap-page approximation without
-	   falsely classifying them as missing addresses. */
+	/* $4200-$420F are decoded write-only CPU registers. Reads expose the
+	   byte retained on the CPU data bus. */
 	if (uAddr >= 0x4200 && uAddr <= 0x420F)
-		return (Uint8)(uAddr >> 8);
+		return pCpu->uOpenBus;
 	/* Undecoded CPU-I/O and expansion locations in this trap page expose
-	   open bus. Cartridge devices (such as S-DD1) are dispatched above. */
-	return uAddr >> 8;
+	   the same retained bus. Cartridge devices (such as S-DD1) are above. */
+	return pCpu->uOpenBus;
 }
 
 #if SNES_DEBUG
@@ -996,6 +1038,8 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
         case 0x4200:	// nmitimen
         {
 			Uint8 uOldNmitimen = pIO->m_Regs.nmitimen;
+			pIO->PrepareAutoJoypadEnableChange(
+				pSnes->GetSCPUMasterClock(), (uData & 0x01) ? TRUE : FALSE);
             pIO->m_Regs.nmitimen = uData;
 
             // unconfirmed:
@@ -1031,6 +1075,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		}
 
         case 0x4201:	// wrio (programmable i/o port)
+			pIO->ProcessAutoJoypad(pSnes->GetSCPUMasterClock());
 			/* A high-to-low transition on OUT1 drives the external PPU counter
 			   latch, the same latch exposed by a $2137 read while OUT1 is high. */
 			if ((pIO->m_Regs.wrio & 0x80) && !(uData & 0x80))
@@ -1043,34 +1088,12 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
             pIO->m_Regs.wrio = uData;
             break;
 
-		case 0x4202:	// wrmpya (multiplicand-a)
-			pIO->m_Regs.wrmpya = uData;
-			break;
-		case 0x4203:	// wrmpyb (multiplicand-b)
-			pIO->m_Regs.wrmpyb = uData;
-
-			// multiply
-			pIO->m_Regs.rdmpy.w = pIO->m_Regs.wrmpya * pIO->m_Regs.wrmpyb;
-			break;
-
-		case 0x4204:	// wrdivl (multiplier-c low)
-			pIO->m_Regs.wrdiv.b.l = uData;
-			break;
-		case 0x4205:	// wrdivh (multiplier-c high)
-			pIO->m_Regs.wrdiv.b.h = uData;
-			break;
-		case 0x4206:	// wrdivb (divisor-b)
-			pIO->m_Regs.wrdivb  = uData;
-			if (uData!=0)
-			{
-				pIO->m_Regs.rddiv.w = pIO->m_Regs.wrdiv.w / pIO->m_Regs.wrdivb;
-				pIO->m_Regs.rdmpy.w = pIO->m_Regs.wrdiv.w % pIO->m_Regs.wrdivb;
-			} else
-			{
-                // divide by zero
-				pIO->m_Regs.rddiv.w = 0xFFFF;
-				pIO->m_Regs.rdmpy.w = pIO->m_Regs.wrdiv.w;
-			}
+		case 0x4202:	// WRMPYA
+		case 0x4203:	// WRMPYB / start multiply
+		case 0x4204:	// WRDIVL
+		case 0x4205:	// WRDIVH
+		case 0x4206:	// WRDIVB / start divide
+			pIO->WriteALU(pCpu, uAddr, uData);
 			break;
 
         case 0x4207:	// htmel (video horizontal IRQ beam position)
@@ -1159,14 +1182,14 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::ReadMem(SNCpuT *pCpu, Uint32 uAddr)
 	   therefore valid open-bus probes, not a missing mapper. */
 	if ((uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF)) &&
 	    uLow >= 0x6000 && uLow <= 0x7FFF)
-		return 0;
+		return pCpu->uOpenBus;
 
 	ROMLAB_UNHANDLED(pCpu, uAddr & 0xFFFFFF, 0, 0);
 	#if SNES_DEBUG
     if (Snes_bDebugUnhandledIO)
 	SnesDebugRead(uAddr);
 	#endif
-	return 0;
+	return pCpu->uOpenBus;
 }
 
 void SNCPU_TRAPFUNC SnesSystem::WriteMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData)
@@ -1379,6 +1402,8 @@ SnesSystem::SnesSystem()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_uNmiFlagSetClock = 0;
+	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
 
 	// setup spc
@@ -1480,6 +1505,8 @@ void SnesSystem::Reset()
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
 	m_nLineIRQClock = 0;
+	m_uNmiFlagSetClock = 0;
+	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
 #if SNDBG_LOG
 	SnesDbgResetSession();
@@ -1766,9 +1793,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 				m_nLineIRQCycle = -1;
 				if (m_bLineIRQInstant)
 				{
-					m_IO.m_Regs.timeup |= 0x80;
-					SNCPUSetIRQDelay(&m_Cpu, 0);
-					SNCPUSignalIRQ(&m_Cpu, 1);
+					AssertTimerIRQ();
 #if SNDBG_LOG
 					g_TmgIrqInstant++;
 #endif
@@ -1827,9 +1852,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 			{
 				m_bLineIRQFired = TRUE;
 				m_nLineIRQCycle = -1;
-				m_IO.m_Regs.timeup |= 0x80;
-				SNCPUSetIRQDelay(&m_Cpu, 0);
-				SNCPUSignalIRQ(&m_Cpu, 1);
+				AssertTimerIRQ();
 			}
 		}
 
@@ -1842,29 +1865,8 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
         // execute up to h-irq
         ExecuteCPU(nIRQCycles);
 
-        // set irq flag
-        m_IO.m_Regs.timeup |= 0x80;
-
-		/* Aero the Acro-Bat 2 waits for $4212.VBlank to clear while its
-		   V-only timer targets line 0.  The real timer edge occurs inside an
-		   opcode; entering the handler before that polling opcode retires
-		   leaves the game in the black-screen loop after the intro.  Snes9x's
-		   opcode core uses the same two-opcode deferral for this title. */
-		const char *pTitle = m_pRom ? m_pRom->GetRomTitle() : NULL;
-		if (m_uLine == 0 &&
-			(m_IO.m_Regs.nmitimen & 0x30) == 0x20 &&
-			m_IO.m_Regs.vtime.w == 0 &&
-			pTitle &&
-			(strcmp(pTitle, "Aero the AcroBat 2") == 0 ||
-			 strcmp(pTitle, "AERO THE ACROBAT 2") == 0))
-		{
-			SNCPUSetIRQDelay(&m_Cpu, 2);
-		}
-		else
-		{
-			SNCPUSetIRQDelay(&m_Cpu, 0);
-		}
-        SNCPUSignalIRQ(&m_Cpu, 1);
+        // Timer source becomes visible here; no title-specific delay.
+		AssertTimerIRQ();
 
         // execute rest of way
         ExecuteCPU(nCycles - nIRQCycles);
@@ -1880,7 +1882,12 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 
 void SnesSystem::ExecuteLine()
 {
+	const Int32 nLineCycles = (Int32)SNES_LINE_MASTER_CYCLES(
+		m_uLine, m_PPU.GetField(), m_PPU.IsFrameInterlace());
+	const Int32 nHBlankCycles = nLineCycles - SNES_VISIBLE_CYCLES;
+
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+	m_DMAC.SetVideoLine(m_uLine);
 	m_nSA1LineClock = 0;
 	if (m_bSA1) {
 		SNCPUSA1BusBeginLine();
@@ -1942,7 +1949,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	Uint32 _tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(SNES_CYCLESPERLINE - SNES_HBLANKCYCLES, nHIRQCycles);
+    ExecuteWithIRQ(SNES_VISIBLE_CYCLES, nHIRQCycles);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
@@ -1973,7 +1980,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	_tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(SNES_HBLANKCYCLES, nHIRQCycles);
+    ExecuteWithIRQ(nHBlankCycles, nHIRQCycles);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
@@ -1981,7 +1988,7 @@ void SnesSystem::ExecuteLine()
 	// Bring the SA-1 to the exact end of the scanline. Shared register,
 	// I-RAM and BW-RAM accesses may have synchronized it earlier in the line.
 	if (m_bSA1)
-		SyncSA1To(SNES_CYCLESPERLINE);
+		SyncSA1To(nLineCycles);
 
 	// O hardware GSU roda em paralelo com o 65816. Este emulador sincroniza
 	// os dois uma vez por scanline, como uma aproximacao de baixo custo para
@@ -2005,7 +2012,8 @@ void SnesSystem::ExecuteLine()
 	m_bLineIRQReschedule = FALSE;
 	m_bLineIRQInstant = FALSE;
 	m_nLineIRQCycle = -1;
-	m_nLineIRQClock = SNES_CYCLESPERLINE;
+	m_nLineIRQClock = nLineCycles;
+	m_IO.ProcessAutoJoypad(GetSCPUMasterClock());
 	PROF_LEAVE("ExecLine");
 }
 
@@ -2153,26 +2161,18 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     // set vbl flag at start of vblank
     m_IO.m_Regs.hvbjoy|= 0x80;
 
-	if (m_IO.m_Regs.nmitimen & 1)
-	{
-		// set joy enable flag at start of vblank
-		m_IO.m_Regs.hvbjoy|= 0x01;
-		m_IO.UpdateJoyPads();
-	}
+	/* Auto-read is a 128-master-clock state machine, not an instantaneous
+	   copy three scanlines into VBlank. */
+	m_IO.BeginAutoJoypad(GetSCPUMasterClock());
 
-    // set 'BLANK NMI' flag at beginning of v-blank
+    // RDNMI becomes visible at H=2; the NMI input reaches the CPU around H=6.
+    m_uNmiFlagSetClock = GetSCPUMasterClock() + 2u;
     m_IO.m_Regs.rdnmi |= 0x80;
     SNCPUSignalNMI(&m_Cpu, m_IO.m_Regs.rdnmi & m_IO.m_Regs.nmitimen & 0x80);
 
     for ( ; m_uLine < uFrameLines; m_uLine++)
 	{
 		ExecuteLine();
-
-		if (m_uLine==uVisibleLines+3) // auto-joy read completes ~3 scanlines into VBlank
-		{
-			// done reading joypad
-			m_IO.m_Regs.hvbjoy&= ~0x01;
-		}
 	}
 
     // clear 'BLANK NMI' flag at end of v-blank

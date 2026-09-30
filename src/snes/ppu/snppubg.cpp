@@ -379,10 +379,13 @@ Uint32 SnesPPURender::FetchBG(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTil
 		return uResult;
 	}
 
-	if (pBGInfo->uMosaic > 0)
 	{
-		iLine /= pBGInfo->uMosaic + 1;
-		iLine *= pBGInfo->uMosaic + 1;
+		const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
+		const Uint8 uMode = (Uint8)(pRegs->bgmode & 7);
+		iLine = _SnesPPUVerticalFetchLine(
+			iLine, pBGInfo->uMosaic, uMode,
+			(pRegs->setini & SNESPPU_SETINI_INTERLACE) ? TRUE : FALSE,
+			m_pPPU->GetField());
 	}
 
 	uScrollX = pBGInfo->uScrollX;
@@ -666,6 +669,17 @@ Uint32 SnesPPURender::FetchBGOffset(SnesBGInfoT *pBGInfo, struct SnesRenderTileT
 	{
 		// no fetching
 		return 0;
+	}
+
+	{
+		const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
+		const Uint8 uMode = (Uint8)(pRegs->bgmode & 7);
+		if (uMode == 6 && (pRegs->setini & SNESPPU_SETINI_INTERLACE))
+		{
+			iLine = _SnesPPUVerticalFetchLine(
+				iLine, pBGInfo->uMosaic, uMode, TRUE,
+				m_pPPU->GetField());
+		}
 	}
 
 #if SNDBG_LOG
