@@ -58,7 +58,16 @@ static int _NetClientSocketRead(NetSocketT *pSocket, NetClientT *pClient)
         case NETPACKET_TYPE_SERVERHELLO:
             {
                 NetPacketServerHelloT *pPacket = (NetPacketServerHelloT *)pPacketHdr;
-                
+
+                if (pPacketHdr->uPacketLen != sizeof(*pPacket) ||
+                    pPacket->Version != NETPLAY_VERSION)
+                {
+                    /* Both ends must agree on five-word v0x101 frames. */
+                    NetPrintf("NetClient: incompatible server protocol\n");
+                    NetSocketDisconnect(pSocket);
+                    return -1;
+                }
+
                 strcpy(pClient->ServerName, pPacket->Name);
 				pClient->clientid = pPacket->clientid;
                 NetPrintf("NetClient: Connected to '%s' as client%d!\n", pClient->ServerName, pClient->clientid);
