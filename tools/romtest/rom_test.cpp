@@ -414,6 +414,28 @@ static void Test128KSramBoardDetection(void)
 	}
 }
 
+static void TestDezaemonUsesStandardLoRom(void)
+{
+	std::vector<Uint8> rom(0x200000, 0xFF);
+	PutHeader(rom, 0x7FC0, "DEZAEMON  ", 0x20, 0x6D00,
+		0x8000, 0x0000);
+	((SNRomInfoT *)&rom[0x7FC0])->RomSize = 0x0B;
+	((SNRomInfoT *)&rom[0x7FC0])->SRAMSize = 7; /* 128 KiB */
+
+	CMemFileIO io;
+	SnesRom snesRom;
+	io.Open(&rom[0], (Uint32)rom.size());
+
+	CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+		"Dezaemon fixture must load");
+	CHECK(snesRom.m_eMapping == SNROM_MAPPING_LOROM,
+		"Dezaemon must use standard LoROM");
+	CHECK((snesRom.m_Flags & SNROM_FLAG_SRAM128K_SPECIAL) == 0,
+		"Dezaemon must not revive the obsolete special SRAM mapper");
+	CHECK(snesRom.GetSRAMBytes() == 128u * 1024u,
+		"Dezaemon must keep 128 KiB physical SRAM");
+}
+
 static void TestType2ExplicitRecovery(void)
 {
 	std::vector<Uint8> linear(0x100000, 0xFF);
@@ -481,6 +503,7 @@ int main(void)
 	TestRealType1StillWorks();
 	Test24MbitBoardDetection();
 	Test128KSramBoardDetection();
+	TestDezaemonUsesStandardLoRom();
 	TestType2ExplicitRecovery();
 
 	if (g_Failures)
