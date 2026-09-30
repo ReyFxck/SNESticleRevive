@@ -64,7 +64,9 @@ void SnesSystem::SaveState(SnesStateT *pState)
 	pState->SPC.Cycles = m_Spc.Cycles;
 	pState->SPC.Counter[0] = m_Spc.Counter[0];
 	pState->SPC.Counter[1] = m_Spc.Counter[1];
-	pState->SPC.uCycleShift = 0;
+	/* Reuse the legacy byte without changing SnesStateT size: it now carries
+	   the S-SMP $F0 TEST latch. */
+	pState->SPC.uCycleShift = m_Spc.uTestReg;
 
 	m_PPU.SaveState(&pState->PPU);
 	m_DMAC.SaveState(&pState->DMAC);
@@ -115,7 +117,10 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	m_Spc.Cycles = pState->SPC.Cycles;
 	m_Spc.Counter[0] = pState->SPC.Counter[0];
 	m_Spc.Counter[1] = pState->SPC.Counter[1];
-	m_Spc.uPad = 0;
+	/* Old states wrote zero here. Treat that legacy zero as the hardware
+	   power-on TEST value so loading an old state does not disable APURAM. */
+	m_Spc.uTestReg = pState->SPC.uCycleShift ?
+		pState->SPC.uCycleShift : 0x0A;
 
 	m_PPU.RestoreState(&pState->PPU);
 	/* Region is hardware identity, not game state. Older PAL save states were
