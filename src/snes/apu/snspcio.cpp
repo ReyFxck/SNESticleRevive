@@ -264,6 +264,8 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 		}
 		break;
 	case 0xF2:	// dsp addr
+		/* DSPADDR is an I/O latch even if APURAM writes are disabled. */
+		pSpc->Mem[0xF2] = uData;
 		break;
 	case 0xF3:  // dsp data
 		/* DSPADDR.7 is a read-only mirror, not a writable alias. */
@@ -286,6 +288,12 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 		#endif
 		break;
 
+	case 0xF8:	// AUXIO4
+	case 0xF9:	// AUXIO5
+		/* Keep these two I/O latches independent of TEST RAM write gating. */
+		pSpc->Mem[uAddr] = uData;
+		break;
+
 	case 0xFA:	// timer0
 		SNSpcTimerSync(&pIO->m_Regs.spc_timer[0], iCycle);
 		SNSpcTimerSetTimer(&pIO->m_Regs.spc_timer[0], uData);
@@ -306,6 +314,4 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 		break;
 	}
 
-	// store to memory
-	pSpc->Mem[uAddr] = uData;
 }
