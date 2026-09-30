@@ -34,8 +34,8 @@ typedef struct
 {
     Uint32              uFrame;
     NetPlayGameStateE   eGameState;
-    Uint32              InputSend;
-    Uint32              InputRecv[NETPLAY_RPC_NUMPEERS];
+    NetPlayFrameInputT  InputSend;
+    NetPlayFrameInputT  InputRecv[NETPLAY_RPC_NUMPEERS];
     int                 InputSize[NETPLAY_RPC_NUMPEERS];
     int                 OutputSize[NETPLAY_RPC_NUMPEERS];
 } NetPlayRPCInputT;
