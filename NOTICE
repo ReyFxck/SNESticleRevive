@@ -71,14 +71,16 @@ listed in this section:
   implementation independently maintained.
 - ares (ares-emulator/ares), ISC: behavioral reference for the S-SMP/S-DSP
   voice pipeline, including PMON ordering and analytical construction of the
-  Gaussian interpolation coefficient table.
+  Gaussian interpolation coefficient table; also used to cross-check Super
+  Scope CRT-beam detection timing and the 24-dot sensor offset.
 - snes_spc / SPC_DSP by Shay Green (as carried by bsnes), LGPL 2.1 or later:
   independent accuracy cross-check for the four-tap Gaussian interpolation,
   its 16-bit intermediate wrap, saturation and forced-even output. No source
   from this module is bundled by merely listing it as a reference here.
-- Snes9x / Snes9x2002 / Snes9x2010: ROM-loader behavior reference for
-  historical copier interleave formats, including the explicit Type-2 mode
-  used by odd legacy SuperFX dumps. The Revive implementation is independent.
+- Snes9x / Snes9x2002 / Snes9x2010: ROM-loader and cartridge-map
+  behavior reference for historical copier interleave formats and uncommon
+  LoROM PCB layouts, including Type-2 and Wanderers from Ys NoMAD1 decode.
+  The Revive implementation is independent.
 
 This NOTICE supplements LICENSE; it does not replace any per-file or
 third-party license notice.

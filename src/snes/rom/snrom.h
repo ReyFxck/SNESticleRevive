@@ -59,6 +59,7 @@ enum SNRomMappingE
 #define SNROM_FLAG_SA1                       0x10000
 #define SNROM_FLAG_ROM24MBS                  0x20000
 #define SNROM_FLAG_SRAM128K_SPECIAL          0x40000
+#define SNROM_FLAG_NOMAD1                    0x80000
 
 struct SNRomInfoT
 {

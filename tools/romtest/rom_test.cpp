@@ -436,6 +436,43 @@ static void TestDezaemonUsesStandardLoRom(void)
 		"Dezaemon must keep 128 KiB physical SRAM");
 }
 
+static void TestNoMAD1BoardDetection(void)
+{
+	{
+		std::vector<Uint8> rom(0x200000, 0xFF);
+		PutHeader(rom, 0x7FC0, "WANDERERS FROM YS", 0x20, 0x7953,
+			0x8000, 0x0000);
+		((SNRomInfoT *)&rom[0x7FC0])->RomSize = 0x0B;
+		((SNRomInfoT *)&rom[0x7FC0])->SRAMSize = 3;
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"Wanderers from Ys fixture must load");
+		CHECK(snesRom.m_eMapping == SNROM_MAPPING_LOROM,
+			"NoMAD1 remains a LoROM board");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_NOMAD1) != 0,
+			"Wanderers from Ys must select NoMAD1 full-bank SRAM decode");
+	}
+
+	{
+		std::vector<Uint8> rom(0x200000, 0xFF);
+		PutHeader(rom, 0x7FC0, "ORDINARY LOROM SRAM", 0x20, 0x7954,
+			0x8000, 0x0000);
+		((SNRomInfoT *)&rom[0x7FC0])->RomSize = 0x0B;
+		((SNRomInfoT *)&rom[0x7FC0])->SRAMSize = 3;
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"ordinary LoROM SRAM fixture must load");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_NOMAD1) == 0,
+			"ordinary LoROM must not select NoMAD1 by SRAM size");
+	}
+}
+
 static void TestType2ExplicitRecovery(void)
 {
 	std::vector<Uint8> linear(0x100000, 0xFF);
@@ -504,6 +541,7 @@ int main(void)
 	Test24MbitBoardDetection();
 	Test128KSramBoardDetection();
 	TestDezaemonUsesStandardLoRom();
+	TestNoMAD1BoardDetection();
 	TestType2ExplicitRecovery();
 
 	if (g_Failures)

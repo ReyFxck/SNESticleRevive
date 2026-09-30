@@ -215,6 +215,13 @@ static void CheckScanlineTiming()
 	Check("odd non-interlace line 240", SNES_LINE_MASTER_CYCLES(240, TRUE, FALSE), 1360);
 	Check("odd line 239 remains normal", SNES_LINE_MASTER_CYCLES(239, TRUE, FALSE), 1364);
 	Check("interlace odd line 240 remains normal", SNES_LINE_MASTER_CYCLES(240, TRUE, TRUE), 1364);
+
+	/* ares models the Super Scope optical hit 24 dots after the aimed X.
+	   Verify both active-display and late-HBlank positions. */
+	Check("scope x0 beam clock", SNES_SUPERSCOPE_LATCH_CYCLES(0), 96);
+	Check("scope x128 beam clock", SNES_SUPERSCOPE_LATCH_CYCLES(128), 608);
+	Check("scope x232 beam boundary", SNES_SUPERSCOPE_LATCH_CYCLES(232), 1024);
+	Check("scope x255 beam hblank", SNES_SUPERSCOPE_LATCH_CYCLES(255), 1116);
 }
 
 static void CheckDMATimingMath()
