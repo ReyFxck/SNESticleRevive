@@ -1405,6 +1405,11 @@ SnesSystem::SnesSystem()
 	m_uNmiFlagSetClock = 0;
 	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
+	m_bScopeLatchPending = FALSE;
+	m_uScopeLatchLine = 0;
+	m_uScopeLatchX = 0;
+	m_uScopeLatchY = 0;
+	m_nScopeLatchCycle = -1;
 
 	// setup spc
 	SNSPCNew(&m_Spc);
@@ -1508,6 +1513,11 @@ void SnesSystem::Reset()
 	m_uNmiFlagSetClock = 0;
 	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
+	m_bScopeLatchPending = FALSE;
+	m_uScopeLatchLine = 0;
+	m_uScopeLatchX = 0;
+	m_uScopeLatchY = 0;
+	m_nScopeLatchCycle = -1;
 #if SNDBG_LOG
 	SnesDbgResetSession();
 	m_GSU.ClearDiagWindow();
@@ -1880,11 +1890,44 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
     nIRQCycles -= nCycles;
 }
 
+void SnesSystem::ExecuteTimedSlice(
+	Int32 nCycles, Int32 &nIRQCycles, Int32 &nLineClock)
+{
+	while (nCycles > 0)
+	{
+		if (m_bScopeLatchPending &&
+		    m_uLine == m_uScopeLatchLine &&
+		    m_nScopeLatchCycle >= nLineClock &&
+		    m_nScopeLatchCycle <= nLineClock + nCycles)
+		{
+			Int32 nToLatch = m_nScopeLatchCycle - nLineClock;
+			if (nToLatch > 0)
+			{
+				ExecuteWithIRQ(nToLatch, nIRQCycles);
+				nLineClock += nToLatch;
+				nCycles -= nToLatch;
+			}
+
+			/* The optical receiver toggles controller-port-2 I/O here. The PPU
+			   records the aimed dot/line; timing of the transition is what games
+			   use to synchronize the gun with the raster. */
+			m_PPU.LatchCounters(m_uScopeLatchX, m_uScopeLatchY);
+			m_bScopeLatchPending = FALSE;
+			continue;
+		}
+
+		ExecuteWithIRQ(nCycles, nIRQCycles);
+		nLineClock += nCycles;
+		nCycles = 0;
+	}
+}
+
 void SnesSystem::ExecuteLine()
 {
 	const Int32 nLineCycles = (Int32)SNES_LINE_MASTER_CYCLES(
 		m_uLine, m_PPU.GetField(), m_PPU.IsFrameInterlace());
 	const Int32 nHBlankCycles = nLineCycles - SNES_VISIBLE_CYCLES;
+	Int32 nLineClock = 0;
 
 	SNCPUResetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
 	m_DMAC.SetVideoLine(m_uLine);
@@ -1949,7 +1992,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	Uint32 _tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(SNES_VISIBLE_CYCLES, nHIRQCycles);
+    ExecuteTimedSlice(SNES_VISIBLE_CYCLES, nHIRQCycles, nLineClock);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
@@ -1980,7 +2023,7 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	_tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteWithIRQ(nHBlankCycles, nHIRQCycles);
+    ExecuteTimedSlice(nHBlankCycles, nHIRQCycles, nLineClock);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
@@ -2125,13 +2168,24 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_PPURender.BeginRender(pTarget);
 	m_PPU.BeginFrame();
 
-	/* A Super Scope receiver asserts the external latch when the CRT beam
-	   crosses the aim point. The PS2 has no CRT light sensor, so the virtual
-	   peripheral supplies one deterministic coordinate latch per frame. */
+	/* Arm the Super Scope optical event for this field. Unlike the previous
+	   frame-start approximation, the latch now fires only when the raster
+	   reaches the aimed line and the sensor's calibrated horizontal delay. */
+	m_bScopeLatchPending = FALSE;
+	m_nScopeLatchCycle = -1;
 	{
 		Uint16 uScopeX, uScopeY;
-		if (m_IO.GetSuperScopePosition(&uScopeX, &uScopeY))
-			m_PPU.LatchCounters(uScopeX, uScopeY);
+		if (m_IO.GetSuperScopePosition(&uScopeX, &uScopeY) &&
+		    uScopeX < 256u &&
+		    uScopeY < m_PPU.GetFrameVisibleLines())
+		{
+			m_uScopeLatchX = uScopeX;
+			m_uScopeLatchY = uScopeY;
+			m_uScopeLatchLine = uScopeY;
+			m_nScopeLatchCycle =
+				(Int32)SNES_SUPERSCOPE_LATCH_CYCLES(uScopeX);
+			m_bScopeLatchPending = TRUE;
+		}
 	}
 
 	/* SETINI overscan is latched by BeginFrame(). Keep CPU/HDMA visible
