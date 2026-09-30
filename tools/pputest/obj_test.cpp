@@ -220,6 +220,12 @@ int main()
 	Check("mode6 field 1 fetch", _SnesPPUInterlaceFetchLine(9, 6, TRUE, TRUE), 19);
 	Check("mode4 ignores screen interlace", _SnesPPUInterlaceFetchLine(7, 4, TRUE, TRUE), 7);
 	Check("mode5 non-interlace unchanged", _SnesPPUInterlaceFetchLine(7, 5, FALSE, TRUE), 7);
+	Check("mode5 mosaic preserves even field",
+	      _SnesPPUVerticalFetchLine(5, 3, 5, TRUE, FALSE), 8);
+	Check("mode5 mosaic preserves odd field",
+	      _SnesPPUVerticalFetchLine(5, 3, 5, TRUE, TRUE), 9);
+	Check("normal mosaic keeps logical row",
+	      _SnesPPUVerticalFetchLine(5, 3, 1, FALSE, TRUE), 4);
 
 	/* A faixa recortada deve ser bit-a-bit equivalente ao teste antigo para
 	   todo X de 9 bits e todos os tamanhos horizontais do SNES. */
