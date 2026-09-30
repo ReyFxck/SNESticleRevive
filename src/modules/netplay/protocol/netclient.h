@@ -81,9 +81,9 @@ void NetClientPingServer(NetClientT *pClient);
 void NetClientSendLoadReq(NetClientT *pClient, Char *pGameName);
 void NetClientSendLoadAck(NetClientT *pClient, NetPlayLoadAckE eLoadAck);
 
-Bool NetClientProcess(NetClientT *pClient, Uint32 uInputSend, Int32 nInputRecv, Uint32 *pInputRecv);
+Bool NetClientProcess(NetClientT *pClient, const NetPlayFrameInputT *pInputSend, Int32 nInputRecv, NetPlayFrameInputT *pInputRecv);
 Bool NetClientTransmit(NetClientT *pClient);
-Bool NetClientEnqueueInput(NetClientT *pClient, Uint32 uInput);
-Bool NetClientRecvInput(NetClientT *pClient, Int32 nInputs, Uint32 *pInputs);
+Bool NetClientEnqueueInput(NetClientT *pClient, const NetPlayFrameInputT *pInput);
+Bool NetClientRecvInput(NetClientT *pClient, Int32 nInputs, NetPlayFrameInputT *pInputs);
 
 #endif
