@@ -597,6 +597,20 @@ static Uint32 _MainLoopStateGetPayloadBytes()
         : (Uint32)sizeof(_SnesState);
 }
 
+static Uint32 _MainLoopStateGetLegacyPayloadBytes()
+{
+    return _pSystem == _pSnes
+        ? (Uint32)SNSTATE_LEGACY_BYTES
+        : 0;
+}
+
+static Bool _MainLoopStateIsDecodedPayloadSizeValid(Uint32 nBytes)
+{
+    Uint32 nCurrent = _MainLoopStateGetPayloadBytes();
+    Uint32 nLegacy = _MainLoopStateGetLegacyPayloadBytes();
+    return nBytes == nCurrent || (nLegacy && nBytes == nLegacy);
+}
+
 static Uint8 *_MainLoopStateGetPayloadData()
 {
     return _pSystem == _pNes
@@ -2005,7 +2019,6 @@ static Int32 _MainLoopStateReadHeader(
     FILE *pFile;
     size_t nRead;
     Bool bPayloadLayoutValid;
-    Uint32 nExpectedPayloadBytes = _MainLoopStateGetPayloadBytes();
     Uint32 uExpectedSystem = _MainLoopStateGetSystemId();
 
     pFile = fopen(pPath, "rb");
@@ -2023,7 +2036,7 @@ static Int32 _MainLoopStateReadHeader(
 
     bPayloadLayoutValid =
         (pHeader->Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW &&
-         pHeader->nPayloadBytes == nExpectedPayloadBytes) ||
+         _MainLoopStateIsDecodedPayloadSizeValid(pHeader->nPayloadBytes)) ||
         (pHeader->Reserved[0] == MAINLOOP_STATE_PAYLOAD_DEFLATE &&
          pHeader->nPayloadBytes > 0 &&
          pHeader->nPayloadBytes <= sizeof(_MainLoop_StateCompressed));
@@ -2059,6 +2072,7 @@ static Bool _MainLoopStateReadPayload(
     Bool bDecoded = FALSE;
     Uint8 *pStateData = _MainLoopStateGetPayloadData();
     Uint32 nStateBytes = _MainLoopStateGetPayloadBytes();
+    Uint32 nDecodedStateBytes = 0;
 
     pFile = fopen(pPath, "rb");
     if (!pFile)
@@ -2074,10 +2088,17 @@ static Bool _MainLoopStateReadPayload(
         return FALSE;
     }
 
+    /* A legacy SNES payload is a byte-for-byte prefix of the new state. */
+    memset(pStateData, 0, nStateBytes);
+
     if (Header.Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW)
     {
-        nRead = fread(pStateData, 1, nStateBytes, pFile);
-        bDecoded = nRead == nStateBytes;
+        nDecodedStateBytes = Header.nPayloadBytes;
+        if (_MainLoopStateIsDecodedPayloadSizeValid(nDecodedStateBytes))
+        {
+            nRead = fread(pStateData, 1, nDecodedStateBytes, pFile);
+            bDecoded = nRead == nDecodedStateBytes;
+        }
     }
     else if (Header.Reserved[0] == MAINLOOP_STATE_PAYLOAD_DEFLATE)
     {
@@ -2096,8 +2117,9 @@ static Bool _MainLoopStateReadPayload(
                 _MainLoop_StateCompressed,
                 Header.nPayloadBytes
             ) == MZ_OK &&
-            nDecodedBytes == nStateBytes)
+            _MainLoopStateIsDecodedPayloadSizeValid((Uint32)nDecodedBytes))
         {
+            nDecodedStateBytes = (Uint32)nDecodedBytes;
             bDecoded = TRUE;
         }
     }
@@ -2111,7 +2133,7 @@ static Bool _MainLoopStateReadPayload(
     uCRC = (Uint32)mz_crc32(
         MZ_CRC32_INIT,
         pStateData,
-        nStateBytes
+        nDecodedStateBytes
     );
     return uCRC == Header.uPayloadCRC;
 }
