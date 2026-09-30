@@ -82,6 +82,18 @@ class SnesIO
 	void			ShiftSerialPad(Uint32 uPad);
 	void			RunALU(SNCpuT *pCpu, Bool bReadPhase);
 
+	Uint32			m_uMouseSerial;
+	Uint16			m_uScopeSerial;
+	Uint8			m_uMouseSensitivity;
+	Uint8			m_uPeripheralPad;
+
+	Bool			IsMouseMode() const;
+	Bool			IsSuperScopeMode() const;
+	void			LatchMouseSerial();
+	void			LatchScopeSerial();
+	Uint8			ReadMouseSerial();
+	Uint8			ReadScopeSerial();
+
 public:
 	SnesIORegsT		m_Regs;
 
@@ -102,6 +114,7 @@ public:
 	void	ProcessAutoJoypad(Uint32 uMasterClock);
 	void	PrepareAutoJoypadEnableChange(Uint32 uMasterClock, Bool bEnable);
 	Bool	IsAutoJoypadActive() const { return m_bAutoReadActive; }
+	Bool	GetSuperScopePosition(Uint16 *pX, Uint16 *pY) const;
 
 	Uint8	ReadALU(SNCpuT *pCpu, Uint32 uAddr);
 	void	WriteALU(SNCpuT *pCpu, Uint32 uAddr, Uint8 uData);
