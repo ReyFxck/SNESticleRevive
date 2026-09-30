@@ -154,6 +154,7 @@ public:
 	void	SetMixer(Int32 iMixer, class ISNSpcDspMix	*pMixer) {m_pMixer[iMixer] = pMixer;}
 
 	Bool	EnqueueWrite(Uint32 uCycle, Uint32 uAddr, Uint8 uData);
+	Bool	GetNextWriteCycle(Uint32 *pCycle) const;
 	void	Sync(Uint32 uCycle);
 	void	Sync(void);
 
