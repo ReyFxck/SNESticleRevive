@@ -97,14 +97,14 @@ int main()
 
 	/* TEST controls APURAM visibility and write permission. */
 	Init(cpu); cpu.Mem[0x0300] = 0x12;
-	SNSPCWrite8(&cpu, 0x0300, 0x34);
+	SNSPCWriteRAM(&cpu, 0x0300, 0x34);
 	Check("TEST default RAM writable", cpu.Mem[0x0300], 0x34);
 	cpu.uTestReg = SNSPC_TEST_TIMERS_ENABLE; /* RAM writable=0 */
-	SNSPCWrite8(&cpu, 0x0300, 0x56);
+	SNSPCWriteRAM(&cpu, 0x0300, 0x56);
 	Check("TEST RAM write disable", cpu.Mem[0x0300], 0x34);
 	cpu.uTestReg = SNSPC_TEST_TIMERS_ENABLE | SNSPC_TEST_RAM_WRITABLE |
 		SNSPC_TEST_RAM_DISABLE;
-	Check("TEST RAM read disable", SNSPCRead8(&cpu, 0x0300), 0x5A);
+	Check("TEST RAM read disable", SNSPCReadRAM(&cpu, 0x0300), 0x5A);
 
 	Init(cpu); PutOp(cpu, 0xEF); Run(cpu, 3);
 	Check("SLEEP leaves PC after opcode", cpu.Regs.rPC, 0x0201);
