@@ -536,63 +536,36 @@ void SnesDMAC::SetHDMAEnable(Uint8 uData)
 
 void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
 {
-    SnesDMAChT *pChan;
+	SnesDMAChT *pChan;
+	assert(uChan < SNESDMAC_CHANNEL_NUM);
+	pChan = &m_Channels[uChan];
 
-    assert(uChan < SNESDMAC_CHANNEL_NUM);
+	if (m_pCPU->Cycles <= 0)
+		return;
 
-    pChan = &m_Channels[uChan];
-
-    Int32 uSrcDelta;
-	Uint8 *pTransfer;
-	Int32 iTransfer=0;
-
-    // any cycles available?
-    if (m_pCPU->Cycles <= 0) {
-        return;
-    }
-	// determine a-bus increment
-	uSrcDelta = _SNDma_MDMAInc[(pChan->dmapx>>3) & 3];
-
-	// get transfer order
-	pTransfer = _SNDma_MDMATransfer[pChan->dmapx & 7];
-	iTransfer = 0;
+	Int32 uSrcDelta = _SNDma_MDMAInc[(pChan->dmapx >> 3) & 3];
+	Uint8 *pTransfer = _SNDma_MDMATransfer[pChan->dmapx & 7];
+	Int32 iTransfer = 0;
 
 	do
 	{
-		Uint8 uData;
-		Uint32 uAddr;
+		Uint32 uAddrA =
+			(Uint32)pChan->a1tx | ((Uint32)pChan->a1bx << 16);
+		Uint32 uAddrB =
+			0x2100u | ((pChan->bbadx + pTransfer[iTransfer & 3]) & 0xFFu);
+		Uint32 uHClock =
+			(Uint32)SNCPUGetCounter(m_pCPU, SNCPU_COUNTER_LINE);
 
-		// get address to read from
-		uAddr = 0x2100 + pChan->bbadx + pTransfer[iTransfer & 3];
+		CopyDMABusByte(uAddrA, uAddrB, TRUE, uHClock);
 		iTransfer++;
-
-		// read byte
-		uData = SNCPURead8(m_pCPU, uAddr);
-
-		// write byte
-		SNCPUWrite8(m_pCPU, pChan->a1tx | (pChan->a1bx << 16), uData);
-
-		// increment src address (does overflow go into next bank?)
-		pChan->a1tx += uSrcDelta;
-
-		// decrement byte count
+		pChan->a1tx = (Uint16)(pChan->a1tx + uSrcDelta);
 		pChan->dasx--;
-
-        // decrement cpu clock cycles
-        ConsumeMasterClocks(SNCPU_CYCLE_SLOW * 1);
 	}
-	/* Finish the four-byte B-bus pattern once a slice starts.  Otherwise a
-	   scheduler boundary after byte 1/2/3 restarts the next slice at phase 0
-	   and corrupts reverse DMA modes 1, 3, 4, 5 and 7. */
 	while (pChan->dasx != 0 &&
-		(m_pCPU->Cycles > 0 || (iTransfer & 3) != 0));
+	       (m_pCPU->Cycles > 0 || (iTransfer & 3) != 0));
 
-    // are we done?
-    if (pChan->dasx == 0)
-    {
-        // clear channel enable bit
-        m_MDMAEnable &= ~(1 << uChan);
-    }
+	if (pChan->dasx == 0)
+		m_MDMAEnable &= ~(1 << uChan);
 }
 
 void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
@@ -810,6 +783,55 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
         // any bytes to transfer?
         if (nBytes > 0)
         {
+			/* Most A->B transfers can stay on the 256-byte buffered fast path.
+			   Fall back only when the transfer can touch a shared/forbidden
+			   bus region whose side effects cannot be reproduced after a bulk
+			   source read. */
+			Bool bExactBus = FALSE;
+			Uint32 uMode = pChan->dmapx & 7;
+			for (Int32 iPhase = 0; iPhase < 4; iPhase++)
+			{
+				if (((pChan->bbadx + _SNDma_MDMATransfer[uMode][iPhase]) &
+				     0xFF) == 0x80)
+				{
+					bExactBus = TRUE;
+					break;
+				}
+			}
+
+			Uint32 uBank = pChan->a1bx;
+			Uint32 uLow = pChan->a1tx;
+			Bool bSystemBank =
+				(uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF))
+					? TRUE : FALSE;
+			if (bSystemBank && uLow >= 0x1F00 && uLow <= 0x4500)
+				bExactBus = TRUE;
+
+			if (bExactBus && !bSA1CC1)
+			{
+				Int32 iDelta = _SNDma_MDMAInc[(pChan->dmapx >> 3) & 3];
+				for (Int32 iByte = 0; iByte < nBytes; iByte++)
+				{
+					Uint32 uAddrA =
+						(Uint32)pChan->a1tx |
+						((Uint32)pChan->a1bx << 16);
+					Uint32 uAddrB =
+						0x2100u |
+						((pChan->bbadx +
+						  _SNDma_MDMATransfer[uMode][iByte & 3]) & 0xFFu);
+					Uint32 uHClock =
+						(Uint32)SNCPUGetCounter(
+							m_pCPU, SNCPU_COUNTER_LINE);
+					CopyDMABusByte(uAddrA, uAddrB, FALSE, uHClock);
+					pChan->a1tx =
+						(Uint16)(pChan->a1tx + iDelta);
+					pChan->dasx--;
+					if (!pChan->dasx)
+						break;
+				}
+				continue;
+			}
+
 		    PROF_ENTER("DMAREADMEM");
 		    switch ((pChan->dmapx>>3) & 3)
 		    {
