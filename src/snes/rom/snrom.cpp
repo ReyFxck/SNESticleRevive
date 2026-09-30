@@ -827,6 +827,13 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			}
 		}
 
+		/* Wanderers from Ys uses the older NoMAD1 LoROM decode: cartridge SRAM
+		   occupies the complete $70-$7D/$F0-$FF banks (with $7E-$7F still
+		   overridden by WRAM). Current Snes9x still identifies this PCB by the
+		   fixed internal title. */
+		if (!strncmp((const char *)m_Name, "WANDERERS FROM YS", 17))
+			m_Flags |= SNROM_FLAG_NOMAD1;
+
 		/* Two LoROM titles use a 512-Kbit SRAM PCB with bank-wide windows in
 		   $70-$73 instead of the standard LoROM SRAM decode. Current Snes9x
 		   still selects this layout by internal title. */
