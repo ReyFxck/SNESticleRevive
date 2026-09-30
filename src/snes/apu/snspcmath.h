@@ -111,6 +111,15 @@ static _INLINE Int16 SNSpcDspInterpolateGaussian(
 
 /* Voice output before per-channel volume. This is the value used by PMON and
    represented by OUTX in the hardware pipeline. Revive's envelope is 7-bit. */
+/* Legacy Revive main/echo voice mix input. Keep this distinct from
+   SNSpcDspVoiceOutput(): the latter applies S-DSP clamp/bit0 behavior for
+   PMON/OUTX, while the historical mixer used the raw envelope product. */
+static _INLINE Int32 SNSpcDspEnvelopeMixSample(
+	Int16 iInterpolatedSample, Uint8 uEnvelope)
+{
+	return ((Int32)iInterpolatedSample * (Int32)uEnvelope) >> 7;
+}
+
 static _INLINE Int16 SNSpcDspVoiceOutput(
 	Int16 iInterpolatedSample, Uint8 uEnvelope)
 {
