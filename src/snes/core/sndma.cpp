@@ -54,6 +54,8 @@ static Int8 _SNDma_MDMAInc[4] =
 	1, 0, -1, 0
 };
 
+static _INLINE Uint8 SnesHDMARead8(SNCpuT *pCPU, Uint32 uAddr);
+
 SnesDMAC::SnesDMAC()
 {
 	memset(m_Channels, 0, sizeof(m_Channels));
