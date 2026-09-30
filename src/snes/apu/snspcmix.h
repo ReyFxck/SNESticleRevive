@@ -69,6 +69,9 @@ class    SNSpcDspMixFull : public SNSpcDspMix
 	Uint32			m_uNoiseGen;
 	Int16			m_iNoiseSample[SNSPCDSP_BUFFERSIZE*2];
 	Uint16			m_iNoiseFrac[SNSPCDSP_BUFFERSIZE];
+	/* PMON needs the previous voice's same-sample output. Keep this out of
+	   the PS2 scratchpad so SNSpcDspDataT stays below the 11 KiB lookup split. */
+	Int16			m_iVoiceOutput[SNSPCDSP_BUFFERSIZE];
 
 	void	FetchBlock(Int32 iChannel);
 	void	RefreshBlock(Int32 iChannel);
