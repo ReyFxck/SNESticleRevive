@@ -194,6 +194,12 @@ void SnesIO::Reset()
 	m_Regs.wrmpya = 0xFF;
 	m_Regs.wrdiv.w = 0xFFFF;
 	ResetALUTiming(0);
+	m_uAutoReadClockStart = 0;
+	m_uAutoReadNextClock = 0;
+	m_uAutoReadPort1Value = 0;
+	m_uAutoReadPort2Value = 0;
+	m_bAutoReadActive = FALSE;
+	m_bAutoReadDisabled = TRUE;
 }
 
 void SnesIO::ResetALUTiming(Uint32 uCpuCycle)
@@ -202,6 +208,129 @@ void SnesIO::ResetALUTiming(Uint32 uCpuCycle)
 	m_uDivCounter = 0;
 	m_uAluShift = 0;
 	m_uAluPrevCpuCycle = uCpuCycle;
+}
+
+void SnesIO::BeginAutoJoypad(Uint32 uMasterClock)
+{
+	/* MesenCE/5A22: start at the first 256-master-clock boundary after
+	   H=130, then back up 128 clocks so OUT0 rises one half-period before
+	   the busy flag.  Keeping the clock absolute preserves the 256-clock
+	   phase across frame boundaries. */
+	Uint32 uRangeStart = uMasterClock + 130u;
+	Uint32 uPhase = uRangeStart & 0xFFu;
+	m_uAutoReadClockStart = uRangeStart + (uPhase ? (256u - uPhase) : 0u) - 128u;
+	m_uAutoReadNextClock = m_uAutoReadClockStart;
+	m_bAutoReadActive = FALSE;
+	m_bAutoReadDisabled = FALSE;
+	m_uAutoReadPort1Value = 0;
+	m_uAutoReadPort2Value = 0;
+}
+
+void SnesIO::ProcessAutoJoypad(Uint32 uMasterClock)
+{
+	/* Signed deltas are safe here because every interesting interval is only
+	   a few thousand clocks long, even if the 32-bit master clock wraps. */
+	if ((Int32)(uMasterClock - m_uAutoReadClockStart) < 0)
+		return;
+
+	if (m_bAutoReadDisabled)
+	{
+		if ((Uint32)(uMasterClock - m_uAutoReadClockStart) >= 256u)
+			WriteSerial(0);
+		return;
+	}
+
+	while ((Int32)(uMasterClock - m_uAutoReadNextClock) >= 0)
+	{
+		Uint32 uClock = m_uAutoReadNextClock;
+		Int32 iStep = (Int32)((uClock - m_uAutoReadClockStart) >> 7);
+		m_uAutoReadNextClock = uClock + 128u;
+
+		switch (iStep)
+		{
+		case 0:
+			WriteSerial((m_Regs.nmitimen & 0x01) ? 1 : 0);
+			break;
+
+		case 1:
+			if (!(m_Regs.nmitimen & 0x01))
+			{
+				m_bAutoReadDisabled = TRUE;
+				m_bAutoReadActive = FALSE;
+			}
+			else
+			{
+				m_bAutoReadActive = TRUE;
+				m_Regs.joy1.w = 0;
+				m_Regs.joy2.w = 0;
+				m_Regs.joy3.w = 0;
+				m_Regs.joy4.w = 0;
+			}
+			break;
+
+		case 2:
+			WriteSerial(0);
+			break;
+
+		default:
+			if (!(m_Regs.nmitimen & 0x01))
+			{
+				iStep = 34;
+			}
+			else if (iStep & 1)
+			{
+				/* The serial helpers advance the controller shift registers at
+				   the read phase; the next 128-clock phase commits those bits to
+				   $4218-$421F. */
+				m_uAutoReadPort1Value = ReadSerial0();
+				m_uAutoReadPort2Value = ReadSerial1();
+			}
+			else
+			{
+				m_Regs.joy1.w = (Uint16)((m_Regs.joy1.w << 1) |
+					(m_uAutoReadPort1Value & 0x01));
+				m_Regs.joy2.w = (Uint16)((m_Regs.joy2.w << 1) |
+					(m_uAutoReadPort2Value & 0x01));
+				m_Regs.joy3.w = (Uint16)((m_Regs.joy3.w << 1) |
+					((m_uAutoReadPort1Value & 0x02) >> 1));
+				m_Regs.joy4.w = (Uint16)((m_Regs.joy4.w << 1) |
+					((m_uAutoReadPort2Value & 0x02) >> 1));
+			}
+			break;
+		}
+
+		if (iStep >= 34)
+		{
+			m_bAutoReadDisabled = TRUE;
+			m_bAutoReadActive = FALSE;
+			WriteSerial(0);
+			return;
+		}
+	}
+
+	if (!(m_Regs.nmitimen & 0x01) &&
+		(Uint32)(uMasterClock - m_uAutoReadClockStart) >= 128u * 3u)
+	{
+		m_bAutoReadDisabled = TRUE;
+		m_bAutoReadActive = FALSE;
+		WriteSerial(0);
+	}
+}
+
+void SnesIO::PrepareAutoJoypadEnableChange(Uint32 uMasterClock, Bool bEnable)
+{
+	Bool bOldEnable = (m_Regs.nmitimen & 0x01) ? TRUE : FALSE;
+	if (bOldEnable == bEnable)
+		return;
+
+	/* Catch up with the old enable value before changing the signal. During
+	   the first 256 clocks, OUT0 follows a mid-sequence enable change. */
+	ProcessAutoJoypad(uMasterClock);
+	if ((Int32)(uMasterClock - m_uAutoReadClockStart) >= 0 &&
+		(Uint32)(uMasterClock - m_uAutoReadClockStart) < 256u)
+	{
+		WriteSerial(bEnable ? 1 : 0);
+	}
 }
 
 void SnesIO::RunALU(SNCpuT *pCpu, Bool bReadPhase)
