@@ -96,6 +96,7 @@ void SNSPCResetRegs(SNSpcT *pCpu)
 	pCpu->Regs.rSP  = 0xFF;
 	pCpu->Regs.rPC  = 0;
 	pCpu->Regs.rPSW = 0;
+	pCpu->Regs.uPad = 0;
 }
 
 void SNSPCSetRomEnable(SNSpcT *pCpu, Bool bEnable)
@@ -139,8 +140,9 @@ void SNSPCReset(SNSpcT *pCpu, Bool bHardReset)
 		SNSPCSetRomEnable(pCpu, TRUE);
 	}
 
-	// reset flags
+	// reset flags and release SLEEP/STOP on either reset path
 	pCpu->Regs.rPSW = 0;
+	pCpu->Regs.uPad = 0;
 
 	// setup PC on reset?
 	pCpu->Regs.rPC = SNSPCRead16(pCpu, SNSPC_VECTOR_RESET);
