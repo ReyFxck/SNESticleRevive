@@ -44,6 +44,7 @@ public:
 	void                        SetPPU(SnesPPU *pPPU) {m_pPPU = pPPU;}
 	void                        SetSDD1(SNSDD1 *pSDD1) {m_pSDD1 = pSDD1;}
 	void                        SetSA1(SNSA1 *pSA1) {m_pSA1 = pSA1;}
+	void                        SetVideoLine(Uint32 uLine) {m_uVideoLine = uLine;}
 
 	void                        Reset();
 	void                        SaveState(struct SNStateDMACT *pState);
@@ -67,6 +68,7 @@ private:
 	Uint8		                m_HDMAEnable;		// hdma channel enable
 	Uint8		                m_HDMAEnded;		// channels stopped for this frame
 	Uint8		                m_HDMADoTransfer;	// repeat/first-line transfer latch
+	Uint32                      m_uVideoLine;
 
 	SNCpu_t	*                   m_pCPU;
 	SnesPPU	*                   m_pPPU;
