@@ -35,6 +35,91 @@ extern "C" {
 
 static Bool _MainLoop_bSuppressGameInputUntilRelease = FALSE;
 
+static MainLoopSnesPeripheralModeE _MainLoop_eSnesInputMode =
+	MAINLOOP_SNES_INPUT_STANDARD;
+
+void _MainLoopSnesInputCycleMode()
+{
+	_MainLoop_eSnesInputMode = (MainLoopSnesPeripheralModeE)
+		(((Int32)_MainLoop_eSnesInputMode + 1) % MAINLOOP_SNES_INPUT_NUM);
+}
+
+const char *_MainLoopSnesInputModeName()
+{
+	switch (_MainLoop_eSnesInputMode)
+	{
+	case MAINLOOP_SNES_INPUT_MOUSE: return "SNES Mouse (port 1)";
+	case MAINLOOP_SNES_INPUT_SUPERSCOPE: return "Super Scope (port 2)";
+	default: return "Standard Pad";
+	}
+}
+
+static Int8 _MainLoopSnesMouseAxis(Uint8 uAxis)
+{
+	Int32 iDelta = (Int32)uAxis - 128;
+	if (iDelta > -18 && iDelta < 18)
+		return 0;
+
+	/* A full DualShock deflection becomes roughly eight SNES mouse mickeys
+	   per emulated frame: controllable in Mario Paint without making the
+	   pointer crawl on a 60 Hz title. */
+	iDelta /= 16;
+	if (iDelta < -127) iDelta = -127;
+	if (iDelta > 127) iDelta = 127;
+	return (Int8)iDelta;
+}
+
+void _MainLoopSnesInputApply(Emu::SysInputT *pInput)
+{
+	if (!pInput || _MainLoop_eSnesInputMode == MAINLOOP_SNES_INPUT_STANDARD)
+		return;
+
+	Uint32 uAnalog = InputGetPadAnalog(0);
+	Uint8 uLX = (Uint8)((uAnalog >> 16) & 0xFF);
+	Uint8 uLY = (Uint8)((uAnalog >> 24) & 0xFF);
+	Uint32 uButtons = InputGetPadData(0);
+
+	if (_MainLoop_eSnesInputMode == MAINLOOP_SNES_INPUT_MOUSE)
+	{
+		Int8 iDX = _MainLoopSnesMouseAxis(uLX);
+		Int8 iDY = _MainLoopSnesMouseAxis(uLY);
+		Uint16 uMouseButtons = 0;
+
+		if (uButtons & PAD_CROSS)
+			uMouseButtons |= EMUSYS_SNES_MOUSE_LEFT;
+		if (uButtons & PAD_CIRCLE)
+			uMouseButtons |= EMUSYS_SNES_MOUSE_RIGHT;
+
+		/* uPad[4] is a tag; special peripherals and multitap are mutually
+		   exclusive on real hardware. Payload remains inside the historical
+		   five-word SysInputT so movies/save states keep their binary size. */
+		pInput->uPad[4] = EMUSYS_SNES_SPECIAL_MOUSE;
+		pInput->uPad[2] =
+			(Uint16)(Uint8)iDX | ((Uint16)(Uint8)iDY << 8);
+		pInput->uPad[3] = uMouseButtons;
+	}
+	else if (_MainLoop_eSnesInputMode == MAINLOOP_SNES_INPUT_SUPERSCOPE)
+	{
+		Uint16 uScopeButtons = 0;
+		Uint8 uX = uLX;
+		Uint8 uY = (Uint8)(((Uint32)uLY * 223u) / 255u);
+
+		if (uButtons & PAD_CROSS)
+			uScopeButtons |= EMUSYS_SNES_SCOPE_FIRE;
+		if (uButtons & PAD_SQUARE)
+			uScopeButtons |= EMUSYS_SNES_SCOPE_CURSOR;
+		if (uButtons & PAD_R1)
+			uScopeButtons |= EMUSYS_SNES_SCOPE_TURBO;
+		if (uButtons & PAD_TRIANGLE)
+			uScopeButtons |= EMUSYS_SNES_SCOPE_PAUSE;
+
+		pInput->uPad[4] = EMUSYS_SNES_SPECIAL_SUPERSCOPE;
+		pInput->uPad[2] = (Uint16)uX | ((Uint16)uY << 8);
+		pInput->uPad[3] = uScopeButtons;
+	}
+}
+
+
 void _MainLoopInputSuppressUntilRelease()
 {
 	_MainLoop_bSuppressGameInputUntilRelease = TRUE;
