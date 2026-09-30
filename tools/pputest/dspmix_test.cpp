@@ -58,6 +58,18 @@ int main()
 	Check("voice output clears bit0",
 		SNSpcDspVoiceOutput(103, 127) & 1, 0);
 
+	/* Both PMON and main/echo voice mixing now consume this same
+	   envelope-adjusted, hardware-even sample (ares DSP voice latch). */
+	Check("cached voice output odd rounds down",
+		SNSpcDspVoiceOutput(2001, 127), 1984);
+	Check("cached voice sample left volume",
+		(Int32)SNSpcDspVoiceOutput(2001, 127) * -47, -93248);
+	Check("cached voice sample right volume",
+		(Int32)SNSpcDspVoiceOutput(2001, 127) * 90, 178560);
+	Check("cached voice output sign",
+		SNSpcDspVoiceOutput(-2001, 127), -1986);
+
+
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
 }
