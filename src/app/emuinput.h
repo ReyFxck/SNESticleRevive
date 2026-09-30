@@ -21,6 +21,8 @@ namespace Emu {
    reserved as a special-peripheral tag. uPad[2]/uPad[3] carry the payload. */
 #define EMUSYS_SNES_SPECIAL_MOUSE       0x0001
 #define EMUSYS_SNES_SPECIAL_SUPERSCOPE  0x0002
+#define EMUSYS_SNES_SPECIAL_JUSTIFIER   0x0003
+#define EMUSYS_SNES_SPECIAL_JUSTIFIERS  0x0004
 
 #define EMUSYS_SNES_MOUSE_LEFT          0x0001
 #define EMUSYS_SNES_MOUSE_RIGHT         0x0002
@@ -29,6 +31,14 @@ namespace Emu {
 #define EMUSYS_SNES_SCOPE_CURSOR        0x0002
 #define EMUSYS_SNES_SCOPE_TURBO         0x0004
 #define EMUSYS_SNES_SCOPE_PAUSE         0x0008
+
+/* Justifier(s) use controller port 2. Coordinates live in uPad[2]/uPad[3].
+   The four low bits of uPad[1] are free in the SNES pad format and carry
+   trigger/start state without changing SysInputT's historical size. */
+#define EMUSYS_SNES_JUSTIFIER1_TRIGGER  0x0001
+#define EMUSYS_SNES_JUSTIFIER1_START    0x0002
+#define EMUSYS_SNES_JUSTIFIER2_TRIGGER  0x0004
+#define EMUSYS_SNES_JUSTIFIER2_START    0x0008
 
 struct SysInputT
 {

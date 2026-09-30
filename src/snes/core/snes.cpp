@@ -1405,11 +1405,11 @@ SnesSystem::SnesSystem()
 	m_uNmiFlagSetClock = 0;
 	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
-	m_bScopeLatchPending = FALSE;
-	m_uScopeLatchLine = 0;
-	m_uScopeLatchX = 0;
-	m_uScopeLatchY = 0;
-	m_nScopeLatchCycle = -1;
+	m_bLightGunLatchPending = FALSE;
+	m_uLightGunLatchLine = 0;
+	m_uLightGunLatchX = 0;
+	m_uLightGunLatchY = 0;
+	m_nLightGunLatchCycle = -1;
 
 	// setup spc
 	SNSPCNew(&m_Spc);
@@ -1513,11 +1513,11 @@ void SnesSystem::Reset()
 	m_uNmiFlagSetClock = 0;
 	m_uIrqFlagSetClock = 0;
 	m_nSA1LineClock = 0;
-	m_bScopeLatchPending = FALSE;
-	m_uScopeLatchLine = 0;
-	m_uScopeLatchX = 0;
-	m_uScopeLatchY = 0;
-	m_nScopeLatchCycle = -1;
+	m_bLightGunLatchPending = FALSE;
+	m_uLightGunLatchLine = 0;
+	m_uLightGunLatchX = 0;
+	m_uLightGunLatchY = 0;
+	m_nLightGunLatchCycle = -1;
 #if SNDBG_LOG
 	SnesDbgResetSession();
 	m_GSU.ClearDiagWindow();
@@ -1895,12 +1895,12 @@ void SnesSystem::ExecuteTimedSlice(
 {
 	while (nCycles > 0)
 	{
-		if (m_bScopeLatchPending &&
-		    m_uLine == m_uScopeLatchLine &&
-		    m_nScopeLatchCycle >= nLineClock &&
-		    m_nScopeLatchCycle <= nLineClock + nCycles)
+		if (m_bLightGunLatchPending &&
+		    m_uLine == m_uLightGunLatchLine &&
+		    m_nLightGunLatchCycle >= nLineClock &&
+		    m_nLightGunLatchCycle <= nLineClock + nCycles)
 		{
-			Int32 nToLatch = m_nScopeLatchCycle - nLineClock;
+			Int32 nToLatch = m_nLightGunLatchCycle - nLineClock;
 			if (nToLatch > 0)
 			{
 				ExecuteWithIRQ(nToLatch, nIRQCycles);
@@ -1911,8 +1911,8 @@ void SnesSystem::ExecuteTimedSlice(
 			/* The optical receiver toggles controller-port-2 I/O here. The PPU
 			   records the aimed dot/line; timing of the transition is what games
 			   use to synchronize the gun with the raster. */
-			m_PPU.LatchCounters(m_uScopeLatchX, m_uScopeLatchY);
-			m_bScopeLatchPending = FALSE;
+			m_PPU.LatchCounters(m_uLightGunLatchX, m_uLightGunLatchY);
+			m_bLightGunLatchPending = FALSE;
 			continue;
 		}
 
@@ -2168,23 +2168,23 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	m_PPURender.BeginRender(pTarget);
 	m_PPU.BeginFrame();
 
-	/* Arm the Super Scope optical event for this field. Unlike the previous
-	   frame-start approximation, the latch now fires only when the raster
-	   reaches the aimed line and the sensor's calibrated horizontal delay. */
-	m_bScopeLatchPending = FALSE;
-	m_nScopeLatchCycle = -1;
+	/* Arm the active port-2 light gun for this field. Super Scope and Justifier
+	   share the same optical path and 24-dot receiver delay. For a chained
+	   Justifier pair, SnesIO exposes whichever gun the protocol selected. */
+	m_bLightGunLatchPending = FALSE;
+	m_nLightGunLatchCycle = -1;
 	{
-		Uint16 uScopeX, uScopeY;
-		if (m_IO.GetSuperScopePosition(&uScopeX, &uScopeY) &&
-		    uScopeX < 256u &&
-		    uScopeY < m_PPU.GetFrameVisibleLines())
+		Uint16 uGunX, uGunY;
+		if (m_IO.GetLightGunPosition(&uGunX, &uGunY) &&
+		    uGunX < 256u &&
+		    uGunY < m_PPU.GetFrameVisibleLines())
 		{
-			m_uScopeLatchX = uScopeX;
-			m_uScopeLatchY = uScopeY;
-			m_uScopeLatchLine = uScopeY;
-			m_nScopeLatchCycle =
-				(Int32)SNES_SUPERSCOPE_LATCH_CYCLES(uScopeX);
-			m_bScopeLatchPending = TRUE;
+			m_uLightGunLatchX = uGunX;
+			m_uLightGunLatchY = uGunY;
+			m_uLightGunLatchLine = uGunY;
+			m_nLightGunLatchCycle =
+				(Int32)SNES_SUPERSCOPE_LATCH_CYCLES(uGunX);
+			m_bLightGunLatchPending = TRUE;
 		}
 	}
 

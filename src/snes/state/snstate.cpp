@@ -199,7 +199,9 @@ void SnesIO::RestoreState(struct SNStateIOT *pState)
 	   re-latched on the next OUT0 strobe after restore. */
 	m_uMouseSerial = 0xFFFFFFFFu;
 	m_uScopeSerial = 0xFFFFu;
+	m_uJustifierSerial = 0xFFFFFFFFu;
 	m_uMouseSensitivity = 0;
+	m_uJustifierActive = 0;
 	m_uPeripheralPad = 0;
 }
 

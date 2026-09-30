@@ -50,6 +50,7 @@ const char *_MainLoopSnesInputModeName()
 	{
 	case MAINLOOP_SNES_INPUT_MOUSE: return "SNES Mouse (port 1)";
 	case MAINLOOP_SNES_INPUT_SUPERSCOPE: return "Super Scope (port 2)";
+	case MAINLOOP_SNES_INPUT_JUSTIFIER: return "Konami Justifier (port 2)";
 	default: return "Standard Pad";
 	}
 }
@@ -116,6 +117,35 @@ void _MainLoopSnesInputApply(Emu::SysInputT *pInput)
 		pInput->uPad[4] = EMUSYS_SNES_SPECIAL_SUPERSCOPE;
 		pInput->uPad[2] = (Uint16)uX | ((Uint16)uY << 8);
 		pInput->uPad[3] = uScopeButtons;
+	}
+	else if (_MainLoop_eSnesInputMode == MAINLOOP_SNES_INPUT_JUSTIFIER)
+	{
+		Uint16 uGunButtons = 0;
+		Uint32 uAnalog2 = InputGetPadAnalog(1);
+		Uint32 uButtons2 = InputGetPadData(1);
+		Uint8 uX1 = uLX;
+		Uint8 uY1 = (Uint8)(((Uint32)uLY * 223u) / 255u);
+		Uint8 uX2 = (Uint8)((uAnalog2 >> 16) & 0xFF);
+		Uint8 uY2 = (Uint8)(((Uint32)((uAnalog2 >> 24) & 0xFF) * 223u) / 255u);
+		Bool bDual = InputIsPadConnected(1);
+
+		if (uButtons & PAD_CROSS)
+			uGunButtons |= EMUSYS_SNES_JUSTIFIER1_TRIGGER;
+		if (uButtons & PAD_START)
+			uGunButtons |= EMUSYS_SNES_JUSTIFIER1_START;
+		if (bDual && (uButtons2 & PAD_CROSS))
+			uGunButtons |= EMUSYS_SNES_JUSTIFIER2_TRIGGER;
+		if (bDual && (uButtons2 & PAD_START))
+			uGunButtons |= EMUSYS_SNES_JUSTIFIER2_START;
+
+		pInput->uPad[4] = bDual
+			? EMUSYS_SNES_SPECIAL_JUSTIFIERS
+			: EMUSYS_SNES_SPECIAL_JUSTIFIER;
+		pInput->uPad[2] = (Uint16)uX1 | ((Uint16)uY1 << 8);
+		pInput->uPad[3] = bDual
+			? ((Uint16)uX2 | ((Uint16)uY2 << 8))
+			: 0xFFFFu;
+		pInput->uPad[1] = (Uint16)((pInput->uPad[1] & 0xFFF0u) | uGunButtons);
 	}
 }
 

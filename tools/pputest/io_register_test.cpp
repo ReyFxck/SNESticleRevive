@@ -207,6 +207,56 @@ static void CheckSpecialPeripherals()
 	Check("scope position present", io.GetSuperScopePosition(&uX, &uY), 1);
 	Check("scope X", uX, 123);
 	Check("scope Y", uY, 77);
+
+	/* Single Konami Justifier: falling OUT0 selects the absent second gun,
+	   and the 32-bit stream reports signature/buttons/active selector. */
+	io.Reset();
+	for (int i=0; i<EMUSYS_DEVICE_NUM; i++)
+		input.uPad[i] = EMUSYS_DEVICE_DISCONNECTED;
+	input.uPad[4] = EMUSYS_SNES_SPECIAL_JUSTIFIER;
+	input.uPad[2] = 45u | (67u << 8);
+	input.uPad[1] = (Uint16)(0xFFF0u |
+		EMUSYS_SNES_JUSTIFIER1_TRIGGER |
+		EMUSYS_SNES_JUSTIFIER1_START);
+	io.LatchInput(&input);
+	io.WriteSerial(1);
+	io.WriteSerial(0);
+	Check("justifier single active1 report",
+	      ReadSerialBits1(io, 32), 0x000E55A8u);
+	Check("justifier single active1 has no gun",
+	      io.GetJustifierPosition(&uX, &uY), 0);
+	Check("justifier post-report one", io.ReadSerial1() & 1, 1);
+
+	/* Next falling edge selects gun 1 again. */
+	io.WriteSerial(1);
+	io.WriteSerial(0);
+	Check("justifier single active0 report",
+	      ReadSerialBits1(io, 32), 0x000E55A0u);
+	Check("justifier single gun1 present",
+	      io.GetJustifierPosition(&uX, &uY), 1);
+	Check("justifier gun1 X", uX, 45);
+	Check("justifier gun1 Y", uY, 67);
+
+	/* Chained pair exposes player 2 when active=1 and adds its button bits. */
+	io.Reset();
+	for (int i=0; i<EMUSYS_DEVICE_NUM; i++)
+		input.uPad[i] = EMUSYS_DEVICE_DISCONNECTED;
+	input.uPad[4] = EMUSYS_SNES_SPECIAL_JUSTIFIERS;
+	input.uPad[2] = 10u | (20u << 8);
+	input.uPad[3] = 30u | (40u << 8);
+	input.uPad[1] = (Uint16)(0xFFF0u |
+		EMUSYS_SNES_JUSTIFIER1_TRIGGER |
+		EMUSYS_SNES_JUSTIFIER1_START |
+		EMUSYS_SNES_JUSTIFIER2_TRIGGER |
+		EMUSYS_SNES_JUSTIFIER2_START);
+	io.LatchInput(&input);
+	io.WriteSerial(1);
+	io.WriteSerial(0);
+	Check("justifiers dual active1 report",
+	      ReadSerialBits1(io, 32), 0x000E55F8u);
+	Check("justifiers gun2 present", io.GetJustifierPosition(&uX, &uY), 1);
+	Check("justifiers gun2 X", uX, 30);
+	Check("justifiers gun2 Y", uY, 40);
 }
 
 static void CheckScanlineTiming()

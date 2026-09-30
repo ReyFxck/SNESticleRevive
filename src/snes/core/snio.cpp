@@ -36,6 +36,17 @@ Bool SnesIO::IsSuperScopeMode() const
 	return m_Input.uPad[4] == EMUSYS_SNES_SPECIAL_SUPERSCOPE ? TRUE : FALSE;
 }
 
+Bool SnesIO::IsJustifierMode() const
+{
+	return (m_Input.uPad[4] == EMUSYS_SNES_SPECIAL_JUSTIFIER ||
+	        m_Input.uPad[4] == EMUSYS_SNES_SPECIAL_JUSTIFIERS) ? TRUE : FALSE;
+}
+
+Bool SnesIO::IsDualJustifierMode() const
+{
+	return m_Input.uPad[4] == EMUSYS_SNES_SPECIAL_JUSTIFIERS ? TRUE : FALSE;
+}
+
 void SnesIO::LatchMouseSerial()
 {
 	Int8 iDX = (Int8)(m_Input.uPad[2] & 0xFF);
@@ -67,6 +78,22 @@ void SnesIO::LatchScopeSerial()
 	m_uScopeSerial = uReport;
 }
 
+void SnesIO::LatchJustifierSerial()
+{
+	Uint16 uButtons = m_Input.uPad[1] & 0x000F;
+	Uint32 uReport = 0x000E5500u;
+
+	if (uButtons & EMUSYS_SNES_JUSTIFIER1_TRIGGER) uReport |= 0x00000080u;
+	if (IsDualJustifierMode() &&
+	    (uButtons & EMUSYS_SNES_JUSTIFIER2_TRIGGER)) uReport |= 0x00000040u;
+	if (uButtons & EMUSYS_SNES_JUSTIFIER1_START) uReport |= 0x00000020u;
+	if (IsDualJustifierMode() &&
+	    (uButtons & EMUSYS_SNES_JUSTIFIER2_START)) uReport |= 0x00000010u;
+	if (m_uJustifierActive & 1) uReport |= 0x00000008u;
+
+	m_uJustifierSerial = uReport;
+}
+
 Uint8 SnesIO::ReadMouseSerial()
 {
 	Uint8 uData = (Uint8)((m_uMouseSerial >> 31) & 1);
@@ -95,6 +122,14 @@ Uint8 SnesIO::ReadScopeSerial()
 	return uData;
 }
 
+Uint8 SnesIO::ReadJustifierSerial()
+{
+	Uint8 uData = (Uint8)((m_uJustifierSerial >> 31) & 1);
+	if (!(m_Regs.joydata & 1))
+		m_uJustifierSerial = (m_uJustifierSerial << 1) | 1u;
+	return uData;
+}
+
 Bool SnesIO::GetSuperScopePosition(Uint16 *pX, Uint16 *pY) const
 {
 	if (!IsSuperScopeMode())
@@ -103,6 +138,31 @@ Bool SnesIO::GetSuperScopePosition(Uint16 *pX, Uint16 *pY) const
 	if (pX) *pX = (Uint16)(m_Input.uPad[2] & 0xFF);
 	if (pY) *pY = (Uint16)((m_Input.uPad[2] >> 8) & 0xFF);
 	return TRUE;
+}
+
+Bool SnesIO::GetJustifierPosition(Uint16 *pX, Uint16 *pY) const
+{
+	Uint16 uPacked;
+
+	if (!IsJustifierMode())
+		return FALSE;
+
+	/* A single Justifier still toggles the active selector. When selector 1
+	   is active there is no chained second gun, so no optical hit exists. */
+	if ((m_uJustifierActive & 1) && !IsDualJustifierMode())
+		return FALSE;
+
+	uPacked = (m_uJustifierActive & 1) ? m_Input.uPad[3] : m_Input.uPad[2];
+	if (pX) *pX = (Uint16)(uPacked & 0xFF);
+	if (pY) *pY = (Uint16)((uPacked >> 8) & 0xFF);
+	return TRUE;
+}
+
+Bool SnesIO::GetLightGunPosition(Uint16 *pX, Uint16 *pY) const
+{
+	if (GetSuperScopePosition(pX, pY))
+		return TRUE;
+	return GetJustifierPosition(pX, pY);
 }
 
 
@@ -149,6 +209,8 @@ Uint8 SnesIO::ReadSerial1()
 {
 	Uint32 uData;
 
+	if (IsJustifierMode())
+		return (Uint8)(ReadJustifierSerial() | 0x1C);
 	if (IsSuperScopeMode())
 		return (Uint8)(ReadScopeSerial() | 0x1C);
 
@@ -225,8 +287,11 @@ Uint8 SnesIO::ReadSerial1()
 
 void SnesIO::WriteSerial(Uint8 uData)
 {
+	Uint8 uOldStrobe = m_Regs.joydata & 1;
+	Uint8 uNewStrobe = uData & 1;
+
 	// strobe?
-	if ((uData&1) && !(m_Regs.joydata&1))
+	if (uNewStrobe && !uOldStrobe)
 	{
 		int iPad;
 
@@ -250,6 +315,15 @@ void SnesIO::WriteSerial(Uint8 uData)
 			LatchScopeSerial();
 	}
 
+	/* Justifier resets its 32-bit stream on either strobe edge and toggles
+	   the selected gun on the falling edge, even for a single-gun chain. */
+	if (IsJustifierMode() && uOldStrobe != uNewStrobe)
+	{
+		if (uOldStrobe && !uNewStrobe)
+			m_uJustifierActive ^= 1;
+		LatchJustifierSerial();
+	}
+
 	m_Regs.joydata = uData;
 }
 
@@ -263,7 +337,7 @@ void SnesIO::UpdateJoyPads()
 	WriteSerial(1);
 	WriteSerial(0);
 
-	if (IsMouseMode() || IsSuperScopeMode())
+	if (IsMouseMode() || IsSuperScopeMode() || IsJustifierMode())
 	{
 		m_Regs.joy1.w = 0;
 		m_Regs.joy2.w = 0;
