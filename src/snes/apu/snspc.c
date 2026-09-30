@@ -79,6 +79,7 @@ void SNSPCNew(SNSpcT *pCpu)
 	pCpu->pWriteTrapFunc = _SNSPCDefaultWrite;
 	pCpu->pUserData  = NULL;
 	pCpu->bRomEnable = FALSE;
+	pCpu->uTestReg = 0x0A;
 
 	SNSPCReset(pCpu, TRUE);
 }
@@ -128,6 +129,8 @@ void SNSPCReset(SNSpcT *pCpu, Bool bHardReset)
 		SNSPCResetCounters(pCpu);
 
 		pCpu->bRomEnable = FALSE;
+		/* TEST powers up with RAM writable and timers globally enabled. */
+		pCpu->uTestReg = 0x0A;
 
 		// clear spc Mem
 		memset(pCpu->Mem, 0, SNSPC_MEM_SIZE);
@@ -163,13 +166,10 @@ void SNSPCPeekMem(SNSpcT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes)
 
 Uint8 SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 {
+	uAddr &= 0xFFFFu;
 	if (uAddr >= 0xF0 && uAddr < 0x100)
-	{
 		return pCpu->pReadTrapFunc(pCpu, uAddr);
-	} else
-	{
-		return pCpu->Mem[uAddr];
-	}
+	return SNSPCReadRAM(pCpu, uAddr);
 }
 
 Uint16 SNSPCRead16(SNSpcT *pCpu, Uint32 Addr)
@@ -201,19 +201,12 @@ void SNSPCSetTrapFunc(SNSpcT *pSpc, SNSpcReadTrapFuncT pReadTrap, SNSpcWriteTrap
 
 void SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
 {
-	// don't write to rom area
-	if (uAddr < SNSPC_ROM_ADDR || !pCpu->bRomEnable)
-	{
-		pCpu->Mem[uAddr] = uData;
-	}  else
-	{
-		pCpu->ShadowMem[uAddr & (SNSPC_ROM_SIZE -1)] = uData;
-	}
+	uAddr &= 0xFFFFu;
+	/* Every S-SMP write first reaches APURAM, subject to TEST gating. */
+	SNSPCWriteRAM(pCpu, uAddr, uData);
 
 	if (uAddr >= 0xF0 && uAddr < 0x100)
-	{
 		pCpu->pWriteTrapFunc(pCpu, uAddr, uData);
-	}
 }
 
 void SNSPCWrite16(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
