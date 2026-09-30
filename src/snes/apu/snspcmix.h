@@ -72,7 +72,7 @@ class    SNSpcDspMixFull : public SNSpcDspMix
 
 	void	FetchBlock(Int32 iChannel);
 	void	RefreshBlock(Int32 iChannel);
-	Int32	OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate);
+	Int32	OutputSample(Int32 iChannel, Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate, const Int16 *pPitchMod);
 	Int32   OutputNoise(Int16 *pOut, Uint16 *pFrac, Int32 nSamples, Int32 nSampleRate);
 	void	FilterEcho(Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSamples, Int32 nSampleRate, Bool bEchoSPCMem);
 public:
