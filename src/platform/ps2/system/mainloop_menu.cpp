@@ -131,7 +131,7 @@ int _MainLoopMenuEvent(Uint32 Type, Uint32 Parm1, void *Parm2)
                                                 );
                                                 _MainLoop_pMenuScreen->SetText(
                                                         2,
-                                                        "Scope: stick + X/Square/R1/Triangle"
+                                                        "Scope: X/Square/R1/Tri | Justifier: X+Start"
                                                 );
                                                 return 1;
                                         case 12:
