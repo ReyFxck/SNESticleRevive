@@ -1029,6 +1029,43 @@ static bool CheckSuperScopeBeamLatch()
     return h == 255u && v == 77u;
 }
 
+static bool CheckJustifierBeamLatch()
+{
+    std::vector<uint8_t> image = BuildSelfTestRom();
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE)
+        return false;
+
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+
+    Emu::SysInputT input;
+    for (size_t i = 0; i < EMUSYS_DEVICE_NUM; ++i)
+        input.uPad[i] = EMUSYS_DEVICE_DISCONNECTED;
+    input.uPad[4] = EMUSYS_SNES_SPECIAL_JUSTIFIER;
+    input.uPad[2] = 200u | (91u << 8);
+    input.uPad[1] = (Uint16)(0xFFF0u | EMUSYS_SNES_JUSTIFIER1_TRIGGER);
+
+    system.ExecuteFrame(&input, NULL, NULL,
+                        Emu::System::MODE_ACCURATEDETERMINISTIC);
+
+    SnesPPU *ppu = system.GetPPU();
+    Uint8 stat = ppu->Read8(0x213F, 0, FALSE);
+    if (!(stat & 0x40))
+        return false;
+
+    Uint16 h = ppu->Read8(0x213C);
+    h |= (Uint16)(ppu->Read8(0x213C) & 1u) << 8;
+    Uint16 v = ppu->Read8(0x213D);
+    v |= (Uint16)(ppu->Read8(0x213D) & 1u) << 8;
+
+    return h == 200u && v == 91u;
+}
+
 static int SelfTestCommand()
 {
     if (!CheckExHiRomSramMirrors())
@@ -1058,6 +1095,12 @@ static int SelfTestCommand()
     if (!CheckSuperScopeBeamLatch())
     {
         fprintf(stderr, "ROM Lab self-test: Super Scope beam latch failed\n");
+        return 1;
+    }
+
+    if (!CheckJustifierBeamLatch())
+    {
+        fprintf(stderr, "ROM Lab self-test: Justifier beam latch failed\n");
         return 1;
     }
 
