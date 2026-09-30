@@ -144,6 +144,18 @@ _INLINE Int32 _SnesPPUInterlaceFetchLine(Int32 iLine, Uint8 uBGMode,
 		: iLine;
 }
 
+_INLINE Int32 _SnesPPUVerticalFetchLine(Int32 iLine, Uint8 uMosaic,
+	Uint8 uBGMode, Bool bScreenInterlace, Bool bOddField)
+{
+	if (uMosaic > 0)
+	{
+		const Int32 nBlock = (Int32)uMosaic + 1;
+		iLine = (iLine / nBlock) * nBlock;
+	}
+	return _SnesPPUInterlaceFetchLine(
+		iLine, uBGMode, bScreenInterlace, bOddField);
+}
+
 struct SnesRenderTileT
 {
 	Uint16	uTile;		// tile index
