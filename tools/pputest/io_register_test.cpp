@@ -104,6 +104,47 @@ static void CheckTimedALU()
 	Check("last-cycle multiply write keeps loaded shift H", io.ReadALU(&cpu, 0x4215), 0x04);
 }
 
+static void CheckAutoJoypadTiming()
+{
+	SnesIO io;
+	Emu::SysInputT input = {};
+
+	input.uPad[0] = 0xA5F0;
+	input.uPad[1] = 0x3C70;
+	input.uPad[2] = EMUSYS_DEVICE_DISCONNECTED;
+	input.uPad[3] = EMUSYS_DEVICE_DISCONNECTED;
+	input.uPad[4] = EMUSYS_DEVICE_DISCONNECTED;
+	io.LatchInput(&input);
+	io.m_Regs.nmitimen = 0x01;
+
+	/* With a frame/VBlank reference clock of 1000, the aligned sequencer
+	   begins at 1152. Busy becomes visible one 128-clock phase later. */
+	io.BeginAutoJoypad(1000);
+	io.ProcessAutoJoypad(1279);
+	Check("autojoy busy before step1", io.IsAutoJoypadActive(), 0);
+	io.ProcessAutoJoypad(1280);
+	Check("autojoy busy at step1", io.IsAutoJoypadActive(), 1);
+	Check("autojoy joy1 cleared at start", io.m_Regs.joy1.w, 0);
+	io.ProcessAutoJoypad(5504);
+	Check("autojoy busy after step34", io.IsAutoJoypadActive(), 0);
+	Check("autojoy joy1 result", io.m_Regs.joy1.w, 0xA5F0);
+	Check("autojoy joy2 result", io.m_Regs.joy2.w, 0x3C70);
+
+	/* Changing enable during the opening 256 clocks immediately changes
+	   OUT0 and prevents this frame's transfer from becoming active. */
+	io.Reset();
+	io.LatchInput(&input);
+	io.m_Regs.nmitimen = 0x01;
+	io.BeginAutoJoypad(1000);
+	io.ProcessAutoJoypad(1152);
+	Check("autojoy strobe high", io.m_Regs.joydata & 1, 1);
+	io.PrepareAutoJoypadEnableChange(1200, FALSE);
+	io.m_Regs.nmitimen &= (Uint8)~0x01;
+	Check("autojoy strobe follows disable", io.m_Regs.joydata & 1, 0);
+	io.ProcessAutoJoypad(1280);
+	Check("autojoy disabled before busy", io.IsAutoJoypadActive(), 0);
+}
+
 static void CheckDMARegisterMap()
 {
 	SnesDMAC dma;
@@ -137,6 +178,7 @@ int main()
 {
 	CheckPowerOnRegisters();
 	CheckTimedALU();
+	CheckAutoJoypadTiming();
 	CheckDMARegisterMap();
 
 	if (g_Failures)
