@@ -135,13 +135,13 @@ private:
 	Uint32		m_uIrqFlagSetClock;
 	/* S-CPU master-clock position already delivered to the SA-1 this line. */
 	Int32		m_nSA1LineClock;
-	/* Transient Super Scope optical event for the current frame. The receiver
-	   toggles the PPU counter-latch line only when the raster crosses the aim. */
-	Bool		m_bScopeLatchPending;
-	Uint16		m_uScopeLatchLine;
-	Uint16		m_uScopeLatchX;
-	Uint16		m_uScopeLatchY;
-	Int32		m_nScopeLatchCycle;
+	/* Transient light-gun optical event for the current frame. Scope and
+	   Justifier share the controller-port-2 PPU counter-latch line. */
+	Bool		m_bLightGunLatchPending;
+	Uint16		m_uLightGunLatchLine;
+	Uint16		m_uLightGunLatchX;
+	Uint16		m_uLightGunLatchY;
+	Int32		m_nLightGunLatchCycle;
 	Uint8		m_Ram[SNES_RAMSIZE] _ALIGN(16);
 	Uint8		m_SRam[SNES_SRAMSIZE] _ALIGN(16);
 
