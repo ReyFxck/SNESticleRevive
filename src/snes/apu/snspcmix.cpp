@@ -30,6 +30,14 @@ extern "C" {
 
 #define SNSPCDSP_MIXASM ((CODE_PLATFORM == CODE_PS2) && 1)
 
+/* PS2 EE hot path for the historical Revive voice-mix formula.
+   PMON/OUTX remain on the separate hardware-even voice-output path. */
+#if CODE_PLATFORM == CODE_PS2
+extern "C" void SNSpcMixVoicePS2(Int32 *pOutLeft, Int32 *pOutRight,
+	const Int16 *pIn, const Uint8 *pEnvelope, Int32 nSamples,
+	Int32 iVolLeft, Int32 iVolRight);
+#endif
+
 Uint32 _ChMask=0xFF;
 
 typedef Int16 SNSpcEchoSampleT;
@@ -646,23 +654,27 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 	return 1;
 }
 
-static _INLINE Int32 _SNSpcDspMixVoiceSample(
-	Int16 iSample, Uint8 uEnvelope)
-{
-	return ((Int32)iSample * (Int32)uEnvelope) >> 7;
-}
-
+/*
+ * Keep the historical Revive main/echo mix math bit-for-bit:
+ * decoded PCM * envelope >> 7, then per-channel volume. PMON/OUTX use the
+ * separately clamped/even S-DSP voice latch and must not be substituted here.
+ */
 static void _MixChannel(
 	Int32 *pOutLeft, Int32 *pOutRight,
 	const Int16 *pIn, const Uint8 *pEnvelope,
 	Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
+#if CODE_PLATFORM == CODE_PS2
+	SNSpcMixVoicePS2(pOutLeft, pOutRight, pIn, pEnvelope, nSamples,
+		iVolLeft, iVolRight);
+#else
 	while (nSamples-- > 0)
 	{
-		Int32 iSample = _SNSpcDspMixVoiceSample(*pIn++, *pEnvelope++);
+		Int32 iSample = SNSpcDspEnvelopeMixSample(*pIn++, *pEnvelope++);
 		*pOutLeft++  += iSample * iVolLeft;
 		*pOutRight++ += iSample * iVolRight;
 	}
+#endif
 }
 
 static void _MixChannelEcho(
@@ -673,7 +685,7 @@ static void _MixChannelEcho(
 {
 	while (nSamples-- > 0)
 	{
-		Int32 iSample = _SNSpcDspMixVoiceSample(*pIn++, *pEnvelope++);
+		Int32 iSample = SNSpcDspEnvelopeMixSample(*pIn++, *pEnvelope++);
 		Int32 iSampleLeft = iSample * iVolLeft;
 		Int32 iSampleRight = iSample * iVolRight;
 		Int32 iEchoLeft;

@@ -235,14 +235,17 @@ extern void SnesRomLabUnimplementedSpcOpcode(Uint32 uPC, Uint8 uOpcode);
 	SNSPC_PUSH16(t2);\
 	SNSPC_SET_PC16(t0);
 
+/* The SPC700 has a 16-bit program counter. Operand fetches across
+   $ffff must wrap to $0000, including an opcode fetched at $ffff. */
 static __inline Uint8 _SNSPCFetch8(SNSpcT *pCpu, Uint32 uAddr)
 {
-	return pCpu->Mem[uAddr];
+	return pCpu->Mem[uAddr & 0xFFFFu];
 }
 
 static __inline Uint16 _SNSPCFetch16(SNSpcT *pCpu, Uint32 uAddr)
 {
-	return pCpu->Mem[uAddr] | (pCpu->Mem[uAddr+1]<<8);
+	Uint32 uPC = uAddr & 0xFFFFu;
+	return pCpu->Mem[uPC] | (pCpu->Mem[(uPC + 1) & 0xFFFFu] << 8);
 }
 
 static __inline Uint8 __SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
