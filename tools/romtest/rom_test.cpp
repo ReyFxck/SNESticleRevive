@@ -332,6 +332,45 @@ static void TestRealType1StillWorks(void)
 		"conversao Type-1 deve restaurar todos os blocos da ROM");
 }
 
+static void Test24MbitBoardDetection(void)
+{
+	static const char *titles[] = {
+		"SOUND NOVEL-TCOOL",
+		"DERBY STALLION 96"
+	};
+
+	for (Uint32 i = 0; i < sizeof(titles) / sizeof(titles[0]); i++)
+	{
+		std::vector<Uint8> rom(0x300000, 0xFF);
+		PutHeader(rom, 0x7FC0, titles[i], 0x20, (Uint16)(0x4100 + i),
+			0x8000, 0x0000);
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"24-Mbit board fixture must load");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_ROM24MBS) != 0,
+			"known BSC 24-Mbit title must select special board map");
+	}
+
+	/* Size is part of the board identity. A hack retaining the same title but
+	   expanded to 4 MiB must fall back to ordinary mapping rather than expose
+	   the 3 MiB PCB geometry. */
+	{
+		std::vector<Uint8> rom(0x400000, 0xFF);
+		PutHeader(rom, 0x7FC0, "SOUND NOVEL-TCOOL", 0x20, 0x5111,
+			0x8000, 0x0000);
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"expanded-title fixture must load");
+		CHECK((snesRom.m_Flags & SNROM_FLAG_ROM24MBS) == 0,
+			"expanded ROM must not force 24-Mbit PCB map");
+	}
+}
+
 static void TestType2ExplicitRecovery(void)
 {
 	std::vector<Uint8> linear(0x100000, 0xFF);
@@ -397,6 +436,7 @@ int main(void)
 	TestVideoRegionHeaderCodes();
 	TestPinocchioFalseType1Regression();
 	TestRealType1StillWorks();
+	Test24MbitBoardDetection();
 	TestType2ExplicitRecovery();
 
 	if (g_Failures)
