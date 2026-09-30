@@ -19,7 +19,50 @@
 #define SNPPU_VERSION_5C77 (0x01)
 #define SNPPU_VERSION_5C78 (0x03)
 
-void SnesPPU::WriteCGDATA(Uint8 uData)
+Bool SnesPPU::IsActiveDisplay(Uint32 uLine) const
+{
+	return !IsForceBlank() && uLine > 0 && uLine < (m_uFrameVisibleLines + 1u);
+}
+
+Bool SnesPPU::CanAccessVRAM(Uint32 uLine) const
+{
+	return IsForceBlank() || uLine >= (m_uFrameVisibleLines + 1u);
+}
+
+Bool SnesPPU::CanAccessCGRAM(Uint32 uLine, Uint32 uHClock) const
+{
+	return IsForceBlank() || uLine == 0 ||
+	       uLine >= (m_uFrameVisibleLines + 1u) ||
+	       uHClock < 88u || uHClock >= 1096u;
+}
+
+Uint16 SnesPPU::ResolveActiveOAMAddress(Uint32 uLine, Uint32 uHClock)
+{
+	if (!IsActiveDisplay(uLine))
+		return (Uint16)(m_Regs.oamaddr.w & 0x3FF);
+
+	/* H=0..255: sprite evaluation advances one object every two PPU clocks.
+	   Afterwards the renderer's already-built per-line list gives the sprite
+	   whose attributes/tiles own the OAM bus. */
+	if (uHClock <= 255u * 4u)
+	{
+		Uint32 uStart = m_Regs.oampri.w & 0x7F;
+		Uint32 uPpuClock = uHClock >> 2;
+		Uint32 uAdvance = (uPpuClock + 1u) >> 1;
+		return (Uint16)(((uStart + uAdvance) & 0x7F) << 2);
+	}
+
+	if (m_pRender)
+	{
+		Uint16 uAddress = m_pRender->GetInternalOAMAddress(uLine, uHClock);
+		if (uAddress != 0xFFFF)
+			return uAddress & 0x3FF;
+	}
+
+	return (Uint16)((m_Regs.oampri.w & 0x7F) << 2);
+}
+
+void SnesPPU::WriteCGDATATimed(Uint8 uData, Uint32 uAddress)
 {
 #if SNDBG_LOG
 	g_DbgCGRAMWrites++;
@@ -27,11 +70,8 @@ void SnesPPU::WriteCGDATA(Uint8 uData)
 #if SNDBG_DEEP
 	g_DbgPPURegWrites[0x22]++;
 #endif
-	Uint32 uCGAddr = (m_Regs.cgadd.w >> 1) &
-	                 (SNESPPU_CGRAM_NUM - 1);
+	uAddress &= SNESPPU_CGRAM_NUM - 1;
 
-	/* $2122 is a latched 15-bit port.  The low byte is not visible in
-	   CGRAM until the following high byte commits the complete color. */
 	if (!(m_Regs.cgadd.w & 1))
 	{
 		m_CGRAMLatch = uData;
@@ -40,48 +80,42 @@ void SnesPPU::WriteCGDATA(Uint8 uData)
 	{
 		Uint16 uColor = (Uint16)m_CGRAMLatch |
 		                ((Uint16)(uData & 0x7F) << 8);
-		Bool bChanged = m_CGRAM[uCGAddr] != uColor;
-
-		m_CGRAM[uCGAddr] = uColor;
+		Bool bChanged = m_CGRAM[uAddress] != uColor;
+		m_CGRAM[uAddress] = uColor;
 #if SNDBG_LOG
 		g_DbgCGRAMCommits++;
-		if (!bChanged)
-			g_DbgCGRAMUnchanged++;
+		if (!bChanged) g_DbgCGRAMUnchanged++;
 #endif
-		/* Preserve every emulated write/address side effect, but avoid
-		   converting and uploading a host palette entry that did not change. */
-		if (bChanged)
-			m_pRender->UpdateCGRAM(uCGAddr, uColor);
+		if (bChanged && m_pRender)
+			m_pRender->UpdateCGRAM(uAddress, uColor);
 	}
-
-	// The internal byte phase advances after every port access.
 	m_Regs.cgadd.w++;
+}
+
+void SnesPPU::WriteCGDATA(Uint8 uData)
+{
+	WriteCGDATATimed(uData, (m_Regs.cgadd.w >> 1) &
+	                         (SNESPPU_CGRAM_NUM - 1));
+}
+
+Uint8 SnesPPU::ReadCGDATATimed(Uint32 uAddress)
+{
+	Uint8 uData;
+	uAddress &= SNESPPU_CGRAM_NUM - 1;
+	if (!(m_Regs.cgadd.w & 1))
+		uData = (Uint8)(m_CGRAM[uAddress] & 0xFF);
+	else
+		uData = (Uint8)(((m_CGRAM[uAddress] >> 8) & 0x7F) |
+		                (m_PPU2OpenBus & 0x80));
+	m_Regs.cgadd.w++;
+	m_PPU2OpenBus = uData;
+	return uData;
 }
 
 Uint8 SnesPPU::ReadCGDATA()
 {
-	Uint32 uCGAddr;
-	Uint8 uData;
-
-	uCGAddr = m_Regs.cgadd.w >> 1;
-	uCGAddr&= SNESPPU_CGRAM_NUM-1;
-	if (!(m_Regs.cgadd.w&1))
-	{
-		// lower byte
-		uData =  m_CGRAM[uCGAddr] & 0xFF;
-	} else
-	{
-		/* CGRAM is 15-bit. Bit 7 of a high-byte read is retained from
-		   the PPU2 data bus rather than being forced to zero. */
-		uData = (Uint8)(((m_CGRAM[uCGAddr] >> 8) & 0x7F) |
-		                (m_PPU2OpenBus & 0x80));
-	}
-
-	// increment color address
-	m_Regs.cgadd.w++;
-	m_PPU2OpenBus = uData;
-
-	return uData;
+	return ReadCGDATATimed((m_Regs.cgadd.w >> 1) &
+	                       (SNESPPU_CGRAM_NUM - 1));
 }
 
 static Uint32 _SwizzleVramAddr(Uint32 uVramAddr, Uint32 uFullGraphic)
@@ -107,7 +141,7 @@ static Uint32 _SwizzleVramAddr(Uint32 uVramAddr, Uint32 uFullGraphic)
 	}
 }
 
-void SnesPPU::WriteVMDATAL(Uint8 uData)
+void SnesPPU::WriteVMDATALTimed(Uint8 uData, Bool bAllow)
 {
 #if SNDBG_LOG
 	g_DbgVRAMWrites++;
@@ -116,21 +150,22 @@ void SnesPPU::WriteVMDATAL(Uint8 uData)
 	g_DbgPPURegWrites[0x18]++;
 #endif
 	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
-	Uint32 uVramAddr;
-
-	// calculate vram address
-	uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w, (m_Regs.vmain >> 2) & 3);
-
-	// write to vram
-	pVram[uVramAddr].b.l = uData;
-
-	// increment vram addr
+	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
+	                                    (m_Regs.vmain >> 2) & 3);
+	if (bAllow)
+	{
+		pVram[uVramAddr].b.l = uData;
+		if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
+	}
 	m_Regs.vmaddr.w += m_Regs.vminc[0];
-
-	m_pRender->UpdateVRAM(uVramAddr);
 }
 
-void SnesPPU::WriteVMDATAH(Uint8 uData)
+void SnesPPU::WriteVMDATAL(Uint8 uData)
+{
+	WriteVMDATALTimed(uData, TRUE);
+}
+
+void SnesPPU::WriteVMDATAHTimed(Uint8 uData, Bool bAllow)
 {
 #if SNDBG_LOG
 	g_DbgVRAMWrites++;
@@ -139,18 +174,19 @@ void SnesPPU::WriteVMDATAH(Uint8 uData)
 	g_DbgPPURegWrites[0x19]++;
 #endif
 	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
-	Uint32 uVramAddr;
-
-	// calculate vram address
-	uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w, (m_Regs.vmain >> 2) & 3);
-
-	// write to vram
-	pVram[uVramAddr].b.h = uData;
-
-	// increment vram addr
+	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
+	                                    (m_Regs.vmain >> 2) & 3);
+	if (bAllow)
+	{
+		pVram[uVramAddr].b.h = uData;
+		if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
+	}
 	m_Regs.vmaddr.w += m_Regs.vminc[1];
+}
 
-	m_pRender->UpdateVRAM(uVramAddr);
+void SnesPPU::WriteVMDATAH(Uint8 uData)
+{
+	WriteVMDATAHTimed(uData, TRUE);
 }
 
 void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
@@ -252,44 +288,42 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 		WriteVMDATAL(*pData);
 }
 
-Uint8 SnesPPU::ReadVMDATAL()
+Uint8 SnesPPU::ReadVMDATALTimed(Bool bAllow)
 {
-	Uint8 uData;
-	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
-
-	/* Reads return the word-sized prefetch latch. On the selected increment
-	   port, hardware reloads that latch from the current VMADDR immediately
-	   before advancing VMADDR; block reads therefore require the documented
-	   dummy access. */
-	uData = m_Regs.vmreadlatch.b.l;
+	Uint8 uData = m_Regs.vmreadlatch.b.l;
 	if (m_Regs.vminc[0])
 	{
 		Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
-		                                      (m_Regs.vmain >> 2) & 3);
-		m_Regs.vmreadlatch.w = pVram[uVramAddr].w;
+		                                    (m_Regs.vmain >> 2) & 3);
+		m_Regs.vmreadlatch.w = bAllow ? m_VRAM[uVramAddr] : 0;
 		m_Regs.vmaddr.w += m_Regs.vminc[0];
 	}
 	m_PPU1OpenBus = uData;
+	return uData;
+}
 
+Uint8 SnesPPU::ReadVMDATAL()
+{
+	return ReadVMDATALTimed(TRUE);
+}
+
+Uint8 SnesPPU::ReadVMDATAHTimed(Bool bAllow)
+{
+	Uint8 uData = m_Regs.vmreadlatch.b.h;
+	if (m_Regs.vminc[1])
+	{
+		Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
+		                                    (m_Regs.vmain >> 2) & 3);
+		m_Regs.vmreadlatch.w = bAllow ? m_VRAM[uVramAddr] : 0;
+		m_Regs.vmaddr.w += m_Regs.vminc[1];
+	}
+	m_PPU1OpenBus = uData;
 	return uData;
 }
 
 Uint8 SnesPPU::ReadVMDATAH()
 {
-	Uint8 uData;
-	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
-
-	uData = m_Regs.vmreadlatch.b.h;
-	if (m_Regs.vminc[1])
-	{
-		Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
-		                                      (m_Regs.vmain >> 2) & 3);
-		m_Regs.vmreadlatch.w = pVram[uVramAddr].w;
-		m_Regs.vmaddr.w += m_Regs.vminc[1];
-	}
-	m_PPU1OpenBus = uData;
-
-	return uData;
+	return ReadVMDATAHTimed(TRUE);
 }
 
 static Uint32 _MapOAMAddress(Uint32 uAddress)
@@ -361,7 +395,7 @@ void SnesPPU::UpdateOAMPriority()
 		m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);
 }
 
-void SnesPPU::WriteOAMDATA(Uint8 uData)
+void SnesPPU::WriteOAMDATATimed(Uint8 uData, Uint32 uAddress, Bool bActive)
 {
 #if SNDBG_LOG
 	g_DbgOAMWrites++;
@@ -369,13 +403,10 @@ void SnesPPU::WriteOAMDATA(Uint8 uData)
 #if SNDBG_DEEP
 	g_DbgPPURegWrites[0x04]++;
 #endif
-	Uint8	*pOamData = (Uint8 *)&m_OAM;
-	Uint32 uAddress = m_Regs.oamaddr.w & 0x3FF;
+	Uint8 *pOamData = (Uint8 *)&m_OAM;
+	uAddress &= 0x3FF;
 	Bool bChanged = FALSE;
 
-	/* Low OAM is a 16-bit write port: the even byte is latched and the pair
-	   is committed only by the odd byte. High OAM writes immediately and is
-	   mirrored every 32 bytes throughout the logical $200-$3ff range. */
 	if (!(uAddress & 1))
 		m_OAMLatch = uData;
 
@@ -387,19 +418,35 @@ void SnesPPU::WriteOAMDATA(Uint8 uData)
 	}
 	else if (uAddress & 1)
 	{
-		Uint32 uEven = uAddress & ~1;
+		Uint32 uEven = uAddress & ~1u;
 		bChanged = pOamData[uEven] != m_OAMLatch ||
 		           pOamData[uAddress] != uData;
 		pOamData[uEven] = m_OAMLatch;
 		pOamData[uAddress] = uData;
 	}
 
-	m_Regs.oamaddr.w = (m_Regs.oamaddr.w & 0x8000) |
-	                     ((uAddress + 1) & 0x3FF);
-	UpdateOAMPriority();
+	if (bActive)
+	{
+		/* During rendering the same write also hits high OAM at the address
+		   derived from the sprite-evaluation/fetch bus. */
+		Uint32 uHigh = 0x200u | ((uAddress & 0x1F0u) >> 4);
+		uHigh = _MapOAMAddress(uHigh);
+		if (pOamData[uHigh] != uData) bChanged = TRUE;
+		pOamData[uHigh] = uData;
+	}
 
-	if (bChanged)
-		m_pRender->UpdateOAM();
+	/* Internal OAM address still advances independently of the address that
+	   owned the rendering bus. */
+	Uint32 uInternal = m_Regs.oamaddr.w & 0x3FF;
+	m_Regs.oamaddr.w = (m_Regs.oamaddr.w & 0x8000) |
+	                     ((uInternal + 1) & 0x3FF);
+	UpdateOAMPriority();
+	if (bChanged && m_pRender) m_pRender->UpdateOAM();
+}
+
+void SnesPPU::WriteOAMDATA(Uint8 uData)
+{
+	WriteOAMDATATimed(uData, m_Regs.oamaddr.w & 0x3FF, FALSE);
 }
 
 void SnesPPU::WriteOAMBlock(const Uint8 *pData, Int32 nBytes)
@@ -452,18 +499,23 @@ void SnesPPU::WriteOAMBlock(const Uint8 *pData, Int32 nBytes)
 		m_pRender->UpdateOAM();
 }
 
-Uint8 SnesPPU::ReadOAMDATA()
+Uint8 SnesPPU::ReadOAMDATATimed(Uint32 uAddress)
 {
-	Uint8	*pOamData = (Uint8 *)&m_OAM;
-	Uint32 uAddress = m_Regs.oamaddr.w & 0x3FF;
+	Uint8 *pOamData = (Uint8 *)&m_OAM;
+	uAddress &= 0x3FF;
 	Uint8 uData = pOamData[_MapOAMAddress(uAddress)];
 
+	Uint32 uInternal = m_Regs.oamaddr.w & 0x3FF;
 	m_Regs.oamaddr.w = (m_Regs.oamaddr.w & 0x8000) |
-	                     ((uAddress + 1) & 0x3FF);
+	                     ((uInternal + 1) & 0x3FF);
 	UpdateOAMPriority();
 	m_PPU1OpenBus = uData;
-
 	return uData;
+}
+
+Uint8 SnesPPU::ReadOAMDATA()
+{
+	return ReadOAMDATATimed(m_Regs.oamaddr.w & 0x3FF);
 }
 
 void SnesPPU::UpdateMatMul()
@@ -479,6 +531,79 @@ void SnesPPU::UpdateMatMul()
 	m_Regs.mpyl = (Uint8)(iProduct  >> 0);
 	m_Regs.mpym = (Uint8)(iProduct  >> 8);
 	m_Regs.mpyh = (Uint8)(iProduct  >> 16);
+}
+
+void SnesPPU::WriteTimed(Uint32 uAddr, Uint8 uData,
+	Uint32 uLine, Uint32 uHClock)
+{
+	uAddr &= 0xFFFF;
+	Bool bVRAM = CanAccessVRAM(uLine);
+
+	switch (uAddr)
+	{
+	case 0x2104:
+		WriteOAMDATATimed(uData, ResolveActiveOAMAddress(uLine, uHClock),
+		                 IsActiveDisplay(uLine));
+		return;
+
+	case 0x2116:
+		m_Regs.vmaddr.b.l = uData;
+		m_Regs.vmreadlatch.w = bVRAM ?
+			m_VRAM[_SwizzleVramAddr(m_Regs.vmaddr.w,
+			                       (m_Regs.vmain >> 2) & 3)] : 0;
+		return;
+	case 0x2117:
+		m_Regs.vmaddr.b.h = uData & 0x7F;
+		m_Regs.vmreadlatch.w = bVRAM ?
+			m_VRAM[_SwizzleVramAddr(m_Regs.vmaddr.w,
+			                       (m_Regs.vmain >> 2) & 3)] : 0;
+		return;
+
+	case 0x2118:
+		WriteVMDATALTimed(uData, bVRAM);
+		return;
+	case 0x2119:
+		WriteVMDATAHTimed(uData, bVRAM);
+		return;
+
+	case 0x2122:
+	{
+		Uint32 uCGAddr = (m_Regs.cgadd.w >> 1) &
+		                 (SNESPPU_CGRAM_NUM - 1);
+		if (!CanAccessCGRAM(uLine, uHClock) && m_pRender)
+			uCGAddr = m_pRender->GetInternalCGRAMAddress(uLine, uHClock);
+		WriteCGDATATimed(uData, uCGAddr);
+		return;
+	}
+	default:
+		Write8(uAddr, uData);
+		return;
+	}
+}
+
+Uint8 SnesPPU::ReadTimed(Uint32 uAddr, Uint8 uCpuOpenBus,
+	Bool bCounterLatchEnabled, Uint32 uLine, Uint32 uHClock)
+{
+	uAddr &= 0xFFFF;
+	switch (uAddr)
+	{
+	case 0x2138:
+		return ReadOAMDATATimed(ResolveActiveOAMAddress(uLine, uHClock));
+	case 0x2139:
+		return ReadVMDATALTimed(CanAccessVRAM(uLine));
+	case 0x213A:
+		return ReadVMDATAHTimed(CanAccessVRAM(uLine));
+	case 0x213B:
+	{
+		Uint32 uCGAddr = (m_Regs.cgadd.w >> 1) &
+		                 (SNESPPU_CGRAM_NUM - 1);
+		if (!CanAccessCGRAM(uLine, uHClock) && m_pRender)
+			uCGAddr = m_pRender->GetInternalCGRAMAddress(uLine, uHClock);
+		return ReadCGDATATimed(uCGAddr);
+	}
+	default:
+		return Read8(uAddr, uCpuOpenBus, bCounterLatchEnabled);
+	}
 }
 
 void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
