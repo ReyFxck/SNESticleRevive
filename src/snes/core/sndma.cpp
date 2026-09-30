@@ -213,6 +213,15 @@ void SnesDMAWritePPUPort(SnesPPU *pPPU, Uint32 uPort, Uint8 uData)
    generico de banco/trap para cada byte, sem alterar ordem, scanline ou os
    ciclos emulados. Fila cheia retorna FALSE e preserva o caminho original,
    que sincroniza o PPU e tenta novamente. */
+static _INLINE Bool SnesHDMAIsDirectTimedPort(Uint8 uPortB)
+{
+	/* These ports need live H/V timing but do not need the renderer's
+	   internal OAM bus. At HDMA H=276 they can bypass the generic CPU trap. */
+	return uPortB == 0x16 || uPortB == 0x17 ||
+	       uPortB == 0x18 || uPortB == 0x19 ||
+	       uPortB == 0x22;
+}
+
 static _INLINE Bool SnesHDMATryQueuePPUWrite(
 	SnesPPU *pPPU, Uint32 uLine, Uint8 uPortB, Uint8 uData)
 {
@@ -1024,8 +1033,17 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 		else
 		{
 			uData = SnesHDMARead8(m_pCPU, uAddrA);
-			if (!SnesHDMATryQueuePPUWrite(
-			        m_pPPU, uLine, uPortB, uData))
+			if (SnesHDMAIsDirectTimedPort(uPortB))
+			{
+				/* HDMA starts at H=276 in the scheduler. The A-bus read above
+				   drives open bus already, so a direct timed B-bus write is
+				   equivalent to the generic trap without SyncPPU overhead. */
+				Uint32 uHClock =
+					(Uint32)SNCPUGetCounter(m_pCPU, SNCPU_COUNTER_LINE);
+				m_pPPU->WriteTimed(uAddrB, uData, uLine, uHClock);
+			}
+			else if (!SnesHDMATryQueuePPUWrite(
+			         m_pPPU, uLine, uPortB, uData))
 			{
 				SNCPUWrite8(m_pCPU, uAddrB, uData);
 			}
