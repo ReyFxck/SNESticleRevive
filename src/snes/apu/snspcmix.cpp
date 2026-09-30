@@ -265,7 +265,6 @@ void SNSpcDspMixFull::Reset()
 	SNSpcDspMix::Reset();
 
 	memset(&m_Echo, 0, sizeof(m_Echo));
-	memset(m_EchoBuffer, 0, sizeof(m_EchoBuffer));
 	m_iNoisePhase = 0; /* retained for state ABI; exact counter path does not use it */
 	m_uNoiseGen   = 0x4000;
 }
