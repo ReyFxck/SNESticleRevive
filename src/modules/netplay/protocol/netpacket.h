@@ -3,6 +3,7 @@
 #define _NETPACKET_H
 
 #include "types.h"
+#include "netplay.h"
 
 #define NETPACKET_NAME_SIZE (16)
 #define NETPACKET_MAX_SIZE (512)
@@ -110,12 +111,24 @@ typedef struct
 } NetPacketPeerInfoT;
 
 
+/* Each run is 16 bytes: 32-bit repeat count, five 16-bit input words,
+   two padding bytes reserved for later protocol revisions. A 512-byte UDP
+   packet carries up to 31 runs (12-byte header + 31 * 16 = 508).
+   Keep all fields native-endian like the existing PS2-only protocol. */
+#define NETPACKET_INPUT_RUNS_MAX 31
 typedef struct
 {
-	NetPacketHdrT   Hdr;
-	Uint32			uAckPos;
-	Uint32			uStartPos;
-	Uint32			EncodeData[128];
+    Uint32               uLength;
+    NetPlayFrameInputT   Input;
+    Uint16               uReserved;
+} NetPacketInputRunT;
+
+typedef struct
+{
+    NetPacketHdrT         Hdr;
+    Uint32                uAckPos;
+    Uint32                uStartPos;
+    NetPacketInputRunT    Runs[NETPACKET_INPUT_RUNS_MAX];
 } NetPacketInputDataT;
 
 typedef struct
