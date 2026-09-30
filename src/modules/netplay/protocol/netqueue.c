@@ -110,14 +110,13 @@ Int32 NetQueueFetchRange(NetQueueT *pQueue, Uint32 uStart, Uint32 uEnd, NetQueue
 		// fetch backward
 		while (uStart!=uEnd && nElements<nMaxElements)
 		{
-			if (!NetQueueGetElement(pQueue, uEnd - 1, pElement))
-			{
+			NetQueueElementT Element;
+			if (!NetQueueGetElement(pQueue, uStart - 1, &Element))
 				break;
-			}
 
-			pElement++;
+			*pElement++ = Element;
 			nElements++;
-			uEnd--;
+			uStart--;
 		}
 	}
 
