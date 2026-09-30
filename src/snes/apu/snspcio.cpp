@@ -220,6 +220,23 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 #endif
 	switch (uAddr)
 	{
+	case 0xF0:	// TEST
+		/* TEST is writable only while the SPC P flag selects page 0.
+		   The underlying APURAM write has already been handled by the bus. */
+		if (pSpc->Regs.rPSW & SNSPC_FLAG_P)
+			break;
+		pSpc->uTestReg = uData;
+		SNSpcTimerSetGlobalGate(&pIO->m_Regs.spc_timer[0], iCycle,
+			(uData & SNSPC_TEST_TIMERS_ENABLE) ? TRUE : FALSE,
+			(uData & SNSPC_TEST_TIMERS_DISABLE) ? TRUE : FALSE);
+		SNSpcTimerSetGlobalGate(&pIO->m_Regs.spc_timer[1], iCycle,
+			(uData & SNSPC_TEST_TIMERS_ENABLE) ? TRUE : FALSE,
+			(uData & SNSPC_TEST_TIMERS_DISABLE) ? TRUE : FALSE);
+		SNSpcTimerSetGlobalGate(&pIO->m_Regs.spc_timer[2], iCycle,
+			(uData & SNSPC_TEST_TIMERS_ENABLE) ? TRUE : FALSE,
+			(uData & SNSPC_TEST_TIMERS_DISABLE) ? TRUE : FALSE);
+		break;
+
 	case 0xF1:	// control
 		{
 			/* Apply already-visible CPU writes, then clear both the live latch
