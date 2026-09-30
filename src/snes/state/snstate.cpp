@@ -23,10 +23,17 @@ void SnesSystem::SaveState(void *pState, Int32 nStateBytes)
 
 void SnesSystem::RestoreState(void *pState, Int32 nStateBytes)
 {
-    if (nStateBytes == sizeof(SnesStateT))
-    {
-        RestoreState((SnesStateT *)pState);
-    }
+	if (nStateBytes == (Int32)sizeof(SnesStateT))
+	{
+		RestoreState((SnesStateT *)pState);
+	}
+	else if (nStateBytes == (Int32)SNSTATE_LEGACY_BYTES)
+	{
+		SnesStateT State;
+		memset(&State, 0, sizeof(State));
+		memcpy(&State, pState, SNSTATE_LEGACY_BYTES);
+		RestoreState(&State);
+	}
 }
 
 Int32 SnesSystem::GetStateSize()
