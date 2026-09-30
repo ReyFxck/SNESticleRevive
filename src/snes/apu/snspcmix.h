@@ -9,6 +9,8 @@
 #ifndef _SNSPCMIX_H
 #define _SNSPCMIX_H
 
+#include <string.h>
+
 #if CODE_PLATFORM == CODE_PS2
 //#define SNSPCDSP_MAXSAMPLES 400
 //#define SNSPCDSP_BUFFERSIZE 400
