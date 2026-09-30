@@ -46,6 +46,16 @@ public:
 	void	Reset();
 	void	SaveState(struct SNStateSPCDSPT *pState);
 	void	RestoreState(struct SNStateSPCDSPT *pState);
+	Uint16	GetDspCounter() const { return m_uDspCounter; }
+	void	SetDspCounter(Uint16 uCounter) { m_uDspCounter = uCounter; }
+	void	CopyChannels(SNSpcChannelT *pOut) const
+	{
+		memcpy(pOut, m_Channels, sizeof(m_Channels));
+	}
+	void	RestoreChannels(const SNSpcChannelT *pIn)
+	{
+		memcpy(m_Channels, pIn, sizeof(m_Channels));
+	}
 };
 
 class SNSpcDspMixSilent : public SNSpcDspMix
@@ -81,6 +91,20 @@ class    SNSpcDspMixFull : public SNSpcDspMix
 public:
 	void	Reset();
 	void	Mix(class CMixBuffer *pOutBuffer);
+	void	CopyTransientState(SNSpcEchoT *pEcho, Int32 *pNoisePhase,
+		Uint32 *pNoiseGen) const
+	{
+		*pEcho = m_Echo;
+		*pNoisePhase = m_iNoisePhase;
+		*pNoiseGen = m_uNoiseGen;
+	}
+	void	RestoreTransientState(const SNSpcEchoT *pEcho, Int32 iNoisePhase,
+		Uint32 uNoiseGen)
+	{
+		m_Echo = *pEcho;
+		m_iNoisePhase = iNoisePhase;
+		m_uNoiseGen = uNoiseGen ? uNoiseGen : 0x4000;
+	}
 };
 
 #endif
