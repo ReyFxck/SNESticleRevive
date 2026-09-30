@@ -6,7 +6,7 @@ on:
       - main
       - experimental/sa1-mips
       - perf/sa1-r5900
-      - fix/mesence-core-accuracy-pass
+      - 'fix/**'
   workflow_dispatch:
 
 permissions:
