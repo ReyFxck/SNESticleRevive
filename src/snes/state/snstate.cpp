@@ -171,6 +171,8 @@ Bool SnesSystem::RestoreState(SnesStateT *pState)
 	/* Per-scanline SA-1 synchronization is transient scheduler state.  A
 	   restored frame begins a fresh line slice. */
 	m_nSA1LineClock = 0;
+	m_uNmiFlagSetClock = GetSCPUMasterClock();
+	m_uIrqFlagSetClock = GetSCPUMasterClock();
 
 	return TRUE;
 }
@@ -187,6 +189,12 @@ void SnesIO::RestoreState(struct SNStateIOT *pState)
 	/* The existing state format predates in-flight ALU timing. Preserve its
 	   binary size: restored result/input latches remain, pending work stops. */
 	ResetALUTiming(0);
+	m_uAutoReadClockStart = 0;
+	m_uAutoReadNextClock = 0;
+	m_uAutoReadPort1Value = 0;
+	m_uAutoReadPort2Value = 0;
+	m_bAutoReadActive = FALSE;
+	m_bAutoReadDisabled = TRUE;
 }
 
 void SNSpcIO::SaveState(struct SNStateSPCIOT *pState)
