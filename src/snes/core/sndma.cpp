@@ -75,7 +75,7 @@ void SnesDMAC::ConsumeMasterClocks(Int32 nClocks)
 {
 	if (nClocks <= 0)
 		return;
-	ConsumeMasterClocks(nClocks);
+	m_pCPU->Cycles -= nClocks;
 	if (m_bDMATimingActive)
 		m_uDMAClockCounter += (Uint32)nClocks;
 }
