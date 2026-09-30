@@ -71,6 +71,43 @@ static const Int16 _SNSpcDspGaussian[512] =
 	1299, 1300, 1300, 1301, 1302, 1302, 1303, 1303, 1303, 1304, 1304, 1304, 1304, 1304, 1305, 1305
 };
 
+/* Native S-DSP envelope/noise counter. Rates 1-31 are phases of one
+   30720-sample down-counter; rate 0 never fires. */
+static const Uint16 _SNSpcDspCounterRate[32] =
+{
+	0, 2048, 1536, 1280, 1024, 768, 640, 512,
+	384, 320, 256, 192, 160, 128, 96, 80,
+	64, 48, 40, 32, 24, 20, 16, 12,
+	10, 8, 6, 5, 4, 3, 2, 1
+};
+
+static const Uint16 _SNSpcDspCounterOffset[32] =
+{
+	0, 0, 1040, 536, 0, 1040, 536, 0,
+	1040, 536, 0, 1040, 536, 0, 1040, 536,
+	0, 1040, 536, 0, 1040, 536, 0, 1040,
+	536, 0, 1040, 536, 0, 1040, 0, 0
+};
+
+static _INLINE Uint16 SNSpcDspCounterTick(Uint16 uCounter)
+{
+	if (!uCounter) uCounter = 30720;
+	return (Uint16)(uCounter - 1);
+}
+
+static _INLINE Bool SNSpcDspCounterPoll(Uint16 uCounter, Uint32 uRate)
+{
+	if ((uRate &= 31u) == 0) return FALSE;
+	return (((Uint32)uCounter + _SNSpcDspCounterOffset[uRate]) %
+		_SNSpcDspCounterRate[uRate]) == 0 ? TRUE : FALSE;
+}
+
+static _INLINE Uint16 SNSpcDspCounterAdvance(Uint16 uCounter, Int32 nSamples)
+{
+	while (nSamples-- > 0) uCounter = SNSpcDspCounterTick(uCounter);
+	return uCounter;
+}
+
 static _INLINE Int32 SNSpcDspClamp16(Int32 iValue)
 {
 	if (iValue > 0x7FFF) return 0x7FFF;
@@ -109,28 +146,16 @@ static _INLINE Int16 SNSpcDspInterpolateGaussian(
 	return (Int16)(iOut & ~1);
 }
 
-/* Voice output before per-channel volume. This is the value used by PMON and
-   represented by OUTX in the hardware pipeline. Revive's envelope is 7-bit. */
-/* Legacy Revive main/echo voice mix input. Keep this distinct from
-   SNSpcDspVoiceOutput(): the latter applies S-DSP clamp/bit0 behavior for
-   PMON/OUTX, while the historical mixer used the raw envelope product. */
-static _INLINE Int32 SNSpcDspEnvelopeMixSample(
-	Int16 iInterpolatedSample, Uint8 uEnvelope)
-{
-	return ((Int32)iInterpolatedSample * (Int32)uEnvelope) >> 7;
-}
-
+/* Hardware voice output after Gaussian/noise and the full 11-bit envelope.
+   This latch feeds OUTX, PMON and the per-channel volume mixer. */
 static _INLINE Int16 SNSpcDspVoiceOutput(
-	Int16 iInterpolatedSample, Uint8 uEnvelope)
+	Int16 iInterpolatedSample, Uint16 uEnvelope)
 {
 	Int32 iSample =
-		((Int32)iInterpolatedSample * (Int32)uEnvelope) >> 7;
+		((Int32)iInterpolatedSample * (Int32)(uEnvelope & 0x07FFu)) >> 11;
 
-	iSample = SNSpcDspClamp16(iSample);
-
-	/* The S-DSP voice output clears bit 0 before PMON/OUTX. */
-	iSample &= ~1;
-	return (Int16)iSample;
+	/* The S-DSP clears bit 0 on the voice-output latch. */
+	return (Int16)(iSample & ~1);
 }
 
 #endif
