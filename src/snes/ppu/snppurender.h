@@ -204,6 +204,7 @@ private:
     Uint8           m_ObjLine[SNPPU_MAXLINE][SNPPU_MAXOBJ];
 	Uint8           m_ObjRangeOverLine[SNPPU_MAXLINE];
 	Uint8           m_ObjTimeOverLine[SNPPU_MAXLINE];
+	Int32           m_iLastRenderedLine;
 
     ISNPPUBlend    *m_pBlend;
 
@@ -238,6 +239,8 @@ public:
 	void UpdateOAM();
 	void UpdateCGRAM(Uint32 uAddr, Uint16 uData);
 	void InvalidateHiresPalette();
+	Uint16 GetInternalOAMAddress(Uint32 uLine, Uint32 uHClock);
+	Uint8 GetInternalCGRAMAddress(Uint32 uLine, Uint32 uHClock);
 };
 
 void SnesPPUInvalidateOutputCache();
