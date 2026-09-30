@@ -1926,7 +1926,7 @@ void SnesSystem::ExecuteLine()
 {
 	const Int32 nLineCycles = (Int32)SNES_LINE_MASTER_CYCLES(
 		m_uLine, m_PPU.GetField(), m_PPU.IsFrameInterlace());
-	const Int32 nToHBlank = SNES_HBLANK_START_CYCLES - SNES_VISIBLE_CYCLES;
+	const Int32 nToHBlank = SNES_HBLANK_START_CYCLES;
 	const Int32 nToHDMA = SNES_HDMA_START_CYCLES - SNES_HBLANK_START_CYCLES;
 	const Int32 nAfterHDMA = nLineCycles - SNES_HDMA_START_CYCLES;
 	Int32 nLineClock = 0;
@@ -1994,16 +1994,11 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 	Uint32 _tCPU = ProfCtrGetCycle();
 #endif
-    ExecuteTimedSlice(SNES_VISIBLE_CYCLES, nHIRQCycles, nLineClock);
-#if SNDBG_LOG
-	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
-	_tCPU = ProfCtrGetCycle();
-#endif
-	/* The 256-pixel software renderer stops at 1024 clocks, but hardware
-	   HBlank does not begin until H=274 (1096 clocks). Keep running the
-	   S-CPU through the remaining background-fetch interval before exposing
-	   HBlank to $4212 or starting HDMA. */
-	ExecuteTimedSlice(nToHBlank, nHIRQCycles, nLineClock);
+    /* One timed slice can span the software renderer's 1024-clock edge:
+       ExecuteTimedSlice already splits internally at H-IRQ and light-gun
+       events. Stopping only at real HBlank removes one scheduler round-trip
+       per scanline without changing observable timing. */
+    ExecuteTimedSlice(nToHBlank, nHIRQCycles, nLineClock);
 #if SNDBG_LOG
 	g_TmgCycCPU += ProfCtrGetCycle() - _tCPU;
 #endif
