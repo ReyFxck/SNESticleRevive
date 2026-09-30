@@ -833,7 +833,7 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 		if (!strncmp((const char *)m_Name, "THOROUGHBRED BREEDER3", 21) ||
 		    !strncmp((const char *)m_Name, "RPG-TCOOL 2", 11))
 		{
-			m_Flags |= SNROM_FLAG_SRAM512K_SPECIAL;
+			m_Flags |= SNROM_FLAG_SRAM128K_SPECIAL;
 		}
 
 		/* Two Nintendo BSC 24-Mbit LoROM boards use a non-standard 3 MiB
