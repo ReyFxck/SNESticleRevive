@@ -291,6 +291,27 @@ void SNSpcDspMix::SaveState(struct SNStateSPCDSPT *pState)
 void SNSpcDspMix::RestoreState(struct SNStateSPCDSPT *pState)
 {
 	memcpy(m_Channels, pState->m_Channels, sizeof(m_Channels));
+
+	/* State format v1 originally stored the Revive 23-bit fixed-point
+	   envelope/count. New states use the native 11-bit S-DSP envelope in the
+	   same fields. Detect the old representation without changing payload size. */
+	for (Int32 i = 0; i < SNSPCDSP_CHANNEL_NUM; ++i)
+	{
+		SNSpcChannelT *pChannel = &m_Channels[i];
+		if (pChannel->iEnvelope > 0x7FF ||
+		    pChannel->iEnvelope < 0 ||
+		    pChannel->nEnvCount > 0x7FF ||
+		    pChannel->nEnvCount < 0)
+		{
+			Int32 iEnvelope = pChannel->iEnvelope;
+			if (iEnvelope < 0) iEnvelope = 0;
+			iEnvelope >>= 12; /* 23-bit 1.0 -> 11-bit 1.0 */
+			if (iEnvelope > 0x7FF) iEnvelope = 0x7FF;
+			pChannel->iEnvelope = iEnvelope;
+			pChannel->nEnvCount = iEnvelope;
+			pChannel->pad = 0;
+		}
+	}
 }
 
 void _SNStateMemDiff(const char *pTag, Uint8 *pA, Uint8 *pB, Int32 nBytes)
