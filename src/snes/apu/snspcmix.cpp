@@ -644,85 +644,38 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, SNSpcEchoSampleT *pEcho, Int32 nSamples
 
  */
 
-static Int32 _FilterEchoStereo(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight, Int32 nSamples, Int32 iEchoFeedback, Int16 *pEchoBuf, Uint32 uEchoAddr, Uint32 uEchoSize, const Int16 *pCoeff, SNSpcFIRFilterT *pFilter)
+static _INLINE Int16 _SNSpcEchoRead16(const Uint8 *pMem, Uint16 uAddr)
 {
-	Int32 iFilterPos;
-	iFilterPos = pFilter[0].iPos;
+	Uint16 uNext = (Uint16)(uAddr + 1);
+	return (Int16)((Uint16)pMem[uAddr] | ((Uint16)pMem[uNext] << 8));
+}
 
-	while (nSamples > 0)
+static _INLINE void _SNSpcEchoWrite16(Uint8 *pMem, Uint16 uAddr, Int16 iSample)
+{
+	Uint16 uNext = (Uint16)(uAddr + 1);
+	pMem[uAddr] = (Uint8)iSample;
+	pMem[uNext] = (Uint8)((Uint16)iSample >> 8);
+}
+
+static Int16 _SNSpcEchoFIR(
+	SNSpcFIRFilterT *pFilter, Int32 iHistoryPos, const Int16 *pCoeff)
+{
+	Int32 iSum = 0;
+
+	/* ares/S-DSP ordering: taps are shifted individually; after tap 6 the
+	   accumulator wraps to signed 16-bit, then tap 7 is added and clamped. */
+	for (Int32 i = 0; i < 7; ++i)
 	{
-		Int32 iSampleL, iSampleR;
-		Int32 iEchoSampleL, iEchoSampleR;
-		Int16 *pFilterLineL, *pFilterLineR;
-
-		iSampleL  = pEchoLeft[0];
-		iSampleR  = pEchoRight[0];
-
-		// fetch sample from echo buffer
-		iEchoSampleL = pEchoBuf[uEchoAddr+0];             // (1.15.0)
-		iEchoSampleR = pEchoBuf[uEchoAddr+1];             // (1.15.0)
-
-		// get pointer to start of filter line
-		pFilterLineL = &pFilter[0].Line[iFilterPos&7];
-		pFilterLineR = &pFilter[1].Line[iFilterPos&7];
-		iFilterPos--;
-
-		// write sample twice for doubled line
-		pFilterLineL[0] = iEchoSampleL;
-		pFilterLineL[8] = iEchoSampleL;
-		pFilterLineR[0] = iEchoSampleR;
-		pFilterLineR[8] = iEchoSampleR;
-
-		// calculate FIR filter
-		iEchoSampleL = pFilterLineL[0] * pCoeff[0];
-		iEchoSampleR = pFilterLineR[0] * pCoeff[0];
-		iEchoSampleL+= pFilterLineL[1] * pCoeff[1];
-		iEchoSampleR+= pFilterLineR[1] * pCoeff[1];
-		iEchoSampleL+= pFilterLineL[2] * pCoeff[2];
-		iEchoSampleR+= pFilterLineR[2] * pCoeff[2];
-		iEchoSampleL+= pFilterLineL[3] * pCoeff[3];
-		iEchoSampleR+= pFilterLineR[3] * pCoeff[3];
-		iEchoSampleL+= pFilterLineL[4] * pCoeff[4];
-		iEchoSampleR+= pFilterLineR[4] * pCoeff[4];
-		iEchoSampleL+= pFilterLineL[5] * pCoeff[5];
-		iEchoSampleR+= pFilterLineR[5] * pCoeff[5];
-		iEchoSampleL+= pFilterLineL[6] * pCoeff[6];
-		iEchoSampleR+= pFilterLineR[6] * pCoeff[6];
-		iEchoSampleL+= pFilterLineL[7] * pCoeff[7];
-		iEchoSampleR+= pFilterLineR[7] * pCoeff[7];
-		iEchoSampleL >>= 7;
-		iEchoSampleR >>= 7;
-
-		// store sample (post-filter) for use by mixing this frame
-		pEchoLeft[0] = iEchoSampleL;
-		pEchoRight[0] = iEchoSampleR;
-
-		// apply feedback to echo sample
-		iEchoSampleL *= iEchoFeedback;
-		iEchoSampleR *= iEchoFeedback;
-		iEchoSampleL >>= 7;
-		iEchoSampleR >>= 7;
-
-		// add echo (1.15.0)
-		iEchoSampleL += iSampleL;
-		iEchoSampleR += iSampleR;
-
-		// write sample to echo buffer (1.15.0)
-		pEchoBuf[uEchoAddr+0] = iEchoSampleL;
-		pEchoBuf[uEchoAddr+1] = iEchoSampleR;
-
-		// wrap echo address
-		uEchoAddr+=2;
-		if (uEchoAddr >= uEchoSize) uEchoAddr = 0;
-
-		pEchoLeft++;
-		pEchoRight++;
-		nSamples--;
+		Int32 iHistory = (iHistoryPos + i + 1) & 7;
+		iSum += ((Int32)pFilter->Line[iHistory] * pCoeff[i]) >> 6;
 	}
-
-	pFilter[0].iPos = iFilterPos;
-	pFilter[1].iPos = iFilterPos;
-	return uEchoAddr;
+	iSum = (Int16)iSum;
+	{
+		Int32 iHistory = (iHistoryPos + 8) & 7;
+		Int32 iLast = ((Int32)pFilter->Line[iHistory] * pCoeff[7]) >> 6;
+		iSum += (Int16)iLast;
+	}
+	return (Int16)(SNSpcDspClamp16(iSum) & ~1);
 }
 
 struct SNSpcDspDataT
@@ -744,30 +697,12 @@ typedef char SNSpcScratchLookupLayoutCheck[
 
 // filter echo buffer into echo memory
 
-void SNSpcDspMixFull::FilterEcho(Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSamples, Int32 nSampleRate, Bool bEchoSPCMem)
+void SNSpcDspMixFull::FilterEcho(
+	Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSamples)
 {
-	Int16 *pEchoBuf;
-	Uint32 uEchoAddr;
-	Uint32 uEchoSize;
-	Int16	FilterCoeff[8];
+	Uint8 *pMem = m_pDsp->GetMem();
+	Int16 FilterCoeff[8];
 
-	// use internal echo buffer. Can only use spc memory if sample rate = 32000 (not deterministic!)
-	if (bEchoSPCMem && (nSampleRate == SNSPCDSP_SAMPLERATE))
-	{
-		pEchoBuf  = (Int16*)(m_pDsp->GetMem() + (m_pDsp->GetReg(SNSPCDSP_REG_ESA) * 0x100));
-	} else
-	{
-		pEchoBuf = m_EchoBuffer;
-	}
-
-	uEchoAddr = m_Echo.uEchoAddr;
-
-	// calculate echo buffer size based on sample rate
-	uEchoSize = (m_pDsp->GetReg(SNSPCDSP_REG_EDL)&0xF) * 512 * 2;
-	uEchoSize = uEchoSize * nSampleRate / SNSPCDSP_SAMPLERATE;
-	if (uEchoSize > SNSPCDSP_ECHOBUFFER_SIZE) uEchoSize = SNSPCDSP_ECHOBUFFER_SIZE;
-
-	// set filter coefficients
 	FilterCoeff[0] = (Int8)m_pDsp->GetReg(SNSPCDSP_REG_ECHOFIR0);
 	FilterCoeff[1] = (Int8)m_pDsp->GetReg(SNSPCDSP_REG_ECHOFIR1);
 	FilterCoeff[2] = (Int8)m_pDsp->GetReg(SNSPCDSP_REG_ECHOFIR2);
@@ -777,17 +712,70 @@ void SNSpcDspMixFull::FilterEcho(Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSam
 	FilterCoeff[6] = (Int8)m_pDsp->GetReg(SNSPCDSP_REG_ECHOFIR6);
 	FilterCoeff[7] = (Int8)m_pDsp->GetReg(SNSPCDSP_REG_ECHOFIR7);
 
-	// fix echo address
-	if (uEchoAddr >= uEchoSize)
-	{
-		if (uEchoSize > 0) uEchoAddr %= uEchoSize;
-		else uEchoAddr=0;
-	}
-
 	PROF_ENTER("SNSpcDspFilterEchoStereo");
-	// filter echo (left)
-	m_Echo.uEchoAddr = _FilterEchoStereo(pLeftEcho, pRightEcho, nSamples,
-		(Int8)m_pDsp->GetReg(SNSPCDSP_REG_EFB), pEchoBuf, uEchoAddr, uEchoSize, FilterCoeff, m_Echo.Filter);
+
+	for (Int32 i = 0; i < nSamples; ++i)
+	{
+		Uint16 uBase = (Uint16)((Uint16)m_Echo.uEchoPage << 8);
+		Uint16 uAddr = (Uint16)(uBase + m_Echo.uEchoAddr);
+		Int16 iReadL = _SNSpcEchoRead16(pMem, uAddr);
+		Int16 iReadR = _SNSpcEchoRead16(pMem, (Uint16)(uAddr + 2));
+		Int32 iHistoryPos = (m_Echo.Filter[0].iPos + 1) & 7;
+		Int16 iFilteredL;
+		Int16 iFilteredR;
+		Int32 iWriteL;
+		Int32 iWriteR;
+		Int32 iFeedback = (Int8)m_pDsp->GetReg(SNSPCDSP_REG_EFB);
+
+		m_Echo.Filter[0].iPos = iHistoryPos;
+		m_Echo.Filter[1].iPos = iHistoryPos;
+		/* Hardware stores half-amplitude samples in its FIR history. */
+		m_Echo.Filter[0].Line[iHistoryPos] = (Int16)(iReadL >> 1);
+		m_Echo.Filter[1].Line[iHistoryPos] = (Int16)(iReadR >> 1);
+		m_Echo.Filter[0].Line[iHistoryPos + 8] = (Int16)(iReadL >> 1);
+		m_Echo.Filter[1].Line[iHistoryPos + 8] = (Int16)(iReadR >> 1);
+
+		iFilteredL = _SNSpcEchoFIR(&m_Echo.Filter[0],
+			iHistoryPos, FilterCoeff);
+		iFilteredR = _SNSpcEchoFIR(&m_Echo.Filter[1],
+			iHistoryPos, FilterCoeff);
+
+		/* Echo input always reaches EVOL/DAC, even when FLG.5 prevents writes. */
+		{
+			Int16 iVoiceEchoL = pLeftEcho[i];
+			Int16 iVoiceEchoR = pRightEcho[i];
+			pLeftEcho[i] = iFilteredL;
+			pRightEcho[i] = iFilteredR;
+
+			iWriteL = (Int32)iVoiceEchoL +
+				(Int16)(((Int32)iFilteredL * iFeedback) >> 7);
+			iWriteR = (Int32)iVoiceEchoR +
+				(Int16)(((Int32)iFilteredR * iFeedback) >> 7);
+			iWriteL = SNSpcDspClamp16(iWriteL) & ~1;
+			iWriteR = SNSpcDspClamp16(iWriteR) & ~1;
+		}
+
+		m_Echo.bReadOnly =
+			(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x20) ? 1 : 0;
+		if (!m_Echo.bReadOnly)
+		{
+			_SNSpcEchoWrite16(pMem, uAddr, (Int16)iWriteL);
+			_SNSpcEchoWrite16(pMem, (Uint16)(uAddr + 2), (Int16)iWriteR);
+		}
+
+		/* EDL is latched when the offset is zero. ESA takes effect for the
+		   next sample, matching echo29's page latch. */
+		if (m_Echo.uEchoAddr == 0)
+			m_Echo.uEchoSize =
+				(Uint16)((m_pDsp->GetReg(SNSPCDSP_REG_EDL) & 0x0F) << 11);
+
+		m_Echo.uEchoAddr = (Uint16)(m_Echo.uEchoAddr + 4);
+		if (m_Echo.uEchoSize == 0 ||
+		    m_Echo.uEchoAddr >= m_Echo.uEchoSize)
+			m_Echo.uEchoAddr = 0;
+
+		m_Echo.uEchoPage = m_pDsp->GetReg(SNSPCDSP_REG_ESA);
+	}
 
 	PROF_LEAVE("SNSpcDspFilterEchoStereo");
 }
