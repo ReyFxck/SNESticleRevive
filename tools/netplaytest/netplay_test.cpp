@@ -9,6 +9,10 @@ typedef struct NetSocket_t NetSocketT;
 typedef struct NetSocketAddr_dummy NetSocketAddrT;
 #include "netinput_codec.h"
 #include "netplay_input_merge.h"
+extern "C" {
+#include "netqueue.h"
+}
+
 
 static int errors = 0;
 static void check(bool ok, const char *name)
@@ -90,6 +94,47 @@ static void codecTests()
           "reject total overflow atomically");
 }
 
+static void queueTests()
+{
+    NetQueueT queue;
+    NetQueueNew(&queue);
+
+    for (int i = 0; i < NETQUEUE_SIZE; i++)
+    {
+        NetQueueElementT item = frame((Uint16)i, (Uint16)(0x1000 + i),
+            (Uint16)(i ^ 0xAA), (Uint16)(i ^ 0x55),
+            EMUSYS_SNES_SPECIAL_MOUSE);
+        check(NetQueueEnqueue(&queue, &item), "enqueue bounded frame");
+    }
+    check(NetQueueGetCount(&queue) == NETQUEUE_SIZE,
+          "backlog contains 128 full frames");
+    NetQueueElementT overflow = frame(0,0,0,0,0);
+    check(!NetQueueEnqueue(&queue, &overflow), "full queue rejects writes");
+
+    NetQueueElementT guard[66];
+    std::memset(guard, 0xA5, sizeof(guard));
+    int n = NetQueueFetchRange(&queue, queue.uHead, queue.uTail,
+                               guard + 1, 64);
+    check(n == 64, "128-frame backlog fetch bounded to 64");
+    check(guard[0].uPad[0] == 0xA5A5 &&
+          guard[65].uPad[0] == 0xA5A5,
+          "bounded fetch preserves both guard frames");
+    for (int i = 0; i < n; i++)
+        check(guard[i+1].uPad[0] == (Uint16)i &&
+              guard[i+1].uPad[1] == (Uint16)(0x1000+i),
+              "complete queue frame preserved");
+
+    check(NetQueueFetchRange(&queue, 0, 128, guard+1, 0) == 0,
+          "zero-capacity fetch is safe");
+
+    NetQueueElementT backwards[3];
+    n = NetQueueFetchRange(&queue, 12, 9, backwards, 3);
+    check(n == 3 && backwards[0].uPad[0] == 11 &&
+          backwards[1].uPad[0] == 10 &&
+          backwards[2].uPad[0] == 9,
+          "reverse fetch walks backward without overread");
+}
+
 static void mergeTests()
 {
     NetPlayFrameInputT peers[4], before[4];
@@ -151,6 +196,7 @@ static void mergeTests()
 int main()
 {
     codecTests();
+    queueTests();
     mergeTests();
     if(errors){std::fprintf(stderr,"netplay_test: %d failure(s)\n",errors);return 1;}
     std::puts("netplay_test: OK");
