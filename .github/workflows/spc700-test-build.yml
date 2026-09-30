@@ -5,6 +5,7 @@ on:
     branches:
       - feature/spc700-complete-mesence
       - fix/hdma-start-timing-dkc
+      - perf/hdma-timed-fastpath-dkc
   workflow_dispatch:
 
 permissions:
