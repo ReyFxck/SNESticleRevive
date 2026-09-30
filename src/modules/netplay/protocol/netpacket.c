@@ -102,10 +102,14 @@ NetPacketHdrT *NetPacketRecvUDP(NetSocketT *pSocket, char *pBuffer, int BufferLe
 	recvlen = NetSocketRecvFrom(pSocket, pBuffer, BufferLen, pAddr, 0);
 	if (recvlen <= 0)
 	{
-		//NetPrintf("NetPacket: socket died %d\n", pSocket->socket);
-		// socket died
 		return NULL;
 	}
+	/* A short datagram has no complete header.  A packet larger than the
+	   wire limit cannot contain a valid input frame and must never reach the
+	   codec, even if its spoofed length matches recvlen. */
+	if (recvlen < (int)sizeof(NetPacketHdrT) ||
+	    recvlen > NETPACKET_MAX_SIZE)
+		return NULL;
 
 	pPacketHdr = (NetPacketHdrT *)pBuffer;
 
