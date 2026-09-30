@@ -240,47 +240,41 @@ void SNSpcDspMixFull::Reset()
 
 	memset(&m_Echo, 0, sizeof(m_Echo));
 	memset(m_EchoBuffer, 0, sizeof(m_EchoBuffer));
-	m_iNoisePhase = 0;
-	m_uNoiseGen   = 1;
+	m_iNoisePhase = 0; /* retained for state ABI; exact counter path does not use it */
+	m_uNoiseGen   = 0x4000;
 }
 
-Int32 SNSpcDspMixFull::OutputNoise(Int16 *pOut, Int32 nSamples, Int32 nSampleRate)
+Int32 SNSpcDspMixFull::OutputNoise(
+	Int16 *pOut, Int16 *pOutVoice0, Int32 nSamples, Uint16 uCounterStart)
 {
-	Uint32 uNoiseFreq;
-	Int32 iNoisePhase;
-	Int32 iNoisePhaseInc;
-	Uint32 uNoiseGen;
+	Uint16 uCounter = uCounterStart;
+	Uint16 uNoiseGen = (Uint16)(m_uNoiseGen & 0x7FFFu);
+	Uint32 uRate = m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x1F;
 
-	iNoisePhase = m_iNoisePhase;
-	uNoiseGen   = m_uNoiseGen;
-	if (uNoiseGen==0) uNoiseGen=1;
+	if (!uNoiseGen) uNoiseGen = 0x4000;
 
-	// get noise frequency
-	uNoiseFreq = _SNSpcDsp_NoiseFreq[m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x1F];
-
-	iNoisePhaseInc = 0x10000 * uNoiseFreq / nSampleRate;
-
-	while (nSamples > 0)
+	for (Int32 i = 0; i < nSamples; ++i)
 	{
-		while (iNoisePhase >= 0x10000)
-		{
-			uNoiseGen<<=1;
-			if (uNoiseGen & 0x80000000)
-			{
-				uNoiseGen^=0x0040001;
-			}
+		Uint16 uPostCounter;
 
-			iNoisePhase-= 0x10000;
+		/* Voices 1-7 sample noise before misc30. */
+		pOut[i] = (Int16)(uNoiseGen << 1);
+
+		uPostCounter = SNSpcDspCounterTick(uCounter);
+		if (SNSpcDspCounterPoll(uPostCounter, uRate))
+		{
+			Uint32 uFeedback =
+				((Uint32)uNoiseGen << 13) ^ ((Uint32)uNoiseGen << 14);
+			uNoiseGen = (Uint16)((uFeedback & 0x4000u) |
+				((Uint32)uNoiseGen >> 1));
 		}
 
-		iNoisePhase+=iNoisePhaseInc;
-
-		*pOut++ = (Int16)uNoiseGen;
-		nSamples--;
+		/* Voice 0 runs voice3c after misc30 and therefore sees the updated LFSR. */
+		pOutVoice0[i] = (Int16)(uNoiseGen << 1);
+		uCounter = uPostCounter;
 	}
 
-	m_iNoisePhase = iNoisePhase;
-	m_uNoiseGen   = uNoiseGen;
+	m_uNoiseGen = uNoiseGen;
 	return 1;
 }
 
@@ -439,22 +433,21 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 }
 
 /*
- * Keep the historical Revive main/echo mix math bit-for-bit:
- * decoded PCM * envelope >> 7, then per-channel volume. PMON/OUTX use the
- * separately clamped/even S-DSP voice latch and must not be substituted here.
+ * Main/echo mixing consumes the same hardware voice-output latch used by
+ * OUTX and PMON: Gaussian/noise * 11-bit envelope, with bit 0 cleared.
  */
 static void _MixChannel(
 	Int32 *pOutLeft, Int32 *pOutRight,
-	const Int16 *pIn, const Uint8 *pEnvelope,
+	const Int16 *pVoiceOutput,
 	Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
 #if CODE_PLATFORM == CODE_PS2
-	SNSpcMixVoicePS2(pOutLeft, pOutRight, pIn, pEnvelope, nSamples,
+	SNSpcMixVoicePS2(pOutLeft, pOutRight, pVoiceOutput, nSamples,
 		iVolLeft, iVolRight);
 #else
 	while (nSamples-- > 0)
 	{
-		Int32 iSample = SNSpcDspEnvelopeMixSample(*pIn++, *pEnvelope++);
+		Int32 iSample = *pVoiceOutput++;
 		*pOutLeft++  += iSample * iVolLeft;
 		*pOutRight++ += iSample * iVolRight;
 	}
@@ -464,12 +457,12 @@ static void _MixChannel(
 static void _MixChannelEcho(
 	Int32 *pOutLeft, Int32 *pOutRight,
 	SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight,
-	const Int16 *pIn, const Uint8 *pEnvelope,
+	const Int16 *pVoiceOutput,
 	Int32 nSamples, Int32 iVolLeft, Int32 iVolRight)
 {
 	while (nSamples-- > 0)
 	{
-		Int32 iSample = SNSpcDspEnvelopeMixSample(*pIn++, *pEnvelope++);
+		Int32 iSample = *pVoiceOutput++;
 		Int32 iSampleLeft = iSample * iVolLeft;
 		Int32 iSampleRight = iSample * iVolRight;
 		Int32 iEchoLeft;
@@ -738,7 +731,7 @@ struct SNSpcDspDataT
 	   scratchpad keeps one final sample per output point instead of a linear
 	   pair plus a separate fraction array. */
 	Int16 iSampleData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
-	Uint8 EnvData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
+	Uint16 EnvData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 
 	SNSpcMixSampleT  Main[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 	SNSpcEchoSampleT Echo[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
