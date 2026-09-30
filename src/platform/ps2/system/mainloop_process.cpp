@@ -29,6 +29,7 @@
 #include "sndbglog.h"
 #include "emusys.h"
 #include "emumovie.h"
+#include "netplay_input_merge.h"
 
 extern "C" {
 #include "gpprim.h"
@@ -140,8 +141,11 @@ Bool MainLoopProcess()
 		if (_pSystem == _pSnes)
 			_MainLoopSnesInputApply(&Input);
 
-		// send controller 1 + 2 inputs combined to 32-bits
-		NetInput.InputSend = ((Uint32)Input.uPad[0]) | (((Uint32)Input.uPad[1])<<16);
+		/* Send all five words, including the special-device tag, coordinates
+		   and auxiliary buttons. The old 32-bit pair dropped the entire SNES
+		   peripheral payload before it ever reached the transport. */
+		for (Int32 i=0; i<EMUSYS_DEVICE_NUM; ++i)
+			NetInput.InputSend.uPad[i] = Input.uPad[i];
 
         PROF_ENTER("NetPlayClientInput");
         NetPlayClientInput(&NetInput);
@@ -157,24 +161,11 @@ Bool MainLoopProcess()
                 NetInput.eGameState = NETPLAY_GAMESTATE_PAUSE;
             }
 
-			// we are connected, retrieve input data
-	        Input.uPad[0] = (Uint16)NetInput.InputRecv[0];
-	        Input.uPad[1] = (Uint16)NetInput.InputRecv[1];
-	        Input.uPad[2] = (Uint16)NetInput.InputRecv[2];
-	        Input.uPad[3] = (Uint16)NetInput.InputRecv[3];
-			Input.uPad[4] = EMUSYS_DEVICE_DISCONNECTED;
-
-			if (Input.uPad[2] == EMUSYS_DEVICE_DISCONNECTED)
-			{
-				// if controller 3 is disconnected, use controller 2 of first peer
-				Input.uPad[2] = (Uint16)(NetInput.InputRecv[0]>>16);
-			}
-
-			if (Input.uPad[3] == EMUSYS_DEVICE_DISCONNECTED)
-			{
-				// if controller 4 is disconnected, use controller 2 of second peer
-				Input.uPad[3] = (Uint16)(NetInput.InputRecv[1]>>16);
-			}
+			/* Rebuild the same five-word input on every peer. Normal
+			   four-controller assignment stays identical to the old protocol;
+			   SNES special controllers carry their whole report atomically. */
+			NetPlayMergeInputs(&Input, NetInput.InputRecv,
+				_pSystem == _pSnes ? TRUE : FALSE);
 
         }
 		else
