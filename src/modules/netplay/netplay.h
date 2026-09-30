@@ -9,7 +9,19 @@
 #ifndef _NETPLAY_H
 #define _NETPLAY_H
 
-#define NETPLAY_VERSION 0x100
+#include "types.h"
+
+/* v0x101 transmits the full five-word frame input instead of silently
+   truncating peripheral payload to one 32-bit controller pair.
+   The server rejects 0x100 peers so old clients cannot decode v2 packets
+   as corrupted ordinary controller input. */
+#define NETPLAY_VERSION 0x101
+
+#define NETPLAY_FRAME_PADS 5
+typedef struct NetPlayFrameInput_t
+{
+    Uint16 uPad[NETPLAY_FRAME_PADS];
+} NetPlayFrameInputT;
 
 typedef enum
 {
