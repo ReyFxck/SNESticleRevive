@@ -358,7 +358,9 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	}
 }
 
-Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples, Int32 nSampleRate, const Int16 *pPitchMod)
+Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut,
+	Int32 nSamples, Int32 nSampleRate, const Int16 *pPitchMod,
+	const Uint16 *pEnvelopeState)
 {
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 	const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
@@ -413,6 +415,17 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 	while (nSamples > 0)
 	{
 		Int16 *pSample;
+
+		if (pEnvelopeState && (*pEnvelopeState & 0x8000u))
+		{
+			/* KON setup: no BRR decode, interpolation or pitch advance. */
+			*pOut++ = 0;
+			pEnvelopeState++;
+			if (pPitchMod) pPitchMod++;
+			nSamples--;
+			continue;
+		}
+		if (pEnvelopeState) pEnvelopeState++;
 
 		if (iPhase >= (14 << 16))
 		{
@@ -939,7 +952,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						pPitchMod = m_iVoiceOutput;
 
 					bMix = OutputSample(iChannel, pSampleData,
-						nSamples, nSampleRate, pPitchMod);
+						nSamples, nSampleRate, pPitchMod, pData->EnvData);
 
 					if (bMix)
 					{
@@ -1062,7 +1075,8 @@ void SNSpcDspMixSilent::FetchBlock(Int32 iChannel)
 	}
 }
 
-Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples, Int32 nSampleRate)
+Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples,
+	Int32 nSampleRate, const Uint16 *pEnvelopeState)
 {
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 	const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
@@ -1091,6 +1105,12 @@ Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples, Int32 nSam
 
 	while (nSamples > 0)
 	{
+		if (pEnvelopeState && (*pEnvelopeState++ & 0x8000u))
+		{
+			nSamples--;
+			continue;
+		}
+
 		if (iPhase >= (14 << 16))
 		{
 			// fetch next block
@@ -1141,7 +1161,7 @@ void SNSpcDspMixSilent::Mix(CMixBuffer *pMixBuf)
 	for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 	{
 		if (OutputEnvelope(iChannel, Envelope, nTotalSamples, m_uDspCounter))
-			OutputSample(iChannel, nTotalSamples, nSampleRate);
+			OutputSample(iChannel, nTotalSamples, nSampleRate, Envelope);
 	}
 	m_uDspCounter = SNSpcDspCounterAdvance(m_uDspCounter, nTotalSamples);
 }
