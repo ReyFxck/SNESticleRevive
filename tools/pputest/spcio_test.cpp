@@ -49,6 +49,13 @@ int main()
 	Check("clear selected port 1", io.m_Regs.apu_w[1], 0x00);
 	Check("preserve unselected port 2", io.m_Regs.apu_w[2], 0x56);
 
+	/* The high half of DSPADDR is readable as a mirror, but writes to
+	   DSPDATA ($F3) must be suppressed when DSPADDR.7 is set. */
+	Check("DSPADDR $00 writable", SNSpcIO::CanWriteDspPort(0x00), TRUE);
+	Check("DSPADDR $7F writable", SNSpcIO::CanWriteDspPort(0x7F), TRUE);
+	Check("DSPADDR $80 write ignored", SNSpcIO::CanWriteDspPort(0x80), FALSE);
+	Check("DSPADDR $FF write ignored", SNSpcIO::CanWriteDspPort(0xFF), FALSE);
+
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
 }

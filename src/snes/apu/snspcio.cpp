@@ -249,6 +249,9 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 	case 0xF2:	// dsp addr
 		break;
 	case 0xF3:  // dsp data
+		/* DSPADDR.7 is a read-only mirror, not a writable alias. */
+		if (!CanWriteDspPort(pSpc->Mem[0xF2]))
+			break;
 		while (!pIO->m_pSpcDsp->EnqueueWrite(SNSPCGetCounter(pSpc, SNSPC_COUNTER_FRAME), pSpc->Mem[0xF2] & 0x7F, uData))
 		{
 			pIO->m_pSpcDsp->Sync();
