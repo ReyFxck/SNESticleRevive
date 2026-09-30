@@ -3,8 +3,9 @@
 #define _NETQUEUE_H
 
 #include "types.h"
+#include "netplay.h"
 
-typedef Uint32 NetQueueElementT; 
+typedef NetPlayFrameInputT NetQueueElementT; 
 
 #define NETQUEUE_SIZE (128)
 #define NETQUEUE_MASK (NETQUEUE_SIZE - 1)
