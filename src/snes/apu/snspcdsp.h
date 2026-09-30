@@ -158,6 +158,14 @@ public:
 
 	Bool	EnqueueWrite(Uint32 uCycle, Uint32 uAddr, Uint8 uData);
 	Bool	GetNextWriteCycle(Uint32 *pCycle) const;
+	Int32	CopyWriteQueue(SNQueueElementT *pOut, Int32 nMax) const
+	{
+		return m_Queue.CopyPending(pOut, nMax);
+	}
+	void	RestoreWriteQueue(const SNQueueElementT *pIn, Int32 nCount)
+	{
+		m_Queue.RestorePending(pIn, nCount);
+	}
 	void	Sync(Uint32 uCycle);
 	void	Sync(void);
 
