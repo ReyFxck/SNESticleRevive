@@ -75,7 +75,7 @@ class    SNSpcDspMixFull : public SNSpcDspMix
 	Int32	OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples, Int32 nSampleRate, const Int16 *pPitchMod);
 	Int32   OutputNoise(Int16 *pOut, Int16 *pOutVoice0,
 		Int32 nSamples, Uint16 uCounterStart);
-	void	FilterEcho(Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSamples, Int32 nSampleRate, Bool bEchoSPCMem);
+	void	FilterEcho(Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSamples);
 public:
 	void	Reset();
 	void	Mix(class CMixBuffer *pOutBuffer);
