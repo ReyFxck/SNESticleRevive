@@ -106,7 +106,18 @@ int main()
 		SNSPC_TEST_RAM_DISABLE;
 	Check("TEST RAM read disable", SNSPCRead8(&cpu, 0x0300), 0x5A);
 
-	Init(cpu); PutOp(cpu, 0xEF); Run(cpu, 3); Check("SLEEP holds PC", cpu.Regs.rPC, 0x0200);
+	Init(cpu); PutOp(cpu, 0xEF); Run(cpu, 3);
+	Check("SLEEP leaves PC after opcode", cpu.Regs.rPC, 0x0201);
+	Check("SLEEP state latched", cpu.Regs.uPad & SNSPC_HALT_SLEEP, SNSPC_HALT_SLEEP);
+	cpu.Mem[0x0201] = 0xE8; cpu.Mem[0x0202] = 0x77; Run(cpu, 20);
+	Check("SLEEP does not execute next opcode", cpu.Regs.rA, 0);
+	Check("SLEEP PC remains stable", cpu.Regs.rPC, 0x0201);
+
+	Init(cpu); PutOp(cpu, 0xFF); Run(cpu, 3);
+	Check("STOP leaves PC after opcode", cpu.Regs.rPC, 0x0201);
+	Check("STOP state latched", cpu.Regs.uPad & SNSPC_HALT_STOP, SNSPC_HALT_STOP);
+	Run(cpu, 20);
+	Check("STOP PC remains stable", cpu.Regs.rPC, 0x0201);
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
