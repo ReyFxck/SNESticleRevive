@@ -199,6 +199,28 @@ int main()
 	Check("hflip left fetches right", _SnesPPUOBJSourceColumn(0, 32, TRUE), 3);
 	Check("hflip right fetches left", _SnesPPUOBJSourceColumn(3, 32, TRUE), 0);
 
+	/* OBJ interlace halves visibility and doubles the source row, selecting
+	   the even/odd source line from the current field exactly like MesenCE. */
+	Check("OBJ normal visible height", _SnesPPUOBJVisibleHeight(32, FALSE), 32);
+	Check("OBJ interlace visible height", _SnesPPUOBJVisibleHeight(32, TRUE), 16);
+	Check("OBJ normal source row",
+	      _SnesPPUOBJLineY(5, 1, 32, 0, FALSE, FALSE), 4);
+	Check("OBJ interlace even row",
+	      _SnesPPUOBJLineY(5, 1, 32, 0, TRUE, FALSE), 8);
+	Check("OBJ interlace odd row",
+	      _SnesPPUOBJLineY(5, 1, 32, 0, TRUE, TRUE), 9);
+	Check("OBJ interlace vflip even",
+	      _SnesPPUOBJLineY(5, 1, 32, 15, TRUE, FALSE), 7);
+	Check("OBJ interlace wrap row",
+	      _SnesPPUOBJLineY(2, 250, 32, 0, TRUE, FALSE), 16);
+
+	/* Only screen-interlaced Mode 5/6 BGs double their vertical fetch line. */
+	Check("mode5 field 0 fetch", _SnesPPUInterlaceFetchLine(7, 5, TRUE, FALSE), 14);
+	Check("mode5 field 1 fetch", _SnesPPUInterlaceFetchLine(7, 5, TRUE, TRUE), 15);
+	Check("mode6 field 1 fetch", _SnesPPUInterlaceFetchLine(9, 6, TRUE, TRUE), 19);
+	Check("mode4 ignores screen interlace", _SnesPPUInterlaceFetchLine(7, 4, TRUE, TRUE), 7);
+	Check("mode5 non-interlace unchanged", _SnesPPUInterlaceFetchLine(7, 5, FALSE, TRUE), 7);
+
 	/* A faixa recortada deve ser bit-a-bit equivalente ao teste antigo para
 	   todo X de 9 bits e todos os tamanhos horizontais do SNES. */
 	{
