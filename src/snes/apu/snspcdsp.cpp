@@ -178,12 +178,22 @@ Bool SNSpcDsp::EnqueueWrite(Uint32 uCycle, Uint32 uAddr, Uint8 uData)
 	return m_Queue.Enqueue(uCycle, uAddr, uData);
 }
 
+Bool SNSpcDsp::GetNextWriteCycle(Uint32 *pCycle) const
+{
+	const SNQueueElementT *pElement = m_Queue.Peek();
+	if (!pElement)
+		return FALSE;
+	if (pCycle)
+		*pCycle = pElement->uCycle;
+	return TRUE;
+}
+
 void SNSpcDsp::Sync(Uint32 uCycle)
 {
 	SNQueueElementT *pElement;
 
 	// dequeue all pending writes  up to cycle time
-	while ( (pElement=m_Queue.Dequeue(uCycle)) != NULL)
+	while ( (pElement=m_Queue.DequeueAtOrBefore(uCycle)) != NULL)
 	{
 		// perform write
 		Write8(pElement->uAddr, pElement->uData);
