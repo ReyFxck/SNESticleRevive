@@ -31,6 +31,11 @@
 #define SNES_HIRQ_CYCLES(_htime) \
 	((Int32)(_htime) * 4 + SNES_IRQ_TRIGGER_CYCLES - ((_htime) ? 0 : 4))
 #define SNES_VIRQ_CYCLES (SNES_IRQ_TRIGGER_CYCLES - 4)
+/* Super Scope optical receiver delay. Current ares models the CRT hit when
+   the raster reaches (X + 24) dots; each SNES dot is four master clocks. */
+#define SNES_SUPERSCOPE_SENSOR_OFFSET_DOTS (24)
+#define SNES_SUPERSCOPE_LATCH_CYCLES(_x) \
+	(((_x) + SNES_SUPERSCOPE_SENSOR_OFFSET_DOTS) * 4)
 #define SNES_LINE_IN_VBLANK(_line) ((_line) >= SNES_VBLANK_START_LINE)
 #define SNES_SPCMINCYCLES 0
 #define SNES_CYCLESPERFRAME (SNES_CYCLESPERLINE * 262)
