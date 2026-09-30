@@ -46,6 +46,13 @@ public:
 
 public:
 
+	/* DSPADDR.7 selects read-only mirrors: reads alias $00-$7f, writes
+	   must not reach the underlying S-DSP registers. */
+	static Bool CanWriteDspPort(Uint8 uDspAddress)
+	{
+		return (uDspAddress & 0x80u) == 0;
+	}
+
 	static Uint8 Read8Trap(struct SNSpc_t *pSpc, Uint32 uAddr);
 	static void Write8Trap(struct SNSpc_t *pSpc, Uint32 uAddr, Uint8 uData);
 
