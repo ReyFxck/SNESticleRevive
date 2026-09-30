@@ -527,10 +527,23 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	// decode next block
 	if (pChannel->uBlockAddr!=0)
 	{
+		Uint8 *pMem = m_pDsp->GetMem();
+		Uint8 WrappedBlock[9];
+		Uint8 *pBlock = pMem + pChannel->uBlockAddr;
+
+		/* A BRR block is nine bytes and APURAM addresses are 16-bit. */
+		if (pChannel->uBlockAddr > 0xFFF7u)
+		{
+			for (Int32 i = 0; i < 9; ++i)
+				WrappedBlock[i] = pMem[(pChannel->uBlockAddr + i) & 0xFFFFu];
+			pBlock = WrappedBlock;
+		}
+
 		PROF_ENTER("SNSpcBRRDecode");
-		uFlags = SNSpcBRRDecode((m_pDsp->GetMem() + pChannel->uBlockAddr), pChannel->BlockData[1], pChannel->BlockData[0][15], pChannel->BlockData[0][14]);
+		uFlags = SNSpcBRRDecode(pBlock, pChannel->BlockData[1],
+			pChannel->BlockData[0][15], pChannel->BlockData[0][14]);
 		PROF_LEAVE("SNSpcBRRDecode");
-		pChannel->uBlockAddr += 9;
+		pChannel->uBlockAddr = (Uint16)(pChannel->uBlockAddr + 9);
 	}  else
 	{
 		// fade out slowly
