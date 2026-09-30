@@ -1008,7 +1008,9 @@ static bool CheckSuperScopeBeamLatch()
     for (size_t i = 0; i < EMUSYS_DEVICE_NUM; ++i)
         input.uPad[i] = EMUSYS_DEVICE_DISCONNECTED;
     input.uPad[4] = EMUSYS_SNES_SPECIAL_SUPERSCOPE;
-    input.uPad[2] = 123u | (77u << 8);
+    /* X=255 fires at (255+24)*4 = 1116 master clocks, inside HBlank.
+       This validates that the optical event survives the HDMA/CPU boundary. */
+    input.uPad[2] = 255u | (77u << 8);
     input.uPad[3] = 0;
 
     system.ExecuteFrame(&input, NULL, NULL,
@@ -1024,7 +1026,7 @@ static bool CheckSuperScopeBeamLatch()
     Uint16 v = ppu->Read8(0x213D);
     v |= (Uint16)(ppu->Read8(0x213D) & 1u) << 8;
 
-    return h == 123u && v == 77u;
+    return h == 255u && v == 77u;
 }
 
 static int SelfTestCommand()
