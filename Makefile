@@ -433,6 +433,7 @@ SRCS := \
 	src/snes/ppu/snppurender.cpp \
 	src/snes/rom/snrom.cpp \
 	src/snes/apu/snspcbrr.c \
+	src/snes/apu/snspcmix_voice_ps2.S \
 	src/snes/apu/snspc.c \
 	src/snes/apu/snspc_c.c \
 	src/snes/apu/snspcdisasm.c \
