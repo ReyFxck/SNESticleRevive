@@ -6,6 +6,7 @@
 /* netpacket.h only needs a pointer to this socket type; the test exercises
    the wire codec without opening a socket on the host. */
 typedef struct NetSocket_t NetSocketT;
+typedef struct NetSocketAddr_dummy NetSocketAddrT;
 #include "netinput_codec.h"
 #include "netplay_input_merge.h"
 
