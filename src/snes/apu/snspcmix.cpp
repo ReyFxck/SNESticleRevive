@@ -179,9 +179,10 @@ Int32 SNSpcDspMix::OutputEnvelope(
 		}
 		else
 		{
-			/* Hardware evolves the hidden _envelope candidate every sample,
-			   even when the rate counter does not commit it to ENVX. */
-			Int32 iNext = iPending;
+			/* envelopeRun starts from the committed envelope each sample.
+			   The hidden _envelope latch is retained separately for bent-line
+			   threshold behavior and savestate fidelity. */
+			Int32 iNext = iEnvelope;
 			Uint32 uRate;
 
 			if (pRegs->adsr1 & 0x80)
