@@ -146,6 +146,69 @@ static void CheckAutoJoypadTiming()
 	Check("autojoy disabled before busy", io.IsAutoJoypadActive(), 0);
 }
 
+static Uint32 ReadSerialBits0(SnesIO &io, int nBits)
+{
+	Uint32 uValue = 0;
+	while (nBits-- > 0)
+		uValue = (uValue << 1) | (io.ReadSerial0() & 1);
+	return uValue;
+}
+
+static Uint32 ReadSerialBits1(SnesIO &io, int nBits)
+{
+	Uint32 uValue = 0;
+	while (nBits-- > 0)
+		uValue = (uValue << 1) | (io.ReadSerial1() & 1);
+	return uValue;
+}
+
+static void CheckSpecialPeripherals()
+{
+	SnesIO io;
+	Emu::SysInputT input = {};
+
+	for (int i=0; i<EMUSYS_DEVICE_NUM; i++)
+		input.uPad[i] = EMUSYS_DEVICE_DISCONNECTED;
+
+	/* SNES Mouse: 00, status, Y, X; MSB first. Negative motion uses
+	   sign-and-magnitude and official hardware returns ones after bit 32. */
+	input.uPad[4] = EMUSYS_SNES_SPECIAL_MOUSE;
+	input.uPad[2] = (Uint16)0xFB | ((Uint16)0x07 << 8); /* X=-5, Y=+7 */
+	input.uPad[3] = EMUSYS_SNES_MOUSE_LEFT | EMUSYS_SNES_MOUSE_RIGHT;
+	io.LatchInput(&input);
+	io.WriteSerial(1);
+	io.WriteSerial(0);
+	Check("mouse 32-bit report", ReadSerialBits0(io, 32), 0x00C10785u);
+	Check("mouse post-report one", io.ReadSerial0() & 1, 1);
+
+	/* Clocking while OUT0 is high cycles 0 -> 1 sensitivity. */
+	io.WriteSerial(1);
+	(void)io.ReadSerial0();
+	io.WriteSerial(0);
+	Check("mouse sensitivity status", ReadSerialBits0(io, 16), 0x00D1);
+
+	/* Super Scope occupies port 2 and reports FCTP00nN + $FF. */
+	io.Reset();
+	for (int i=0; i<EMUSYS_DEVICE_NUM; i++)
+		input.uPad[i] = EMUSYS_DEVICE_DISCONNECTED;
+	input.uPad[4] = EMUSYS_SNES_SPECIAL_SUPERSCOPE;
+	input.uPad[2] = 123u | (77u << 8);
+	input.uPad[3] =
+		EMUSYS_SNES_SCOPE_FIRE |
+		EMUSYS_SNES_SCOPE_CURSOR |
+		EMUSYS_SNES_SCOPE_TURBO |
+		EMUSYS_SNES_SCOPE_PAUSE;
+	io.LatchInput(&input);
+	io.WriteSerial(1);
+	io.WriteSerial(0);
+	Check("scope 16-bit report", ReadSerialBits1(io, 16), 0xF0FF);
+
+	Uint16 uX = 0, uY = 0;
+	Check("scope position present", io.GetSuperScopePosition(&uX, &uY), 1);
+	Check("scope X", uX, 123);
+	Check("scope Y", uY, 77);
+}
+
 static void CheckScanlineTiming()
 {
 	Check("normal even-field line", SNES_LINE_MASTER_CYCLES(240, FALSE, FALSE), 1364);
@@ -203,6 +266,7 @@ int main()
 	CheckPowerOnRegisters();
 	CheckTimedALU();
 	CheckAutoJoypadTiming();
+	CheckSpecialPeripherals();
 	CheckScanlineTiming();
 	CheckDMATimingMath();
 	CheckDMARegisterMap();
