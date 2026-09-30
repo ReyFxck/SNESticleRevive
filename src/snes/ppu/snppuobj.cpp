@@ -469,6 +469,43 @@ void SnesPPURender::UpdateOBJVisibility(Uint8 *pObjY, Uint8 *pObjSize, Int32 iOb
 	}
 }
 
+Uint16 SnesPPURender::GetInternalOAMAddress(Uint32 uLine, Uint32 uHClock)
+{
+	if (uLine >= SNPPU_MAXLINE || !m_nObjLine[uLine])
+		return 0xFFFF;
+
+	/* For H>255 the 5C77 exposes the sprite-fetch object's OAM base. Sprite
+	   fetch starts at H=270 and processes the selected list backwards. Each
+	   visible 8px column consumes one attribute phase every two PPU clocks. */
+	Uint32 uHPos = uHClock >> 2;
+	Int32 iList = (Int32)m_nObjLine[uLine] - 1;
+	if (uHPos < 270u)
+		return (Uint16)m_ObjLine[uLine][iList] << 2;
+
+	Uint32 nAttributePhases = (uHPos - 270u + 1u) >> 1;
+	while (iList >= 0)
+	{
+		Uint32 uObj = m_ObjLine[uLine][iList];
+		const SnesRenderObjT *pObj = &m_Objs[uObj];
+		Int32 iObjectX = (Int32)(pObj->uPosX & 0x1FF);
+		Int32 iFirstTile, nTiles;
+		if (iObjectX & 0x100)
+			iObjectX -= 512;
+		_SnesPPUOBJCountedTileRange(pObj->uPosX, iObjectX, pObj->uWidth,
+			&iFirstTile, &nTiles);
+		if (nTiles <= 0)
+			nTiles = 1;
+
+		if (nAttributePhases < (Uint32)nTiles || iList == 0)
+			return (Uint16)uObj << 2;
+
+		nAttributePhases -= (Uint32)nTiles;
+		iList--;
+	}
+
+	return 0xFFFF;
+}
+
 void SnesPPURender::UpdateOBJ(Uint8 *pObjY, Uint8 *pObjSize)
 {
 	SnesOAMT *pOAM = m_pPPU->GetOAM();
