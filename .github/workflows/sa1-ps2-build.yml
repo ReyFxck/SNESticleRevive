@@ -7,6 +7,7 @@ on:
       - experimental/sa1-mips
       - perf/sa1-r5900
       - 'fix/**'
+      - 'audit/spc700-ares-ps2-audio-20260930'
   workflow_dispatch:
 
 permissions:
