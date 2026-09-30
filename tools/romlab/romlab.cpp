@@ -940,6 +940,93 @@ static bool CheckDezaemonStandardSramMap()
     return true;
 }
 
+static bool CheckNoMAD1Map()
+{
+    std::vector<uint8_t> image(0x200000, 0xFF);
+    SNRomInfoT *header = (SNRomInfoT *)&image[0x7FC0];
+    memset(header, 0, sizeof(*header));
+    memset(header->Title, ' ', sizeof(header->Title));
+    memcpy(header->Title, "WANDERERS FROM YS", 17);
+    header->RomMakeup = 0x20;
+    header->RomType = 0x02;
+    header->RomSize = 0x0B;
+    header->SRAMSize = 3; // 8 KiB
+    header->Country = 1;
+    header->License = 0x33;
+    header->Checksum = 0x7953;
+    header->InverseChecksum = (uint16_t)~header->Checksum;
+    image[0x7FFC] = 0x00;
+    image[0x7FFD] = 0x80;
+
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE ||
+        !(rom.m_Flags & SNROM_FLAG_NOMAD1))
+        return false;
+
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+    if (system.GetSRAMBytes() != 0x2000)
+        return false;
+
+    memset(system.GetSRAMData(), 0, SNES_SRAMSIZE);
+
+    /* Exactly 2 MiB deliberately bypasses Revive's generic small-ROM
+       full-bank SRAM compatibility path. This write succeeds only because
+       the explicit NoMAD1 board overlay owns the upper half of bank $70. */
+    SNCPUWrite8(system.GetCpu(), 0x708123, 0xA5);
+    if (system.GetSRAMData()[0x0123] != 0xA5 ||
+        SNCPURead8(system.GetCpu(), 0xF08123) != 0xA5)
+        return false;
+
+    /* $7E/$7F remain WRAM because the system map overrides cartridge decode. */
+    SNCPUWrite8(system.GetCpu(), 0x7E8123, 0x5C);
+    if (system.GetSRAMData()[0x0123] != 0xA5 ||
+        SNCPURead8(system.GetCpu(), 0x7E8123) != 0x5C)
+        return false;
+
+    return true;
+}
+
+static bool CheckSuperScopeBeamLatch()
+{
+    std::vector<uint8_t> image = BuildSelfTestRom();
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE)
+        return false;
+
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+
+    Emu::SysInputT input;
+    for (size_t i = 0; i < EMUSYS_DEVICE_NUM; ++i)
+        input.uPad[i] = EMUSYS_DEVICE_DISCONNECTED;
+    input.uPad[4] = EMUSYS_SNES_SPECIAL_SUPERSCOPE;
+    input.uPad[2] = 123u | (77u << 8);
+    input.uPad[3] = 0;
+
+    system.ExecuteFrame(&input, NULL, NULL,
+                        Emu::System::MODE_ACCURATEDETERMINISTIC);
+
+    SnesPPU *ppu = system.GetPPU();
+    Uint8 stat = ppu->Read8(0x213F, 0, FALSE);
+    if (!(stat & 0x40))
+        return false;
+
+    Uint16 h = ppu->Read8(0x213C);
+    h |= (Uint16)(ppu->Read8(0x213C) & 1u) << 8;
+    Uint16 v = ppu->Read8(0x213D);
+    v |= (Uint16)(ppu->Read8(0x213D) & 1u) << 8;
+
+    return h == 123u && v == 77u;
+}
+
 static int SelfTestCommand()
 {
     if (!CheckExHiRomSramMirrors())
@@ -957,6 +1044,18 @@ static int SelfTestCommand()
     if (!CheckDezaemonStandardSramMap())
     {
         fprintf(stderr, "ROM Lab self-test: Dezaemon standard LoROM SRAM map failed\n");
+        return 1;
+    }
+
+    if (!CheckNoMAD1Map())
+    {
+        fprintf(stderr, "ROM Lab self-test: NoMAD1 full-bank SRAM map failed\n");
+        return 1;
+    }
+
+    if (!CheckSuperScopeBeamLatch())
+    {
+        fprintf(stderr, "ROM Lab self-test: Super Scope beam latch failed\n");
         return 1;
     }
 
