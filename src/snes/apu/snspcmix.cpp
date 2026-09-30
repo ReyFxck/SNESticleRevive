@@ -1121,13 +1121,12 @@ void SNSpcDspMixSilent::Mix(CMixBuffer *pMixBuf)
 
 	m_nSampleRate = nSampleRate;
 
-	if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40)) // check mute
+	/* The silent mixer still advances the DSP state. FLG.6 affects only DAC
+	   output and must not freeze envelopes, BRR position or ENDX. */
+	for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 	{
-		for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
-		{
-			if (OutputEnvelope(iChannel, Envelope, nTotalSamples, m_uDspCounter))
-				OutputSample(iChannel, nTotalSamples, nSampleRate);
-		}
+		if (OutputEnvelope(iChannel, Envelope, nTotalSamples, m_uDspCounter))
+			OutputSample(iChannel, nTotalSamples, nSampleRate);
 	}
 	m_uDspCounter = SNSpcDspCounterAdvance(m_uDspCounter, nTotalSamples);
 }
