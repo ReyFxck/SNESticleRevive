@@ -77,6 +77,8 @@ Bool NetQueueGetElement(NetQueueT *pQueue, Uint32 uPos, NetQueueElementT *pEleme
 
 Int32 NetQueueFetchRange(NetQueueT *pQueue, Uint32 uStart, Uint32 uEnd, NetQueueElementT *pElement, Int32 nMaxElements)
 {
+	if (nMaxElements <= 0)
+		return 0;
 	Int32 nLength;
 	Int32 nElements = 0;
 
@@ -91,7 +93,7 @@ Int32 NetQueueFetchRange(NetQueueT *pQueue, Uint32 uStart, Uint32 uEnd, NetQueue
 	if (nLength >= 0)
 	{
 		// fetch forward
-		while (uStart!=uEnd)
+		while (uStart!=uEnd && nElements<nMaxElements)
 		{
 			if (!NetQueueGetElement(pQueue, uStart, pElement))
 			{
@@ -106,9 +108,9 @@ Int32 NetQueueFetchRange(NetQueueT *pQueue, Uint32 uStart, Uint32 uEnd, NetQueue
 	} else
 	{
 		// fetch backward
-		while (uStart!=uEnd)
+		while (uStart!=uEnd && nElements<nMaxElements)
 		{
-			if (!NetQueueGetElement(pQueue, uEnd, pElement))
+			if (!NetQueueGetElement(pQueue, uEnd - 1, pElement))
 			{
 				break;
 			}
