@@ -87,6 +87,30 @@ static std::vector<Uint8> MakeType1Image(const std::vector<Uint8> &linear)
 	return interleaved;
 }
 
+static std::vector<Uint8> MakeType2Image(const std::vector<Uint8> &linear)
+{
+	const Uint32 blockBytes = 0x10000;
+	const Uint32 blockCount = (Uint32)linear.size() / blockBytes;
+	std::vector<Uint8> interleaved(linear.size());
+
+	CHECK(linear.size() >= 0x100000 && !(linear.size() & (blockBytes - 1)),
+		"imagem Type-2 de teste deve usar blocos completos de 64 KiB");
+
+	for (Uint32 inputBlock = 0; inputBlock < blockCount; inputBlock++)
+	{
+		Uint32 linearBlock =
+			(inputBlock & ~0x0Fu) |
+			((inputBlock & 0x03u) << 2) |
+			((inputBlock & 0x0Cu) >> 2);
+		CHECK(linearBlock < blockCount,
+			"permutacao Type-2 deve ficar dentro da imagem");
+		if (linearBlock < blockCount)
+			memcpy(&interleaved[inputBlock * blockBytes],
+			       &linear[linearBlock * blockBytes], blockBytes);
+	}
+	return interleaved;
+}
+
 static void TestCleanLoRom(void)
 {
 	std::vector<Uint8> rom(0x100000, 0xFF);
@@ -308,6 +332,59 @@ static void TestRealType1StillWorks(void)
 		"conversao Type-1 deve restaurar todos os blocos da ROM");
 }
 
+static void TestType2ExplicitRecovery(void)
+{
+	std::vector<Uint8> linear(0x100000, 0xFF);
+
+	/* Fill every 64 KiB block with a distinct marker so the test validates
+	   the whole permutation rather than only the header block (block zero is
+	   intentionally unchanged by Type-2 and therefore cannot auto-identify
+	   this format). */
+	for (Uint32 block = 0; block < 16; block++)
+		memset(&linear[block * 0x10000], (int)block, 0x10000);
+
+	PutHeader(linear, 0x7FC0, "TYPE2 LEGACY", 0x20, 0x6A5A,
+		0x8000, 0x0000);
+	std::vector<Uint8> interleaved = MakeType2Image(linear);
+
+	CHECK(!memcmp(&interleaved[0], &linear[0], 0x10000),
+		"Type-2 deve manter o primeiro bloco/header no lugar");
+	CHECK(memcmp(&interleaved[0], &linear[0], linear.size()) != 0,
+		"fixture Type-2 deve embaralhar os demais blocos");
+
+	/* Auto deliberately leaves Type-2 untouched: there is no safe header-only
+	   discriminator for this historical format. */
+	SnesRom::SetForceType2(FALSE);
+	{
+		CMemFileIO io;
+		SnesRom snesRom;
+		std::vector<Uint8> automatic = interleaved;
+		io.Open(&automatic[0], (Uint32)automatic.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"Type-2 em Auto ainda deve ter header carregavel");
+		CHECK(memcmp(snesRom.GetData(), &linear[0], linear.size()) != 0,
+			"Auto nao deve adivinhar e rearranjar Type-2");
+	}
+
+	SnesRom::SetForceType2(TRUE);
+	{
+		CMemFileIO io;
+		SnesRom snesRom;
+		std::vector<Uint8> forced = interleaved;
+		io.Open(&forced[0], (Uint32)forced.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"Type-2 forcado deve carregar");
+		CHECK(snesRom.m_eMapping == SNROM_MAPPING_LOROM,
+			"Type-2 recuperado deve manter mapper LoROM");
+		CHECK(snesRom.GetRomTitle() &&
+		       !strcmp(snesRom.GetRomTitle(), "TYPE2 LEGACY"),
+			"Type-2 recuperado deve preservar header");
+		CHECK(!memcmp(snesRom.GetData(), &linear[0], linear.size()),
+			"Type-2 forcado deve restaurar todos os blocos lineares");
+	}
+	SnesRom::SetForceType2(FALSE);
+}
+
 int main(void)
 {
 	TestCleanLoRom();
@@ -320,6 +397,7 @@ int main(void)
 	TestVideoRegionHeaderCodes();
 	TestPinocchioFalseType1Regression();
 	TestRealType1StillWorks();
+	TestType2ExplicitRecovery();
 
 	if (g_Failures)
 	{
