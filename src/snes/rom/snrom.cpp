@@ -827,6 +827,17 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 			}
 		}
 
+		/* Two Nintendo BSC 24-Mbit LoROM boards use a non-standard 3 MiB
+		   wiring where $80-$9F selects the third MiB while $A0-$BF mirrors
+		   the second. This board layout is still handled explicitly by current
+		   Snes9x; ordinary 24-Mbit carts must keep the generic LoROM map. */
+		if (m_uRomBytes == 0x300000u &&
+		    (!strncmp((const char *)m_Name, "SOUND NOVEL-TCOOL", 17) ||
+		     !strncmp((const char *)m_Name, "DERBY STALLION 96", 17)))
+		{
+			m_Flags |= SNROM_FLAG_ROM24MBS;
+		}
+
 		// S-RTC (Daikaijuu Monogatari II): relogio de tempo real. Detectado
 		// pelo nibble alto do tipo de cartucho (0x5x = S-RTC). E' um jogo
 		// HiROM com bateria.
