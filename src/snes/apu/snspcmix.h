@@ -28,18 +28,15 @@ class    SNSpcDspMix : public ISNSpcDspMix
 	SNSpcChannelT	m_Channels[SNSPCDSP_CHANNEL_NUM];
 
 protected:
-	// envelope parameters
+	/* Native DSP-rate state. m_uDspCounter is the pre-misc30 counter value
+	   for the next 32 kHz sample. */
 	Uint32			m_nSampleRate;
-	Uint32			m_AttackTicks[16];
-	Uint32			m_DecayTicks[8];
-	Uint32			m_SustainTicks[32];
-	Uint32			m_LinearTicks[32];
-	Uint32			m_BentLineTicks[32];
+	Uint16			m_uDspCounter;
 
 protected:
 	SNSpcChannelT  *GetChannel(Int32 iChannel) {return &m_Channels[iChannel]; }
-	void	BuildLookupTables(Uint32 nSampleRate);
-	Int32	OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples);
+	Int32	OutputEnvelope(Int32 iChannel, Uint16 *pOut, Int32 nSamples,
+		Uint16 uCounterStart);
 
 public:
 	virtual Bool	GetChannelState(Int32 iChannel, Uint8 *pEnvX, Uint8 *pOutX);
@@ -68,6 +65,7 @@ class    SNSpcDspMixFull : public SNSpcDspMix
 	Int32			m_iNoisePhase;
 	Uint32			m_uNoiseGen;
 	Int16			m_iNoiseSample[SNSPCDSP_BUFFERSIZE];
+	Int16			m_iNoiseSampleVoice0[SNSPCDSP_BUFFERSIZE];
 	/* PMON needs the previous voice's same-sample output. Keep this out of
 	   the PS2 scratchpad so SNSpcDspDataT stays below the 11 KiB lookup split. */
 	Int16			m_iVoiceOutput[SNSPCDSP_BUFFERSIZE];
@@ -75,7 +73,8 @@ class    SNSpcDspMixFull : public SNSpcDspMix
 	void	FetchBlock(Int32 iChannel);
 	void	RefreshBlock(Int32 iChannel);
 	Int32	OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples, Int32 nSampleRate, const Int16 *pPitchMod);
-	Int32   OutputNoise(Int16 *pOut, Int32 nSamples, Int32 nSampleRate);
+	Int32   OutputNoise(Int16 *pOut, Int16 *pOutVoice0,
+		Int32 nSamples, Uint16 uCounterStart);
 	void	FilterEcho(Int16 *pLeftEcho, Int16 *pRightEcho, Int32 nSamples, Int32 nSampleRate, Bool bEchoSPCMem);
 public:
 	void	Reset();
