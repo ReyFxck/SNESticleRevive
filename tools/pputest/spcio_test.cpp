@@ -56,6 +56,38 @@ int main()
 	Check("DSPADDR $80 write ignored", SNSpcIO::CanWriteDspPort(0x80), FALSE);
 	Check("DSPADDR $FF write ignored", SNSpcIO::CanWriteDspPort(0xFF), FALSE);
 
+	/* Hardware timer pipeline: stage1 toggles every base period and stage2
+	   advances only on the gated 1->0 edge. */
+	{
+		SNSpcTimerT timer;
+		SNSpcTimerReset(&timer, 10);
+		SNSpcTimerSetTimer(&timer, 2);
+		SNSpcTimerSetEnable(&timer, 0, TRUE);
+		SNSpcTimerSync(&timer, 10);
+		Check("timer first half has no output",
+			SNSpcTimerGetCounter(&timer, 10), 0);
+		SNSpcTimerSync(&timer, 20);
+		Check("timer first falling edge stage2 only",
+			SNSpcTimerGetCounter(&timer, 20), 0);
+		SNSpcTimerSync(&timer, 40);
+		Check("timer target raises stage3",
+			SNSpcTimerGetCounter(&timer, 40), 1);
+		Check("timer read clears stage3",
+			SNSpcTimerGetCounter(&timer, 40), 0);
+	}
+
+	/* TEST global disable can itself create the stage1 falling edge. */
+	{
+		SNSpcTimerT timer;
+		SNSpcTimerReset(&timer, 10);
+		SNSpcTimerSetTimer(&timer, 1);
+		SNSpcTimerSetEnable(&timer, 0, TRUE);
+		SNSpcTimerSync(&timer, 10); /* stage1/line high */
+		SNSpcTimerSetGlobalGate(&timer, 10, TRUE, TRUE);
+		Check("timer TEST disable falling edge",
+			SNSpcTimerGetCounter(&timer, 10), 1);
+	}
+
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
 }
