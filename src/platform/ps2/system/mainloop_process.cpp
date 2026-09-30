@@ -137,6 +137,9 @@ Bool MainLoopProcess()
 			}
 		}
 
+		if (_pSystem == _pSnes)
+			_MainLoopSnesInputApply(&Input);
+
 		// send controller 1 + 2 inputs combined to 32-bits
 		NetInput.InputSend = ((Uint32)Input.uPad[0]) | (((Uint32)Input.uPad[1])<<16);
 
