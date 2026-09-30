@@ -73,7 +73,6 @@ public:
 class    SNSpcDspMixFull : public SNSpcDspMix
 {
 	SNSpcEchoT		m_Echo;
-	Int16			m_EchoBuffer[SNSPCDSP_ECHOBUFFER_SIZE];
 
 	Int32			m_iNoisePhase;
 	Uint32			m_uNoiseGen;
