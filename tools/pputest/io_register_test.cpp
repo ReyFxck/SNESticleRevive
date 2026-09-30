@@ -7,6 +7,7 @@
 #include "types.h"
 #include "sndma.h"
 #include "snio.h"
+#include "sntiming.h"
 
 static int g_Failures;
 
@@ -145,6 +146,14 @@ static void CheckAutoJoypadTiming()
 	Check("autojoy disabled before busy", io.IsAutoJoypadActive(), 0);
 }
 
+static void CheckScanlineTiming()
+{
+	Check("normal even-field line", SNES_LINE_MASTER_CYCLES(240, FALSE, FALSE), 1364);
+	Check("odd non-interlace line 240", SNES_LINE_MASTER_CYCLES(240, TRUE, FALSE), 1360);
+	Check("odd line 239 remains normal", SNES_LINE_MASTER_CYCLES(239, TRUE, FALSE), 1364);
+	Check("interlace odd line 240 remains normal", SNES_LINE_MASTER_CYCLES(240, TRUE, TRUE), 1364);
+}
+
 static void CheckDMATimingMath()
 {
 	/* MesenCE aligns DMA ownership to the next multiple of 8 master clocks. */
@@ -194,6 +203,7 @@ int main()
 	CheckPowerOnRegisters();
 	CheckTimedALU();
 	CheckAutoJoypadTiming();
+	CheckScanlineTiming();
 	CheckDMATimingMath();
 	CheckDMARegisterMap();
 
