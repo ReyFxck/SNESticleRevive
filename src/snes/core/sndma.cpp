@@ -912,6 +912,7 @@ void SnesDMAC::ProcessMDMA()
 
 void SnesDMAC::ProcessHDMA(Uint32 uLine)
 {
+	m_uVideoLine = uLine;
 	Uint8 uActive = m_HDMAEnable & ~m_HDMAEnded;
 
 	if (!uActive)
