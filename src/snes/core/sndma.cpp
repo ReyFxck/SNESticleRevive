@@ -465,106 +465,107 @@ void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
 
 void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 {
-	/* Optimized PPU block writers bypass SNCPUWrite8. Remember the final
-	   byte now, before the loops advance pData/nBytes, and publish it after
-	   the transfer just like the byte-wise DMA path does. */
+	Int32 nOriginalBytes = nBytes;
 	Uint8 uLastBus = nBytes > 0 ? pData[nBytes - 1] : m_pCPU->uOpenBus;
+	Uint32 uStartH = (Uint32)SNCPUGetCounter(m_pCPU, SNCPU_COUNTER_LINE);
+	Int32 iBusByte = 0;
+	Bool bVRAMAllowed = m_pPPU->CanAccessVRAM(m_uVideoLine);
+	Bool bActive = m_pPPU->IsActiveDisplay(m_uVideoLine);
 
-    SNCPUConsumeCycles(m_pCPU,  SNCPU_CYCLE_SLOW * nBytes);
+	SNCPUConsumeCycles(m_pCPU, SNCPU_CYCLE_SLOW * nBytes);
 
-    // special case simple transfer mode llll
-	if ((pChan->dmapx & 7)==0)
+	/* Keep the bulk paths for the overwhelmingly common VBlank/forced-blank
+	   uploads. Active-display transfers must visit each bus byte because OAM
+	   is redirected and CGRAM has H-clock access windows. */
+	if ((pChan->dmapx & 7) == 0)
 	{
 		switch (pChan->bbadx)
 		{
-		case 0x04: // oamdata (oam data)
-			m_pPPU->WriteOAMBlock(pData, nBytes);
+		case 0x04:
+			if (!bActive)
+				m_pPPU->WriteOAMBlock(pData, nBytes);
+			else
+				while (nBytes-- > 0)
+				{
+					m_pPPU->WriteTimed(0x2104, *pData++, m_uVideoLine,
+						uStartH + (Uint32)(iBusByte++ * SNCPU_CYCLE_SLOW));
+				}
 			break;
-		case 0x18: // vmaddl (video port address low)
-			while (nBytes > 0)
-			{
-				m_pPPU->WriteVMDATAL(*pData++);
-				nBytes--;
-			}
+
+		case 0x18:
+			if (bVRAMAllowed)
+				while (nBytes-- > 0) m_pPPU->WriteVMDATAL(*pData++);
+			else
+				while (nBytes-- > 0)
+				{
+					m_pPPU->WriteTimed(0x2118, *pData++, m_uVideoLine,
+						uStartH + (Uint32)(iBusByte++ * SNCPU_CYCLE_SLOW));
+				}
 			break;
-		case 0x19: // vmdatah (video port data hi)
-			while (nBytes > 0)
-			{
-				m_pPPU->WriteVMDATAH(*pData++);
-				nBytes--;
-			}
+
+		case 0x19:
+			if (bVRAMAllowed)
+				while (nBytes-- > 0) m_pPPU->WriteVMDATAH(*pData++);
+			else
+				while (nBytes-- > 0)
+				{
+					m_pPPU->WriteTimed(0x2119, *pData++, m_uVideoLine,
+						uStartH + (Uint32)(iBusByte++ * SNCPU_CYCLE_SLOW));
+				}
 			break;
-		case 0x22: // cgdata (color data)
-			while (nBytes > 0)
-			{
-				m_pPPU->WriteCGDATA(*pData++);
-				nBytes--;
-			}
+
+		case 0x22:
+			if (!bActive)
+				while (nBytes-- > 0) m_pPPU->WriteCGDATA(*pData++);
+			else
+				while (nBytes-- > 0)
+				{
+					m_pPPU->WriteTimed(0x2122, *pData++, m_uVideoLine,
+						uStartH + (Uint32)(iBusByte++ * SNCPU_CYCLE_SLOW));
+				}
 			break;
 
 		default:
-			// generic write byte
-			while (nBytes > 0)
+			while (nBytes-- > 0)
 			{
-				SNCPUWrite8(m_pCPU, 0x2100 + pChan->bbadx, *pData++);
-				nBytes--;
+				Uint32 uPort = pChan->bbadx & 0xFF;
+				if (uPort < 0x40)
+					m_pPPU->WriteTimed(0x2100 + uPort, *pData++,
+						m_uVideoLine,
+						uStartH + (Uint32)(iBusByte++ * SNCPU_CYCLE_SLOW));
+				else
+					SNCPUWrite8(m_pCPU, 0x2100 + uPort, *pData++);
 			}
+			break;
 		}
-
-	} else
-	if ((pChan->dmapx & 7)==1 && pChan->bbadx==0x18)
+	}
+	else if ((pChan->dmapx & 7) == 1 && pChan->bbadx == 0x18 &&
+	         bVRAMAllowed)
 	{
 		m_pPPU->WriteVMDATABlock(pData, nBytes);
-	} else
+	}
+	else
 	{
-		Uint8 *pTransfer;
-		Int32 iTransfer=0;
-
-		// get transfer order
-		pTransfer = _SNDma_MDMATransfer[pChan->dmapx & 7];
-
-		while (nBytes > 0)
+		Uint8 *pTransfer = _SNDma_MDMATransfer[pChan->dmapx & 7];
+		Int32 iTransfer = 0;
+		while (nBytes-- > 0)
 		{
-			Uint8 uData;
-			Uint32 uAddr;
-
-			// fetch data byte
-			uData = pData[iTransfer];
-
-			// get address to write to (8-bit b-bus, wrapping at $21FF)
-			uAddr = (pChan->bbadx + pTransfer[iTransfer & 3]) & 0xFF;
+			Uint8 uData = pData[iTransfer];
+			Uint32 uAddr =
+				(pChan->bbadx + pTransfer[iTransfer & 3]) & 0xFF;
+			Uint32 uHClock =
+				uStartH + (Uint32)(iBusByte++ * SNCPU_CYCLE_SLOW);
 			iTransfer++;
 
-			switch (uAddr)
-			{
-			case 0x04: // oamdata (oam data)
-				m_pPPU->WriteOAMDATA(uData);
-				break;
-			case 0x18: // vmaddl (video port address low)
-				m_pPPU->WriteVMDATAL(uData);
-				break;
-			case 0x19: // vmdatah (video port data hi)
-				m_pPPU->WriteVMDATAH(uData);
-				break;
-			case 0x22: // cgdata (color data)
-				m_pPPU->WriteCGDATA(uData);
-				break;
-
-			default:
-				/* PPU MDMA bytes must bypass the normal per-scanline write
-				   queue.  First Samurai uses mode 4 at BBAD=$16, producing
-				   $2116,$2117,$2118,$2119 groups; queuing only the first
-				   two made every tile word land at a stale VRAM address. */
-				if (uAddr < 0x40)
-					SnesDMAWritePPUPort(m_pPPU, uAddr, uData);
-				else
-					SNCPUWrite8(m_pCPU, 0x2100 + uAddr, uData);
-			}
-			nBytes--;
+			if (uAddr < 0x40)
+				m_pPPU->WriteTimed(0x2100 + uAddr, uData,
+				                   m_uVideoLine, uHClock);
+			else
+				SNCPUWrite8(m_pCPU, 0x2100 + uAddr, uData);
 		}
 	}
 
-	if (nBytes >= 0)
+	if (nOriginalBytes > 0)
 		m_pCPU->uOpenBus = uLastBus;
 }
 
