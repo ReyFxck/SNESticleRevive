@@ -76,6 +76,9 @@ listed in this section:
   independent accuracy cross-check for the four-tap Gaussian interpolation,
   its 16-bit intermediate wrap, saturation and forced-even output. No source
   from this module is bundled by merely listing it as a reference here.
+- Snes9x / Snes9x2002 / Snes9x2010: ROM-loader behavior reference for
+  historical copier interleave formats, including the explicit Type-2 mode
+  used by odd legacy SuperFX dumps. The Revive implementation is independent.
 
 This NOTICE supplements LICENSE; it does not replace any per-file or
 third-party license notice.
