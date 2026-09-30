@@ -150,9 +150,13 @@ void SNSpcIO::Reset()
 
 	m_Queue.Reset();
 
-	SNSpcTimerReset(&m_Regs.spc_timer[0], 128 * SNSPC_CYCLE); //SNES_MASTERCLOCKRATE / 8000);
-	SNSpcTimerReset(&m_Regs.spc_timer[1], 128 * SNSPC_CYCLE); //SNES_MASTERCLOCKRATE / 8000);
-	SNSpcTimerReset(&m_Regs.spc_timer[2], 16  * SNSPC_CYCLE); //SNES_MASTERCLOCKRATE / 64000);
+	/* ares' timer stage0 receives two timer clocks per ordinary S-SMP
+	   instruction cycle. With Revive's master-cycle counter that means the
+	   stage1 toggle occurs every 64/64/8 nominal SMP cycles; the falling edge
+	   then feeds stage2 at the documented 128/128/16-cycle rate. */
+	SNSpcTimerReset(&m_Regs.spc_timer[0], 64 * SNSPC_CYCLE);
+	SNSpcTimerReset(&m_Regs.spc_timer[1], 64 * SNSPC_CYCLE);
+	SNSpcTimerReset(&m_Regs.spc_timer[2], 8  * SNSPC_CYCLE);
 }
 
 #if SNES_STATEDEBUG
@@ -260,7 +264,7 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[2], iCycle, (uData & 4));
 
 			// set rom enable
-			SNSPCSetRomEnable(pSpc, uData & 0x80);
+			SNSPCSetRomEnable(pSpc, (uData & 0x80) ? TRUE : FALSE);
 		}
 		break;
 	case 0xF2:	// dsp addr
