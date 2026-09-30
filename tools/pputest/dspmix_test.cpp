@@ -26,17 +26,37 @@ int main()
 	Check("PMON full negative", SNSpcDspApplyPitchMod(0x3FFF, -0x8000), 0);
 	Check("PMON masks base pitch", SNSpcDspApplyPitchMod(0xFFFF, 0), 0x3FFF);
 
-	/* Keep PMON/OUTX sample-domain math exactly aligned with the existing
-	   Revive linear interpolation path until Gaussian interpolation is moved
-	   into the mixer as a separate accuracy/performance change. */
-	Check("linear frac zero",
-		SNSpcDspInterpolateLinear(1000, 3000, 0), 999);
-	Check("linear midpoint",
-		SNSpcDspInterpolateLinear(1000, 3000, 0x8000), 1999);
+	/* Four-tap hardware Gaussian interpolation. The pointer passed to the
+	   helper is the current sample; [-1], [0], [1], [2] are the tap window. */
+	{
+		Int16 samples[4] = { -1000, 2000, -3000, 4000 };
+		const Int16 *p = &samples[1];
+
+		Check("gaussian phase 0",
+			SNSpcDspInterpolateGaussian(p, 0x0000), 544);
+		Check("gaussian phase 1/4",
+			SNSpcDspInterpolateGaussian(p, 0x4000), 152);
+		Check("gaussian phase 1/2",
+			SNSpcDspInterpolateGaussian(p, 0x8000), -394);
+		Check("gaussian phase 3/4",
+			SNSpcDspInterpolateGaussian(p, 0xC000), -812);
+	}
+
+	/* Saturation and the S-DSP's forced-even output bit are observable at
+	   the interpolation stage, before envelope and per-voice volume. */
+	{
+		Int16 positive[4] = { 32767, 32767, 32767, 32767 };
+		Int16 negative[4] = { -32768, -32768, -32768, -32768 };
+		Check("gaussian positive clamp",
+			SNSpcDspInterpolateGaussian(&positive[1], 0xFFFF), 32766);
+		Check("gaussian negative clamp",
+			SNSpcDspInterpolateGaussian(&negative[1], 0xFFFF), -32768);
+	}
+
 	Check("voice output envelope",
-		SNSpcDspVoiceOutput(1000, 3000, 0x8000, 127), 1982);
+		SNSpcDspVoiceOutput(2000, 127), 1984);
 	Check("voice output clears bit0",
-		SNSpcDspVoiceOutput(101, 101, 0, 127) & 1, 0);
+		SNSpcDspVoiceOutput(103, 127) & 1, 0);
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
