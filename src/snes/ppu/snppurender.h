@@ -121,6 +121,29 @@ _INLINE Int32 _SnesPPUOBJSourceColumn(Int32 iTileX, Uint8 uWidth,
 	return bHFlip ? ((Int32)(uWidth >> 3) - 1 - iTileX) : iTileX;
 }
 
+_INLINE Uint8 _SnesPPUOBJVisibleHeight(Uint8 uHeight, Bool bObjInterlace)
+{
+	return bObjInterlace ? (Uint8)(uHeight >> 1) : uHeight;
+}
+
+_INLINE Uint32 _SnesPPUOBJLineY(Int32 iLine, Uint8 uPosY, Uint8 uHeight,
+	Uint8 uVXOR, Bool bObjInterlace, Bool bOddField)
+{
+	Uint32 uY = (Uint32)(iLine - (Int32)uPosY) & 0xFFu;
+	if (bObjInterlace)
+		uY = (uY << 1) | (bOddField ? 1u : 0u);
+	uY ^= uVXOR;
+	return uY & (uHeight - 1u);
+}
+
+_INLINE Int32 _SnesPPUInterlaceFetchLine(Int32 iLine, Uint8 uBGMode,
+	Bool bScreenInterlace, Bool bOddField)
+{
+	return (bScreenInterlace && (uBGMode == 5 || uBGMode == 6))
+		? ((iLine << 1) | (bOddField ? 1 : 0))
+		: iLine;
+}
+
 struct SnesRenderTileT
 {
 	Uint16	uTile;		// tile index
