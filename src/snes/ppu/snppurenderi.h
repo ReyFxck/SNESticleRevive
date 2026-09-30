@@ -43,6 +43,16 @@ public:
 	virtual void UpdateOAM() {SetUpdateFlags(SNESPPURENDER_UPDATE_OBJ);};
 	virtual void UpdateCGRAM(Uint32 uAddr, Uint16 uData) {};
 	virtual void InvalidateHiresPalette() {};
+	/* Active-display CPU accesses are redirected to PPU-internal addresses.
+	   Generic/test renderers may return the hardware-safe fallback values. */
+	virtual Uint16 GetInternalOAMAddress(Uint32 uLine, Uint32 uHClock)
+	{
+		(void)uLine; (void)uHClock; return 0xFFFF;
+	}
+	virtual Uint8 GetInternalCGRAMAddress(Uint32 uLine, Uint32 uHClock)
+	{
+		(void)uLine; (void)uHClock; return 0;
+	}
 };
 
 #endif
