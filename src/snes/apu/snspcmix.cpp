@@ -34,7 +34,7 @@ extern "C" {
    PMON/OUTX remain on the separate hardware-even voice-output path. */
 #if CODE_PLATFORM == CODE_PS2
 extern "C" void SNSpcMixVoicePS2(Int32 *pOutLeft, Int32 *pOutRight,
-	const Int16 *pIn, const Uint8 *pEnvelope, Int32 nSamples,
+	const Int16 *pVoiceOutput, Int32 nSamples,
 	Int32 iVolLeft, Int32 iVolRight);
 #endif
 
@@ -45,139 +45,26 @@ typedef Int32 SNSpcMixSampleT;
 
 static void _SNSpcDspBuildVoiceOutput(
 	Int16 *pOut, const Int16 *pIn,
-	const Uint8 *pEnvelope, Int32 nSamples)
+	const Uint16 *pEnvelope, Int32 nSamples)
 {
 	while (nSamples-- > 0)
 		*pOut++ = SNSpcDspVoiceOutput(*pIn++, *pEnvelope++);
 }
 
 /*
-SPC Timing:
-
-CPU cycles/sec: 1022727.272727
-
-sample rate: 32000hz (31.25 microseconds)
-32 CPU cycles / sample (32 * 32000 = 1024000)
-Envelope updates at 32000hz
-
-Attack:
-Linear 0->1 Increments by 1/64
-Requires 64 steps to reach 1.0
-envticks = AttackTimeMS * 32000hz / 64
-
-Decay:
-Exponential 1->0    Decs by X * 1/256  		595 updates to 1/10
-
-Sustain:
-Exponential -> 0    Decs by X * 1/256  		595 updates to 1/10
-
-Increase Bent Line:
-0->0.75 Increase by 1/64
-0.75->1 Increase by 1/256
-(48+64) = 112 total steps
-envticks = TimeMS * 32000hz / 112
-
-*/
-
-// channel[i].mix = channel[i].envx * channel[i].outx
-// main_mix = channel[i].mix *  * channel_vol
-// echo_mix = channel[i].echo_enabled ? (channel[i].mix * channel_vol) : 0
-// echo_buffer = echo_out * echo_feedback + echo_mix
-// output = main_mix * main_vol + echo_mix * echo_vol
-
-static Uint32 _SNSpcDsp_AttackTimeMS[16]=
-{
-	4100, 2600, 1500, 1000, 640, 380, 260, 160, 96, 64, 40, 24, 16, 10, 6, 0
-};
-
-static Uint32 _SNSpcDsp_DecayTimeMS[8]=
-{
-	1200, 740, 440, 290, 180, 110, 74, 37
-};
-
-static Uint32 _SNSpcDsp_SustainTimeMS[32]=
-{
-	0xFFFFFFF, 38000, 28000, 24000, 19000, 14000, 12000, 9400, 7100, 5900, 4700, 3500, 2900, 2400, 1800, 1500,
-		1200, 880, 740, 590, 440, 370, 290, 220, 180, 150, 110, 92, 74, 55, 37, 28
-};
-
-static Uint32 _SNSpcDsp_LinearMS[32]=
-{
-	0xFFFFFFF,
-		4100, 	3100,	2600,	2000,	1500,	1300,	1000,	770,	640,	510,	380,	320,
-		260,	190,	160,	130,	96, 	80,	64,	48,	40, 	32,	24,	20,	16,	12,	10,	8,	6,	4,	2,
-};
-
-static Uint32 _SNSpcDsp_BentLineMS[32]=
-{
-	0xFFFFFFF,
-		7200, 5400, 4600, 3500, 2600, 2300, 1800,
-		1300, 1100, 900, 670, 580, 450, 340, 280,
-		220, 170, 140, 110, 84, 70, 56, 42,
-		35, 28, 21, 18, 14, 11, 7, 3
-};
-
-static Uint32 _SNSpcDsp_NoiseFreq[32]=
-{
-	0,	16,	21,	25,	31,	42,	50,	63,	83,	100,
-	125,	107,	200,	250,	333,	400,	500,	667,	800,	1000,	1300,
-	1600,	2000,	2700,	3200,	4000,	5300,	6400,	8000,	10700,	16000,	32000
-};
-
-void SNSpcDspMix::BuildLookupTables(Uint32 nSampleRate)
-{
-	int i;
-	Uint32 uFactor;
-
-	uFactor = nSampleRate * 0x10000 / SNSPCDSP_SAMPLERATE;
-
-	for (i=0; i < 16; i++)
-	{
-		m_AttackTicks[i] = _SNSpcDsp_AttackTimeMS[i] * (32 * uFactor / 64);
-	}
-
-	for (i=0; i < 8; i++)
-	{
-		m_DecayTicks[i] = _SNSpcDsp_DecayTimeMS[i] * (32 * uFactor / 595);
-	}
-
-	for (i=0; i < 32; i++)
-	{
-		if (_SNSpcDsp_SustainTimeMS[i] != 0xFFFFFFF)
-		{
-			m_SustainTicks[i] = _SNSpcDsp_SustainTimeMS[i] * (32 * uFactor / 595);
-		} else
-		{
-			m_SustainTicks[i] = 0xFFFFFFF;
-		}
-	}
-
-	for (i=0; i < 32; i++)
-	{
-		if (_SNSpcDsp_LinearMS[i] != 0xFFFFFFF)
-		{
-			m_LinearTicks[i] = _SNSpcDsp_LinearMS[i] * (32 * uFactor / 64);
-		} else
-		{
-			m_LinearTicks[i] = 0xFFFFFFF;
-		}
-	}
-
-	for (i=0; i < 32; i++)
-	{
-		if (_SNSpcDsp_BentLineMS[i] != 0xFFFFFFF)
-		{
-			m_BentLineTicks[i] = _SNSpcDsp_BentLineMS[i] * (32 * uFactor / 112);
-		} else
-		{
-			m_BentLineTicks[i] = 0xFFFFFFF;
-		}
-	}
-}
+ * Native S-DSP envelope timing.
+ *
+ * Revive's output path already runs at the S-DSP's 32 kHz sample rate, so
+ * envelope/noise clocks can use the real 30720-step counter directly rather
+ * than millisecond lookup tables. Voices 1-7 poll before misc30's counter
+ * tick; voice 0 polls after it, matching the hardware phase ordering.
+ */
 
 void SNSpcDspMix::Reset()
 {
 	memset(m_Channels, 0, sizeof(m_Channels));
+	m_nSampleRate = SNSPCDSP_SAMPLERATE;
+	m_uDspCounter = 0;
 }
 
 void SNSpcDspMix::KeyOn(Int32 iChannel)
@@ -185,21 +72,28 @@ void SNSpcDspMix::KeyOn(Int32 iChannel)
 	SNSpcChannelT *pChannel = &m_Channels[iChannel];
 	const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
 
-	pChannel->eEnvState  = SNSPCDSP_ENVSTATE_ATTACK;
-	pChannel->nEnvCount  = 0;
+	pChannel->eEnvState = SNSPCDSP_ENVSTATE_ATTACK;
+	pChannel->iEnvelope = 0;
+	pChannel->nEnvCount = 0;
+	pChannel->iPhase = 0;
 	pChannel->uBlockAddr = m_pDsp->GetSampleDir(pRegs->srcn, 0);
-    // clear endx
-	pChannel->endx		 = FALSE;
+	pChannel->uOldBlockAddr = 0;
+	pChannel->envx = 0;
+	pChannel->outx = 0;
+	pChannel->endx = FALSE;
+	pChannel->pad = 0;
+	memset(pChannel->BlockData, 0, sizeof(pChannel->BlockData));
 }
 
 void SNSpcDspMix::KeyOff(Int32 iChannel)
 {
 	SNSpcChannelT *pChannel = &m_Channels[iChannel];
 
-	if ((pChannel->eEnvState!= SNSPCDSP_ENVSTATE_RELEASE) && (pChannel->eEnvState!= SNSPCDSP_ENVSTATE_SILENCE))
+	if (pChannel->eEnvState != SNSPCDSP_ENVSTATE_RELEASE &&
+	    pChannel->eEnvState != SNSPCDSP_ENVSTATE_SILENCE)
 	{
 		pChannel->eEnvState = SNSPCDSP_ENVSTATE_RELEASE;
-		pChannel->nEnvCount = 0;
+		pChannel->nEnvCount = pChannel->iEnvelope;
 	}
 }
 
@@ -216,246 +110,123 @@ Bool SNSpcDspMix::GetChannelState(Int32 iChannel, Uint8 *pEnvX, Uint8 *pOutX)
 	return endx;
 }
 
-Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
+Int32 SNSpcDspMix::OutputEnvelope(
+	Int32 iChannel, Uint16 *pOut, Int32 nSamples, Uint16 uCounterStart)
 {
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 	const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
-	Int32 iEnvelope;
-	Int32 nEnvCount;
-	Int32 nEnvRate = 0;
-	Int32 iEnvTarget;
+	Int32 iEnvelope = pChannel->iEnvelope;
+	Int32 iPending = pChannel->nEnvCount;
+	Uint16 uCounter = uCounterStart;
 
-	// envx=0 by default
 	pChannel->envx = 0;
 	pChannel->outx = 0;
 
-	#if !SNSPCDSP_MIXSILENCE
-	// sample has ended
-	if (pChannel->uBlockAddr== 0)
-	{
-		return 0;
-	}
-	#endif
-
-	// initialze envelope state based on register settings
-	if (!(pRegs->adsr1 & 0x80))
-	{
-		SNSpcEnvStateE eNewState = pChannel->eEnvState;
-
-		#if !SNSPCDSP_MIXSILENCE
-		if (!pRegs->gain)
-		{
-			return 0;
-		}
-		#endif
-
-		if (pChannel->eEnvState!=SNSPCDSP_ENVSTATE_RELEASE && pChannel->eEnvState!=SNSPCDSP_ENVSTATE_SILENCE)
-		{
-			// enforce gain modes
-			switch (pRegs->gain >> 5)
-			{
-			case 0x6:
-				eNewState = SNSPCDSP_ENVSTATE_INCREASELINEAR;
-				break;
-			case 0x7:
-				eNewState = SNSPCDSP_ENVSTATE_INCREASEBENTLINE;
-				break;
-			case 0x4:
-				eNewState = SNSPCDSP_ENVSTATE_DECREASELINEAR;
-				break;
-			case 0x5:
-				eNewState = SNSPCDSP_ENVSTATE_DECREASEEXP;
-				break;
-			default:
-				eNewState = SNSPCDSP_ENVSTATE_DIRECT;
-			}
-
-			// the equivilent of a gain "key-on"
-			if (eNewState!= pChannel->eEnvState)
-			{
-				pChannel->eEnvState = eNewState;
-				pChannel->nEnvCount = 0;
-			}
-		}
-	}
-
 #if !SNSPCDSP_MIXSILENCE
-	if (pChannel->eEnvState==SNSPCDSP_ENVSTATE_SILENCE)
-	{
+	if (pChannel->uBlockAddr == 0 ||
+	    pChannel->eEnvState == SNSPCDSP_ENVSTATE_SILENCE)
 		return 0;
-	}
 #endif
+
+	if (iEnvelope < 0) iEnvelope = 0;
+	if (iEnvelope > 0x7FF) iEnvelope = 0x7FF;
+	if (iPending < 0 || iPending > 0x7FF) iPending = iEnvelope;
 
 	PROF_ENTER("SNSpcDspOutputEnvelope");
 
-	// process envelope
-	iEnvelope = pChannel->iEnvelope;
-	nEnvCount = pChannel->nEnvCount;
-	while (nSamples > 0)
+	for (Int32 i = 0; i < nSamples; ++i)
 	{
-		// see if enough time elapsed between envelope updates
-		if (nEnvCount <= 0)
+		Uint16 uPollCounter =
+			(iChannel == 0) ? SNSpcDspCounterTick(uCounter) : uCounter;
+
+		/* voice3 uses the committed envelope for this sample; envelopeRun()
+		   computes the value that becomes visible on a later sample. */
+		pOut[i] = (Uint16)iEnvelope;
+
+		if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_RELEASE)
 		{
-			// update envelope
-			switch (pChannel->eEnvState)
+			iEnvelope -= 0x08;
+			if (iEnvelope <= 0)
 			{
-			case SNSPCDSP_ENVSTATE_ATTACK:
-				// get attack rate
-				nEnvRate = m_AttackTicks[pRegs->adsr1&0xF];
-				// update envelope
-				iEnvelope += SNSPCDSP_ENVELOPE_MAX >> 6;		// increment by 1/64
-
-				// has attack completed?
-				if (iEnvelope >= SNSPCDSP_ENVELOPE_MAX)
-				{
-					iEnvelope = SNSPCDSP_ENVELOPE_MAX;
-
-					// begin decay
-					pChannel->eEnvState = SNSPCDSP_ENVSTATE_DECAY;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_DECAY:
-				// get decay rate
-				nEnvRate = m_DecayTicks[(pRegs->adsr1>>4) & 7];
-				// get sustain level
-				iEnvTarget = ((pRegs->adsr2>>5) + 1) << (SNSPCDSP_ENVELOPE_BITS - 3);
-
-				// update envelope
-				iEnvelope -= iEnvelope >> 8;           // decrement by x / 256
-
-				// has decay completed?
-				if (iEnvelope <= iEnvTarget)
-				{
-					iEnvelope = iEnvTarget;
-					// begin sustain
-					pChannel->eEnvState = SNSPCDSP_ENVSTATE_SUSTAIN;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_SUSTAIN:
-				// get sustain rate
-				nEnvRate = m_SustainTicks[pRegs->adsr2&0x1F];
-				// update envelope
-				iEnvelope -= iEnvelope >> 8;					// decrement by x / 256
-
-				// has sustain completed?
-				if (iEnvelope <= 0)
-				{
-					iEnvelope = 0;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_RELEASE:
-				// set rate, should decrease to 0 in 256 steps ( 256 / 32000 = 0.008 sec)
-				nEnvRate = 1 << 16;
-
-				iEnvelope -= SNSPCDSP_ENVELOPE_MAX >> 8;		// decrement by 1/256
-				if (iEnvelope <= 0)
-				{
-					iEnvelope = 0;
-					pChannel->eEnvState = SNSPCDSP_ENVSTATE_SILENCE;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_DECREASELINEAR:
-				// get rate
-				nEnvRate = m_LinearTicks[pRegs->gain & 0x1F];
-
-				iEnvelope -= SNSPCDSP_ENVELOPE_MAX >> 6;		// decrement by 1/64
-				if (iEnvelope <= 0)
-				{
-					iEnvelope = 0;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_DECREASEEXP:
-				// get sustain rate
-				nEnvRate = m_SustainTicks[pRegs->gain & 0x1F];
-				// update envelope
-				iEnvelope -= iEnvelope >> 8;					// decrement by x / 256
-
-				// has decrease completed?
-				if (iEnvelope <= 0)
-				{
-					iEnvelope = 0;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_INCREASELINEAR:
-				// get rate
-				nEnvRate = m_LinearTicks[pRegs->gain & 0x1F];
-				// update envelope
-				iEnvelope += SNSPCDSP_ENVELOPE_MAX >> 6;		// increment by 1/64
-
-				// has increase completed?
-				if (iEnvelope >= SNSPCDSP_ENVELOPE_MAX)
-				{
-					iEnvelope = SNSPCDSP_ENVELOPE_MAX;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_INCREASEBENTLINE:
-				// get rate
-				nEnvRate = m_BentLineTicks[pRegs->gain & 0x1F];
-
-				if (iEnvelope >= (SNSPCDSP_ENVELOPE_MAX * 3 / 4 ))
-				{
-					// update envelope
-					iEnvelope += SNSPCDSP_ENVELOPE_MAX >> 8;		// increment by 1/256
-				} else
-				{
-					// update envelope
-					iEnvelope += SNSPCDSP_ENVELOPE_MAX >> 6;		// increment by 1/64
-				}
-
-				// has increase completed?
-				if (iEnvelope >= SNSPCDSP_ENVELOPE_MAX)
-				{
-					iEnvelope = SNSPCDSP_ENVELOPE_MAX;
-				}
-				break;
-
-			case SNSPCDSP_ENVSTATE_DIRECT:
-				iEnvelope = pRegs->gain << (SNSPCDSP_ENVELOPE_BITS - 7);
-				nEnvCount = 0x10000000;
-				nEnvRate  = 0;
-				break;
-
-			default:
-			case SNSPCDSP_ENVSTATE_SILENCE:
 				iEnvelope = 0;
-				nEnvCount = 0x10000000;
-				nEnvRate  = 0;
-				break;
+				pChannel->eEnvState = SNSPCDSP_ENVSTATE_SILENCE;
+			}
+			iPending = iEnvelope;
+		}
+		else
+		{
+			Int32 iNext = iEnvelope;
+			Uint32 uRate;
+
+			if (pRegs->adsr1 & 0x80)
+			{
+				if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_ATTACK)
+				{
+					uRate = (pRegs->adsr1 & 0x0F) * 2 + 1;
+					iNext += (uRate < 31) ? 0x20 : 0x400;
+				}
+				else
+				{
+					iNext--;
+					iNext -= iNext >> 8;
+					if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_DECAY)
+						uRate = ((pRegs->adsr1 >> 4) & 7) * 2 + 16;
+					else
+						uRate = pRegs->adsr2 & 0x1F;
+				}
+			}
+			else
+			{
+				Uint8 uGain = pRegs->gain;
+				Uint32 uMode = uGain >> 5;
+				if (uMode < 4)
+				{
+					iNext = (Int32)uGain << 4;
+					uRate = 31;
+				}
+				else
+				{
+					uRate = uGain & 0x1F;
+					if (uMode == 4)
+						iNext -= 0x20;
+					else if (uMode == 5)
+					{
+						iNext--;
+						iNext -= iNext >> 8;
+					}
+					else
+					{
+						iNext += 0x20;
+						if (uMode == 7 && iPending >= 0x600)
+							iNext += 0x08 - 0x20;
+					}
+				}
 			}
 
-			// increment envcount (number of ticks until next update)
-			nEnvCount += nEnvRate;
+			/* Decay changes mode when the candidate reaches the sustain
+			   level, even if the rate poll does not commit that candidate. */
+			if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_DECAY &&
+			    (iNext >> 8) == (pRegs->adsr2 >> 5))
+				pChannel->eEnvState = SNSPCDSP_ENVSTATE_SUSTAIN;
+
+			iPending = iNext;
+			if ((Uint32)iNext > 0x7FFu)
+			{
+				iNext = (iNext < 0) ? 0 : 0x7FF;
+				if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_ATTACK)
+					pChannel->eEnvState = SNSPCDSP_ENVSTATE_DECAY;
+			}
+
+			if (SNSpcDspCounterPoll(uPollCounter, uRate))
+				iEnvelope = iNext;
 		}
 
-		// write envelope
-		*pOut = iEnvelope >> (SNSPCDSP_ENVELOPE_BITS - 7);
-		pOut++;
-
-		// next sample
-		nEnvCount-= 1 << 16;
-		nSamples--;
+		uCounter = SNSpcDspCounterTick(uCounter);
 	}
 
-	// cleanup
 	pChannel->iEnvelope = iEnvelope;
-	pChannel->nEnvCount = nEnvCount;
-
-	// update envx
-	pChannel->envx = iEnvelope >> (SNSPCDSP_ENVELOPE_BITS - 7);
-
-	// voice ended?
-	if (pChannel->eEnvState == SNSPCDSP_ENVSTATE_SILENCE)
-	{
-		// signal end of channel
-		pChannel->endx = TRUE;
-	}
+	pChannel->nEnvCount = iPending;
+	pChannel->envx = (Uint8)(iEnvelope >> 4);
 
 	PROF_LEAVE("SNSpcDspOutputEnvelope");
 	return 1;
