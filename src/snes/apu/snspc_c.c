@@ -358,6 +358,13 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 	nCycles = pCpu->Cycles;
 
 	if (nCycles <= 0) return 0;
+	/* Once SLEEP/STOP has executed, the S-SMP keeps clocking while the PC
+	   remains on the following byte. Only reset releases these states. */
+	if (pCpu->Regs.uPad & (SNSPC_HALT_SLEEP | SNSPC_HALT_STOP))
+	{
+		pCpu->Cycles = 0;
+		return 0;
+	}
 
 	// registerize registers
 	rPC			= pCpu->Regs.rPC;
@@ -684,16 +691,16 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 		break;
 
 	SNSPC_OP(0xEF, 3);
-		// SLEEP/STOP halt the SPC and repeat the opcode until reset/wakeup.
-		rPC--;
+		/* PC already points at the following byte. Keep it there while the
+		   core clocks in SLEEP, matching the S-SMP bus-visible state. */
+		pCpu->Regs.uPad |= SNSPC_HALT_SLEEP;
 		SNSPC_SUBCYCLES(3);
-		break;
+		goto halted;
 
 	SNSPC_OP(0xFF, 3);
-		// STOP
-		rPC--;
+		pCpu->Regs.uPad |= SNSPC_HALT_STOP;
 		SNSPC_SUBCYCLES(3);
-		break;
+		goto halted;
 
 		// MOV1 membit, C
 	SNSPC_OP(0x0ca,5)
@@ -754,6 +761,16 @@ Int32 SNSPCExecute_C(SNSpcT *pCpu)
 			SNSPC_SUBCYCLES(1);
 		}
 	}
+
+halted:
+	/* The halted SMP consumes the rest of the scheduler slice without
+	   fetching another instruction. Timers still observe elapsed time through
+	   the absolute SPC counters. */
+	nCycles = 0;
+	SNSPC_PACKFLAGS();
+	pCpu->Cycles = nCycles;
+	pCpu->Regs.rPC = (Uint16)rPC;
+	return 0;
 
 done:
 	// backup one!
