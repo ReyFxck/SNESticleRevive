@@ -515,6 +515,10 @@ void SnesDMAC::SetMDMAEnable(Uint8 uData)
 		}
 	}
 #endif
+	/* A new $420B command begins a fresh DMA session. CPU execution cannot
+	   program another command while the previous DMA owns the bus. */
+	if (uData)
+		m_MDMAStartedMask = 0;
 	m_MDMAEnable = uData;
 }
 
@@ -907,9 +911,13 @@ void SnesDMAC::BeginHDMA()
 	if (!uEnabled)
 		return;
 
-	/* Mesen: HDMA initialization has one 8-clock global overhead, then
-	   initializes every enabled channel before the first scanline transfer. */
-	ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
+	Bool bOwnTiming = m_bDMATimingActive ? FALSE : TRUE;
+	if (bOwnTiming)
+		BeginDMATiming();
+
+	/* HDMA initialization has one 8-clock global overhead, then initializes
+	   every enabled channel before the first scanline transfer. */
+	ConsumeMasterClocks(8);
 
 	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{
@@ -954,6 +962,9 @@ void SnesDMAC::BeginHDMA()
 			}
 		}
 	}
+
+	if (bOwnTiming)
+		EndDMATiming();
 }
 
 void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
@@ -1019,21 +1030,41 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 
 void SnesDMAC::ProcessMDMA()
 {
-    Uint32 uChan = 0;
+	if (!m_MDMAEnable)
+		return;
 
-    while (m_MDMAEnable && (m_pCPU->Cycles > 0))
-    {
-        if (m_MDMAEnable & (1 << uChan))
-        {
-            // process channel
-            ProcessMDMAChFast(uChan);
-        }
-        else
-        {
-            // next channel
-            uChan++;
-        }
-    }
+	/* Manual DMA waits for an 8-clock boundary, pays one global 8-clock
+	   startup, then 8 clocks once per active channel before its bytes. */
+	if (!m_bDMATimingActive)
+	{
+		BeginDMATiming();
+		ConsumeMasterClocks(8);
+	}
+
+	Uint32 uChan = 0;
+	while (m_MDMAEnable && m_pCPU->Cycles > 0 && uChan < SNESDMAC_CHANNEL_NUM)
+	{
+		Uint8 uMask = (Uint8)(1 << uChan);
+		if (m_MDMAEnable & uMask)
+		{
+			if (!(m_MDMAStartedMask & uMask))
+			{
+				m_MDMAStartedMask |= uMask;
+				ConsumeMasterClocks(8);
+				if (m_pCPU->Cycles <= 0)
+					break;
+			}
+			ProcessMDMAChFast(uChan);
+		}
+		if (!(m_MDMAEnable & uMask))
+			uChan++;
+	}
+
+	if (!m_MDMAEnable)
+	{
+		EndDMATiming();
+		m_MDMAStartedMask = 0;
+	}
 }
 
 void SnesDMAC::ProcessHDMA(Uint32 uLine)
@@ -1043,6 +1074,12 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 
 	if (!uActive)
 		return;
+
+	/* When MDMA is already running, HDMA steals its clocks inside the same
+	   synchronized DMA session. Otherwise this HBlank owns start/end sync. */
+	Bool bOwnTiming = m_bDMATimingActive ? FALSE : TRUE;
+	if (bOwnTiming)
+		BeginDMATiming();
 
 #if SNDBG_LOG
 	Uint32 _tHDMAData = ProfCtrGetCycle();
@@ -1137,6 +1174,8 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 #if SNDBG_LOG
 	g_TmgCycHDMATable += ProfCtrGetCycle() - _tHDMATable;
 #endif
+	if (bOwnTiming)
+		EndDMATiming();
 }
 
 void SnesDMAC::Reset()
