@@ -194,7 +194,7 @@ void NetPlayClientInput(NetPlayRPCInputT *pInput)
         int iPeer;
 
 		// transmit/recv input data now
-		if (NetClientProcess(&_client, pInput->InputSend, NETPLAY_RPC_NUMPEERS, pInput->InputRecv))
+		if (NetClientProcess(&_client, &pInput->InputSend, NETPLAY_RPC_NUMPEERS, pInput->InputRecv))
 		{
             pInput->eGameState = NETPLAY_GAMESTATE_PLAY;
 		} else
