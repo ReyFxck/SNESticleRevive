@@ -130,6 +130,9 @@ private:
 	Bool		m_bLineIRQInstant;
 	Int32		m_nLineIRQCycle;
 	Int32		m_nLineIRQClock;
+	/* Master-clock stamps for the 5A22's four-clock sticky status windows. */
+	Uint32		m_uNmiFlagSetClock;
+	Uint32		m_uIrqFlagSetClock;
 	/* S-CPU master-clock position already delivered to the SA-1 this line. */
 	Int32		m_nSA1LineClock;
 	Uint8		m_Ram[SNES_RAMSIZE] _ALIGN(16);
@@ -178,6 +181,9 @@ private:
 	void	SyncSA1();
 	void	SyncSA1To(Int32 nClock);
 	void	RefreshSCPUIRQ();
+	Uint32	GetSCPUMasterClock() const;
+	Uint32	GetSCPULineClock() const;
+	void	AssertTimerIRQ();
 	Int32	CalculateLineIRQCycle();
 	void	RescheduleLineIRQ(Bool bAllowImmediate);
 	void	ExecuteLine();
