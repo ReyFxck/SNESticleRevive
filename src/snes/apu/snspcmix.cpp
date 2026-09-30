@@ -1173,7 +1173,6 @@ struct SNSpcDspDataT
 	Int16 iSampleData[SNSPCDSP_BUFFERSIZE*2] _ALIGN(16);
 	Uint16 FracData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 	Uint8 EnvData[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
-	Int16 VoiceOutput[SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 
 	SNSpcMixSampleT  Main[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
 	SNSpcEchoSampleT Echo[2][SNSPCDSP_BUFFERSIZE] _ALIGN(16);
@@ -1335,7 +1334,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		{
 			/* The DSP evaluates voices in order. Voice N can therefore use the
 			   same-sample output of voice N-1 as its PMON input. */
-			_SNSpcDspMemset64((Uint64 *)pData->VoiceOutput,
+			_SNSpcDspMemset64((Uint64 *)m_iVoiceOutput,
 				(sizeof(Int16) * nSamples + 7) / 8);
 
 			for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
@@ -1360,7 +1359,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 					   previous voice output already lives in VoiceOutput. */
 					if (iChannel > 0 &&
 					    (m_pDsp->GetReg(SNSPCDSP_REG_PMON) & (1<<iChannel)))
-						pPitchMod = pData->VoiceOutput;
+						pPitchMod = m_iVoiceOutput;
 
 					bMix = OutputSample(iChannel, pSampleData, pFracData,
 						nSamples, nSampleRate, pPitchMod);
@@ -1380,10 +1379,10 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						/* Build the unscaled voice output once. It feeds both OUTX
 						   and the following voice's PMON path. */
 						_SNSpcDspBuildVoiceOutput(
-							pData->VoiceOutput, pSampleData, pFracData,
+							m_iVoiceOutput, pSampleData, pFracData,
 							pData->EnvData, nSamples);
 						GetChannel(iChannel)->outx =
-							(Uint8)(pData->VoiceOutput[nSamples - 1] >> 8);
+							(Uint8)(m_iVoiceOutput[nSamples - 1] >> 8);
 						bVoiceOutputReady = TRUE;
 
 						// mix channel into main and echo buffers
@@ -1411,7 +1410,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 				/* A silent/ended voice modulates the next voice with zero, not
 				   stale output from the previous channel. */
 				if (!bVoiceOutputReady)
-					_SNSpcDspMemset64((Uint64 *)pData->VoiceOutput,
+					_SNSpcDspMemset64((Uint64 *)m_iVoiceOutput,
 						(sizeof(Int16) * nSamples + 7) / 8);
 			}
 		}
