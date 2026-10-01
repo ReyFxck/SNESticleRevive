@@ -1247,7 +1247,43 @@ void SNPPUBlendGS::ExecHires512(const Uint16 *pLine512, Int32 iLine)
 	DmaSyncGIF();
 #endif
 
+#if SNDBG_LOG
+	Uint32 uStart = ProfCtrGetCycle();
+#endif
 	memcpy(pStage, pLine512, SNPPU_DMA_HIRES_BYTES);
+#if SNDBG_LOG
+	_SNPPUGSDiag.CopyCycles += ProfCtrGetCycle() - uStart;
+#endif
+	SubmitHiresLine(iLine);
+}
+
+Bool SNPPUBlendGS::ExecHiresIndexed(const Uint8 *pMain, const Uint8 *pSub,
+	const Uint16 *pPalette, Int32 iLine, Uint16 *pCache)
+{
+	if (!m_pTarget) return FALSE;
+	/* The previous transfer owns this staging area until GIF completes.
+	   Build final pixels directly here instead of stack -> scratchpad copy. */
+#if SNDBG_LOG
+	Uint32 uStart = ProfCtrGetCycle();
+#endif
+	DmaSyncGIF();
+#if SNDBG_LOG
+	_SNPPUGSDiag.SyncCycles += ProfCtrGetCycle() - uStart;
+	_SNPPUGSDiag.SyncCalls++;
+	uStart = ProfCtrGetCycle();
+#endif
+	Uint32 *pStage = (Uint32 *)SNPPU_DMA_HIRES_ADDR;
+	SnesPPUBuildHiresOutput32(pStage, pMain, pSub, pPalette);
+	if (pCache) memcpy(pCache, pStage, SNPPU_DMA_HIRES_BYTES);
+#if SNDBG_LOG
+	_SNPPUGSDiag.CopyCycles += ProfCtrGetCycle() - uStart;
+#endif
+	SubmitHiresLine(iLine);
+	return TRUE;
+}
+
+void SNPPUBlendGS::SubmitHiresLine(Int32 iLine)
+{
 
 	/* The upload source, format and destination texture never change.  Build
 	   the GIF/DMA chain once, then patch only TRXPOS.DSAY for each line. */

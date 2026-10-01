@@ -64,6 +64,7 @@ class SNPPUBlendGS : public ISNPPUBlend
 	Uint64 GetDirtyPaletteGroups() const;
 	Uint128 *BuildSparsePaletteList(PaletteT *pPalette,
 		Uint64 uDirtyGroups, SNPPUDmaListT *pRenderList);
+	void SubmitHiresLine(Int32 iLine);
 
 public:
     SNPPUBlendGS(Uint32 uVramAddr, Uint32 uOutAddr);
@@ -73,6 +74,8 @@ public:
         Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub,
         Uint32 uIntensity, Bool bFixedSub=FALSE);
     virtual void ExecHires512(const Uint16 *pLine512, Int32 iLine);
+    virtual Bool ExecHiresIndexed(const Uint8 *pMain, const Uint8 *pSub,
+        const Uint16 *pPalette, Int32 iLine, Uint16 *pCache = NULL);
     virtual void Clear(SNPPUBlendInfoT *pInfo, Int32 iLine);
     virtual void End();
     virtual void UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 uIntensity);

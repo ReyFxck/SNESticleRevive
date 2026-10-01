@@ -366,16 +366,6 @@ static void _SnesPPUBuildPseudoHiresLine(
 	}
 }
 
-#if CODE_PLATFORM == CODE_PS2
-static void _SnesPPUBuildNativeHires512(
-	Uint32 *pOut, const SNPPUBlendInfoT *pInfo, const Uint16 *pCGRAM,
-	Uint32 uIntensity)
-{
-	_SnesPPUPrepareHiresPalette(pCGRAM, uIntensity);
-	SnesPPUBuildHiresOutput32(pOut, pInfo->uMain8, pInfo->uSub8,
-		_SnesPPU_HiresPalette16);
-}
-#endif
 
 void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 {
@@ -654,28 +644,26 @@ static Bool bPrint = TRUE;
 		if (bMode56HiresSimple)
 		{
 #if CODE_PLATFORM == CODE_PS2
-			Uint32 HiresLine[256] _ALIGN(64);
-			_SnesPPUBuildNativeHires512(
-				HiresLine, pBlendInfo, m_pPPU->GetCGData(),
-				m_pPPU->GetIntensity());
-			m_pBlend->ExecHires512((const Uint16 *)HiresLine, iLine);
+			_SnesPPUPrepareHiresPalette(m_pPPU->GetCGData(), m_pPPU->GetIntensity());
+			Uint16 *pCachePixels = NULL;
+#if SNPPU_BG_CACHE
+			if (pHiresLineCache && bHiresLineCachePromote)
+				pCachePixels = pHiresLineCache->uPixels;
+#endif
+			Bool bProduced = m_pBlend->ExecHiresIndexed(
+				pBlendInfo->uMain8, pBlendInfo->uSub8,
+				_SnesPPU_HiresPalette16, iLine, pCachePixels);
 #if SNPPU_BG_CACHE
 			if (pHiresLineCache)
 			{
 				if (bHiresLineCachePromote)
-				{
-					memcpy(pHiresLineCache->uPixels, HiresLine,
-						sizeof(pHiresLineCache->uPixels));
-					/* Publish readiness only after all 512 pixels exist. */
-					pHiresLineCache->uReady = TRUE;
-				} else
-				{
-					/* Remember only the cheap candidate key on a first miss. */
+					pHiresLineCache->uReady = bProduced;
+				else
 					SnesPPUHiresLineCacheSetKey(&pHiresLineCache->Key,
-						_SnesPPU_OutputGeneration, iLine,
-						&HiresLineState);
-				}
+						_SnesPPU_OutputGeneration, iLine, &HiresLineState);
 			}
+#else
+			(void)bProduced;
 #endif
 #else
 			m_pBlend->Exec(
