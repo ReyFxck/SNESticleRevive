@@ -35,6 +35,7 @@ jobs:
           ./tools/pputest/mask_alignment_test
           ./tools/pputest/hires_test
           ./tools/pputest/audioschedule_test
+          ./tools/pputest/audio_output_test
           ./tools/pputest/mode7_test
           ./tools/pputest/queue_test
           ./tools/pputest/spcio_test

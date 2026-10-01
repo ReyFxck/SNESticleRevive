@@ -156,6 +156,13 @@ ROOT=../..
     -I "$ROOT/src/snes/apu" \
     dspmix_test.cpp -o dspmix_test
 
+"${CXX:-g++}" -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
+    -I "$ROOT/src/common/base" -I "$ROOT/src/common/debug" \
+    -I "$ROOT/src/common/render" -I "$ROOT/src/modules/audio" \
+    audio_output_test.cpp "$ROOT/src/common/render/audmixbuffer.cpp" \
+    "$ROOT/src/common/render/mixbuffer.cpp" -o audio_output_test
+
 "${CC:-gcc}" -O2 -ffunction-sections -fdata-sections \
     -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
     -I "$ROOT/src/common/base" -I "$ROOT/src/common/debug" \
