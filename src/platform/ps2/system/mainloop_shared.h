@@ -171,6 +171,13 @@ extern Float32 _MainLoop_fOutputIntensity;
 
 /* ---- Function entrypoints across mainloop_*.cpp ------------------- */
 
+#if SNDBG_LOG
+/* Last display's frontend phases, separate from core/scanline DMA timing. */
+extern Uint32 _MainLoop_DiagPrepCount;
+extern Uint32 _MainLoop_DiagSubmitCount;
+extern Uint32 _MainLoop_DiagFlipCount;
+#endif
+
 void MainLoopRender();
 Bool MainLoopReinitVideo();
 void _MenuEnable(Bool bEnable);

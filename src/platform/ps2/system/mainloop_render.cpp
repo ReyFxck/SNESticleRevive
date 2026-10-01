@@ -25,6 +25,7 @@
 #include "prof.h"
 #include "snstate.h"
 #include "snppublend_gs.h"
+#include "sndbglog.h"
 #include "common/debug/dbgterm.h"
 
 #include "mainloop_iop.h"
@@ -252,8 +253,17 @@ void MainLoopSafeFrameskipAfterFlip()
 #endif
 }
 
+#if SNDBG_LOG
+Uint32 _MainLoop_DiagPrepCount;
+Uint32 _MainLoop_DiagSubmitCount;
+Uint32 _MainLoop_DiagFlipCount;
+#endif
+
 void MainLoopRender()
 {
+#if SNDBG_LOG
+    Uint32 uFrontendStart = ProfCtrGetCycle();
+#endif
 	static Uint32 _iFrame=0;
         static int whichdrawbuf = 0;
 
@@ -479,9 +489,16 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 	}
 	#endif
 
+#if SNDBG_LOG
+    Uint32 uSubmitStart = ProfCtrGetCycle();
+    _MainLoop_DiagPrepCount = uSubmitStart - uFrontendStart;
+#endif
     PROF_ENTER("GPFlush");
     GPFifoFlush();
     PROF_LEAVE("GPFlush");
+#if SNDBG_LOG
+    _MainLoop_DiagSubmitCount = ProfCtrGetCycle() - uSubmitStart;
+#endif
 
     /* gsKit_sync_flip waits for vsync, swaps the display buffer
        and resets gsKit's draw queue for the next frame. The
@@ -489,7 +506,13 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
        block is now subsumed by this single call. */
     PROF_ENTER("WaitVBlank");
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle();
+#if SNDBG_LOG
+    Uint32 uFlipStart = ProfCtrGetCycle();
+#endif
     GSK_SyncFlip();
+#if SNDBG_LOG
+    _MainLoop_DiagFlipCount = ProfCtrGetCycle() - uFlipStart;
+#endif
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle() - _uVblankCycle;
 	MainLoopSafeFrameskipAfterFlip();
     PROF_LEAVE("WaitVBlank");

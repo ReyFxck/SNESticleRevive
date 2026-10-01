@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "mainloop_debug.h"
 #include "mainloop.h"
@@ -68,6 +69,10 @@ static void _MainLoopResetSnesRegionCadence(void)
 
 Bool MainLoopProcess()
 {
+#if SNDBG_LOG
+    Uint32 uLoopStart = ProfCtrGetCycle();
+    Bool bSnesAtStart = _pSnes && _pSystem == _pSnes && !_bMenu;
+#endif
     NetPlayRPCInputT NetInput;
 
     PROF_ENTER("Frame");
@@ -332,6 +337,50 @@ Bool MainLoopProcess()
 	_MenuRuntimeUpdate();
 
 	MainLoopRender();
+
+#if SNDBG_LOG
+    /* Measure the whole application iteration, including audio enqueue and
+       presentation. The old core counter ends before frontend finish/flip. */
+    struct FrameWindowT
+    {
+        Uint32 uSession, nFrames, uMinWork, uMaxWork;
+        Uint64 uLoop, uPrep, uSubmit, uFlip;
+    };
+    static FrameWindowT window;
+    Bool bSnesDisplay = bSnesAtStart && _pSystem == _pSnes &&
+        !_bMenu && !_MainLoop_BlackScreen;
+    if (!bSnesDisplay || window.uSession != g_DbgSessionId)
+    {
+        memset(&window, 0, sizeof(window));
+        window.uSession = g_DbgSessionId;
+    }
+    if (bSnesDisplay)
+    {
+        Uint32 uLoop = ProfCtrGetCycle() - uLoopStart;
+        Uint32 uWork = uLoop - _MainLoop_DiagFlipCount;
+        if (!window.nFrames || uWork < window.uMinWork) window.uMinWork = uWork;
+        if (uWork > window.uMaxWork) window.uMaxWork = uWork;
+        window.uLoop += uLoop;
+        window.uPrep += _MainLoop_DiagPrepCount;
+        window.uSubmit += _MainLoop_DiagSubmitCount;
+        window.uFlip += _MainLoop_DiagFlipCount;
+        if (++window.nFrames == SNDBG_FRAME_PERIOD)
+        {
+            DLog("[ps2-frame] session=%u input=%u host-hz=%u display-frames=%u count avg loop/prep/submit/flip=%u/%u/%u/%u work min/avg/max=%u/%u/%u",
+                (unsigned)window.uSession, (unsigned)_uInputFrame,
+                (unsigned)g_DbgHostRefreshHz, (unsigned)window.nFrames,
+                (unsigned)(window.uLoop / window.nFrames),
+                (unsigned)(window.uPrep / window.nFrames),
+                (unsigned)(window.uSubmit / window.nFrames),
+                (unsigned)(window.uFlip / window.nFrames),
+                (unsigned)window.uMinWork,
+                (unsigned)((window.uLoop - window.uFlip) / window.nFrames),
+                (unsigned)window.uMaxWork);
+            memset(&window, 0, sizeof(window));
+            window.uSession = g_DbgSessionId;
+        }
+    }
+#endif
 
     PROF_LEAVE("Frame");
 
