@@ -1,5 +1,8 @@
 # Retorno dos testes: Mode 7 e saída de áudio
 
+Nova rodada com Mode 5 e cenas em movimento:
+[WORKLOAD_MOTION_2026-10-01.md](WORKLOAD_MOTION_2026-10-01.md).
+
 Continuação de [WORKLOAD_AUDIT_2026-10-01.md](WORKLOAD_AUDIT_2026-10-01.md).
 Base original: `main` em `6c6eb4a`; primeira entrega: `5e7c31b`.
 O retorno relata pouca diferença nas cenas pesadas, travamentos posteriores
