@@ -1025,25 +1025,32 @@ static bool CheckSDD1MapAndSpeed()
     system.SetSnesRom(&rom);
     system.Reset();
     SNCpuT *cpu = system.GetCpu();
+    Uint8 expectedSegments[4] = { 0, 1, 2, 3 };
     for (Uint32 fast = 0; fast < 2; fast++)
     {
         SNCPUWrite8(cpu, 0x420D, (Uint8)fast);
         for (Uint32 group = 0; group < 4; group++)
         {
-            Uint8 segment = (Uint8)(5 - group);
+            Uint8 segment = (Uint8)(fast ? group : 5 - group);
             SNCPUWrite8(cpu, 0x4804 + group, segment);
             SNCPUWrite8(cpu, 0x4804 + group, segment);
-            for (Uint32 page = 0; page < 128; page++)
+            expectedSegments[group] = segment;
+            for (Uint32 checkGroup = 0; checkGroup < 4; checkGroup++)
             {
-                Uint32 address = 0xC00000 + group * 0x100000 +
-                                 page * SNCPU_BANK_SIZE + 0x100;
-                if (SNCPURead8(cpu, address) != (Uint8)(segment * 37 + page) ||
-                    cpu->Bank[address >> SNCPU_BANK_SHIFT].uBankCycle !=
-                        (fast ? SNCPU_CYCLE_FAST : SNCPU_CYCLE_SLOW))
-                    return false;
+                for (Uint32 page = 0; page < 128; page++)
+                {
+                    Uint32 address = 0xC00000 + checkGroup * 0x100000 +
+                                     page * SNCPU_BANK_SIZE + 0x100;
+                    if (SNCPURead8(cpu, address) !=
+                            (Uint8)(expectedSegments[checkGroup] * 37 + page) ||
+                        cpu->Bank[address >> SNCPU_BANK_SHIFT].uBankCycle !=
+                            (fast ? SNCPU_CYCLE_FAST : SNCPU_CYCLE_SLOW))
+                        return false;
+                }
             }
         }
     }
+    SNCPUWrite8(cpu, 0x4804, 5);
     system.Reset();
     for (Uint32 group = 0; group < 4; group++)
     {

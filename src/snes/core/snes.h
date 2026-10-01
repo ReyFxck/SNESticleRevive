@@ -179,7 +179,7 @@ private:
 	void	MapMemLoRom24MBit(void);
 	void	MapMemLoRomSRAM128K(void);
 	void	RemapSA1ROM(Uint32 uWhich, Uint8 uMap);
-	void	RemapSDD1(void);   // (re)mapeia $C0-$FF conforme $4804-$4807
+	void	RemapSDD1(Uint32 uGroupMask = 0x0F); // $4804-$4807, one MiB per group
 	void	DumpMemMap();
 
 	void	SetFastRom();

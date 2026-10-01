@@ -1021,7 +1021,8 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		pSnes->m_SDD1.WriteReg(uAddr, uData);
 		if (pSnes->m_SDD1.MapDirty())
 		{
-			pSnes->RemapSDD1();
+			/* Each MMC register owns one independent 1 MiB ROM window. */
+			pSnes->RemapSDD1(1u << (uAddr & 3u));
 			pSnes->m_SDD1.ClearMapDirty();
 		}
 	} else
