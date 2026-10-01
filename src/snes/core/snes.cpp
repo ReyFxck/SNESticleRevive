@@ -1645,6 +1645,20 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 			break;
 		}
 
+		/* WAI must remain asleep across scheduler slices.  The opcode core
+		   zeroes the current slice when CB executes, but ExecuteCPU() adds a
+		   fresh budget on the next raster slice.  Do not let that new budget
+		   resume instruction execution until an IRQ/NMI (or reset) wakes the
+		   5A22.  A pending DMA still has to run because it already owns the
+		   bus before the CPU can return to the halted state. */
+		if ((m_Cpu.uSignal & SNCPU_SIGNAL_WAI) &&
+			!(m_Cpu.uSignal & (SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_NMIEDGE |
+			                   SNCPU_SIGNAL_RESET | SNCPU_SIGNAL_DMA)))
+		{
+			m_Cpu.Cycles = 0;
+			break;
+		}
+
         // process signal
         if (m_Cpu.uSignal & (SNCPU_SIGNAL_IRQ | SNCPU_SIGNAL_NMIEDGE | SNCPU_SIGNAL_RESET | SNCPU_SIGNAL_DMA))
         {
