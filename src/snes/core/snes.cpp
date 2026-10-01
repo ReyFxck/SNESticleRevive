@@ -1484,6 +1484,10 @@ void SnesSystem::Reset()
 		m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE);
 
 	m_SDD1.Reset();
+	/* Resetting MMC registers must reset the actual bank bindings too.
+	   Repeated writes of the default segments no longer rebuild that map. */
+	if (m_bSDD1)
+		RemapSDD1();
 
 	// So' o cartucho com S-RTC deve tocar o relogio do host (time/gmtime).
 	// Antes isso rodava no boot de TODO jogo -> se time()/gmtime() falhar no

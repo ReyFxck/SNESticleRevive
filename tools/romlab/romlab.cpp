@@ -990,6 +990,76 @@ static bool CheckNoMAD1Map()
     return true;
 }
 
+static bool CheckSDD1MapAndSpeed()
+{
+    SNSDD1 chip;
+    chip.ClearMapDirty();
+    chip.WriteReg(0x4804, chip.BankSegment(0));
+    if (chip.MapDirty()) return false;
+    chip.WriteReg(0x4804, 5);
+    chip.WriteReg(0x4804, 5);
+    if (!chip.MapDirty()) return false; // repeated write cannot cancel a change
+    chip.ClearMapDirty();
+    chip.WriteReg(0x4800, 0xFF);
+    chip.WriteReg(0x4801, 0xA5);
+    if (chip.MapDirty() || !chip.DmaEnabled(0) || chip.DmaEnabled(1))
+        return false;
+
+    std::vector<uint8_t> image = BuildSelfTestRom();
+    image.resize(0x600000, 0xFF);
+    SNRomInfoT *header = (SNRomInfoT *)&image[0x7FC0];
+    header->RomMakeup = 0x32;
+    header->RomType = 0x45;
+    header->RomSize = 0x0D;
+    for (Uint32 segment = 0; segment < 6; segment++)
+        for (Uint32 page = 0; page < 128; page++)
+            image[segment * 0x100000 + page * SNCPU_BANK_SIZE + 0x100] =
+                (Uint8)(segment * 37 + page);
+
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE ||
+        !(rom.m_Flags & SNROM_FLAG_SDD1)) return false;
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+    SNCpuT *cpu = system.GetCpu();
+    for (Uint32 fast = 0; fast < 2; fast++)
+    {
+        SNCPUWrite8(cpu, 0x420D, (Uint8)fast);
+        for (Uint32 group = 0; group < 4; group++)
+        {
+            Uint8 segment = (Uint8)(5 - group);
+            SNCPUWrite8(cpu, 0x4804 + group, segment);
+            SNCPUWrite8(cpu, 0x4804 + group, segment);
+            for (Uint32 page = 0; page < 128; page++)
+            {
+                Uint32 address = 0xC00000 + group * 0x100000 +
+                                 page * SNCPU_BANK_SIZE + 0x100;
+                if (SNCPURead8(cpu, address) != (Uint8)(segment * 37 + page) ||
+                    cpu->Bank[address >> SNCPU_BANK_SHIFT].uBankCycle !=
+                        (fast ? SNCPU_CYCLE_FAST : SNCPU_CYCLE_SLOW))
+                    return false;
+            }
+        }
+    }
+    system.Reset();
+    for (Uint32 group = 0; group < 4; group++)
+    {
+        SNCPUWrite8(cpu, 0x4804 + group, (Uint8)group);
+        for (Uint32 page = 0; page < 128; page++)
+        {
+            Uint32 address = 0xC00000 + group * 0x100000 +
+                             page * SNCPU_BANK_SIZE + 0x100;
+            if (SNCPURead8(cpu, address) != (Uint8)(group * 37 + page) ||
+                cpu->Bank[address >> SNCPU_BANK_SHIFT].uBankCycle != SNCPU_CYCLE_SLOW)
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool CheckSuperScopeBeamLatch()
 {
     std::vector<uint8_t> image = BuildSelfTestRom();
@@ -1068,6 +1138,12 @@ static bool CheckJustifierBeamLatch()
 
 static int SelfTestCommand()
 {
+    if (!CheckSDD1MapAndSpeed())
+    {
+        fprintf(stderr, "ROM Lab self-test: S-DD1 map/FastROM timing failed\n");
+        return 1;
+    }
+
     if (!CheckExHiRomSramMirrors())
     {
         fprintf(stderr, "ROM Lab self-test: ExHiROM SRAM mirrors failed\n");

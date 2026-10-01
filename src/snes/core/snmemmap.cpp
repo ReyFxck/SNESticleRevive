@@ -937,7 +937,8 @@ void SnesSystem::RemapSDD1(void)
 		Uint32 uRomOff  = (uSeg * 0x100000) % uRomBytes;
 		Uint32 uBankBase = (0xC0 + g * 0x10) << 16;   // $C00000 / $D00000 / ...
 
-		SNCPUSetMemSpeed(&m_Cpu, uBankBase, 0x100000, SNCPU_CYCLE_SLOW);
+		/* MMC selects ROM data only. The S-CPU's $420D MEMSEL retains
+		   ownership of FastROM timing when a cartridge window changes. */
 		SNCPUSetBank    (&m_Cpu, uBankBase, 0x100000, pRomData + uRomOff, FALSE);
 	}
 
