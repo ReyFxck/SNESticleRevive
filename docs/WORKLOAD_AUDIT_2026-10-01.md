@@ -1,5 +1,7 @@
 # Investigação de workloads — 2026-10-01
 
+Retorno posterior dos testes e novas mudanças: [Mode 7 e saída de áudio](WORKLOAD_FOLLOWUP_2026-10-01.md).
+
 ## Resultado e limites da investigação
 
 Base: `main` em `6c6eb4ae7337e9f206f1f560ac09f6ff3af11c83`.
