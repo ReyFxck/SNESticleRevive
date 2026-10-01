@@ -96,6 +96,30 @@ _INLINE SnesPPUMode7LineT SnesPPUMode7MakeLine(
  * tilemap sem alterar o resultado emulado. As variantes clamp/black tambem
  * evitam leituras cujo valor o PPU descartaria por estar fora de 0..1023.
  */
+_INLINE Uint32 SnesPPUMode7TileByteAddress(Int32 x, Int32 y)
+{
+	return (((Uint32)y >> 3) & 0x7F00u) |
+	       (((Uint32)x >> 10) & 0xFEu);
+}
+
+_INLINE Uint32 SnesPPUMode7PixelByteOffset(Int32 x, Int32 y)
+{
+	return (((Uint32)x >> 7) & 0x0Eu) |
+	       (((Uint32)y >> 4) & 0x70u) | 1u;
+}
+
+_INLINE Uint8 SnesPPUMode7RepeatPixel(const Uint8 *pVram,
+	Uint32 uTileAddr, Int32 x, Int32 y,
+	Uint32 &uLastTileAddr, Uint32 &uChrBase)
+{
+	if (uTileAddr != uLastTileAddr)
+	{
+		uChrBase = (Uint32)pVram[uTileAddr] << 7;
+		uLastTileAddr = uTileAddr;
+	}
+	return pVram[uChrBase | SnesPPUMode7PixelByteOffset(x, y)];
+}
+
 _INLINE void SnesPPUMode7FetchRepeat(
 	Uint8 *pLine, Int32 nPixels, const Uint8 *pVram,
 	Int32 x, Int32 y, Int32 dx, Int32 dy)
@@ -103,25 +127,61 @@ _INLINE void SnesPPUMode7FetchRepeat(
 	Uint32 uLastTileAddr = 0xFFFFFFFFu;
 	Uint32 uChrBase = 0;
 
+	/* A/B/C/D are signed 16-bit; horizontal flip can also produce +32768.
+	   Over three steps that range cannot cross a complete 1024-pixel map.
+	   Equal endpoint tile addresses therefore prove that all four pixels
+	   use the same tile, even across the wrapped coordinate boundary.
+	   Keep the scalar path for other callers and the last 0..3 pixels. */
+	if ((Uint32)dx + 32768u <= 65536u &&
+	    (Uint32)dy + 32768u <= 65536u)
+	{
+		while (nPixels >= 4)
+		{
+			Int32 x1 = x + dx, y1 = y + dy;
+			Int32 x2 = x1 + dx, y2 = y1 + dy;
+			Int32 x3 = x2 + dx, y3 = y2 + dy;
+			Uint32 uFirstTile = SnesPPUMode7TileByteAddress(x, y);
+			Uint32 uLastTile = SnesPPUMode7TileByteAddress(x3, y3);
+
+			if (uFirstTile == uLastTile)
+			{
+				pLine[0] = SnesPPUMode7RepeatPixel(pVram, uFirstTile,
+					x, y, uLastTileAddr, uChrBase);
+				pLine[1] = pVram[uChrBase | SnesPPUMode7PixelByteOffset(x1, y1)];
+				pLine[2] = pVram[uChrBase | SnesPPUMode7PixelByteOffset(x2, y2)];
+				pLine[3] = pVram[uChrBase | SnesPPUMode7PixelByteOffset(x3, y3)];
+			}
+			else
+			{
+				pLine[0] = SnesPPUMode7RepeatPixel(pVram, uFirstTile,
+					x, y, uLastTileAddr, uChrBase);
+				pLine[1] = SnesPPUMode7RepeatPixel(pVram,
+					SnesPPUMode7TileByteAddress(x1, y1), x1, y1,
+					uLastTileAddr, uChrBase);
+				pLine[2] = SnesPPUMode7RepeatPixel(pVram,
+					SnesPPUMode7TileByteAddress(x2, y2), x2, y2,
+					uLastTileAddr, uChrBase);
+				pLine[3] = SnesPPUMode7RepeatPixel(pVram, uLastTile,
+					x3, y3, uLastTileAddr, uChrBase);
+			}
+			x = x3 + dx;
+			y = y3 + dy;
+			pLine += 4;
+			nPixels -= 4;
+		}
+	}
+
 	while (nPixels-- > 0)
 	{
-		Int32 x2 = (x >> 8) & 0x3FF;
-		Int32 y2 = (y >> 8) & 0x3FF;
-		Uint32 uTileAddr = ((Uint32)(y2 >> 3) << 7) |
-		                       (Uint32)(x2 >> 3);
-
+		/* Select byte-address fields directly from the 24.8 coordinates.
+		   Map bytes are even; CHR bytes are odd. The fields do not overlap,
+		   so OR replaces the pixel/tile shifts and additions without changing
+		   wrapping, fractional bits or the PPU's transform rounding. */
+		*pLine++ = SnesPPUMode7RepeatPixel(pVram,
+			SnesPPUMode7TileByteAddress(x, y), x, y,
+			uLastTileAddr, uChrBase);
 		x += dx;
 		y += dy;
-
-		if (uTileAddr != uLastTileAddr)
-		{
-			uChrBase = (Uint32)pVram[uTileAddr * 2] << 6;
-			uLastTileAddr = uTileAddr;
-		}
-
-		Uint32 uChrAddr = uChrBase + (Uint32)(x2 & 7) +
-		                  ((Uint32)(y2 & 7) << 3);
-		*pLine++ = pVram[uChrAddr * 2 + 1];
 	}
 }
 
