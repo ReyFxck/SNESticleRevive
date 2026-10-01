@@ -32,6 +32,7 @@ jobs:
           ./tools/pputest/chrcache_test
           ./tools/pputest/chrcache_obj_only_test
           ./tools/pputest/bglinecache_test
+          ./tools/pputest/vramstamp_test
           ./tools/pputest/mask_alignment_test
           ./tools/pputest/hires_test
           ./tools/pputest/audioschedule_test

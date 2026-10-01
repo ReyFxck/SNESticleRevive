@@ -16,6 +16,7 @@
 #include "snppuchrcache.h"
 #include "snppuhires.h"
 #include "snppubglinecache.h"
+#include "snppuvramstamp.h"
 #include "snppumode7.h"
 #include "rendersurface.h"
 #include "snmask.h"
@@ -98,7 +99,7 @@ static SnesPPUBGLineCacheNormalEntryT
 static Uint8
 	_SnesPPU_BGLineCacheVictim[4][SNPPU_BG_LINE_CACHE_LINES] _ALIGN(64);
 #endif
-static Uint32 _SnesPPU_BGLineGeneration = 1;
+static SnesPPUVramStampT _SnesPPU_BGLineVram;
 
 static _INLINE Bool _SnesPPURestoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
@@ -203,18 +204,16 @@ void SnesPPUInvalidateChrCache(Uint32 uWordAddress, Uint32 nWords)
 #endif
 #endif
 #if SNPPU_BG_CACHE
-	/* One monotonically increasing epoch invalidates decoded scanlines in O(1).
-	   The larger line cache never risks surviving a tilemap or character
-	   upload, regardless of whether the separate physical CHR cache is on. */
-	_SnesPPU_BGLineGeneration++;
-	if (_SnesPPU_BGLineGeneration == 0)
+	/* Invalidate only BG dependency regions, including tilemap and CHR.
+	   Writes to an unrelated OBJ upload must not discard every decoded BG.
+	   Counter wrap clears entries before any old stamp could become valid. */
+	if (_SnesPPU_BGLineVram.Invalidate(uWordAddress, nWords))
 	{
 		memset(_SnesPPU_BGLineCache, 0, sizeof(_SnesPPU_BGLineCache));
 #if SNPPU_BG_LINE_CACHE_WAYS > 1
 		memset(_SnesPPU_BGLineCacheNormal, 0,
 			sizeof(_SnesPPU_BGLineCacheNormal));
 #endif
-		_SnesPPU_BGLineGeneration = 1;
 	}
 #endif
 #if !(SNPPU_OBJ_CACHE || SNPPU_BG_CHR_CACHE || SNPPU_BG_CACHE)
@@ -2199,6 +2198,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				    BGInfo[iBG].uMosaic == 0 &&
 				    iLine >= 0)
 				{
+					Uint32 uBGGeneration = _SnesPPU_BGLineVram.GetBGGeneration(
+						iBG, uBGMode, &BGInfo[iBG]);
 					Uint32 uLineCacheIndex = SnesPPUBGLineCacheIndex(
 						pRenderInfo->uBGVramAddr[iBG],
 						BGInfo[iBG].uChrSize);
@@ -2207,7 +2208,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 
 					if (pPrimary->uReady &&
 					    SnesPPUBGLineCacheKeyMatches(&pPrimary->Key,
-						_SnesPPU_BGLineGeneration,
+						uBGGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iBG,
 						uBGMode, &BGInfo[iBG]))
 					{
@@ -2230,7 +2231,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						&_SnesPPU_BGLineCacheNormal[iBG][uLineCacheIndex];
 					if (!bHiresPair && pSecondary->uReady &&
 					    SnesPPUBGLineCacheKeyMatches(&pSecondary->Key,
-						_SnesPPU_BGLineGeneration,
+						uBGGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iBG,
 						uBGMode, &BGInfo[iBG]))
 					{
@@ -2255,7 +2256,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						pNormalLineCache = pSecondary;
 						pNormalLineCache->uReady = FALSE;
 						SnesPPUBGLineCacheSetKey(&pNormalLineCache->Key,
-							_SnesPPU_BGLineGeneration,
+							uBGGeneration,
 							pRenderInfo->uBGVramAddr[iBG], iBG,
 							uBGMode, &BGInfo[iBG]);
 						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 0;
@@ -2266,7 +2267,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						pLineCache = pPrimary;
 						pLineCache->uReady = FALSE;
 						SnesPPUBGLineCacheSetKey(&pLineCache->Key,
-						_SnesPPU_BGLineGeneration,
+						uBGGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iBG,
 						uBGMode, &BGInfo[iBG]);
 #if SNPPU_BG_LINE_CACHE_WAYS > 1
