@@ -194,6 +194,7 @@ extern Uint32 g_DbgBGChrCacheBypasses;
 extern Uint32 g_DbgBGChrCacheInvalidations;
 extern Uint32 g_DbgBGLineCacheHits;
 extern Uint32 g_DbgBGLineCacheMisses;
+extern Uint32 g_DbgBGLineCacheScrolls;
 extern Uint32 g_DbgBGLineCacheBypasses;
 extern Uint32 g_DbgHiresLineCacheHits;
 extern Uint32 g_DbgHiresLineCacheMisses;

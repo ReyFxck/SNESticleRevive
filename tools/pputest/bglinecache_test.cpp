@@ -8,6 +8,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 #include "types.h"
 #include "snppubglinecache.h"
@@ -24,8 +25,75 @@ static void Check(const char *pName, Uint32 uGot, Uint32 uExpected)
 	}
 }
 
+static Uint32 EncodeX(Uint32 x, bool half)
+{
+	Uint32 tile = half ? x >> 1 : x;
+	return (tile & 31u) | ((tile & 32u) << 5) |
+		(half ? (x & 1u) << 12 : 0u);
+}
+
+static void CheckScrollReuse()
+{
+	for (Uint32 mode : { 1u, 5u })
+		for (Uint32 size : { 0u, 1u })
+		{
+			SnesBGInfoT info = {};
+			info.uBitDepth = 4;
+			info.uChrSize = size;
+			bool half = mode == 1 && size;
+			Uint32 mask = half ? 127 : 63;
+			for (Uint32 oldX = 0; oldX <= mask; ++oldX)
+				for (Int32 step : { -2, -1, 0, 1, 2 })
+				{
+					SnesPPUBGLineCacheKeyT key = {};
+					Uint32 oldState = EncodeX(oldX, half) | (11u << 5) | (3u << 24);
+					Uint32 newState = EncodeX((oldX + step) & mask, half) |
+						(11u << 5) | (3u << 24) | (7u << 16);
+					SnesPPUBGLineCacheSetKey(&key, 41, oldState, 0, mode, &info);
+					Int32 expected = step == 1 || step == -1 ? step : 0;
+					Check("adjacent scroll including wrap", SnesPPUBGLineCacheScrollStep(
+						&key, 41, newState, 0, mode, &info), expected);
+					Check("changed row rejects scroll reuse", SnesPPUBGLineCacheScrollStep(
+						&key, 41, newState ^ (1u << 24), 0, mode, &info), 0);
+					Check("changed VRAM rejects scroll reuse", SnesPPUBGLineCacheScrollStep(
+						&key, 42, newState, 0, mode, &info), 0);
+				}
+		}
+	for (Int32 step : { -1, 1 })
+	{
+		Uint8 source[272] _ALIGN(16), got[272] _ALIGN(16), expected[272] _ALIGN(16);
+		Uint8 sourceOpaque[48], sourcePriority[48], opaque[48], priority[48];
+		Uint8 expectedOpaque[48], expectedPriority[48];
+		for (Uint32 i = 0; i < sizeof(source); ++i) source[i] = (Uint8)(i * 79u + 13u);
+		for (Uint32 i = 0; i < 48; ++i)
+		{
+			sourceOpaque[i] = (Uint8)(i * 29u);
+			sourcePriority[i] = (Uint8)(i * 43u);
+		}
+		std::memset(got, 0xA5, sizeof(got));
+		std::memset(opaque, 0xA5, sizeof(opaque));
+		std::memset(priority, 0xA5, sizeof(priority));
+		std::memcpy(expected, got, sizeof(got));
+		std::memcpy(expectedOpaque, opaque, sizeof(opaque));
+		std::memcpy(expectedPriority, priority, sizeof(priority));
+		Uint32 src = step > 0 ? 1 : 0, dst = step > 0 ? 0 : 1;
+		for (Uint32 i = 0; i < 256; ++i) expected[8 + dst * 8 + i] = source[src * 8 + i];
+		for (Uint32 i = 0; i < 32; ++i)
+		{
+			expectedOpaque[dst + i] = sourceOpaque[src + i];
+			expectedPriority[dst + i] = sourcePriority[src + i];
+		}
+		SnesPPUBGLineCacheCopyOverlap(got + 8, opaque, priority,
+			source, sourceOpaque, sourcePriority, step);
+		Check("overlap pixels and guards", std::memcmp(got, expected, sizeof(got)) == 0, TRUE);
+		Check("overlap opacity", std::memcmp(opaque, expectedOpaque, sizeof(opaque)) == 0, TRUE);
+		Check("overlap priority", std::memcmp(priority, expectedPriority, sizeof(priority)) == 0, TRUE);
+	}
+}
+
 int main()
 {
+	CheckScrollReuse();
 	SnesPPUBGLineCacheKeyT Key;
 	SnesBGInfoT Info;
 	Uint32 uState = 0;

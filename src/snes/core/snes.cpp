@@ -161,6 +161,7 @@ Uint32 g_DbgBGChrCacheBypasses = 0;
 Uint32 g_DbgBGChrCacheInvalidations = 0;
 Uint32 g_DbgBGLineCacheHits = 0;
 Uint32 g_DbgBGLineCacheMisses = 0;
+Uint32 g_DbgBGLineCacheScrolls = 0;
 Uint32 g_DbgBGLineCacheBypasses = 0;
 Uint32 g_DbgHiresLineCacheHits = 0;
 Uint32 g_DbgHiresLineCacheMisses = 0;
@@ -328,6 +329,7 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrCacheInvalidations = 0;
 	g_DbgBGLineCacheHits = 0;
 	g_DbgBGLineCacheMisses = 0;
+	g_DbgBGLineCacheScrolls = 0;
 	g_DbgBGLineCacheBypasses = 0;
 	g_DbgHiresLineCacheHits = 0;
 	g_DbgHiresLineCacheMisses = 0;
@@ -2645,10 +2647,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGChrCacheMisses,
 				(unsigned)g_DbgBGChrCacheBypasses,
 				(unsigned)g_DbgBGChrCacheInvalidations);
-			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u",
+			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u scroll=%u",
 				(unsigned)g_DbgBGLineCacheHits,
 				(unsigned)g_DbgBGLineCacheMisses,
-				(unsigned)g_DbgBGLineCacheBypasses);
+				(unsigned)g_DbgBGLineCacheBypasses,
+				(unsigned)g_DbgBGLineCacheScrolls);
 			DLog("[snes-hires-line-cache] hit/miss/bypass=%u/%u/%u",
 				(unsigned)g_DbgHiresLineCacheHits,
 				(unsigned)g_DbgHiresLineCacheMisses,

@@ -10,6 +10,7 @@
 #define _SNPPUBGLINECACHE_H
 
 #include "types.h"
+#include <string.h>
 #include "snppurender.h"
 
 #define SNPPU_BG_LINE_CACHE_LINES 256u
@@ -95,6 +96,47 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 	       pKey->uBitDepth == pInfo->uBitDepth &&
 	       pKey->uPalBase == pInfo->uPalBase &&
 	       pKey->uPriority == pInfo->Priority;
+}
+
+/* Reuse an adjacent 33-cell window only when every other fetch input is
+   exact. Normal 16x16 maps have two 8-dot cells per horizontal map entry;
+   native hires has one logical cell (two physical CHR halves) per entry. */
+_INLINE Int32 SnesPPUBGLineCacheScrollStep(
+	const SnesPPUBGLineCacheKeyT *pKey, Uint32 uGeneration,
+	Uint32 uVramState, Uint32 uBG, Uint32 uMode, const SnesBGInfoT *pInfo)
+{
+	const Bool bHalfX = uMode == 1u && pInfo->uChrSize;
+	const Uint32 uXMask = 0x041Fu | (bHalfX ? 0x1000u : 0u);
+	Uint32 uSameXState = (uVramState & ~uXMask) | (pKey->uVramState & uXMask);
+	if (!SnesPPUBGLineCacheKeyMatches(pKey, uGeneration,
+		uSameXState, uBG, uMode, pInfo)) return 0;
+	Uint32 uOldX = (pKey->uVramState & 31u) | ((pKey->uVramState >> 5) & 32u);
+	Uint32 uNewX = (uVramState & 31u) | ((uVramState >> 5) & 32u);
+	if (bHalfX)
+	{
+		uOldX = (uOldX << 1) | ((pKey->uVramState >> 12) & 1u);
+		uNewX = (uNewX << 1) | ((uVramState >> 12) & 1u);
+	}
+	Uint32 uMask = bHalfX ? 127u : 63u;
+	Uint32 uDelta = (uNewX - uOldX) & uMask;
+	return uDelta == 1u ? 1 : uDelta == uMask ? -1 : 0;
+}
+
+/* Both pixel buffers are 8-byte aligned. Copy the 32 overlapping cells and
+   their unshifted opacity/priority bytes; the ordinary decoder fills the
+   remaining cell before fine-X mask alignment or screen composition. */
+_INLINE void SnesPPUBGLineCacheCopyOverlap(
+	Uint8 *pDest, Uint8 *pOpaque, Uint8 *pPriority,
+	const Uint8 *pSource, const Uint8 *pSourceOpaque,
+	const Uint8 *pSourcePriority, Int32 nStep)
+{
+	Uint32 uSourceCell = nStep > 0 ? 1u : 0u;
+	Uint32 uDestCell = nStep > 0 ? 0u : 1u;
+	for (Uint32 i = 0; i < 32u; ++i)
+		((Uint64 *)pDest)[uDestCell + i] =
+			((const Uint64 *)pSource)[uSourceCell + i];
+	memcpy(pOpaque + uDestCell, pSourceOpaque + uSourceCell, 32u);
+	memcpy(pPriority + uDestCell, pSourcePriority + uSourceCell, 32u);
 }
 
 #endif // _SNPPUBGLINECACHE_H
