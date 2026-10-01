@@ -28,6 +28,7 @@ extern "C" {
 #include "snspc_c.h"
 }
 #include "snppucolor.h"
+#include "snppurender.h"
 #include "snstate.h"
 
 #include "input_movie.h"
@@ -1143,8 +1144,87 @@ static bool CheckJustifierBeamLatch()
     return h == 200u && v == 91u;
 }
 
+/* Compare a moving synthetic PPU scene with a cold renderer on every line.
+   No ROM, timing, or host-performance assumption is involved. */
+static bool CheckBGScrollRendering()
+{
+    for (unsigned mode : {1u, 5u})
+    for (unsigned large : {0u, 1u})
+    for (unsigned maps : {0u, 3u})
+    {
+        std::vector<uint8_t> expected;
+        for (unsigned cold = 0; cold < 2; ++cold)
+        {
+            SnesPPU ppu;
+            SnesPPURender render{};
+            render.SetPPU(&ppu);
+            ppu.SetPPURender(&render);
+            ppu.Reset();
+            uint32_t seed = 0x65816;
+            for (unsigned i = 0; i < SNESPPU_VRAM_NUMWORDS; ++i)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                *ppu.GetVramPtr(i) = (Uint16)(seed >> 16);
+            }
+            for (unsigned i = 0; i < 256; ++i)
+                ppu.GetCGData()[i] = (Uint16)((i * 317u) & 0x7FFFu);
+            render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+            SnesPPURegsT *regs = const_cast<SnesPPURegsT *>(ppu.GetRegs());
+            regs->inidisp = 15;
+            regs->bgmode = (Uint8)(mode | (large ? 0x30u : 0));
+            regs->bg1sc = (Uint8)(0xC0u | maps);
+            regs->bg2sc = (Uint8)(0xE0u | maps);
+            regs->bg12nba = 0x40;
+            regs->tm = regs->ts = 3;
+            regs->cgwsel = 2;
+            CRenderSurface surface;
+            surface.Alloc(256, 8, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+            size_t position = 0;
+            for (unsigned step = 0; step < 272; ++step)
+            {
+                /* Cross map/quadrant wrap points in both directions, change
+                   fine X, and reject reuse after vertical movement. */
+                unsigned x = (step < 136 ? step : 271 - step) * 8u;
+                regs->bg1hofs.w = (Uint16)((x + (step & 7u)) & 1023u);
+                regs->bg2hofs.w = (Uint16)((1023u - x) & 1023u);
+                regs->bg1vofs.w = (Uint16)((step / 64u) * 8u);
+                regs->bg2vofs.w = 3;
+                regs->cgadsub = (Uint8)((step & 16u) ? 0x63 : 0);
+                if ((step % 31u) == 0)
+                {
+                    unsigned address = (step * 23u) & 0x7FFFu;
+                    *ppu.GetVramPtr(address) ^= 0x55AA;
+                    render.UpdateVRAM(address);
+                }
+                render.BeginRender(&surface);
+                for (unsigned line = 1; line <= 8; ++line)
+                {
+                    if (cold) render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+                    render.RenderLine((Int32)line);
+                    const uint8_t *pixels = surface.GetLinePtr((Int32)line - 1);
+                    if (!cold)
+                        expected.insert(expected.end(), pixels, pixels + 1024);
+                    else if (memcmp(expected.data() + position, pixels, 1024))
+                    {
+                        fprintf(stderr, "BG scroll diverged: mode=%u large=%u maps=%u step=%u line=%u\n",
+                                mode, large, maps, step, line);
+                        render.EndRender();
+                        return false;
+                    }
+                    position += 1024;
+                }
+                render.EndRender();
+            }
+        }
+    }
+    printf("BG scroll renderer: PASS (Mode 1/5, tile sizes, map wraps, fine X, priorities, color math, VRAM writes)\n");
+    return true;
+}
+
 static int SelfTestCommand()
 {
+    if (!CheckBGScrollRendering())
+        return 1;
     if (!CheckSDD1MapAndSpeed())
     {
         fprintf(stderr, "ROM Lab self-test: S-DD1 map/FastROM timing failed\n");
