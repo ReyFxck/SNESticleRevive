@@ -156,6 +156,22 @@ ROOT=../..
     -I "$ROOT/src/snes/apu" \
     dspmix_test.cpp -o dspmix_test
 
+"${CC:-gcc}" -O2 -ffunction-sections -fdata-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
+    -I "$ROOT/src/common/base" -I "$ROOT/src/common/debug" \
+    -I "$ROOT/src/snes/apu" \
+    -c "$ROOT/src/snes/apu/snspcbrr.c" -o mixer_feedback_brr.o
+
+"${CXX:-g++}" -O2 -fno-strict-aliasing -fwrapv \
+    -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \
+    -I "$ROOT/src/common/base" -I "$ROOT/src/common/render" \
+    -I "$ROOT/src/common/debug" -I "$ROOT/src/snes/apu" \
+    -I "$ROOT/src/snes/core" -I "$ROOT/src/snes/cpu" \
+    mixer_feedback_test.cpp "$ROOT/src/snes/apu/snspcmix.cpp" \
+    "$ROOT/src/snes/apu/snspcdsp.cpp" mixer_feedback_brr.o \
+    "$ROOT/src/common/render/mixbuffer.cpp" -o mixer_feedback_test
+
 "${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
     -Wl,--gc-sections \
     -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
@@ -194,4 +210,4 @@ ROOT=../..
     "$ROOT/src/snes/ppu/snppucolor.cpp" \
     -o brightness_test
 
-echo "OK -> ./obj_test && ./oam_test && ./io_register_test && ./chrcache_test && ./chrcache_obj_only_test && ./bglinecache_test && ./mask_alignment_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./dspmix_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test && ./brightness_test"
+echo "OK -> ./obj_test && ./oam_test && ./io_register_test && ./chrcache_test && ./chrcache_obj_only_test && ./bglinecache_test && ./mask_alignment_test && ./hires_test && ./audioschedule_test && ./mode7_test && ./queue_test && ./spcio_test && ./spc700_test && ./dspmix_test && ./mixer_feedback_test && ./safe_frameskip_test && ./regioncadence_test && ./diag_test && ./brightness_test"
