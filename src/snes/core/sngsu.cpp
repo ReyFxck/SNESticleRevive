@@ -585,11 +585,11 @@ SNGSU_ALWAYS_INLINE void SNGSU::Step()
     if (m_Diag.CurrentJobInstructions > m_Diag.MaxJobInstructions)
         m_Diag.MaxJobInstructions = m_Diag.CurrentJobInstructions;
 #endif
-    // watchdog: rede de seguranca contra um programa que nunca alcance STOP
-    // (bug nosso ou ROM corrompida).  Apos um teto de instrucoes, forca a
-    // parada (+IRQ) para nao travar a EE.  Rotinas reais do Star Fox terminam
-    // bem antes disto.
-    if (++m_Runaway > 2000000)
+#if SNDBG_LOG
+    // Run() already bounds each slice. A long-running guest program must
+    // remain running: an instruction quota is not a hardware STOP or IRQ.
+    // Keep the one-shot diagnostic without changing architectural state.
+    if (++m_Runaway == 2000001)
     {
         // Desenvolvimento: uma captura curta e unica permite identificar o
         // laço real caso algum jogo ainda alcance esta rede de seguranca.
@@ -611,12 +611,9 @@ SNGSU_ALWAYS_INLINE void SNGSU::Step()
                  (unsigned)m_R[8], (unsigned)m_R[9], (unsigned)m_R[10], (unsigned)m_R[11],
                  (unsigned)m_R[12], (unsigned)m_R[13], (unsigned)m_R[14], (unsigned)m_R[15]);
         }
-#if SNDBG_LOG
         m_Diag.Watchdogs++;
-#endif
-        m_bGo = FALSE; m_bIrq = TRUE; m_Runaway = 0;
-        return;
     }
+#endif
 
     // Pipeline de um byte do GSU: executa o byte que ja estava prebuscado e
     // busca o byte apontado por R15. Uma escrita posterior em R15 conserva

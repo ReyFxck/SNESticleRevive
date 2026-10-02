@@ -561,6 +561,20 @@ int main()
         CHECK("pixel cache B plano 1", g_ram[0x201], 0x80);
     }
 
+    {
+        // A valid JMP R8 / NOP delay-slot loop can span arbitrarily many
+        // scheduler slices. The former watchdog fabricated STOP and IRQ.
+        memset(g_rom, 0x01, sizeof(g_rom)); g_rom[0] = 0x98;
+        SNGSU g; g.SetMemory(g_rom, sizeof(g_rom), g_ram, sizeof(g_ram));
+        g.Reset(); g.SetReg(8, 0x8000);
+        g.WriteReg(0x301E, 0); g.WriteReg(0x301F, 0x80);
+        for (int i = 0; i < 2101; i++) g.Run(1000);
+        CHECK("long job still GO", g.IsRunning(), 1);
+        CHECK("long job no false IRQ", g.IrqPending(), 0);
+        g.WriteReg(0x3030, 0); // A real CPU write can stop it.
+        CHECK("host clears GO", g.IsRunning(), 0);
+    }
+
     // ===== Parte B: fuzz oracle =====
     printf("\n--- fuzz oracle (milhares de casos) ---\n");
     fuzz();
