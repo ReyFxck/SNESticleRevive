@@ -1307,8 +1307,8 @@ void SNPPUBlendGS::FlushDirectLines()
 	*pList->pDirectImageCount = (Uint16)(nLines * 16u);
 	*pList->pDirectRefCount = (Uint16)(nLines * 16u);
 	*pList->pDirectUVEnd = GS_SET_UV(256 << 4, nLines << 4);
-	*pList->pDirectXYZEnd = GS_SET_XYZ(0x8000 + (512 << 4),
-		0x8000 + (nLines << 4), 0);
+	Uint32 uEndY = 0x8000 + (nLines << 4);
+	*pList->pDirectXYZEnd = GS_SET_XYZ(0xA000, uEndY, 0);
 	Uint128 *pChain = m_bDirectSparsePalette ?
 		BuildSparsePaletteList((PaletteT *)SNPPU_DMA_BLENDINFO_ADDR,
 			m_uDirectDirtyGroups, pList) : pList->Data;
