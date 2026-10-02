@@ -2512,6 +2512,16 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 	}
 
+	/* Main composition has resolved priorities, windows and OBJ palettes.
+	   Without any eligible main pixel, neither sub colour nor halving can
+	   affect this line. Preserve TS when it supplies visible hires dots. */
+	if (!bPseudoHires && !bNativeHires && SNMaskIsEmpty(pMainAddSubMask))
+	{
+		SNMaskClear(pSubAddSubMask);
+		PROF_LEAVE("RenderBG");
+		return;
+	}
+
 #if CODE_PLATFORM == CODE_PS2
 	/* O caminho direto do GS, escolhido logo depois por RenderLine(), usa
 	   apenas a tela principal. Evite montar uma subtela que sera descartada. */

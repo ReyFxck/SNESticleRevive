@@ -636,6 +636,21 @@ static Bool bPrint = TRUE;
 			}
 		}
 
+#if CODE_PLATFORM == CODE_PS2
+		/* CGADSUB selects sources, not necessarily visible pixels. Once the
+		   effective math mask is empty, an unclipped, full-brightness normal
+		   line has exactly the same result as palette-expanded main pixels.
+		   Native/pseudo hires still need both screens as visible dots. */
+		if (!bDirectMain && !(pRegs->setini & SNESPPU_SETINI_PSEUDOHIR) &&
+		    (pRegs->bgmode & 7) != 5 && (pRegs->bgmode & 7) != 6 &&
+		    (pRegs->cgwsel & 0xC0) == 0 && m_pPPU->GetIntensity() == 15 &&
+		    SNMaskIsEmpty(&ColorMask[1]))
+		{
+			bDirectMain = TRUE;
+			bFixedSub = FALSE;
+		}
+#endif
+
 		// perform color blending of main+sub
 #if SNDBG_LOG
 		g_TmgCycColorMath += ProfCtrGetCycle() - _tColorMath;

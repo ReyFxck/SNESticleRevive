@@ -1221,8 +1221,78 @@ static bool CheckBGScrollRendering()
     return true;
 }
 
+/* Sources selected by CGADSUB can be entirely absent after composition.
+   Compare their output with math disabled across clipping/brightness/hires.
+   BG2 remains enabled on TS, making a dropped visible hires screen detectable. */
+static bool CheckEmptyMathRendering()
+{
+    unsigned cases = 0;
+    for (unsigned mode : {1u, 5u, 6u, 7u})
+    for (unsigned pseudo : {0u, 8u})
+    for (unsigned cgw : {2u, 0x32u, 0xC2u, 0xE2u})
+    for (unsigned brightness : {0u, 7u, 15u})
+    {
+        std::vector<uint8_t> expected;
+        for (unsigned math : {0u, 0x12u})
+        {
+            std::unique_ptr<SnesPPU> ppuStorage(new SnesPPU);
+            std::unique_ptr<SnesPPURender> renderStorage(new SnesPPURender{});
+            SnesPPU &ppu = *ppuStorage;
+            SnesPPURender &render = *renderStorage;
+            render.SetPPU(&ppu);
+            ppu.SetPPURender(&render);
+            ppu.Reset();
+            uint32_t seed = 0x2131;
+            for (unsigned i = 0; i < SNESPPU_VRAM_NUMWORDS; ++i)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                *ppu.GetVramPtr(i) = (Uint16)(seed >> 16);
+            }
+            for (unsigned i = 0; i < 256; ++i)
+                ppu.GetCGData()[i] = (Uint16)((i * 317u) & 0x7FFFu);
+            render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+            SnesPPURegsT *regs = const_cast<SnesPPURegsT *>(ppu.GetRegs());
+            regs->inidisp = (Uint8)brightness;
+            regs->bgmode = (Uint8)mode;
+            regs->setini = (Uint8)pseudo;
+            regs->bg1sc = 0xC0;
+            regs->bg2sc = 0xE0;
+            regs->bg12nba = 0x40;
+            regs->tm = 1;
+            regs->ts = 2;
+            regs->cgwsel = (Uint8)cgw;
+            /* The portable blender's legacy simple pseudo-hires path expects
+               a GS backend. Keep both reference scenes on its general path. */
+            regs->cgadsub = (Uint8)((!math && pseudo && mode != 5 && mode != 6) ? 8u : math);
+            regs->m7a.w = 277; regs->m7c.w = (Uint16)-141;
+            regs->m7b.w = 91; regs->m7d.w = 240;
+            CRenderSurface surface;
+            surface.Alloc(256, 8, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+            render.BeginRender(&surface);
+            for (unsigned line = 1; line <= 8; ++line)
+            {
+                render.RenderLine((Int32)line);
+                const uint8_t *pixels = surface.GetLinePtr((Int32)line - 1);
+                if (!math) expected.insert(expected.end(), pixels, pixels + 1024);
+                else if (memcmp(expected.data() + (line - 1) * 1024, pixels, 1024))
+                {
+                    fprintf(stderr, "Empty math diverged: mode=%u pseudo=%u cgw=%02X bright=%u line=%u\n",
+                            mode, pseudo, cgw, brightness, line);
+                    render.EndRender();
+                    return false;
+                }
+            }
+            render.EndRender();
+        }
+        cases++;
+    }
+    printf("Empty math renderer: PASS (%u scenes; clipping, brightness, TS, native/pseudo hires)\n", cases);
+    return true;
+}
+
 static int SelfTestCommand()
 {
+    if (!CheckEmptyMathRendering()) return 1;
     if (!CheckBGScrollRendering())
         return 1;
     if (!CheckSDD1MapAndSpeed())
