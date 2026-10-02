@@ -11,6 +11,7 @@
 #include "snmask.h"
 #include "snppublend_c.h"
 #include "snppucolor.h"
+#include "snppumathidentity.h"
 
 static int g_Failures;
 
@@ -22,6 +23,57 @@ static void CheckPixel(const char *pName, Uint32 uGot, Uint32 uExpected)
 			(unsigned)uGot, (unsigned)uExpected);
 		g_Failures++;
 	}
+}
+
+static void CheckIdentityMath()
+{
+	SNMaskT math = {}, half = {}, sub = {};
+	CheckPixel("empty math", SnesPPUMathIsIdentity(&math, &half, &sub, TRUE, 0x123456), TRUE);
+	for (unsigned bit = 0; bit < 256; ++bit)
+	{
+		std::memset(&math, 0, sizeof(math));
+		math.uMask8[bit >> 3] = (Uint8)(1u << (bit & 7u));
+		CheckPixel("black fixed operand", SnesPPUMathIsIdentity(&math, &half, &sub, FALSE, 0), TRUE);
+		CheckPixel("transparent sub uses fixed black", SnesPPUMathIsIdentity(&math, &half, &sub, TRUE, 0), TRUE);
+		for (unsigned channel = 0; channel < 24; ++channel)
+			CheckPixel("nonblack converted fixed operand",
+				SnesPPUMathIsIdentity(&math, &half, &sub, TRUE, 1u << channel), FALSE);
+		half = math;
+		CheckPixel("halving black is not identity", SnesPPUMathIsIdentity(&math, &half, &sub, FALSE, 0), FALSE);
+		std::memset(&half, 0, sizeof(half));
+		sub = math;
+		CheckPixel("opaque sub is not proven black", SnesPPUMathIsIdentity(&math, &half, &sub, TRUE, 0), FALSE);
+		CheckPixel("fixed selection ignores TS", SnesPPUMathIsIdentity(&math, &half, &sub, FALSE, 0), TRUE);
+		std::memset(&sub, 0, sizeof(sub));
+	}
+
+	/* Independent portable blender oracle: every SNES color, addition and
+	   subtraction, full and partial math masks, transparent sub/fixed black.
+	   CGRAM[0] deliberately contains a different, nonblack color. */
+	SNPPUBlendInfoT info = {};
+	SNMaskT masks[3] = {};
+	SNMaskSet(&masks[0]);
+	Uint16 cgram[256] = {};
+	cgram[0] = 0x7FFF;
+	std::memset(info.uMain8, 1, sizeof(info.uMain8));
+	Uint32 pixels[256];
+	CRenderSurface surface;
+	surface.Set((Uint8 *)pixels, 256, 1, sizeof(pixels), PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+	SNPPUBlendC blend;
+	blend.Begin(&surface);
+	blend.UpdatePalette(&info, cgram, 15);
+	for (unsigned color = 0; color < 32768; ++color)
+	{
+		blend.UpdatePaletteEntry(&info, 1, color, 15);
+		for (unsigned subtract = 0; subtract < 2; ++subtract)
+		{
+			std::memset(&masks[1], subtract ? 0xA5 : 0xFF, sizeof(masks[1]));
+			blend.Exec(&info, 0, 0, masks, subtract, 15);
+			for (unsigned x = 0; x < 256; ++x)
+				CheckPixel("black math portable oracle", pixels[x], SNPPUColorConvert15to32((Uint16)color));
+		}
+	}
+	blend.End();
 }
 
 int main()
@@ -62,6 +114,7 @@ int main()
 	CheckPixel("brightness 7", pixels[1][0], 0x00777777u);
 	CheckPixel("brightness 0", pixels[2][0], 0x00000000u);
 	CheckPixel("whole scanline", pixels[1][255], 0x00777777u);
+	CheckIdentityMath();
 
 	if (g_Failures)
 	{

@@ -17,6 +17,7 @@
 #include "snppuchrcache.h"
 #include "snppuhires.h"
 #include "snppuhirlinecache.h"
+#include "snppumathidentity.h"
 #include "rendersurface.h"
 #include "snmask.h"
 #include "snmaskop.h"
@@ -644,7 +645,10 @@ static Bool bPrint = TRUE;
 		if (!bDirectMain && !(pRegs->setini & SNESPPU_SETINI_PSEUDOHIR) &&
 		    (pRegs->bgmode & 7) != 5 && (pRegs->bgmode & 7) != 6 &&
 		    (pRegs->cgwsel & 0xC0) == 0 && m_pPPU->GetIntensity() == 15 &&
-		    SNMaskIsEmpty(&ColorMask[1]))
+		    (SNMaskIsEmpty(&ColorMask[1]) ||
+		     SnesPPUMathIsIdentity(&ColorMask[1], &ColorMask[2],
+		        &pRenderInfo->SubAddSubMask, (pRegs->cgwsel & 0x02u) != 0,
+		        SNPPUColorConvert15to32(pRegs->coldata))))
 		{
 			bDirectMain = TRUE;
 			bFixedSub = FALSE;
