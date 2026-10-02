@@ -30,6 +30,7 @@ with tempfile.TemporaryDirectory(prefix='gsu-planes-') as tmp:
   count+=1
  uc.hook_add(UC_HOOK_CODE,hook)
  rng=random.Random(346712);totals={b:{'legacy':0,'packed':0,'cases':0} for b in (2,4,8)}
+ coverage={b:{bits:{'legacy':0,'packed':0,'cases':0} for bits in range(1,9)} for b in totals}
  for bpp in totals:
   for flags in range(256):
    for sample in range(4):
@@ -47,6 +48,8 @@ with tempfile.TemporaryDirectory(prefix='gsu-planes-') as tmp:
      count=0;uc.emu_start(symbols[name],RET,count=5000)
      assert uc.reg_read(regs.UC_MIPS_REG_PC)==RET
      assert bytes(uc.mem_read(DATA+32,10))==expected,(name,flags,bpp,colors.hex())
+     if flags: coverage[bpp][flags.bit_count()][label]+=count
      if flags==255:totals[bpp][label]+=count
+    if flags: coverage[bpp][flags.bit_count()]['cases']+=1
     if flags==255:totals[bpp]['cases']+=1
- print(json.dumps({'result':'PASS','cases':3072,'full_cache_mean_instructions':{b:{k:v/totals[b]['cases'] for k,v in totals[b].items() if k!='cases'} for b in totals},'limits':'conversion wrapper instructions; no RAM-access timing, whole-chip or PS2 FPS claim'}))
+ print(json.dumps({'result':'PASS','cases':3072,'full_cache_mean_instructions':{b:{k:v/totals[b]['cases'] for k,v in totals[b].items() if k!='cases'} for b in totals},'mean_instructions_by_covered_pixels':{b:{bits:{k:v/row['cases'] for k,v in row.items() if k!='cases'} for bits,row in rows.items()} for b,rows in coverage.items()},'limits':'conversion wrapper instructions; no RAM-access timing, whole-chip or PS2 FPS claim'}))

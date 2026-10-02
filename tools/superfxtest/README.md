@@ -22,6 +22,10 @@ operations, then preserves RAM bits outside the coverage mask. Partial
 caches keep their previous RAM reads; full caches avoid those reads as
 before. Color conversion, addresses and writes remain equivalent.
 
+The checker also reports partial coverage. In the 2 bpp fixture with one
+covered pixel, the previous loop averages 172.9 instructions versus 96
+for the transpose; empty caches return immediately in both implementations.
+
 These counts exclude chip/RAM timing, cache misses and whole-frame work;
 they are not PS2 FPS measurements. The current scheduler still counts
 384/960 instructions per scanline. Correct SuperFX clocks, instruction
