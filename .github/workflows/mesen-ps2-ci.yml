@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ci/mesen-ps2-fixed-20260928
+      - backup/mesen-ps2-source-export-20261002
   workflow_dispatch:
 
 permissions:
@@ -598,6 +599,25 @@ jobs:
           ms = ms.replace(reg, "    Ps2InputEnableAsyncSampler();\n" + reg, 1)
           m.write_text(ms)
           PY
+
+      - name: Package PS2 source tree
+        run: |
+          set -euo pipefail
+          cat > work/port/SOURCE_INFO.txt <<'EOF'
+          MesenCE NES / PS2 generated source tree
+          MesenCE base: 20ba206cef5ba207c21203176d02cb9f43dda9fb
+          Reference functional build commit: 7e9bbb541c4af444201a0c131ca2565135cbb2b4
+          Export branch: backup/mesen-ps2-source-export-20261002
+          This archive is the fully reconstructed work/port after all PS2 CI patches.
+          EOF
+          tar -czf mesence-nes-ps2-source.tar.gz -C work/port .
+
+      - name: Upload PS2 source tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: MesenCE-NES-PS2-SOURCE-${{ github.sha }}
+          path: mesence-nes-ps2-source.tar.gz
+          if-no-files-found: error
 
       - name: Build NES PS2 ELF
         run: |
