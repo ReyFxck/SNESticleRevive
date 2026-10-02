@@ -152,6 +152,7 @@ Bool MainLoopProcess()
 #if SNES_TARGET_PROFILE
     memset(&g_SnesTargetProfile, 0, sizeof(g_SnesTargetProfile));
 #endif
+    Aud_Service();
     NetPlayRPCInputT NetInput;
 
     PROF_ENTER("Frame");

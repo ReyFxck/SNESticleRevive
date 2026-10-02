@@ -41,6 +41,7 @@ extern "C" {
 
 extern "C" {
 #include "mcsave_ee.h"
+#include "audio.h"
 };
 
 /* Same MAINLOOP_SCREENWIDTH / HEIGHT pair as mainloop_init.cpp. The
@@ -264,11 +265,12 @@ static void _MainLoopDrawTargetProfile()
     Int32 h = FontGetHeight() + 1;
     /* Gameplay crops the 240-line UI canvas. Keep the complete panel
        above line 216 so the 224-line SNES aperture includes its footer. */
-    Int32 y = 216 - h * 8;
+    const Int32 rows = AUDIO_RFAUDS2 ? 9 : 8;
+    Int32 y = 216 - h * rows;
     PolyTexture(NULL);
     PolyBlend(TRUE);
     PolyColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-    PolyRect(3.0f, (Float32)y - 1.0f, 250.0f, (Float32)(h * 8 + 1));
+    PolyRect(3.0f, (Float32)y - 1.0f, 250.0f, (Float32)(h * rows + 1));
     FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     if (!p->Ready)
     {
@@ -300,6 +302,15 @@ static void _MainLoopDrawTargetProfile()
     y += h;
     FontPrintf(6, y, "PREP %u.%u SUBMIT %u.%u FLIP %u.%u",
         TARGET_FMT(p->PrepMs10), TARGET_FMT(p->SubmitMs10), TARGET_FMT(p->FlipMs10));
+#if AUDIO_RFAUDS2
+    AudOutputStatsT audio;
+    y += h;
+    if (Aud_GetOutputStats(&audio))
+        FontPrintf(6, y, "Q EE %u IO %u UND %u", audio.queued_ee_frames,
+            audio.queued_iop_frames, audio.underruns);
+    else
+        FontPrintf(6, y, "RFAuds2 output unavailable");
+#endif
 #undef TARGET_FMT
 }
 #endif

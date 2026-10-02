@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* BOOTLOG: route through DLog (defined in modules/sjpcm/sjpcm_rpc.c).
+/* BOOTLOG: route through DLog (defined in modules/audio/audio_log.c).
    Plain EE printf never reaches PCSX2/NetherSX2's emulator log in this
    build (the libc->SIF->IOP stdout wiring is broken), but the IOP-side
    loadmodule lines do print.  DLog writes to the EE SIO TX FIFO which
@@ -343,6 +343,19 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   RPC. CDVD_FlushCache call-sites have been replaced with no-ops
 	   or fileXioSync()/cdfs_FlushCache() where appropriate. */
 
+#if AUDIO_RFAUDS2
+    /* RFAuds2 owns the SPU2 directly; audsrv/LIBSD must not own it too. */
+    {
+        int loaded = IOPLoadModule("RFAUDS2.IRX", ppSearchPaths, 0, NULL) >= 0;
+        BootImport("rfauds2.irx", loaded ? 0 : -1);
+        if (loaded) {
+            BootMark("[IOP] rfauds2_bind...");
+            int ar = Aud_Init(0, 960*25, AUDMIXBUFFER_MAXENQUEUE);
+            BootImport("rfauds2_bind", ar >= 0 ? 0 : -1);
+            if (ar >= 0) _MainLoop_bAudioReady = TRUE;
+        }
+    }
+#else
 	/* Audio: load audsrv.irx (modern PS2DEV audio service, replaces
 	   the legacy SjPCM stack). audsrv.irx depends on the SPU2 driver
 	   (sceSd*), which is provided either by rom0:LIBSD (retail BIOS)
@@ -384,6 +397,8 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 				_MainLoop_bAudioReady = TRUE;
 		}
 	}
+
+#endif
 
 	/* Lista de TODOS os modulos importados + veredito (tela ja pronta). */
 	BootImportFlush();

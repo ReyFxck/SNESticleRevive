@@ -6,16 +6,10 @@
  *   Declares the audio interface for the PlayStation 2 audio backend.
  */
 
-/*
- * audio.h - EE-side audio output API (audsrv backend).
- *
- * A small Aud_* API over the PS2SDK **audsrv** service (SPU2 native:
- * 48000 Hz / 16-bit / stereo). This was historically the SjPCM API by
- * Nick Van Veen ("Sjeep", 2002), which talked to a custom SJPCM2.IRX
- * over SIF RPC - that IRX is gone. The implementation here
- * (audio_audsrv.c) is a from-scratch audsrv version; the API was
- * renamed from SjPCM_* to Aud_* so the name matches what it actually
- * does. MIT (this repo).
+/* EE-side Aud_* API. Both backends accept the existing planar 48 kHz,
+ * stereo S16 output from AudMixBuffer. Select AUDIO_BACKEND at build time.
+ * RFAuds2 owns PCM until admission is acknowledged; audsrv is retained for
+ * comparable baseline builds. Emulated audio policy remains in the core.
  */
 
 #ifndef _AUDIO_H
@@ -39,5 +33,14 @@ void Aud_EnqueueAsync(short *left, short *right, int size);
 void Aud_Wait();
 
 int  Aud_IsInitialized();
+/* Poll/launch at most one audio RPC without waiting for the IOP queue. */
+void Aud_Service(void);
+
+typedef struct AudOutputStatsT {
+    unsigned int queued_ee_frames, queued_iop_frames;
+    unsigned int underruns, silent_frames, backpressure_waits;
+} AudOutputStatsT;
+/* Last completed telemetry, no RPC. Returns 0 when unsupported/unavailable. */
+int Aud_GetOutputStats(AudOutputStatsT *stats);
 
 #endif /* _AUDIO_H */
