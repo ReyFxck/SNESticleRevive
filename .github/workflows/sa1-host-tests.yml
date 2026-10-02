@@ -47,6 +47,9 @@ jobs:
           ./tools/pputest/regioncadence_test
           ./tools/pputest/diag_test
           ./tools/pputest/brightness_test
+          ./tools/pputest/targetprofile_test
+      - name: Test asynchronous RFAuds2 PCM adapter
+        run: SANITIZE=1 bash ./tools/rfauds2test/build.sh
       - name: Build ROM loader tests
         run: ./tools/romtest/build.sh
       - name: Run ROM loader tests
