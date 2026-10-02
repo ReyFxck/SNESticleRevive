@@ -8,7 +8,8 @@ public:
     }
 
     static constexpr int GetMemoryTypeCount() {
-        return 1;
+        // This count sizes live console memory, even with the debugger off.
+        return static_cast<int>(MemoryType::None) + 1;
     }
 
     static constexpr bool IsRom(MemoryType) {

@@ -351,9 +351,25 @@ Bool MainLoopProcess()
 
             if (_pSystem == _pNes)
             {
-                /* NES is a 60 Hz source in the current integration. */
+#if NES_MESENCE
+                Uint32 sourceHz = _pNes->GetFrameRate();
+                Uint32 hostHz = (Uint32)GSK_GetRefreshHz();
+                _AudMix->SetFrameRate(sourceHz);
+                Bool allowed = NetInput.eGameState == NETPLAY_GAMESTATE_IDLE &&
+                    !s_pMovieClip->IsPlaying() && !s_pMovieClip->IsRecording();
+                Uint32 hidden = MainLoopSafeFrameskipTake(allowed);
+                Uint32 extra = 0;
+                Bool hold = FALSE;
+                if (hidden) _MainLoopResetSnesRegionCadence();
+                else MainLoopRegionCadenceStep(&s_SnesRegionCadence, allowed,
+                    sourceHz, hostHz, &extra, &hold);
+                hidden += extra;
+#else
                 _AudMix->SetFrameRate(60);
                 _MainLoopResetSnesRegionCadence();
+                Uint32 hidden = 0;
+                Bool hold = FALSE;
+#endif
 
                 /* The shared VRAM block is 256 KiB either way:
                    NES = 256x256 RGBA32, SNES = 512x256 RGBA5551.
@@ -365,11 +381,18 @@ Bool MainLoopProcess()
                     TextureSetFilter(&_OutTex, g_GskTextureFilter);
                 }
                 PROF_ENTER("NesExecuteFrame");
-                _pNes->ExecuteFrame(&Input, pSurface, pMixBuffer, eMode);
+                for (Uint32 i = 0; i < hidden; ++i)
+                    _pNes->ExecuteFrame(&Input, NULL, pMixBuffer, eMode);
+                if (!hold)
+                    _pNes->ExecuteFrame(&Input, pSurface, pMixBuffer, eMode);
                 PROF_LEAVE("NesExecuteFrame");
-                PROF_ENTER("NesTexUpload");
-                TextureUpload(&_OutTex, pSurface->GetLinePtr(0));
-                PROF_LEAVE("NesTexUpload");
+                if (!hold)
+                {
+                    PROF_ENTER("NesTexUpload");
+                    TextureUpload(&_OutTex, pSurface->GetLinePtr(0));
+                    PROF_LEAVE("NesTexUpload");
+                }
+                bProducedFrame = hold ? FALSE : TRUE;
             }
             else
             {

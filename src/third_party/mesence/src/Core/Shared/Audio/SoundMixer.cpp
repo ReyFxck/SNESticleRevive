@@ -93,6 +93,10 @@ void SoundMixer::PlayAudioBuffer(int16_t* samples, uint32_t sampleCount, uint32_
 	_rightSample = samples[1];
 	uint32_t count = _resampler->Resample(samples, sampleCount, sourceRate, cfg.SampleRate, _sampleBuffer, 0x10000 / 2);
 	if(count) {
+		// Expansion providers (e.g. EPSM) also belong in the PS2 stream.
+		for(IAudioProvider* provider : _audioProviders) {
+			provider->MixAudio(_sampleBuffer, count, cfg.SampleRate);
+		}
 		_audioDevice->PlayBuffer(_sampleBuffer, count, cfg.SampleRate, true);
 		_audioDevice->ProcessEndOfFrame();
 	}

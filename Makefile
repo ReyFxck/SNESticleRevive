@@ -134,6 +134,20 @@ CONSERVATIVE_FLAGS := \
 
 CHARSET_FLAGS := -finput-charset=UTF-8 -fexec-charset=UTF-8
 
+# The supplied MesenCE port replaces the NES core only. Legacy snapshots
+# can still be opened with NES_BACKEND=infones.
+NES_BACKEND ?= mesence
+ifeq ($(NES_BACKEND),mesence)
+NES_MESENCE := 1
+include src/third_party/mesence/mesence_sources.mk
+NES_SOURCES := $(MESENCE_CORE_SOURCES) src/nes/mesence/mesence_bridge.cpp src/nes/system/nessystem_mesence.cpp
+else ifeq ($(NES_BACKEND),infones)
+NES_MESENCE := 0
+NES_SOURCES := src/third_party/nes_snd_emu/Blip_Buffer.cpp src/third_party/nes_snd_emu/Nes_Apu.cpp src/third_party/nes_snd_emu/Nes_Oscs.cpp src/nes/core/InfoNES.cpp src/nes/cpu/K6502.cpp src/nes/apu/InfoNES_pAPU.cpp src/nes/mapper/InfoNES_Mapper.cpp src/nes/system/InfoNES_System_PS2.cpp src/nes/system/nessystem.cpp
+else
+$(error NES_BACKEND must be mesence or infones)
+endif
+
 # Experimental output comparison. The SNES mixer/resampler is shared.
 AUDIO_BACKEND ?= rfauds2
 ifeq ($(AUDIO_BACKEND),rfauds2)
@@ -153,7 +167,7 @@ endif
 CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
-	-DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
+	-DNES_MESENCE=$(NES_MESENCE) -DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
@@ -163,7 +177,7 @@ CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
-	-DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
+	-DNES_MESENCE=$(NES_MESENCE) -DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
@@ -348,7 +362,7 @@ LIBS := \
 	$(AUDIO_LIBS) \
 	-lpatches \
 	-lcglue \
-	-ldebug -lkernel -lc -lm -lstdc++ -lgcc
+	-ldebug -lkernel -lc -lm -lstdc++ -lsupc++ -latomic -lgcc
 
 SRCS := \
     src/platform/ps2/ps2sdk_stubs.c \
@@ -508,16 +522,8 @@ SRCS := \
 	src/platform/ps2/system/mainloop_bgm.cpp \
 	src/platform/ps2/system/global_alloc.cpp \
 	src/platform/ps2/system/embedded_irx.cpp \
-	src/third_party/nes_snd_emu/Blip_Buffer.cpp \
-	src/third_party/nes_snd_emu/Nes_Apu.cpp \
-	src/third_party/nes_snd_emu/Nes_Oscs.cpp \
-	src/nes/core/InfoNES.cpp \
-	src/nes/cpu/K6502.cpp \
-	src/nes/apu/InfoNES_pAPU.cpp \
-	src/nes/mapper/InfoNES_Mapper.cpp \
-	src/nes/system/InfoNES_System_PS2.cpp \
 	src/nes/system/nesrom.cpp \
-	src/nes/system/nessystem.cpp
+	$(NES_SOURCES)
 
 OBJS := \
 	$(patsubst src/%.c,$(OBJ_DIR)/%.o,$(filter %.c,$(SRCS))) \
@@ -678,7 +684,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='AUDIO_BACKEND=$(AUDIO_BACKEND) SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
+	mode='NES_BACKEND=$(NES_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND) SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -834,6 +840,16 @@ $(OBJS): $(BUILD_CONFIG_FILE)
 
 $(OBJ_DIR)/%.o: src/%.c | $(OBJ_DIR)
 	$(call RUN_COMPILE,CC,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
+# Isolate the supplied C++20 port's RTTI/exceptions and conservative compiler
+# settings from the legacy SNES core and frontend. No standalone PS2 drivers.
+MESENCE_FLAGS = $(filter-out -O2 -fno-exceptions -fno-rtti -fpermissive,$(CXXFLAGS)) -O1 -std=gnu++20 -DPS2_PORT -DMESEN_NES_ONLY -Isrc/third_party/mesence/src -Isrc/third_party/mesence/src/Core
+$(OBJ_DIR)/third_party/mesence/%.o: src/third_party/mesence/%.cpp | $(OBJ_DIR)
+	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) $(DEPFLAGS) -c "$<" -o "$@")
+$(OBJ_DIR)/nes/mesence/mesence_bridge.o: src/nes/mesence/mesence_bridge.cpp | $(OBJ_DIR)
+	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) $(DEPFLAGS) -c "$<" -o "$@")
+$(OBJ_DIR)/third_party/mesence/src/Core/Shared/BaseControlDevice.o: src/third_party/mesence/src/Core/Shared/BaseControlDevice.cpp | $(OBJ_DIR)
+	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) -O0 $(DEPFLAGS) -c "$<" -o "$@")
+
 $(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
 	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(CXXFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
 $(OBJ_DIR)/%.o: src/%.s | $(OBJ_DIR)

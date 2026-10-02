@@ -134,12 +134,14 @@ bool Serializer::LoadFrom(istream &file)
 
 		uint32_t valueSize = _data[i] | (_data[i + 1] << 8) | (_data[i + 2] << 16) | (_data[i + 3] << 24);
 		i += 4;
-		if(i + valueSize > size) {
+		if(valueSize > size - i) {
 			//invalid
 			return false;
 		}
 
-		_values.emplace(key, SerializeValue(i < _data.size() ? &_data[i] : nullptr, valueSize));
+		if(!_values.emplace(key, SerializeValue(i < _data.size() ? &_data[i] : nullptr, valueSize)).second) {
+			return false;
+		}
 
 		i += valueSize;
 	}

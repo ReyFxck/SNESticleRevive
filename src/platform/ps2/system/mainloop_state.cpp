@@ -463,6 +463,10 @@ Bool _MainLoopCheckSRAM()
  * cannot destroy the last known-good state.
  */
 
+#if NES_MESENCE
+#include "../../../nes/mesence/mesence_bridge.h"
+#endif
+
 #define MAINLOOP_STATE_SLOT_NUM       5
 #define MAINLOOP_STATE_BANK_NUM       2
 /* The outer container remains version 1 for compatibility with existing SNES
@@ -606,16 +610,28 @@ static Uint32 _MainLoopStateGetSystemId()
 
 static Uint32 _MainLoopStateGetPayloadBytes()
 {
-    return _pSystem == _pNes
-        ? (Uint32)sizeof(_NesState)
-        : (Uint32)sizeof(_SnesState);
+    if (_pSystem == _pNes)
+    {
+#if NES_MESENCE
+        return _pNes->GetSnapshotBytes();
+#else
+        return sizeof(_NesState);
+#endif
+    }
+    return sizeof(_SnesState);
 }
 
 static Uint8 *_MainLoopStateGetPayloadData()
 {
-    return _pSystem == _pNes
-        ? (Uint8 *)&_NesState
-        : (Uint8 *)&_SnesState;
+    if (_pSystem == _pNes)
+    {
+#if NES_MESENCE
+        return _pNes->GetSnapshotData();
+#else
+        return (Uint8 *)&_NesState;
+#endif
+    }
+    return (Uint8 *)&_SnesState;
 }
 
 static void _MainLoopStateSetMessage(const Char *pFormat, ...)
@@ -2082,6 +2098,17 @@ static Int32 _MainLoopStateReadHeader(
         return -1;
     }
 
+#if NES_MESENCE
+    if (_pSystem == _pNes)
+    {
+        /* Distinguish variable Mesen snapshots from fixed InfoNES banks. */
+        if (pHeader->Reserved[4] != MESENCE_STATE_FORMAT ||
+            pHeader->Reserved[3] <= 16 ||
+            pHeader->Reserved[3] > MESENCE_MAX_STATE_BYTES)
+            return -1;
+        nExpectedPayloadBytes = pHeader->Reserved[3];
+    }
+#endif
     bPayloadLayoutValid =
         (pHeader->Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW &&
          pHeader->nPayloadBytes == nExpectedPayloadBytes) ||
@@ -2135,6 +2162,18 @@ static Bool _MainLoopStateReadPayload(
         return FALSE;
     }
 
+#if NES_MESENCE
+    if (_pSystem == _pNes)
+    {
+        nStateBytes = Header.Reserved[3];
+        if (!_pNes->AllocateState(nStateBytes))
+        {
+            fclose(pFile);
+            return FALSE;
+        }
+        pStateData = _pNes->GetSnapshotData();
+    }
+#endif
     if (Header.Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW)
     {
         nRead = fread(pStateData, 1, nStateBytes, pFile);
@@ -2412,7 +2451,11 @@ Bool _MainLoopLoadState()
         if (bPayloadOK)
         {
             bRestoreOK = _pSystem == _pNes
+#if NES_MESENCE
+                ? _pNes->RestoreSnapshot()
+#else
                 ? _pNes->RestoreState(&_NesState)
+#endif
                 : _pSnes->RestoreState(&_SnesState);
         }
 
@@ -2560,12 +2603,14 @@ Bool _MainLoopSaveState()
        ~500 KB structure. Fast deflate substantially cuts slow memory-card
        I/O while keeping the on-disk format backward compatible: version-1
        raw banks still load, and Reserved[0] advertises compressed banks. */
-    pStateData = _MainLoopStateGetPayloadData();
-    nStateBytes = _MainLoopStateGetPayloadBytes();
     if (_pSystem == _pNes)
     {
+#if NES_MESENCE
+        if (!_pNes->SnapshotState())
+#else
         _pNes->SaveState(&_NesState);
         if (_NesState.uMagic != NES_STATE_MAGIC)
+#endif
         {
             _MainLoopStateSetMessage("Could not snapshot the NES mapper state.");
             return FALSE;
@@ -2575,6 +2620,8 @@ Bool _MainLoopSaveState()
     {
         _pSnes->SaveState(&_SnesState);
     }
+    pStateData = _MainLoopStateGetPayloadData();
+    nStateBytes = _MainLoopStateGetPayloadBytes();
     uPayloadCRC = (Uint32)mz_crc32(
         MZ_CRC32_INIT,
         pStateData,
@@ -2697,6 +2744,13 @@ Bool _MainLoopSaveState()
                 ? uStoredCRC
                 : 0;
         Header.Reserved[2] = _MainLoopStateGetSystemId();
+#if NES_MESENCE
+        if (_pSystem == _pNes)
+        {
+            Header.Reserved[3] = nStateBytes;
+            Header.Reserved[4] = MESENCE_STATE_FORMAT;
+        }
+#endif
 
         ML_TRACE("State save path: %s", Path);
         if (_MainLoopStateWriteBank(

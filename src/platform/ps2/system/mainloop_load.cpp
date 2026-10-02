@@ -541,7 +541,29 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
 		pSystem->SetRom(pRom);
 	}
 
+    if (pSystem == _pNes && !_pNes->IsRomReady())
+    {
+        _MainLoopSetLoadError("NES core could not initialize this cartridge");
+        return FALSE;
+    }
+#if NES_MESENCE
+    if (pSystem == _pNes)
+    {
+        GSK_SetContentRegion(_pNes->GetFrameRate() == 50
+            ? GSK_CONTENT_PAL : GSK_CONTENT_NTSC);
+        if (GSK_TvStandardNeedsReinit() && !MainLoopReinitVideo())
+        {
+            _MainLoopSetLoadError("Could not switch PS2 video standard");
+            return FALSE;
+        }
+    }
+#endif
 	pSystem->Reset();
+    if (pSystem == _pNes && !_pNes->IsRomReady())
+    {
+        _MainLoopSetLoadError("NES core could not reset this cartridge");
+        return FALSE;
+    }
 
     _pSystem = pSystem;
     snprintf(_RomPath, sizeof(_RomPath), "%s", OriginalPath);

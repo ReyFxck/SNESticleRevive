@@ -78,7 +78,8 @@ vector<uint8_t> BatteryManager::LoadBattery(string extension)
 void BatteryManager::LoadBattery(string extension, uint8_t* data, uint32_t length)
 {
 	vector<uint8_t> batteryData = LoadBattery(extension);
-	memcpy(data, batteryData.data(), std::min((uint32_t)batteryData.size(), length));
+	uint32_t count = std::min((uint32_t)batteryData.size(), length);
+	if(count) memcpy(data, batteryData.data(), count);
 }
 
 uint32_t BatteryManager::GetBatteryFileSize(string extension)

@@ -86,6 +86,7 @@ private:
 	bool _saving = false;
 	SerializeFormat _format = SerializeFormat::Binary;
 	bool _hasError = false;
+	bool _strictLoad = false;
 
 private:
 	bool LoadFromTextFormat(istream& file);
@@ -224,6 +225,9 @@ public:
 
 	void SetErrorFlag() { _hasError = true; }
 	bool HasError() { return _hasError; }
+	/* Frontend states use one exact serializer version; missing fields must
+	   fail instead of retaining pieces of the currently running machine. */
+	void RequireCompleteState() { _strictLoad = true; }
 
 	bool IsValid() { return _values.size() > 0; }
 	void AddKeyPrefix(string prefix);
@@ -275,13 +279,14 @@ public:
 							SerializeValue& savedValue = result->second;
 							if(savedValue.Size >= sizeof(T)) {
 								ReadValue(value, savedValue.DataPtr);
+								if(_strictLoad && savedValue.Size != sizeof(T)) _hasError = true;
 							} else {
 								//TODO review this - is it better to keep the state as-is if the data can't be found?
 								//Setting to 0 can break compatibility with old save states - maybe keeping the current state is safer?
-								//value = (T)0;
+								if(_strictLoad) _hasError = true;
 							}
 						} else {
-							//value = (T)0;
+							if(_strictLoad) _hasError = true;
 						}
 						break;
 					}
@@ -376,7 +381,7 @@ public:
 
 			//Write array content
 			if constexpr(sizeof(T) == 1 || !isBigEndian) {
-				_data.insert(_data.end(), (uint8_t*)arrayValues, (uint8_t*)(arrayValues + elementCount));
+				if(elementCount) _data.insert(_data.end(), (uint8_t*)arrayValues, (uint8_t*)(arrayValues + elementCount));
 			} else {
 				for(uint32_t i = 0; i < elementCount; i++) {
 					WriteValue(arrayValues[i]);
@@ -387,8 +392,10 @@ public:
 			if(result != _values.end()) {
 				SerializeValue& savedValue = result->second;
 				//Copy as much data as possible (up to the size of whichever is smaller - savedValue or arrayValues)
+				if(_strictLoad && savedValue.Size != sizeof(T) * elementCount) _hasError = true;
 				if constexpr(sizeof(T) == 1 || !isBigEndian) {
-					memcpy(arrayValues, savedValue.DataPtr, std::min<int>(savedValue.Size, sizeof(T) * elementCount));
+					size_t bytes = std::min<size_t>(savedValue.Size, sizeof(T) * elementCount);
+					if(bytes) memcpy(arrayValues, savedValue.DataPtr, bytes);
 				} else {
 					uint8_t* src = savedValue.DataPtr;
 					uint32_t maxCount = std::min<int>(elementCount, savedValue.Size / sizeof(T));
@@ -398,7 +405,7 @@ public:
 					}
 				}
 			} else {
-				//memset(arrayValues, 0, sizeof(T) * elementCount);
+				if(_strictLoad) _hasError = true;
 			}
 		}
 	}
@@ -431,6 +438,7 @@ public:
 			if(result != _values.end()) {
 				SerializeValue& savedValue = result->second;
 				uint32_t elementCount = savedValue.Size / sizeof(T);
+				if(_strictLoad && savedValue.Size % sizeof(T)) _hasError = true;
 				values.resize(elementCount);
 
 				uint8_t* src = savedValue.DataPtr;
@@ -439,6 +447,7 @@ public:
 					src += sizeof(T);
 				}
 			} else {
+				if(_strictLoad) _hasError = true;
 				values.clear();
 			}
 		}

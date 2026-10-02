@@ -41,6 +41,12 @@ void iNesLoader::LoadRom(RomData& romData, vector<uint8_t>& romFile, NesHeader *
 
 	romData.ChrRamSize = header.GetChrRamSize();
 	romData.SaveChrRamSize = header.GetSaveChrRamSize();
+	/* NES 2.0 can describe only nonvolatile CHR RAM. The mapper stores its
+	   CHR allocation in ChrRamSize; a zero volatile size must not erase the
+	   nonvolatile allocation advertised by the header. */
+	if(romData.ChrRamSize == 0 && romData.SaveChrRamSize > 0) {
+		romData.ChrRamSize = romData.SaveChrRamSize;
+	}
 	romData.WorkRamSize = header.GetWorkRamSize();
 	romData.SaveRamSize = header.GetSaveRamSize();
 

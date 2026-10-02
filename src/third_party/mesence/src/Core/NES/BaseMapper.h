@@ -260,6 +260,10 @@ public:
 	void CopyChrTile(uint32_t address, uint8_t *dest);
 
 	//Debugger Helper Functions
+	/* Frontend-owned battery I/O: expose only persistent cartridge RAM. */
+	uint8_t* FrontendSaveRam(uint32_t& bytes) { bytes = HasBattery() ? _saveRamSize : 0; return bytes ? _saveRam : nullptr; }
+	uint8_t* FrontendSaveChrRam(uint32_t& bytes) { bytes = _hasChrBattery ? _chrRamSize : 0; return bytes ? _chrRam : nullptr; }
+
 	bool HasChrRam();
 	bool HasChrRom();
 	uint32_t GetChrRomSize() { return _chrRomSize; }

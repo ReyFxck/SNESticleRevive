@@ -53,6 +53,8 @@ Emulator::Emulator() :
     NesConfig &nes = _settings->GetNesConfig();
     nes.EnableHdPacks = false;
     nes.DisableGameDatabase = true;
+    // Desktop settings normally populate these; the standalone defaults mute every channel.
+    for(auto &volume : nes.ChannelVolumes) volume = 100;
     nes.Port1.Type = ControllerType::NesController;
     nes.Port2.Type = ControllerType::NesController;
 
@@ -93,6 +95,10 @@ void Emulator::Stop(bool, bool, bool saveBattery)
         _console->SaveBattery();
     }
     _console.reset();
+    // Unloading NES must also release its cartridge copy before SNES loads.
+    _rom.RomFile = VirtualFile();
+    _rom.PatchFile = VirtualFile();
+    memset(_consoleMemory, 0, sizeof(_consoleMemory));
 }
 
 void Emulator::OnBeforeSendFrame() {}
@@ -144,7 +150,7 @@ bool Emulator::LoadRom(VirtualFile romFile, VirtualFile patchFile, bool, bool)
     memset(_consoleMemory, 0, sizeof(_consoleMemory));
 
     string baseName = FolderUtilities::GetFilename(romFile.GetFileName(), false);
-    _batteryManager->Initialize(baseName);
+    _batteryManager->Initialize(""); // SNESticle owns battery file I/O.
 
     unique_ptr<IConsole> console(new NesConsole(this));
     LoadRomResult result = console->LoadRom(romFile);

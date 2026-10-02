@@ -36,6 +36,13 @@
 
 #include "Utilities/UTF8Util.h"
 
+/* PS2SDK also defines this annotation. */
+#ifdef __noinline
+#undef __noinline
+#endif
+
+
+
 #ifdef _MSC_VER
 	#define __noinline __declspec(noinline)
 #elif !defined(__MINGW32__) && (defined(__clang__) || defined(__GNUC__))

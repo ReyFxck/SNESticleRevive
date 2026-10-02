@@ -92,7 +92,9 @@ CWavFile _WavFile;
 Uint8 _RomData[8 * 1024 * 1024 + 1024] __attribute__((aligned(64))) __attribute__ ((section (".bss")));
 
 SnesStateT		_SnesState;
+#if !NES_MESENCE
 NesStateT		_NesState;
+#endif
 
 Emu::MovieClip *s_pMovieClip;
 

@@ -111,7 +111,9 @@ extern NesSystem      *_pNes;
 extern NesRom         *_pNesRom;
 extern NesFDSBios     *_pNesFDSBios;
 extern NesDisk        *_pNesFDSDisk;
+#if !NES_MESENCE
 extern NesStateT       _NesState;
+#endif
 extern Int32           _MainLoop_iDisk;
 extern Bool            _MainLoop_bDiskInserted;
 

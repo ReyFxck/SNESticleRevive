@@ -9,7 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#if 1
+/* The supplied C++20 core catches allocation failures. Its standard-library
+   containers require throwing operator new; the historical null-returning
+   overrides cannot implement that contract. Keep them for the legacy build. */
+#if !NES_MESENCE
 void *operator new(unsigned x)
 {
 	void *ptr = malloc(x);
