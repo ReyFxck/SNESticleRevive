@@ -2178,7 +2178,10 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		PROF_ENTER("BGCHR");
 		for (iBG=0; iBG <= 3; iBG++)
 		{
-			if (uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR)
+			/* Fine X also moves opacity/priority masks. FETCHPAL is the legacy
+			   name of this flag; the indexed compositor must consume it even
+			   when the world row and its CHR bytes did not change. */
+			if (uBGFlags[iBG] & (SNPPU_BGFLAGS_FETCHCHR | SNPPU_BGFLAGS_FETCHPAL))
 			{
 				const Bool bHiresPair =
 					(uBGMode == 5 && iBG < 2 &&

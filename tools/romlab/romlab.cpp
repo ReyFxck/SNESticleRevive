@@ -1144,6 +1144,69 @@ static bool CheckJustifierBeamLatch()
     return h == 200u && v == 91u;
 }
 
+/* HDMA can keep the same world row while fine X changes between lines.
+   Compare warm masks with a fresh decode; this failed before FETCHPAL was
+   consumed by the indexed renderer. */
+static bool CheckBGFineXRendering()
+{
+    unsigned cases = 0;
+    for (unsigned mode : {1u, 5u})
+    for (unsigned large : {0u, 1u})
+    {
+        std::vector<uint8_t> expected;
+        for (unsigned cold = 0; cold < 2; ++cold)
+        {
+            SnesPPU ppu;
+            SnesPPURender render{};
+            render.SetPPU(&ppu);
+            ppu.SetPPURender(&render);
+            ppu.Reset();
+            uint32_t seed = 0xF1E65816;
+            for (unsigned i = 0; i < SNESPPU_VRAM_NUMWORDS; ++i)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                *ppu.GetVramPtr(i) = (Uint16)(seed >> 16);
+            }
+            for (unsigned i = 0; i < 256; ++i)
+                ppu.GetCGData()[i] = (Uint16)((i * 317u) & 0x7FFFu);
+            render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+            auto *regs = const_cast<SnesPPURegsT *>(ppu.GetRegs());
+            regs->inidisp = 15;
+            regs->bgmode = (Uint8)(mode | (large ? 0x30u : 0));
+            regs->bg1sc = 0xC3;
+            regs->bg2sc = 0xE3;
+            regs->bg12nba = 0x40;
+            regs->tm = regs->ts = 3;
+            regs->cgwsel = 2;
+            regs->cgadsub = 0x63;
+            CRenderSurface surface;
+            surface.Alloc(256, 224, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+            render.BeginRender(&surface);
+            for (unsigned line = 1; line <= 224; ++line)
+            {
+                regs->bg1hofs.w = (Uint16)((line / 32u) * 8u + (line & 7u));
+                regs->bg2hofs.w = (Uint16)((1023u - line) & 1023u);
+                regs->bg1vofs.w = (Uint16)((13u - line) & 1023u);
+                regs->bg2vofs.w = (Uint16)((19u - line) & 1023u);
+                if (cold) render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+                render.RenderLine((Int32)line);
+                auto *pixels = surface.GetLinePtr((Int32)line - 1);
+                if (!cold) expected.insert(expected.end(), pixels, pixels + 1024);
+                else if (memcmp(expected.data() + (line - 1u) * 1024u, pixels, 1024))
+                {
+                    fprintf(stderr, "BG fine X diverged: mode=%u large=%u line=%u\n", mode, large, line);
+                    render.EndRender();
+                    return false;
+                }
+            }
+            render.EndRender();
+        }
+        ++cases;
+    }
+    printf("BG fine X renderer: PASS (%u scenes; fixed world Y, HDMA scroll, opacity, priority, main/sub)\n", cases);
+    return true;
+}
+
 /* Compare a moving synthetic PPU scene with a cold renderer on every line.
    No ROM, timing, or host-performance assumption is involved. */
 static bool CheckBGScrollRendering()
@@ -1293,6 +1356,7 @@ static bool CheckEmptyMathRendering()
 static int SelfTestCommand()
 {
     if (!CheckEmptyMathRendering()) return 1;
+    if (!CheckBGFineXRendering()) return 1;
     if (!CheckBGScrollRendering())
         return 1;
     if (!CheckSDD1MapAndSpeed())
