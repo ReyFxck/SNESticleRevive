@@ -50,6 +50,12 @@ jobs:
           ./tools/pputest/targetprofile_test
       - name: Test asynchronous RFAuds2 PCM adapter
         run: SANITIZE=1 bash ./tools/rfauds2test/build.sh
+      - name: Test mounted state destination enumeration
+        run: python3 tools/statetest/check_roots.py
+      - name: Build and test SuperFX core
+        run: |
+          bash tools/gsutest/build.sh
+          ./tools/gsutest/gsu_test
       - name: Build ROM loader tests
         run: ./tools/romtest/build.sh
       - name: Run ROM loader tests
