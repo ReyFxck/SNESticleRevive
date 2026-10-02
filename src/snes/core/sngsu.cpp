@@ -19,6 +19,7 @@
 
 #include "types.h"
 #include "sngsu.h"
+#include "sngsuplanes.h"
 
 #include <string.h>
 
@@ -467,18 +468,16 @@ void SNGSU::PixFlush(Int32 nCache)
     Uint8 y = (Uint8)(offset >> 5);
     Int32  bpp = ScreenBpp();
     Uint32 rowAddr = PixelRowAddr(xbase, y);
+    /* Transpose the eight cached colors once. The old loop retested the
+       same coverage and color bits for every bitplane (up to 64 pixels). */
+    Uint64 planes = SNGSUPackPixelPlanes(m_PixColor[nCache]);
+    Uint8 coverage = SNGSUPixelCoverage(flags);
     for (Int32 b = 0; b < bpp; b++) {
-        // plano b: par (b>>1) a offset (b>>1)*16, byte (b&1) dentro do par
         Uint32 addr = rowAddr + (Uint32)((b >> 1) * 16 + (b & 1));
-        Uint8  byte = (flags == 0xFF) ? 0 : RamReadByte(addr);
-        for (Int32 i = 0; i < 8; i++) {
-            if (flags & (1 << i)) {
-                Uint8 mask = (Uint8)(1 << (7 - i));        // pixel 0 = bit7
-                if ((m_PixColor[nCache][i] >> b) & 1) byte |= mask;
-                else                          byte &= (Uint8)~mask;
-            }
-        }
+        Uint8 byte = (flags == 0xFF) ? 0 : RamReadByte(addr);
+        byte = (Uint8)((byte & ~coverage) | ((Uint8)planes & coverage));
         RamWriteByte(addr, byte);
+        planes >>= 8;
     }
     m_PixFlags[nCache] = 0;
 }

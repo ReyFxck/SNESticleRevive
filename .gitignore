@@ -11,6 +11,7 @@ build/
 *.log
 *.bak*
 __pycache__/
+tools/superfxtest/planes_test
 
 # Local PS2DEV environment
 .ps2dev-env
