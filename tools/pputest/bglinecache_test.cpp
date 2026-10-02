@@ -43,15 +43,15 @@ static void CheckScrollReuse()
 			bool half = mode == 1 && size;
 			Uint32 mask = half ? 127 : 63;
 			for (Uint32 oldX = 0; oldX <= mask; ++oldX)
-				for (Int32 step : { -2, -1, 0, 1, 2 })
+				for (Int32 step = -32; step <= 32; ++step)
 				{
 					SnesPPUBGLineCacheKeyT key = {};
 					Uint32 oldState = EncodeX(oldX, half) | (11u << 5) | (3u << 24);
 					Uint32 newState = EncodeX((oldX + step) & mask, half) |
 						(11u << 5) | (3u << 24) | (7u << 16);
 					SnesPPUBGLineCacheSetKey(&key, 41, oldState, 0, mode, &info);
-					Int32 expected = step == 1 || step == -1 ? step : 0;
-					Check("adjacent scroll including wrap", SnesPPUBGLineCacheScrollStep(
+					Int32 expected = step && step >= -8 && step <= 8 ? step : 0;
+					Check("overlapping scroll including wrap", SnesPPUBGLineCacheScrollStep(
 						&key, 41, newState, 0, mode, &info), expected);
 					Check("changed row rejects scroll reuse", SnesPPUBGLineCacheScrollStep(
 						&key, 41, newState ^ (1u << 24), 0, mode, &info), 0);
@@ -59,8 +59,9 @@ static void CheckScrollReuse()
 						&key, 42, newState, 0, mode, &info), 0);
 				}
 		}
-	for (Int32 step : { -1, 1 })
+	for (Int32 step = -8; step <= 8; ++step)
 	{
+		if (!step) continue;
 		Uint8 source[272] _ALIGN(16), got[272] _ALIGN(16), expected[272] _ALIGN(16);
 		Uint8 sourceOpaque[48], sourcePriority[48], opaque[48], priority[48];
 		Uint8 expectedOpaque[48], expectedPriority[48];
@@ -76,9 +77,11 @@ static void CheckScrollReuse()
 		std::memcpy(expected, got, sizeof(got));
 		std::memcpy(expectedOpaque, opaque, sizeof(opaque));
 		std::memcpy(expectedPriority, priority, sizeof(priority));
-		Uint32 src = step > 0 ? 1 : 0, dst = step > 0 ? 0 : 1;
-		for (Uint32 i = 0; i < 256; ++i) expected[8 + dst * 8 + i] = source[src * 8 + i];
-		for (Uint32 i = 0; i < 32; ++i)
+		Uint32 exposed = (Uint32)(step > 0 ? step : -step);
+		Uint32 src = step > 0 ? exposed : 0, dst = step > 0 ? 0 : exposed;
+		for (Uint32 i = 0; i < (33u - exposed) * 8u; ++i)
+			expected[8 + dst * 8 + i] = source[src * 8 + i];
+		for (Uint32 i = 0; i < 33u - exposed; ++i)
 		{
 			expectedOpaque[dst + i] = sourceOpaque[src + i];
 			expectedPriority[dst + i] = sourcePriority[src + i];

@@ -1243,11 +1243,13 @@ static bool CheckBGScrollRendering()
             CRenderSurface surface;
             surface.Alloc(256, 8, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
             size_t position = 0;
-            for (unsigned step = 0; step < 272; ++step)
+            for (unsigned step = 0; step < 408; ++step)
             {
                 /* Cross map/quadrant wrap points in both directions, change
                    fine X, and reject reuse after vertical movement. */
-                unsigned x = (step < 136 ? step : 271 - step) * 8u;
+                unsigned distance = step < 136 ? 1u : step < 272 ? 8u : 9u;
+                unsigned phase = step % 136u;
+                unsigned x = (phase < 68 ? phase : 135 - phase) * distance * 8u;
                 regs->bg1hofs.w = (Uint16)((x + (step & 7u)) & 1023u);
                 regs->bg2hofs.w = (Uint16)((1023u - x) & 1023u);
                 regs->bg1vofs.w = (Uint16)((step / 64u) * 8u);

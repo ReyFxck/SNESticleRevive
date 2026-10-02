@@ -103,20 +103,23 @@ static SnesPPUVramStampT _SnesPPU_BGLineVram;
 
 static _INLINE Bool _SnesPPURestoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
-	Uint32 iBG, Bool bHiresPair, Uint32 uFineX)
+	Uint32 iBG, Bool bHiresPair, Uint32 uFineX, Bool bCopyPixels)
 {
 	Uint32 iSubPlane = iBG + 2u;
 
-	memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
-		SNPPU_BG_LINE_PIXELS);
+	/* Fine-X-only reloads leave the same CHR bytes resident in BGPlanes. */
+	if (bCopyPixels)
+		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
+			SNPPU_BG_LINE_PIXELS);
 	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 		pEntry->uMainOpaque, uFineX);
 	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 		pEntry->uMainPriority, uFineX);
 	if (bHiresPair)
 	{
-		memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
-			SNPPU_BG_LINE_PIXELS);
+		if (bCopyPixels)
+			memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
+				SNPPU_BG_LINE_PIXELS);
 		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
 			pEntry->uSubOpaque, uFineX);
 		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
@@ -159,10 +162,11 @@ static _INLINE void _SnesPPUStoreBGLine(
 #if SNPPU_BG_LINE_CACHE_WAYS > 1
 static _INLINE void _SnesPPURestoreBGLineNormal(
 	SnesPPUBGLineCacheNormalEntryT *pEntry,
-	SnesRender8pInfoT *pRenderInfo, Uint32 iBG, Uint32 uFineX)
+	SnesRender8pInfoT *pRenderInfo, Uint32 iBG, Uint32 uFineX, Bool bCopyPixels)
 {
-	memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
-		SNPPU_BG_LINE_PIXELS);
+	if (bCopyPixels)
+		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
+			SNPPU_BG_LINE_PIXELS);
 	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 		pEntry->uMainOpaque, uFineX);
 	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
@@ -2220,7 +2224,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						uBGMode, &BGInfo[iBG]))
 					{
 						_SnesPPURestoreBGLine(pPrimary, pRenderInfo,
-							iBG, bHiresPair, BGInfo[iBG].uScrollX & 7u);
+							iBG, bHiresPair, BGInfo[iBG].uScrollX & 7u,
+							(uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR) != 0);
 #if SNPPU_BG_LINE_CACHE_WAYS > 1
 						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 1;
 #endif
@@ -2243,7 +2248,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						uBGMode, &BGInfo[iBG]))
 					{
 						_SnesPPURestoreBGLineNormal(pSecondary, pRenderInfo,
-							iBG, BGInfo[iBG].uScrollX & 7u);
+							iBG, BGInfo[iBG].uScrollX & 7u,
+							(uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR) != 0);
 						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 0;
 #if SNDBG_LOG
 						g_DbgBGLineCacheHits++;
@@ -2252,7 +2258,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					}
 #endif
 
-					/* A one-cell horizontal move retains the other 32 cells.
+					/* A short horizontal move retains the overlapping cells.
 					   Copy before replacement can overwrite the source key. */
 					SnesPPUBGLineCacheEntryT *pOverlap = NULL;
 					Int32 nScrollStep = pPrimary->uReady ?
@@ -2291,9 +2297,9 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 								pNormalOverlap->uMain, pNormalOverlap->uMainOpaque,
 								pNormalOverlap->uMainPriority, nScrollStep);
 #endif
-						iFetchTile = nScrollStep > 0 ? 32 : 0;
+						nFetchTiles = nScrollStep > 0 ? nScrollStep : -nScrollStep;
+						iFetchTile = nScrollStep > 0 ? 33 - nFetchTiles : 0;
 						pFetchTiles += iFetchTile;
-						nFetchTiles = 1;
 #if SNDBG_LOG
 						g_DbgBGLineCacheScrolls++;
 #endif
