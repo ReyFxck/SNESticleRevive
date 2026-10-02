@@ -106,8 +106,30 @@ static void checkMapper(MesenceCore *core, unsigned mapper) {
  assert(ram[0]==0x11 && ram[1]==(mapper==1?0x22:0x33));
  printf("MesenCE MMC%u: bank writes/battery/state PASS\n",mapper==1?1:3);
 }
+static void checkTwoPads(MesenceCore *core) {
+ auto image=rom(false);
+ // Strobe/latch and read both eight-bit serial ports into separate SRAM bytes.
+ const uint8_t code[]={0x78,0xd8,0xa2,0xff,0x9a,
+  0xa9,1,0x8d,0x16,0x40,0xa9,0,0x8d,0x16,0x40,
+  0x85,0,0x85,1,0xa2,8,
+  0xad,0x16,0x40,0x4a,0x66,0,
+  0xad,0x17,0x40,0x4a,0x66,1,
+  0xca,0xd0,0xf1,0xa5,0,0x8d,0,0x60,
+  0xa5,1,0x8d,1,0x60,0x4c,5,0x80};
+ memcpy(image.data()+16,code,sizeof(code));
+ assert(MesenceLoad(core,image.data(),image.size()));
+ uint32_t bytes; auto ram=MesenceSram(core,&bytes); assert(ram && bytes==8192);
+ for(unsigned value=0;value<256;++value) {
+  uint8_t pads[2]={(uint8_t)value,(uint8_t)(value^0xa5)};
+  for(unsigned frame=0;frame<2;++frame) assert(MesenceFrame(core,pads,nullptr,0,nullptr,nullptr));
+  if(ram[0]!=pads[0] || ram[1]!=pads[1]) fprintf(stderr,"pad %u: got %u/%u wanted %u/%u\n",value,ram[0],ram[1],pads[0],pads[1]);
+  assert(ram[0]==pads[0] && ram[1]==pads[1]);
+ }
+ puts("MesenCE input: all 256 serial combinations on both ports PASS");
+}
 int main() {
  auto core=MesenceCreate(); assert(core);
+ checkTwoPads(core);
  std::vector<uint32_t> pixels(256*256,0x12345678);
  for(bool pal:{false,true}) {
   auto image=rom(pal); assert(MesenceLoad(core,image.data(),image.size()));

@@ -55,11 +55,6 @@ void BaseNesPpu::SetState(NesPpuState& state)
 	UpdateGrayscaleAndIntensifyBits();
 }
 
-bool BaseNesPpu::IsRenderingEnabled()
-{
-	return _renderingEnabled;
-}
-
 uint16_t BaseNesPpu::GetCurrentBgColor()
 {
 	uint16_t color;

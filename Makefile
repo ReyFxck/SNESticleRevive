@@ -684,7 +684,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='NES_BACKEND=$(NES_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND) SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
+	mode='MESENCE_OPT=O2 NES_BACKEND=$(NES_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND) SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -840,15 +840,13 @@ $(OBJS): $(BUILD_CONFIG_FILE)
 
 $(OBJ_DIR)/%.o: src/%.c | $(OBJ_DIR)
 	$(call RUN_COMPILE,CC,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
-# Isolate the supplied C++20 port's RTTI/exceptions and conservative compiler
+# Isolate the supplied C++20 port's RTTI/exceptions and compiler
 # settings from the legacy SNES core and frontend. No standalone PS2 drivers.
-MESENCE_FLAGS = $(filter-out -O2 -fno-exceptions -fno-rtti -fpermissive,$(CXXFLAGS)) -O1 -std=gnu++20 -DPS2_PORT -DMESEN_NES_ONLY -Isrc/third_party/mesence/src -Isrc/third_party/mesence/src/Core
+MESENCE_FLAGS = $(filter-out -O2 -fno-exceptions -fno-rtti -fpermissive,$(CXXFLAGS)) -O2 -std=gnu++20 -DPS2_PORT -DMESEN_NES_ONLY -Isrc/third_party/mesence/src -Isrc/third_party/mesence/src/Core
 $(OBJ_DIR)/third_party/mesence/%.o: src/third_party/mesence/%.cpp | $(OBJ_DIR)
 	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) $(DEPFLAGS) -c "$<" -o "$@")
 $(OBJ_DIR)/nes/mesence/mesence_bridge.o: src/nes/mesence/mesence_bridge.cpp | $(OBJ_DIR)
 	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) $(DEPFLAGS) -c "$<" -o "$@")
-$(OBJ_DIR)/third_party/mesence/src/Core/Shared/BaseControlDevice.o: src/third_party/mesence/src/Core/Shared/BaseControlDevice.cpp | $(OBJ_DIR)
-	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) -O0 $(DEPFLAGS) -c "$<" -o "$@")
 
 $(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
 	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(CXXFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")

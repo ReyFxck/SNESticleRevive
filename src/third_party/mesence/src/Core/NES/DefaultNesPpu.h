@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "NES/NesPpu.h"
+#include "Shared/EmuSettings.h"
 
 class DefaultNesPpu final : public NesPpu<DefaultNesPpu>
 {
@@ -9,19 +10,19 @@ public:
 	{
 	}
 
-	__forceinline void StoreSpriteInformation(bool verticalMirror, uint16_t tileAddr, uint8_t lineOffset) { }
-	__forceinline void StoreTileInformation() {}
-	__forceinline bool RemoveSpriteLimit() { return _console->GetNesConfig().RemoveSpriteLimit; }
-	__forceinline bool UseAdaptiveSpriteLimit() { return _console->GetNesConfig().AdaptiveSpriteLimit; }
+	MESENCE_PPU_INLINE __forceinline void StoreSpriteInformation(bool verticalMirror, uint16_t tileAddr, uint8_t lineOffset) { }
+	MESENCE_PPU_INLINE __forceinline void StoreTileInformation() {}
+	MESENCE_PPU_INLINE __forceinline bool RemoveSpriteLimit() { return _settings->GetNesConfig().RemoveSpriteLimit; }
+	MESENCE_PPU_INLINE __forceinline bool UseAdaptiveSpriteLimit() { return _settings->GetNesConfig().AdaptiveSpriteLimit; }
 
 	void* OnBeforeSendFrame() { return nullptr; }
 
-	__forceinline void ProcessScanline()
+	MESENCE_PPU_INLINE __forceinline void ProcessScanline()
 	{
 		ProcessScanlineImpl();
 	}
 
-	__forceinline void DrawPixel()
+	MESENCE_PPU_INLINE __forceinline void DrawPixel()
 	{
 		//This is called 3.7 million times per second - needs to be as fast as possible.
 		if(IsRenderingEnabled() || ((_videoRamAddr & 0x3F00) != 0x3F00)) {

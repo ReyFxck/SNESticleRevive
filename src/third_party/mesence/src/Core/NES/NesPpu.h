@@ -56,7 +56,7 @@ protected:
 	__forceinline uint16_t GetAttributeAddr();
 
 	void ProcessScanlineFirstCycle();
-	__forceinline void ProcessScanlineImpl();
+	MESENCE_PPU_INLINE __forceinline void ProcessScanlineImpl();
 	__forceinline void ProcessSpriteEvaluation();
 	__noinline void ProcessSpriteEvaluationStart();
 	__noinline void ProcessSpriteEvaluationEnd();
@@ -64,7 +64,7 @@ protected:
 	void BeginVBlank();
 	void TriggerNmi();
 
-	__forceinline void LoadTileInfo();
+	MESENCE_PPU_INLINE __forceinline void LoadTileInfo();
 	void LoadSprite(uint8_t spriteY, uint8_t tileIndex, uint8_t attributes, uint8_t spriteX, bool extraSprite);
 	void LoadSpriteTileInfo();
 	void LoadExtraSprites();
@@ -76,7 +76,7 @@ protected:
 	void SetOamCorruptionFlags();
 	void ProcessOamCorruption();
 
-	__forceinline uint8_t GetPixelColor();
+	MESENCE_PPU_INLINE __forceinline uint8_t GetPixelColor();
 
 	void SendFrame();
 
@@ -126,7 +126,7 @@ public:
 
 	void UpdateTimings(ConsoleRegion region, bool overclockAllowed = true) override;
 
-	__forceinline void Exec();
+	MESENCE_PPU_INLINE __forceinline void Exec();
 	void Run(uint64_t runTo) override;
 
 	uint32_t GetPixelBrightness(uint8_t x, uint8_t y) override;
@@ -137,6 +137,7 @@ public:
 	}
 };
 
+#ifndef PS2_PORT
 template<class T>
 void NesPpu<T>::Run(uint64_t runTo)
 {
@@ -146,6 +147,8 @@ void NesPpu<T>::Run(uint64_t runTo)
 		_masterClock += _masterClockDivider;
 	} while(_masterClock + _masterClockDivider <= runTo);
 }
+
+#endif
 
 template<class T> NesPpu<T>::~NesPpu()
 {

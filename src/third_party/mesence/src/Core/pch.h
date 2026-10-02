@@ -59,6 +59,14 @@
 	#define __noinline
 #endif
 
+// Only force helpers whose bodies are visible in the NES PPU dot loop.
+// Other __forceinline declarations still require the existing LTO rule.
+#if defined(PS2_PORT) && (defined(__GNUC__) || defined(__clang__))
+#define MESENCE_PPU_INLINE __attribute__((always_inline))
+#else
+#define MESENCE_PPU_INLINE
+#endif
+
 using std::vector;
 using std::unordered_map;
 using std::unordered_set;

@@ -83,7 +83,7 @@ template<class T> void NesPpu<T>::Reset(bool softReset)
 
 	//Reset OAM decay timestamps regardless of the reset PPU option
 	memset(_oamDecayCycles, 0, sizeof(_oamDecayCycles));
-	_enableOamDecay = _console->GetNesConfig().EnableOamDecay;
+	_enableOamDecay = _settings->GetNesConfig().EnableOamDecay;
 
 	if(softReset && _settings->GetNesConfig().DisablePpuReset) {
 		return;
@@ -191,7 +191,7 @@ template<class T> void NesPpu<T>::UpdateTimings(ConsoleRegion region, bool overc
 	}
 
 	if(overclockAllowed) {
-		NesConfig& cfg = _console->GetNesConfig();
+		NesConfig& cfg = _settings->GetNesConfig();
 		_nmiScanline += cfg.PpuExtraScanlinesBeforeNmi;
 		_standardVblankEnd += cfg.PpuExtraScanlinesBeforeNmi;
 		_vblankEnd += cfg.PpuExtraScanlinesAfterNmi + cfg.PpuExtraScanlinesBeforeNmi;
@@ -300,7 +300,7 @@ template<class T> uint8_t NesPpu<T>::PeekRam(uint16_t addr)
 			break;
 
 		case PpuRegisters::SpriteData:
-			if(!_console->GetNesConfig().DisablePpu2004Reads) {
+			if(!_settings->GetNesConfig().DisablePpu2004Reads) {
 				if(_scanline <= 239 && IsRenderingEnabled()) {
 					if(_cycle >= 257 && _cycle <= 320) {
 						uint8_t step = ((_cycle - 257) % 8) > 3 ? 3 : ((_cycle - 257) % 8);
@@ -319,7 +319,7 @@ template<class T> uint8_t NesPpu<T>::PeekRam(uint16_t addr)
 		case PpuRegisters::VideoMemoryData:
 			returnValue = _memoryReadBuffer;
 
-			if((_videoRamAddr & 0x3FFF) >= 0x3F00 && !_console->GetNesConfig().DisablePaletteRead) {
+			if((_videoRamAddr & 0x3FFF) >= 0x3F00 && !_settings->GetNesConfig().DisablePaletteRead) {
 				returnValue = (ReadPaletteRam(_videoRamAddr) & _paletteRamMask) | (_openBus & 0xC0);
 				openBusMask = 0xC0;
 			} else {
@@ -352,7 +352,7 @@ template<class T> uint8_t NesPpu<T>::ReadRam(uint16_t addr)
 			break;
 
 		case PpuRegisters::SpriteData:
-			if(!_console->GetNesConfig().DisablePpu2004Reads) {
+			if(!_settings->GetNesConfig().DisablePpu2004Reads) {
 				if(_scanline <= 239 && IsRenderingEnabled()) {
 					//While the screen is begin drawn
 					if(_cycle >= 257 && _cycle <= 320) {
@@ -384,7 +384,7 @@ template<class T> uint8_t NesPpu<T>::ReadRam(uint16_t addr)
 				returnValue = _memoryReadBuffer;
 				_memoryReadBuffer = ReadVram(_ppuBusAddress & 0x3FFF, MemoryOperationType::Read);
 
-				if((_ppuBusAddress & 0x3FFF) >= 0x3F00 && !_console->GetNesConfig().DisablePaletteRead) {
+				if((_ppuBusAddress & 0x3FFF) >= 0x3F00 && !_settings->GetNesConfig().DisablePaletteRead) {
 					//Note: When grayscale is turned on, the read values also have the grayscale mask applied to them
 					returnValue = (ReadPaletteRam(_ppuBusAddress) & _paletteRamMask) | (_openBus & 0xC0);
 					_emu->ProcessPpuRead<CpuType::Nes>(_ppuBusAddress, returnValue, MemoryType::NesPpuMemory);
@@ -523,7 +523,7 @@ template<class T> void NesPpu<T>::WriteRam(uint16_t addr, uint8_t value)
 template<class T> void NesPpu<T>::ProcessTmpAddrScrollGlitch(uint16_t normalAddr, uint16_t value, uint16_t mask)
 {
 	_tmpVideoRamAddr = normalAddr;
-	if(_cycle == 257 && _console->GetNesConfig().EnablePpu2000ScrollGlitch && _scanline < 240 && IsRenderingEnabled()) {
+	if(_cycle == 257 && _settings->GetNesConfig().EnablePpu2000ScrollGlitch && _scanline < 240 && IsRenderingEnabled()) {
 		//Use open bus to set some parts of V (glitch that occurs when writing to $2000/$2005/$2006 on cycle 257)
 		_videoRamAddr = (_videoRamAddr & ~mask) | (value & mask);
 		#ifndef PS2_PORT
@@ -680,7 +680,7 @@ template<class T> void NesPpu<T>::WriteVram(uint16_t addr, uint8_t value)
 	_mapper->WriteVram(addr, value);
 }
 
-template<class T> void NesPpu<T>::LoadTileInfo()
+template<class T> MESENCE_PPU_INLINE void NesPpu<T>::LoadTileInfo()
 {
 	if(IsRenderingEnabled()) {
 		switch(_cycle & 0x07) {
@@ -830,7 +830,7 @@ template<class T> void NesPpu<T>::ShiftTileRegisters()
 	_highBitShift <<= 1;
 }
 
-template<class T> uint8_t NesPpu<T>::GetPixelColor()
+template<class T> MESENCE_PPU_INLINE uint8_t NesPpu<T>::GetPixelColor()
 {
 	uint8_t offset = _xScroll;
 	uint8_t backgroundColor = 0;
@@ -883,7 +883,7 @@ template<class T> uint8_t NesPpu<T>::GetPixelColor()
 	return ((offset + ((_cycle - 1) & 0x07) < 8) ? _previousTilePalette : _currentTilePalette) + backgroundColor;
 }
 
-template<class T> void NesPpu<T>::ProcessScanlineImpl()
+template<class T> MESENCE_PPU_INLINE void NesPpu<T>::ProcessScanlineImpl()
 {
 	//Only called for cycle 1+
 	if(_cycle <= 256) {
@@ -1216,7 +1216,7 @@ template<class T> void NesPpu<T>::SendFrame()
 
 	//Get phase at the start of the current frame (341*241 cycles ago)
 	uint32_t videoPhase = ((_masterClock / _masterClockDivider) - 82181) % 3;
-	NesConfig& cfg = _console->GetNesConfig();
+	NesConfig& cfg = _settings->GetNesConfig();
 	if(_region != ConsoleRegion::Ntsc || cfg.PpuExtraScanlinesAfterNmi != 0 || cfg.PpuExtraScanlinesBeforeNmi != 0) {
 		//Force 2-phase pattern for PAL or when overclocking is used
 		videoPhase = _frameCount & 0x01;
@@ -1314,7 +1314,7 @@ template<class T> void NesPpu<T>::DebugUpdateFrameBuffer(bool toGrayscale)
 
 template<class T> void NesPpu<T>::SetOamCorruptionFlags()
 {
-	if(!_console->GetNesConfig().EnablePpuOamRowCorruption) {
+	if(!_settings->GetNesConfig().EnablePpuOamRowCorruption) {
 		return;
 	}
 
@@ -1340,7 +1340,7 @@ template<class T> void NesPpu<T>::SetOamCorruptionFlags()
 
 template<class T> void NesPpu<T>::ProcessOamCorruption()
 {
-	if(!_console->GetNesConfig().EnablePpuOamRowCorruption) {
+	if(!_settings->GetNesConfig().EnablePpuOamRowCorruption) {
 		return;
 	}
 
@@ -1355,7 +1355,7 @@ template<class T> void NesPpu<T>::ProcessOamCorruption()
 	}
 }
 
-template<class T> void NesPpu<T>::Exec()
+template<class T> MESENCE_PPU_INLINE void NesPpu<T>::Exec()
 {
 	if(_cycle < 340) {
 		//Process cycles 1 to 340
@@ -1413,7 +1413,7 @@ template<class T> void NesPpu<T>::ProcessScanlineFirstCycle()
 
 	UpdateApuStatus();
 
-	if(_scanline == _console->GetNesConfig().InputScanline) {
+	if(_scanline == _settings->GetNesConfig().InputScanline) {
 		_console->GetControlManager()->UpdateControlDevices();
 		_console->GetControlManager()->UpdateInputState();
 	}
@@ -1496,7 +1496,7 @@ template<class T> void NesPpu<T>::UpdateState()
 	if(_updateVramAddrDelay > 0) {
 		_updateVramAddrDelay--;
 		if(_updateVramAddrDelay == 0) {
-			if(_console->GetNesConfig().EnablePpu2006ScrollGlitch && _scanline < 240 && IsRenderingEnabled()) {
+			if(_settings->GetNesConfig().EnablePpu2006ScrollGlitch && _scanline < 240 && IsRenderingEnabled()) {
 				//When a $2006 address update lands on the Y or X increment, the written value is bugged and is ANDed with the incremented value
 				if(_cycle == 257) {
 					_videoRamAddr &= _updateVramAddr;
@@ -1638,6 +1638,23 @@ template<class T> void NesPpu<T>::Serialize(Serializer& s)
 		UpdateApuStatus();
 	}
 }
+
+#ifdef PS2_PORT
+// Instantiate Run beside Exec: the compiler can see the dot loop's body,
+// instead of emitting an out-of-line Exec call per dot from NesConsole.cpp.
+template<class T>
+void NesPpu<T>::Run(uint64_t runTo)
+{
+	do {
+		//Always need to run at least once, check condition at the end of the loop (slightly faster)
+		Exec();
+		_masterClock += _masterClockDivider;
+	} while(_masterClock + _masterClockDivider <= runTo);
+}
+
+template void NesPpu<DefaultNesPpu>::Run(uint64_t runTo);
+template void NesPpu<NsfPpu>::Run(uint64_t runTo);
+#endif
 
 template NesPpu<DefaultNesPpu>::NesPpu(NesConsole* console);
 template uint16_t* NesPpu<DefaultNesPpu>::GetScreenBuffer(bool previousBuffer, bool processGrayscaleEmphasisBits);

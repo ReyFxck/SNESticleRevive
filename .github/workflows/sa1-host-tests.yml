@@ -58,6 +58,8 @@ jobs:
         run: python3 tools/smbtest/check_smb.py
       - name: Test MesenCE frontend with sanitizers
         run: SANITIZE=1 bash tools/mesencetest/build.sh
+      - name: Test NES frontend controller mapping
+        run: python3 tools/mesencetest/check_input.py
       - name: Build and test SuperFX core
         run: |
           bash tools/superfxtest/build.sh
