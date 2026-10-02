@@ -728,7 +728,10 @@ static void _SNSpcDspMemset64(Uint64 *pDest, Int32 nDwords)
 __attribute__((noinline))
 void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMainVol, Int32 iEchoVol)
 {
-
+	/* The DSP supplies aligned groups of eight samples. All six operands
+	   are modified by the loop, and PMULTH/PMADDH overwrite HI/LO. Describe
+	   that contract even with noinline: input-only operands permit aliases
+	   and fail to describe the stores to the compiler. */
 	__asm__ __volatile__ (
 		"pcpyh       %4,%4           \n"
 		"pcpyld      %4,%4,%4           \n"
@@ -742,7 +745,7 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 
 		".set noreorder \n"
 		".align 3           \n"
-		"_MixEchoPS2_Loop:         \n"
+		"1:         \n"
 		"lq          $8,0x00(%1)     \n"    // $8 = 4x main samples
 		"lq          $9,0x10(%1)     \n"    // $9 = 4x main samples
 		"lq         $10,0x00(%2)     \n"    // $10  = 8x echo samples
@@ -772,14 +775,14 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 
 		"addiu      %3,%3,-8         \n"
 		"addiu      %1,%1,0x20       \n"
-		"bgtz       %3,_MixEchoPS2_Loop \n"
+		"bgtz       %3,1b \n"
 		"addiu      %2,%2,0x10       \n"
 
 		".set reorder \n"
 
+		: "+&r" (pOut), "+&r" (pMain), "+&r" (pEcho), "+&r" (nSamples), "+&r" (iMainVol), "+&r" (iEchoVol)
 		:
-		: "r" (pOut), "r" (pMain), "r" (pEcho), "r" (nSamples), "r" (iMainVol), "r" (iEchoVol)
-		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
+		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "hi", "lo", "memory"
 		);
 }
 #endif
