@@ -5,10 +5,13 @@ como urgentes; a orientação anterior de adiar travamentos não vale para as
 próximas etapas. Top Gear continua como workload autorizado. Nenhuma entrada
 abaixo significa que o problema já foi resolvido no aparelho.
 
-SNESticle: `main` em `6c6eb4a`, candidato de desempenho em `70347f8`,
+SNESticle: `main` em `6c6eb4a`, candidato de desempenho/perfil em `55fed6c`,
 [PR #97](https://github.com/ReyFxck/SNESticleRevive/pull/97).
-O normal/profile v2 entregue continua idêntico. Esta rodada não muda código
-de emulação, transporte ou apresentação do SNESticle.
+O pacote v2 anterior não foi sobrescrito. Candidatos novos permanecem separados:
+[RFAuds2 #98](https://github.com/ReyFxck/SNESticleRevive/pull/98) e
+[destino HDD de states #99](https://github.com/ReyFxck/SNESticleRevive/pull/99).
+A main não recebeu esses candidatos. O v3 amplia atribuição de custos,
+não demonstra 60 FPS nem correção dos travamentos posteriores.
 
 ## Caches da build normal v2
 
@@ -49,12 +52,12 @@ scanline e a coerência das escritas faz parte da equivalência.
 
 | Trabalho | Estado/evidência | Próxima verificação necessária |
 |---|---|---|
-| Mode 7 em movimento | Continua aberto após o retorno do usuário. Há otimizações gerais na PR, sem 60 FPS comprovados no aparelho. | Comparar normal v2 e profile v2 na mesma cena/configuração; separar FETCH, BG e OUT. Investigar histórico e dependências do caminho dominante antes de nova edição. |
-| Crash de Star Ocean | Correções gerais de MMC/FastROM e remapeamento já preparadas; não demonstram que o travamento posterior relatado foi corrigido. | Últimas linhas do crash, revisão exata do ELF, entrada e ponto da sequência; comparar execução EE com checkpoints portáteis. |
+| Mode 7 em movimento | Continua aberto após o retorno do usuário. Há otimizações gerais na PR, sem 60 FPS comprovados no aparelho. | Comparar normal e profile v3 na mesma cena/configuração; separar CPU, MDMA/HDMA, BEGIN/END e os estágios PPU. A foto 2608 deixa mais de 40 ms de CORE sem atribuição pelos medidores anteriores. Investigar histórico e dependências do caminho dominante antes de nova edição. |
+| Crash de Star Ocean | Correções gerais de MMC/FastROM e remapeamento já preparadas; não demonstram que o travamento posterior relatado foi corrigido. | Novo checkpoint no ponto do crash, revisão exata do ELF e sequência de entrada; comparar execução EE com checkpoints portáteis. |
 | Tela preta/travamento posterior de Tales | Recuperação geral do header da tradução resolve o boot no core portátil; o relato posterior permanece aberto. | Reproduzir após o diálogo no caminho PS2 e localizar CPU/APU/PPU/DMA/mapper envolvido. |
-| Spawn (USA), áudio na intro sem entrada | Ainda não reproduzido: essa ROM não foi fornecida. A correção geral de ganho de 2x foi feita antes, mas não comprova a causa em Spawn. | Capturar PCM antes/depois do mixer MMI, conversão e backend; distinguir clipping, PCM incorreto e falta de amostras no transporte. |
-| Trocar audsrv pelo RFAuds2 | Fonte localizado em [ReyFxck/RFAuds2](https://github.com/ReyFxck/RFAuds2), main `6787ef5`. O SNESticle ainda usa audsrv. | Integrar candidato de transporte por adapter `Aud_*`, preservando conversão/DSP/PCM para um A/B de backend. |
-| RFAuds2 assíncrono/completo | O main original usa `sceSifCallRpc` bloqueante. Candidato isolado `fix/async-pcm-transport` acrescenta envio NOWAIT, conclusão consultável e admissão parcial IOP sem espera por espaço. Compilou EE/IOP; fixtures de transporte passaram. | Adapter que retém blocos/caudas, service/poll durante trabalho útil, transições e medições no aparelho. Não chamar o módulo inteiro de concluído. |
+| Spawn (USA), áudio na intro sem entrada | ROM recebida. Intro sem entrada executou 10800 frames/180 s emulados no core portátil com mixer completo; clipping muito raro no PCM capturado. Isso não certifica o mixer MMI ou a reprodução PS2. | Capturar PCM antes/depois do mixer MMI, conversão e backend; distinguir clipping, PCM incorreto e falta de amostras no transporte. |
+| Trocar audsrv pelo RFAuds2 | Fonte localizado em [ReyFxck/RFAuds2](https://github.com/ReyFxck/RFAuds2), main `6787ef5`. O candidato #98 integra um adapter RFAuds2, mantendo audsrv como referência de comparação. O wrapper antigo descarta a cauda quando audsrv aceita menos bytes. | Adapter/fixtures e builds A/B prontos; validar SPU2/DMA/IRQ, menu/BGM, jogo, volume e transições no aparelho. A troca de backend não comprova sozinha o defeito de Spawn. |
+| RFAuds2 assíncrono/completo | O main original usa `sceSifCallRpc` bloqueante. Candidato isolado `fix/async-pcm-transport` acrescenta envio NOWAIT, conclusão consultável e admissão parcial IOP sem espera por espaço. Compilou EE/IOP; fixtures de transporte passaram. | Adapter #98 retém PCM/caudas em FIFO EE de 32 KiB; envio e telemetria são assíncronos, controles ocasionais síncronos. Fixture de 249680 frames e ASan/UBSan passam. FAT/Slim e playback prolongado ainda pendentes; não chamar o módulo inteiro de concluído. |
 | Super FX, issue #31 | Core funcional existe; o scheduler ainda usa 384/960 **instruções** por linha como aproximação dos clocks. | Auditar CLSR, custos de instrução/memória/cache/multiplicação e sincronização/IRQ; depois medir custo EE de dispatch, PLOT/RPIX e acessos. |
 | Completar chips existentes | A presença de classes/flags não certifica implementação completa. Lacunas confirmadas abaixo. | Inventário por comandos, registradores, memória, timing, IRQ e serialização; fixtures de comportamento antes de otimização. |
 
@@ -63,8 +66,9 @@ e os relatórios [AUDIT](WORKLOAD_AUDIT_2026-10-01.md) e
 [FOLLOWUP](WORKLOAD_FOLLOWUP_2026-10-01.md). O arquivo original completo não
 está mais neste executor após a recuperação do ambiente. A análise agregada
 de custos não identifica sozinha a exceção nem as últimas instruções de um
-crash. Para essa investigação é necessário recuperar o arquivo integral,
-preferencialmente também um log da build que reproduz o travamento.
+crash. O usuário informou que também perdeu o original. A investigação segue com
+novos traces e o HUD v3; não depende de recuperar esse arquivo. A exceção
+específica posterior ainda precisa ser reproduzida no caminho PS2.
 
 ### Super FX: opinião da issue e comportamento observável
 
@@ -103,17 +107,17 @@ uma diferença específica e demonstrada.
 |---|---|
 | Chips ausentes | Usar o inventário acima e criar etapas independentes; a detecção de um chip não pode simular suporte funcional. |
 | SMB | Integração de rede/smbman já existe, com estados separados para DHCP, driver, protocolo, autenticação, share e browse. Protocolo atual é SMB1/NT1. Reproduzir o erro e a configuração do cliente/servidor antes de trocar componentes. |
-| Destinos de save state | Código enumera mass0/mass1/mass, MC e MMCE e considera a origem da ROM. PFS/HDD depende da origem/mapeamento da ROM; isso pode limitar o que aparece. Auditar enumeração e mount sem remover a exclusão de destinos somente leitura. Coprocessadores sem estado serializado são outra pendência distinta. |
+| Destinos de save state | Código enumera mass0/mass1/mass, MC e MMCE e considera a origem da ROM. Candidato #99 permite usar um PFS já montado para escrita mesmo com ROM em USB/MC/MMCE; preserva remapeamento da origem HDD e rejeita mount ausente/reset. Explicit picker ainda lista apenas mass0/mass1/mass, enquanto Auto aceita mass2+ da origem. Enumeração completa e validação física permanecem abertas. Coprocessadores sem estado serializado são outra pendência distinta. |
 
 ## Prioridade baixa
 
 | Trabalho | Dependência |
 |---|---|
 | CRT-easymode opcional on/off | Definir resultado visual e custo compatíveis com o GS; validar antes de ativar por padrão. |
-| Substituir infoNES pelo port MesenCE | Fonte/branch do port PS2 ainda não localizado. Foi solicitado o link ao usuário. Comparar orçamento EE/RAM, áudio, interface e saves antes da integração. |
+| Substituir infoNES pelo port MesenCE | ZIP recebido contém somente mesence-ps2.elf e audsrv.irx, sem fontes. O link do repositório/branch do port foi solicitado ao usuário. Comparar orçamento EE/RAM, áudio, interface e saves antes da integração. |
 
 FPS on/off e diagnóstico no menu, pedido anterior, continuam registrados
-para a etapa de configuração. O profile v2 atual é uma build separada.
+para a etapa de configuração. O profile v3 continua sendo uma build separada; a versão RFA também mostra filas EE/IOP e UND.
 
 ## Critério de entrega
 
@@ -124,3 +128,15 @@ efeitos ou áudio para alcançar um contador de FPS. Ganhos de host não
 demonstram FPS no PS2. Integração na main depende de estabilidade e das
 melhorias aprovadas; a build de desempenho e o candidato RFAuds2 ficam
 separados nesta etapa.
+
+## Evidência desta etapa
+
+- [Relatório do adapter RFAuds2](https://github.com/ReyFxck/SNESticleRevive/blob/fix/rfauds2-backend/docs/RFAUDS2_BACKEND_2026-10-02.md).
+- [Correção isolada do destino HDD](https://github.com/ReyFxck/SNESticleRevive/blob/fix/mounted-state-roots/docs/SAVE_STATE_MOUNTED_HDD_2026-10-02.md).
+- [Transportes/telemetria do módulo](https://github.com/ReyFxck/RFAuds2/pull/1).
+
+As fotos são do NetherSX2 e não medem um PS2 físico. Quatro ELFs comparáveis
+(audsrv/RFAuds2, normal/profile) e um ELF separado para HDD foram compilados.
+Os testes demonstram propriedade/ordem/admissão de PCM e o resolver HDD, não
+conclusão da lista inteira. Nenhuma sonda privada de captura PCM foi incluída
+na produção. Chips, SMB, CRT/Mesen e os defeitos restantes mantêm suas etapas.
