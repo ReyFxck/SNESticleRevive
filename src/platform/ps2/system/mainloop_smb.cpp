@@ -7,6 +7,8 @@
  */
 
 #include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +56,14 @@ static char s_config_path[512] = "";
 static const char *s_mass_config_paths[] = {
     "mass0:/SNESticle/SMB.CNF",
     "mass1:/SNESticle/SMB.CNF",
+    "mass2:/SNESticle/SMB.CNF",
+    "mass3:/SNESticle/SMB.CNF",
+    "mass4:/SNESticle/SMB.CNF",
+    "mass5:/SNESticle/SMB.CNF",
+    "mass6:/SNESticle/SMB.CNF",
+    "mass7:/SNESticle/SMB.CNF",
+    "mass8:/SNESticle/SMB.CNF",
+    "mass9:/SNESticle/SMB.CNF",
     "mass:/SNESticle/SMB.CNF",
     NULL
 };
@@ -102,9 +112,11 @@ static int SmbCopyValue(char *destination, size_t destinationSize,
 static int SmbParseInteger(const char *value, int *result)
 {
     char *end;
+    errno = 0;
     long number = strtol(value, &end, 10);
 
-    if (!value[0] || *end != '\0')
+    if (!value[0] || *end != '\0' || errno == ERANGE ||
+        number < INT_MIN || number > INT_MAX)
         return -1;
     *result = (int)number;
     return 0;
@@ -290,6 +302,12 @@ static int SmbLoadConfig(SmbConfigT *config)
     static const char *ownedMemoryCardPaths[] = {
         "mc0:/SNESticle/SMB.CNF",
         "mc1:/SNESticle/SMB.CNF",
+        "mc2:/SNESticle/SMB.CNF",
+        "mc3:/SNESticle/SMB.CNF",
+        "mc4:/SNESticle/SMB.CNF",
+        "mc5:/SNESticle/SMB.CNF",
+        "mc6:/SNESticle/SMB.CNF",
+        "mc7:/SNESticle/SMB.CNF",
         NULL
     };
     static const char *sharedMemoryCardPaths[] = {
@@ -333,7 +351,8 @@ static int SmbLoadConfig(SmbConfigT *config)
        only after SMB was explicitly requested, so boot remains lazy. */
     if ((MassStorageIsEnabled() || Mx4sioIsEnabled()) &&
         (UsbBdmIsLoaded() || Mx4sioIsLoaded() ||
-         (MassStorageIsEnabled() && UsbBdmLoadEmbeddedIrx() >= 0)))
+         (MassStorageIsEnabled() && UsbBdmLoadEmbeddedIrx() >= 0) ||
+         (Mx4sioIsEnabled() && Mx4sioLoadIfEnabled() >= 0 && Mx4sioIsLoaded())))
     {
         for (index = 0; s_mass_config_paths[index]; ++index)
         {
@@ -471,8 +490,13 @@ static int SmbWriteConfigFile(const char *path, const SmbConfigT *config)
     if (!ok)
         return -1;
 
-    strncpy(s_config_path, path, sizeof(s_config_path) - 1);
-    s_config_path[sizeof(s_config_path) - 1] = '\0';
+    /* Saving to the previously selected file passes s_config_path itself.
+       strncpy on identical buffers is undefined, even without truncation. */
+    if (path != s_config_path)
+    {
+        strncpy(s_config_path, path, sizeof(s_config_path) - 1);
+        s_config_path[sizeof(s_config_path) - 1] = '\0';
+    }
     return 0;
 }
 
@@ -483,6 +507,12 @@ int SmbSaveConfig(const SmbConfigT *source)
     const char *paths[] = {
         "mc0:/SNESticle/SMB.CNF",
         "mc1:/SNESticle/SMB.CNF",
+        "mc2:/SNESticle/SMB.CNF",
+        "mc3:/SNESticle/SMB.CNF",
+        "mc4:/SNESticle/SMB.CNF",
+        "mc5:/SNESticle/SMB.CNF",
+        "mc6:/SNESticle/SMB.CNF",
+        "mc7:/SNESticle/SMB.CNF",
         NULL
     };
     int index;
@@ -524,7 +554,10 @@ int SmbSaveConfig(const SmbConfigT *source)
     /* No memory card and a read-only boot device (usually an ISO): fall back
        to every enabled writable storage family. mass: is kept after mass0/1
        for older drivers that expose only the unnumbered alias. */
-    if (MassStorageIsEnabled() || Mx4sioIsEnabled())
+    if ((MassStorageIsEnabled() || Mx4sioIsEnabled()) &&
+        (UsbBdmIsLoaded() || Mx4sioIsLoaded() ||
+         (MassStorageIsEnabled() && UsbBdmLoadEmbeddedIrx() >= 0) ||
+         (Mx4sioIsEnabled() && Mx4sioLoadIfEnabled() >= 0 && Mx4sioIsLoaded())))
     {
         for (index = 0; s_mass_config_paths[index]; ++index)
             if (SmbWriteConfigFile(s_mass_config_paths[index], &config) == 0)
