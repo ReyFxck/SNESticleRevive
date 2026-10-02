@@ -1383,14 +1383,6 @@ static void _RenderBGData_O(Uint8 *pLine8, Uint8 *pSrc8, SNMaskT *pBGMask, Uint3
 		uMask = *pMaskData;
 		pMaskData++;
 
-		// write 0 to output
-		__asm__ __volatile__ (
-			"sq        $0,0x00(%0)     \n"
-			:
-			: "r" (pLine8)
-			: "memory"
-			);
-
 		if (uMask)
 		{
 			/* GCC 15 r5900 TI-mode split: keep 128-bit value in fixed
@@ -1428,6 +1420,18 @@ static void _RenderBGData_O(Uint8 *pLine8, Uint8 *pSrc8, SNMaskT *pBGMask, Uint3
 					: "$8", "$9", "memory"
 					);
 			}
+		}
+
+		else
+		{
+			/* Both nonempty paths write all 16 pixels, including transparent
+			   zeroes. Clear only the empty block instead of storing twice. */
+			__asm__ __volatile__ (
+				"sq        $0,0x00(%0)     \n"
+				:
+				: "r" (pLine8)
+				: "memory"
+				);
 		}
 
 		pSrc8+=16;
