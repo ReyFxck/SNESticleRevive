@@ -82,9 +82,9 @@ endif
 SNES_DIAG_ENABLED := $(if $(filter-out 0,$(SNES_DIAGNOSTICS)),1,0)
 SNES_DIAG_DEEP := $(if $(filter 2,$(SNES_DIAGNOSTICS)),1,0)
 
-# A separate target-side HUD measures frames and coarse stages without the
-# per-instruction/per-pixel diagnostic counters or continuous SIO logging.
-SNES_TARGET_PROFILE ?= 0
+# Optional timing is controlled in Configurations and off at startup.
+# Deep diagnostic builds retain their separate compile-time probes.
+SNES_TARGET_PROFILE ?= $(if $(filter 0,$(SNES_DIAGNOSTICS)),1,0)
 ifneq ($(filter 0 1,$(SNES_TARGET_PROFILE)),$(SNES_TARGET_PROFILE))
 $(error SNES_TARGET_PROFILE must be 0 or 1)
 endif

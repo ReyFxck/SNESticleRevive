@@ -15,6 +15,7 @@
 #include "mainloop_bgm.h"
 #include "mainloop_safe_frameskip.h"
 #include "mainloop_target_profile.h"
+#include "mainloop_telemetry.h"
 
 #include "types.h"
 #include "console.h"
@@ -259,7 +260,7 @@ void MainLoopSafeFrameskipAfterFlip()
 #if SNES_TARGET_PROFILE
 static void _MainLoopDrawTargetProfile()
 {
-    if (_bMenu || _pSystem != _pSnes || _MainLoop_BlackScreen) return;
+    if (!SnesTargetProfileIsEnabled() || _bMenu || _pSystem != _pSnes || _MainLoop_BlackScreen) return;
     const MainLoopTargetProfileSnapshotT *p = &g_MainLoopTargetProfile;
     FontSelect(2);
     Int32 h = FontGetHeight() + 1;
@@ -324,7 +325,8 @@ Uint32 _MainLoop_DiagFlipCount;
 void MainLoopRender()
 {
 #if SNDBG_LOG || SNES_TARGET_PROFILE
-    Uint32 uFrontendStart = ProfCtrGetCycle();
+    Bool measure = (SNDBG_LOG || SnesTargetProfileIsEnabled()) ? TRUE : FALSE;
+    Uint32 uFrontendStart = measure ? ProfCtrGetCycle() : 0;
 #endif
 	static Uint32 _iFrame=0;
         static int whichdrawbuf = 0;
@@ -551,19 +553,29 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 	}
 	#endif
 
+    if (MainLoopFPSIsEnabled() && !_bMenu && _pSystem && !_MainLoop_BlackScreen)
+    {
+        FontSelect(2); FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        if (g_MainLoopFPS.Ready)
+            FontPrintf(6, 12, "EMU %u.%u DRAW %u.%u PS2 %u.%u",
+                (unsigned)(g_MainLoopFPS.SourceRate10 / 10), (unsigned)(g_MainLoopFPS.SourceRate10 % 10),
+                (unsigned)(g_MainLoopFPS.DrawRate10 / 10), (unsigned)(g_MainLoopFPS.DrawRate10 % 10),
+                (unsigned)(g_MainLoopFPS.PresentRate10 / 10), (unsigned)(g_MainLoopFPS.PresentRate10 % 10));
+        else FontPrintf(6, 12, "FPS...");
+    }
     #if SNES_TARGET_PROFILE
     _MainLoopDrawTargetProfile();
     #endif
 
 #if SNDBG_LOG || SNES_TARGET_PROFILE
-    Uint32 uSubmitStart = ProfCtrGetCycle();
-    _MainLoop_DiagPrepCount = uSubmitStart - uFrontendStart;
+    Uint32 uSubmitStart = measure ? ProfCtrGetCycle() : 0;
+    _MainLoop_DiagPrepCount = measure ? uSubmitStart - uFrontendStart : 0;
 #endif
     PROF_ENTER("GPFlush");
     GPFifoFlush();
     PROF_LEAVE("GPFlush");
 #if SNDBG_LOG || SNES_TARGET_PROFILE
-    _MainLoop_DiagSubmitCount = ProfCtrGetCycle() - uSubmitStart;
+    _MainLoop_DiagSubmitCount = measure ? ProfCtrGetCycle() - uSubmitStart : 0;
 #endif
 
     /* gsKit_sync_flip waits for vsync, swaps the display buffer
@@ -573,11 +585,11 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
     PROF_ENTER("WaitVBlank");
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle();
 #if SNDBG_LOG || SNES_TARGET_PROFILE
-    Uint32 uFlipStart = ProfCtrGetCycle();
+    Uint32 uFlipStart = measure ? ProfCtrGetCycle() : 0;
 #endif
     GSK_SyncFlip();
 #if SNDBG_LOG || SNES_TARGET_PROFILE
-    _MainLoop_DiagFlipCount = ProfCtrGetCycle() - uFlipStart;
+    _MainLoop_DiagFlipCount = measure ? ProfCtrGetCycle() - uFlipStart : 0;
 #endif
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle() - _uVblankCycle;
 	MainLoopSafeFrameskipAfterFlip();

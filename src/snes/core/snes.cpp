@@ -23,6 +23,7 @@
 
 #if SNES_TARGET_PROFILE
 SnesTargetProfileFrameT g_SnesTargetProfile;
+Bool g_SnesTargetProfileEnabled = FALSE;
 #endif
 
 #ifndef SNESTICLE_ROMLAB

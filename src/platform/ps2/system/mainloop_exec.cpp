@@ -53,8 +53,11 @@ Bool _ExecuteSnes(CRenderSurface *pSurface, CMixBuffer *pMixBuffer, Emu::SysInpu
 		    _pSystem->ExecuteFrame(pInput, pSurface, pMixBuffer, eMode);
 		    SNTARGET_END(Core, _targetCore);
 #if SNES_TARGET_PROFILE
-            g_SnesTargetProfile.SourceFrames++;
-            if (pSurface) g_SnesTargetProfile.RenderedFrames++;
+            if (SnesTargetProfileIsEnabled())
+            {
+                g_SnesTargetProfile.SourceFrames++;
+                if (pSurface) g_SnesTargetProfile.RenderedFrames++;
+            }
 #endif
 		    PROF_LEAVE("SnesExecuteFrame");
             #else

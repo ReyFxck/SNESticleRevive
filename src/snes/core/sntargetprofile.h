@@ -37,10 +37,18 @@ _INLINE Uint32 SnesTargetProfileMillis10(Uint64 uCount, Uint32 nIterations)
 #if SNES_TARGET_PROFILE
 #include "profctr.h"
 extern SnesTargetProfileFrameT g_SnesTargetProfile;
-#define SNTARGET_BEGIN(name) Uint32 name = ProfCtrGetCycle()
+extern Bool g_SnesTargetProfileEnabled;
+_INLINE Bool SnesTargetProfileIsEnabled() { return g_SnesTargetProfileEnabled; }
+_INLINE void SnesTargetProfileSetEnabled(Bool enabled) { g_SnesTargetProfileEnabled = enabled; }
+#define SNTARGET_BEGIN(name) \
+	Bool name##_enabled = g_SnesTargetProfileEnabled; \
+	Uint32 name = name##_enabled ? ProfCtrGetCycle() : 0
 #define SNTARGET_END(field, name) \
-	(g_SnesTargetProfile.field += ProfCtrGetCycle() - (name))
+	do { if (name##_enabled) \
+		g_SnesTargetProfile.field += ProfCtrGetCycle() - (name); } while (0)
 #else
+_INLINE Bool SnesTargetProfileIsEnabled() { return FALSE; }
+_INLINE void SnesTargetProfileSetEnabled(Bool enabled) { (void)enabled; }
 #define SNTARGET_BEGIN(name)
 #define SNTARGET_END(field, name)
 #endif

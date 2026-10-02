@@ -88,6 +88,9 @@ typedef struct
 static const I18nPhraseT s_Phrases[] =
 {
     { "TV Standard", "Padrao de TV", "Estandar de TV", "电视制式" },
+    { "FPS Counter", "Contador FPS", "Contador FPS", "帧率显示" },
+    { "Diagnostics", "Diagnostico", "Diagnostico", "诊断" },
+    { "Build required", "Outra build", "Otra build", "需要诊断版本" },
     { "Auto (game)", "Auto (jogo)", "Auto (juego)", "自动（游戏）" },
     { "Console BIOS", "BIOS do Console", "BIOS de Consola", "主机 BIOS" },
     { "NTSC 60 Hz", "NTSC 60 Hz", "NTSC 60 Hz", "NTSC 60 Hz" },

@@ -1,7 +1,15 @@
 /* Check target-clock units and rendered/source cadence independently of FPS
    or wall-clock timing on the host running this test. */
 #include <cstdio>
+#include "types.h"
+/* A controlled Count source proves that Off never samples the timer. */
+#define _PROFCTR_H
+#define SNES_TARGET_PROFILE 1
+static Uint32 countReads, fakeCount;
+static Uint32 ProfCtrGetCycle() { countReads++; return fakeCount; }
 #include "sntargetprofile.h"
+SnesTargetProfileFrameT g_SnesTargetProfile = {};
+Bool g_SnesTargetProfileEnabled = FALSE;
 
 static int failures;
 static void Check(const char *name, Uint32 got, Uint32 expected)
@@ -15,6 +23,24 @@ static void Check(const char *name, Uint32 got, Uint32 expected)
 
 int main()
 {
+	for (int i = 0; i < 10000; i++)
+	{
+		SNTARGET_BEGIN(off);
+		SNTARGET_END(CPU, off);
+	}
+	Check("disabled timer reads", countReads, 0);
+	Check("disabled accumulation", g_SnesTargetProfile.CPU, 0);
+	SnesTargetProfileSetEnabled(TRUE);
+	fakeCount = 0xfffffff0u;
+	SNTARGET_BEGIN(on);
+	fakeCount = 0x20;
+	SNTARGET_END(CPU, on);
+	Check("enabled timer reads", countReads, 2);
+	Check("enabled wrap delta", g_SnesTargetProfile.CPU, 0x30);
+	SnesTargetProfileSetEnabled(FALSE);
+	SNTARGET_BEGIN(offAgain);
+	SNTARGET_END(CPU, offAgain);
+	Check("disabled again", countReads, 2);
 	const Uint64 second = SNTARGET_COUNT_HZ;
 	/* Raw Count fixtures must not be derived from the implementation's
 	   clock constant: that would let a bus-clock mixup pass again. */
@@ -38,6 +64,6 @@ int main()
 	Check("count wrap cadence", SnesTargetProfileRate10(120, (Uint32)(end - start)), 600);
 	Check("window total wider than 32 bits", SnesTargetProfileMillis10(second * 60, 60), 10000);
 	if (failures) return 1;
-	std::puts("targetprofile_test: PASS (clock units, source/render cadence, wrap, wide totals)");
+	std::puts("targetprofile_test: PASS (runtime off/on, clock units, cadence, wrap, wide totals)");
 	return 0;
 }

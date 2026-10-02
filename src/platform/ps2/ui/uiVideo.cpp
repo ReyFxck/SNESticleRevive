@@ -28,6 +28,8 @@ extern "C" {
 #include "mainloop_smb.h"
 #include "mainloop_safe_frameskip.h"
 #include "audmixbuffer.h"
+#include "mainloop_telemetry.h"
+#include "sntargetprofile.h"
 #include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
 #include "snppucolor.h"
 #include "../i18n/i18n.h"
@@ -36,12 +38,12 @@ extern "C" {
 extern Char _SramPath[256];
 extern TextureT _OutTex;
 
-#define VIDEO_ITEM_COUNT 21
+#define VIDEO_ITEM_COUNT 23
 
 /* Persistence                                                         */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 22
+#define VIDEOCFG_VERSION 23
 
 typedef struct
 {
@@ -68,6 +70,35 @@ typedef struct
 	Int32  scanlines;    /* 0=off, 1=CRT-style overlay                  */
 	Int32  language;     /* I18nLanguageE                                */
 	Int32  tvstandard;   /* GSK_TV_STANDARD_*                            */
+} VideoCfgV22T;
+
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;     /* volume da trilha de menu: 0=off, 1..100 */
+	Int32  bgmrate;    /* frequencia de sintese da trilha (Hz)     */
+	Int32  gamevol;    /* volume do audio do jogo (SNES/NES): 0..100 */
+	Int32  hddenable;  /* suporte ao HD interno (hdd0:): 0=off, 1=on  */
+	Int32  mmceenable; /* suporte a MMCE (mmce0/1): 0=off, 1=on       */
+	Int32  massenable; /* mass/USB (mass0/1): 0=off, 1=on             */
+	Int32  smbenable;  /* historical host slot; now smb: 0=off, 1=on */
+	Int32  mx4sioenable; /* MX4SIO (SD via SIO2): 0=off, 1=on         */
+	Int32  colorprofile; /* SNPPU_COLOR_PROFILE_*                     */
+	Int32  frameskip;    /* recuperacao adaptativa: 0=off, 1=on       */
+	Int32  hostenable;   /* emulator/ps2link HostFS (host:): 0=off,1=on */
+	Int32  texturefilter;/* 0=Sharp/nearest, 1=Smooth/linear            */
+	Int32  scanlines;    /* 0=off, 1=CRT-style overlay                  */
+	Int32  language;     /* I18nLanguageE                                */
+	Int32  tvstandard;   /* GSK_TV_STANDARD_*                            */
+	Int32 showfps;
+	Int32 diagnostics;
 } VideoCfgT;
 
 /* v21 is the exact prefix before TV-standard policy was added. */
@@ -255,6 +286,8 @@ void VideoSettingsSave(void)
 	cfg.scanlines = g_GskScanlines ? 1 : 0;
 	cfg.language = I18nGetLanguage();
 	cfg.tvstandard = g_GskTvStandard;
+	cfg.showfps = MainLoopFPSIsEnabled() ? 1 : 0;
+	cfg.diagnostics = SnesTargetProfileIsEnabled() ? 1 : 0;
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
@@ -265,6 +298,7 @@ void VideoSettingsSave(void)
 void VideoSettingsLoad(void)
 {
 	VideoCfgT cfg;
+	VideoCfgV22T oldcfg22;
 	VideoCfgV21T oldcfg21;
 	VideoCfgV20T oldcfg20;
 	VideoCfgV19T oldcfg19;
@@ -286,6 +320,16 @@ void VideoSettingsLoad(void)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
 		}
+		else if (header.version == 22)
+        {
+            memset(&oldcfg22, 0, sizeof(oldcfg22));
+            if (MemCardReadFile(path, (Uint8 *)&oldcfg22, sizeof(oldcfg22)))
+            {
+                memcpy(&cfg, &oldcfg22, sizeof(oldcfg22));
+                cfg.version = VIDEOCFG_VERSION;
+                loaded = TRUE;
+            }
+        }
 		else if (header.version == 21)
 		{
 			memset(&oldcfg21, 0, sizeof(oldcfg21));
@@ -395,6 +439,8 @@ void VideoSettingsLoad(void)
 		if (cfg.covers == 0 || cfg.covers == 1) CoverSetEnabled(cfg.covers ? TRUE : FALSE);
 		if (cfg.bgmvol >= 0 && cfg.bgmvol <= 100) BgmSetVolume(cfg.bgmvol);
 		if (cfg.bgmrate >= 8000 && cfg.bgmrate <= 48000) BgmSetRate(cfg.bgmrate);
+		MainLoopFPSSetEnabled(cfg.showfps == 1 ? TRUE : FALSE);
+		SnesTargetProfileSetEnabled(cfg.diagnostics == 1 ? TRUE : FALSE);
 		if (cfg.gamevol >= 0 && cfg.gamevol <= 100) AudMixGameSetVolume(cfg.gamevol);
 		if (cfg.hddenable == 0 || cfg.hddenable == 1) HddSupportSetEnabled(cfg.hddenable);
 		if (cfg.mmceenable == 0 || cfg.mmceenable == 1) MmceSupportSetEnabled(cfg.mmceenable);
@@ -470,13 +516,13 @@ static const Int32 _VideoItemY[] =
 	14, 26, 38, 50, 62, 74, 86, 98, 110,  /* Screen */
 	140, 152,                               /* Interface */
 	182, 194, 206,                          /* Audio */
-	236,                                    /* Performance */
-	266, 278, 290, 302, 314, 326           /* Storage */
+	236, 248, 260,                          /* Performance */
+	290, 302, 314, 326, 338, 350           /* Storage */
 };
 
 #define VIDEO_VIEW_TOP   34
 #define VIDEO_VIEW_BOTTOM 181
-#define VIDEO_CONTENT_H 338
+#define VIDEO_CONTENT_H 362
 
 static Int32 _VideoScrollForSelection(Int32 sel)
 {
@@ -646,19 +692,29 @@ void CVideoScreen::Draw()
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[14] - scroll, 14, m_iSelect,
 	          I18nGetText(I18N_FRAMESKIP), MainLoopSafeFrameskipIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 
+    _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[15] - scroll, 15, m_iSelect,
+              I18nTranslate("FPS Counter"), MainLoopFPSIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+    _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
+              I18nTranslate("Diagnostics"),
+#if SNES_TARGET_PROFILE
+              SnesTargetProfileIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+#else
+              I18nTranslate("Build required"));
+#endif
+
 	/* Storage */
-	_VideoSection(VIDEO_VIEW_TOP + 252 - scroll, I18nGetText(I18N_STORAGE_DEVICES));
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[15] - scroll, 15, m_iSelect,
-	          I18nGetText(I18N_MASS_USB), MassStorageIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
-	          I18nGetText(I18N_HDD_SUPPORT), HddSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoSection(VIDEO_VIEW_TOP + 276 - scroll, I18nGetText(I18N_STORAGE_DEVICES));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll, 17, m_iSelect,
-	          I18nGetText(I18N_MMCE_CARDS), _VideoMmceStatus());
+	          I18nGetText(I18N_MASS_USB), MassStorageIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
-	          I18nGetText(I18N_MX4SIO_SD), _VideoMx4sioStatus());
+	          I18nGetText(I18N_HDD_SUPPORT), HddSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[19] - scroll, 19, m_iSelect,
-	          I18nGetText(I18N_HOSTFS_EMU), HostFsSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	          I18nGetText(I18N_MMCE_CARDS), _VideoMmceStatus());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[20] - scroll, 20, m_iSelect,
+	          I18nGetText(I18N_MX4SIO_SD), _VideoMx4sioStatus());
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[21] - scroll, 21, m_iSelect,
+	          I18nGetText(I18N_HOSTFS_EMU), HostFsSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[22] - scroll, 22, m_iSelect,
 	          I18nGetText(I18N_SMB_NETWORK), I18nTranslate(SmbGetStatusText()));
 
 	UiChromeScroll(scroll > 0,
@@ -693,6 +749,8 @@ static void _VideoResetDefaults()
 	g_GskDispOffY = 0;
 	g_GskTextureFilter = 0;
 	g_GskScanlines = 0;
+	MainLoopFPSSetEnabled(FALSE);
+	SnesTargetProfileSetEnabled(FALSE);
 
 	GSK_SetWidescreen(0);
 	GSK_SetOverscan(0);
@@ -827,13 +885,19 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			MainLoopSafeFrameskipSetEnabled(
 				MainLoopSafeFrameskipIsEnabled() ? FALSE : TRUE);
 			break;
-		case 15:
+        case 15:
+            MainLoopFPSSetEnabled(MainLoopFPSIsEnabled() ? FALSE : TRUE);
+            break;
+        case 16:
+            SnesTargetProfileSetEnabled(SnesTargetProfileIsEnabled() ? FALSE : TRUE);
+            break;
+		case 17:
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
-		case 16:
+		case 18:
 			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
-		case 17:
+		case 19:
 			MmceSupportSetEnabled(!MmceSupportIsEnabled());
 			if (MmceSupportIsEnabled())
 			{
@@ -842,7 +906,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 18:
+		case 20:
 			Mx4sioSetEnabled(!Mx4sioIsEnabled());
 			if (Mx4sioIsEnabled())
 			{
@@ -851,10 +915,10 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 19:
+		case 21:
 			HostFsSupportSetEnabled(!HostFsSupportIsEnabled());
 			break;
-		case 20:
+		case 22:
 			if (SmbSupportIsEnabled())
 			{
 				BgmIOBegin();
