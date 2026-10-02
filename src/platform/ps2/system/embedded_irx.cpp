@@ -470,6 +470,11 @@ extern "C" int HddSupportIsEnabled(void)
     return s_hdd_enabled;
 }
 
+extern "C" int HddIsMounted(void)
+{
+    return s_hdd_enabled && s_hdd_loaded && s_hdd_mounted[0];
+}
+
 extern "C" void HddSupportSetEnabled(int enabled)
 {
     s_hdd_enabled = enabled ? 1 : 0;

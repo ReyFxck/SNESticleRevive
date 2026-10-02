@@ -97,6 +97,9 @@ int  UsbBdmGetLastError(void);
 int  HddSupportIsEnabled(void);
 void HddSupportSetEnabled(int enabled);
 int  HddLoadEmbeddedIrx(void);
+/* A writable PFS partition already mounted by this runtime. Query only;
+   never starts a driver or chooses/mounts a partition. Reset clears it. */
+int  HddIsMounted(void);
 
 /* MMCE (MemCard PRO2 / SD2PSX via mmceman) -> mmce0:/mmce1:.  O driver e'
    carregado sob demanda.  Depois da carga, cada porta e' validada com o
