@@ -108,6 +108,14 @@ _INLINE Uint32 SnesPPUMode7PixelByteOffset(Int32 x, Int32 y)
 	       (((Uint32)y >> 4) & 0x70u) | 1u;
 }
 
+_INLINE Uint8 SnesPPUMode7ByteHighBits(Uint64 uData)
+{
+	Uint32 lo = (Uint32)uData & 0x80808080u;
+	Uint32 hi = (Uint32)(uData >> 32) & 0x80808080u;
+	return (Uint8)(((lo * 0x00204081u) >> 28) |
+		(((hi * 0x00204081u) >> 28) << 4));
+}
+
 _INLINE Uint8 SnesPPUMode7RepeatPixel(const Uint8 *pVram,
 	Uint32 uTileAddr, Int32 x, Int32 y,
 	Uint32 &uLastTileAddr, Uint32 &uChrBase)
@@ -127,48 +135,77 @@ _INLINE void SnesPPUMode7FetchRepeat(
 	Uint32 uLastTileAddr = 0xFFFFFFFFu;
 	Uint32 uChrBase = 0;
 
-	/* A/B/C/D are signed 16-bit; horizontal flip can also produce +32768.
-	   Over three steps that range cannot cross a complete 1024-pixel map.
-	   Equal endpoint tile addresses therefore prove that all four pixels
-	   use the same tile, even across the wrapped coordinate boundary.
-	   Keep the scalar path for other callers and the last 0..3 pixels. */
-	if ((Uint32)dx + 32768u <= 65536u &&
-	    (Uint32)dy + 32768u <= 65536u)
+	/* Pack x/y into one 64-bit accumulator. Bias x by a multiple of the
+	   1024-pixel wrap period, then compensate the low-word carry of a
+	   negative dx in the high-word increment. The guard leaves ample
+	   headroom for all 256 signed-16-bit steps; no cross-word overflow can
+	   change y. Endpoint equality still proves a shared tile for four dots.
+	   Unusual caller ranges retain the scalar path below. */
+	if ((Uint32)dx + 32768u <= 65536u && (Uint32)dy + 32768u <= 65536u &&
+	    nPixels <= 256 && (Uint32)x + 0x20000000u < 0x40000000u)
 	{
+		Uint64 xy = ((Uint64)(Uint32)y << 32) | ((Uint32)x + 0x40000000u);
+		Uint64 step = ((Uint64)(Uint32)(dy - (dx < 0)) << 32) | (Uint32)dx;
 		while (nPixels >= 4)
 		{
-			Int32 x1 = x + dx, y1 = y + dy;
-			Int32 x2 = x1 + dx, y2 = y1 + dy;
-			Int32 x3 = x2 + dx, y3 = y2 + dy;
-			Uint32 uFirstTile = SnesPPUMode7TileByteAddress(x, y);
-			Uint32 uLastTile = SnesPPUMode7TileByteAddress(x3, y3);
-
-			if (uFirstTile == uLastTile)
+#if defined(__GNUC__)
+			/* Prevent GCC from replacing the induction with __muldi3 on
+			   R5900, which has native 64-bit add but no DMULT instruction. */
+			__asm__ __volatile__("" : "+r"(xy));
+#endif
+			Uint64 p1 = xy + step, p2 = p1 + step, p3 = p2 + step;
+			Uint32 first = ((xy >> 35) & 0x7F00u) | ((xy >> 10) & 0xFEu);
+			Uint32 last = ((p3 >> 35) & 0x7F00u) | ((p3 >> 10) & 0xFEu);
+			if (first == last)
 			{
-				pLine[0] = SnesPPUMode7RepeatPixel(pVram, uFirstTile,
-					x, y, uLastTileAddr, uChrBase);
-				pLine[1] = pVram[uChrBase | SnesPPUMode7PixelByteOffset(x1, y1)];
-				pLine[2] = pVram[uChrBase | SnesPPUMode7PixelByteOffset(x2, y2)];
-				pLine[3] = pVram[uChrBase | SnesPPUMode7PixelByteOffset(x3, y3)];
+				if (first != uLastTileAddr)
+				{
+					uChrBase = (Uint32)pVram[first] << 7;
+					uLastTileAddr = first;
+				}
+				pLine[0] = pVram[uChrBase | ((xy >> 7) & 0x0Eu) | ((xy >> 36) & 0x70u) | 1u];
+				pLine[1] = pVram[uChrBase | ((p1 >> 7) & 0x0Eu) | ((p1 >> 36) & 0x70u) | 1u];
+				pLine[2] = pVram[uChrBase | ((p2 >> 7) & 0x0Eu) | ((p2 >> 36) & 0x70u) | 1u];
+				pLine[3] = pVram[uChrBase | ((p3 >> 7) & 0x0Eu) | ((p3 >> 36) & 0x70u) | 1u];
 			}
 			else
 			{
-				pLine[0] = SnesPPUMode7RepeatPixel(pVram, uFirstTile,
-					x, y, uLastTileAddr, uChrBase);
-				pLine[1] = SnesPPUMode7RepeatPixel(pVram,
-					SnesPPUMode7TileByteAddress(x1, y1), x1, y1,
-					uLastTileAddr, uChrBase);
-				pLine[2] = SnesPPUMode7RepeatPixel(pVram,
-					SnesPPUMode7TileByteAddress(x2, y2), x2, y2,
-					uLastTileAddr, uChrBase);
-				pLine[3] = SnesPPUMode7RepeatPixel(pVram, uLastTile,
-					x3, y3, uLastTileAddr, uChrBase);
+				Uint32 tile0 = ((xy >> 35) & 0x7F00u) | ((xy >> 10) & 0xFEu);
+				if (tile0 != uLastTileAddr)
+				{
+					uChrBase = (Uint32)pVram[tile0] << 7;
+					uLastTileAddr = tile0;
+				}
+				pLine[0] = pVram[uChrBase | ((xy >> 7) & 0x0Eu) | ((xy >> 36) & 0x70u) | 1u];
+				Uint32 tile1 = ((p1 >> 35) & 0x7F00u) | ((p1 >> 10) & 0xFEu);
+				if (tile1 != uLastTileAddr)
+				{
+					uChrBase = (Uint32)pVram[tile1] << 7;
+					uLastTileAddr = tile1;
+				}
+				pLine[1] = pVram[uChrBase | ((p1 >> 7) & 0x0Eu) | ((p1 >> 36) & 0x70u) | 1u];
+				Uint32 tile2 = ((p2 >> 35) & 0x7F00u) | ((p2 >> 10) & 0xFEu);
+				if (tile2 != uLastTileAddr)
+				{
+					uChrBase = (Uint32)pVram[tile2] << 7;
+					uLastTileAddr = tile2;
+				}
+				pLine[2] = pVram[uChrBase | ((p2 >> 7) & 0x0Eu) | ((p2 >> 36) & 0x70u) | 1u];
+				Uint32 tile3 = ((p3 >> 35) & 0x7F00u) | ((p3 >> 10) & 0xFEu);
+				if (tile3 != uLastTileAddr)
+				{
+					uChrBase = (Uint32)pVram[tile3] << 7;
+					uLastTileAddr = tile3;
+				}
+				pLine[3] = pVram[uChrBase | ((p3 >> 7) & 0x0Eu) | ((p3 >> 36) & 0x70u) | 1u];
+
 			}
-			x = x3 + dx;
-			y = y3 + dy;
+			xy = p3 + step;
 			pLine += 4;
 			nPixels -= 4;
 		}
+		x = (Int32)((Uint32)xy - 0x40000000u);
+		y = (Int32)(xy >> 32);
 	}
 
 	while (nPixels-- > 0)

@@ -2658,14 +2658,7 @@ static void _FetchMode7Priority(Uint8 *pPriority, Uint8 *pLine, Int32 nPixels)
 		// get priority bits
 		uPri64 = uData64 & uMask64;
 
-		uPriority|= (uPri64 >> ( 0x00 + 7)) << 0;
-		uPriority|= (uPri64 >> ( 0x08 + 7)) << 1;
-		uPriority|= (uPri64 >> ( 0x10 + 7)) << 2;
-		uPriority|= (uPri64 >> ( 0x18 + 7)) << 3;
-		uPriority|= (uPri64 >> ( 0x20 + 7)) << 4;
-		uPriority|= (uPri64 >> ( 0x28 + 7)) << 5;
-		uPriority|= (uPri64 >> ( 0x30 + 7)) << 6;
-		uPriority|= (uPri64 >> ( 0x38 + 7)) << 7;
+		uPriority = SnesPPUMode7ByteHighBits(uPri64);
 
 		// remove priority bits
 		uData64 &= ~uMask64;
@@ -2722,14 +2715,7 @@ static void _FetchMode7Opaque(Uint8 *pMask, Uint8 *pLine, Int32 nPixels)
 			// get priority bits
 			uData64 = uData64 & uMask64;
 
-			uOpaque|= (uData64 >> ( 0x00 + 7)) << 0;
-			uOpaque|= (uData64 >> ( 0x08 + 7)) << 1;
-			uOpaque|= (uData64 >> ( 0x10 + 7)) << 2;
-			uOpaque|= (uData64 >> ( 0x18 + 7)) << 3;
-			uOpaque|= (uData64 >> ( 0x20 + 7)) << 4;
-			uOpaque|= (uData64 >> ( 0x28 + 7)) << 5;
-			uOpaque|= (uData64 >> ( 0x30 + 7)) << 6;
-			uOpaque|= (uData64 >> ( 0x38 + 7)) << 7;
+			uOpaque = SnesPPUMode7ByteHighBits(uData64);
 
 			// store priority
 			pMask[0] = (Uint8)(uOpaque^0xFF);

@@ -223,8 +223,24 @@ static void CheckFetchBoundaries()
 					}
 }
 
+static void CheckByteGather()
+{
+	Uint32 random = 5129;
+	for (Uint32 bits = 0; bits < 256; ++bits)
+		for (Uint32 trial = 0; trial < 256; ++trial)
+		{
+			Uint64 data = 0;
+			for (Uint32 b = 0; b < 8; ++b)
+				data |= (Uint64)((NextRandom(&random) & 127u) |
+					(((bits >> b) & 1u) << 7)) << (b * 8);
+			Check("eight byte MSBs including random low bits",
+				SnesPPUMode7ByteHighBits(data), bits);
+		}
+}
+
 int main()
 {
+	CheckByteGather();
 	Uint32 uRandom = 0x4D374B91u;
 	Int32 i;
 
