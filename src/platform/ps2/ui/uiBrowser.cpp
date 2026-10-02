@@ -1920,10 +1920,14 @@ void CBrowserScreen::SetDir(const Char *pDir)
            (FAT/exFAT, via ata_bd) viram uma unidade massN:.  A ordem
            depende da deteccao, entao listamos algumas; as vazias so'
            abrem sem conteudo. */
-        if (MassStorageIsEnabled())
+        if (MassStorageIsEnabled() || Mx4sioIsEnabled())
         {
-            AddEntry("mass0:", BROWSER_ENTRYTYPE_DRIVE, 0);
-            AddEntry("mass1:", BROWSER_ENTRYTYPE_DRIVE, 0);
+            for (Int32 unit = 0; unit < MAINLOOP_MASS_UNITS; unit++)
+            {
+                Char root[16];
+                snprintf(root, sizeof(root), "mass%d:", (int)unit);
+                AddEntry(root, BROWSER_ENTRYTYPE_DRIVE, 0);
+            }
         }
         /* HD interno (APA): so' listado se o usuario LIGOU o suporte a HDD
            nas configs.  A carga dos modulos (dev9/atad/hdd) e' preguicosa,
@@ -1940,8 +1944,12 @@ void CBrowserScreen::SetDir(const Char *pDir)
             if (mmceSlots & 2)
                 AddEntry("mmce1:", BROWSER_ENTRYTYPE_DRIVE, 0);
         }
-        AddEntry("mc0:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        AddEntry("mc1:", BROWSER_ENTRYTYPE_DRIVE, 0);
+        for (Int32 unit = 0; unit < MAINLOOP_MEMCARD_UNITS; unit++)
+        {
+            Char root[16];
+            snprintf(root, sizeof(root), "mc%d:", (int)unit);
+            AddEntry(root, BROWSER_ENTRYTYPE_DRIVE, 0);
+        }
 	}
 
 	if (!pDir[0])

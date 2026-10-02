@@ -469,7 +469,7 @@ Bool _MainLoopCheckSRAM()
    banks. Reserved[2] identifies the core; NesStateT has its own version. */
 #define MAINLOOP_STATE_FORMAT_VERSION 1
 #define MAINLOOP_STATE_HEADER_BYTES   64
-#define MAINLOOP_STATE_MAX_ROOTS      8
+#define MAINLOOP_STATE_MAX_ROOTS      (MAINLOOP_MASS_UNITS + MAINLOOP_MEMCARD_UNITS + 4)
 #define MAINLOOP_STATE_MAX_CANDIDATES (MAINLOOP_STATE_MAX_ROOTS * MAINLOOP_STATE_BANK_NUM * 2)
 #define MAINLOOP_STATE_PAYLOAD_RAW     0
 #define MAINLOOP_STATE_PAYLOAD_DEFLATE 1
@@ -555,6 +555,20 @@ enum MainLoopStateRootHintE
     MAINLOOP_STATE_ROOT_HINT_MMCE0,
     MAINLOOP_STATE_ROOT_HINT_MMCE1,
     MAINLOOP_STATE_ROOT_HINT_HDD,
+    MAINLOOP_STATE_ROOT_HINT_MASS2,
+    MAINLOOP_STATE_ROOT_HINT_MASS3,
+    MAINLOOP_STATE_ROOT_HINT_MASS4,
+    MAINLOOP_STATE_ROOT_HINT_MASS5,
+    MAINLOOP_STATE_ROOT_HINT_MASS6,
+    MAINLOOP_STATE_ROOT_HINT_MASS7,
+    MAINLOOP_STATE_ROOT_HINT_MASS8,
+    MAINLOOP_STATE_ROOT_HINT_MASS9,
+    MAINLOOP_STATE_ROOT_HINT_MC2,
+    MAINLOOP_STATE_ROOT_HINT_MC3,
+    MAINLOOP_STATE_ROOT_HINT_MC4,
+    MAINLOOP_STATE_ROOT_HINT_MC5,
+    MAINLOOP_STATE_ROOT_HINT_MC6,
+    MAINLOOP_STATE_ROOT_HINT_MC7,
 
     MAINLOOP_STATE_ROOT_HINT_NUM
 };
@@ -703,9 +717,15 @@ void MainLoopStateSetPreferredRoot(const Char *pRoot)
     {
         if (!strncmp(pRoot, "mass0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS0;
         else if (!strncmp(pRoot, "mass1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS1;
+        else if (!strncmp(pRoot, "mass", 4) && pRoot[4] >= '2' &&
+                 pRoot[4] <= '9' && pRoot[5] == ':')
+            Hint = MAINLOOP_STATE_ROOT_HINT_MASS2 + pRoot[4] - '2';
         else if (!strncmp(pRoot, "mass:", 5)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS;
         else if (!strncmp(pRoot, "mc0:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC0;
         else if (!strncmp(pRoot, "mc1:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC1;
+        else if (!strncmp(pRoot, "mc", 2) && pRoot[2] >= '2' &&
+                 pRoot[2] <= '7' && pRoot[3] == ':')
+            Hint = MAINLOOP_STATE_ROOT_HINT_MC2 + pRoot[2] - '2';
         else if (!strncmp(pRoot, "mmce0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE0;
         else if (!strncmp(pRoot, "mmce1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE1;
         else if (!strncmp(pRoot, "hdd0:", 5) || !strncmp(pRoot, "pfs0:", 5))
@@ -723,7 +743,7 @@ Bool MainLoopStateDeviceAvailable(MainLoopStateDeviceE eDevice)
             return TRUE;
 
         case MAINLOOP_STATEDEVICE_USB:
-            return MassStorageIsEnabled() ? TRUE : FALSE;
+            return (MassStorageIsEnabled() || Mx4sioIsEnabled()) ? TRUE : FALSE;
 
         case MAINLOOP_STATEDEVICE_MEMCARD:
             return TRUE;
@@ -804,6 +824,13 @@ static Bool _MainLoopStateConfigPathIsWritable(const Char *pPath)
 /* Optional filesystems are not resident during boot anymore.  Reads must be
    side-effect free (state.cfg discovery must never start USB); writes happen
    only after an explicit user action and may start the selected USB stack. */
+static Bool _MainLoopStateEnsureMassDriver()
+{
+    if (UsbBdmIsLoaded() || Mx4sioIsLoaded()) return TRUE;
+    if (MassStorageIsEnabled() && UsbBdmLoadEmbeddedIrx() >= 0) return TRUE;
+    return Mx4sioIsEnabled() && Mx4sioLoadIfEnabled() >= 0 && Mx4sioIsLoaded();
+}
+
 static Bool _MainLoopStatePathDeviceReady(const Char *pPath, Bool bStart)
 {
     if (!pPath)
@@ -817,8 +844,7 @@ static Bool _MainLoopStatePathDeviceReady(const Char *pPath, Bool bStart)
         {
             return TRUE;
         }
-        return bStart && MassStorageIsEnabled() &&
-               UsbBdmLoadEmbeddedIrx() >= 0;
+        return bStart && _MainLoopStateEnsureMassDriver();
     }
 
     if (!strncmp(pPath, "cdfs:", 6) || !strncmp(pPath, "cdrom", 5))
@@ -1598,6 +1624,24 @@ static Int32 _MainLoopStateBuildRoots(
         iMMCESlots = MmceProbeAvailableSlots();
     }
 
+    if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady &&
+        _MainLoop_StateRootHint >= MAINLOOP_STATE_ROOT_HINT_MASS2 &&
+        _MainLoop_StateRootHint <= MAINLOOP_STATE_ROOT_HINT_MASS9)
+    {
+        snprintf(Root, sizeof(Root), "mass%u:",
+            (unsigned)(_MainLoop_StateRootHint - MAINLOOP_STATE_ROOT_HINT_MASS2 + 2));
+        _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, FALSE);
+    }
+
+    if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD) &&
+        _MainLoop_StateRootHint >= MAINLOOP_STATE_ROOT_HINT_MC2 &&
+        _MainLoop_StateRootHint <= MAINLOOP_STATE_ROOT_HINT_MC7)
+    {
+        snprintf(Root, sizeof(Root), "mc%u:",
+            (unsigned)(_MainLoop_StateRootHint - MAINLOOP_STATE_ROOT_HINT_MC2 + 2));
+        _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, TRUE);
+    }
+
     /* A Storage choice made in Save States is an exact root preference.
        Put it first while preserving the normal fallback roots afterwards. */
     switch (_MainLoop_StateRootHint)
@@ -1701,15 +1745,24 @@ static Int32 _MainLoopStateBuildRoots(
 
     if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
     {
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mass0:", "mass0:", FALSE);
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mass1:", "mass1:", FALSE);
+        for (Int32 unit = 0; unit < MAINLOOP_MASS_UNITS; unit++)
+        {
+            snprintf(Root, sizeof(Root), "mass%d:", (int)unit);
+            _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, FALSE);
+        }
         _MainLoopStateAddRoot(pRoots, &nRoots, "mass:", "mass:", FALSE);
     }
 
+    if (bAuto && _MainLoopStateGetHddRoot(Root, sizeof(Root)))
+        _MainLoopStateAddRoot(pRoots, &nRoots, Root, "Internal HDD", FALSE);
+
     if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD)
     {
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mc0:", "mc0:", TRUE);
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mc1:", "mc1:", TRUE);
+        for (Int32 unit = 0; unit < MAINLOOP_MEMCARD_UNITS; unit++)
+        {
+            snprintf(Root, sizeof(Root), "mc%d:", (int)unit);
+            _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, TRUE);
+        }
     }
 
     if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MMCE)
@@ -2322,8 +2375,7 @@ Bool _MainLoopLoadState()
     }
 
     if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_USB &&
-        !UsbBdmIsLoaded() && !Mx4sioIsLoaded() &&
-        UsbBdmLoadEmbeddedIrx() < 0)
+        !_MainLoopStateEnsureMassDriver())
     {
         _MainLoopStateSetMessage("USB driver failed (%d).",
                                  UsbBdmGetLastError());
@@ -2461,8 +2513,7 @@ Bool _MainLoopSaveState()
     }
 
     if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_USB &&
-        !UsbBdmIsLoaded() && !Mx4sioIsLoaded() &&
-        UsbBdmLoadEmbeddedIrx() < 0)
+        !_MainLoopStateEnsureMassDriver())
     {
         _MainLoopStateSetMessage("USB driver failed (%d).",
                                  UsbBdmGetLastError());
