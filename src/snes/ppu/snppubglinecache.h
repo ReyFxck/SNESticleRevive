@@ -13,7 +13,12 @@
 #include <string.h>
 #include "snppurender.h"
 
-#define SNPPU_BG_LINE_CACHE_LINES 256u
+#ifndef SNPPU_BG_LINE_CACHE_LINES
+#define SNPPU_BG_LINE_CACHE_LINES 512u
+#endif
+#if SNPPU_BG_LINE_CACHE_LINES != 256 && SNPPU_BG_LINE_CACHE_LINES != 512
+#error BG line cache supports 256 or 512 world rows
+#endif
 #define SNPPU_BG_LINE_PIXELS      (33u * 8u)
 #define SNPPU_BG_LINE_MASK_BYTES  40u
 #define SNPPU_BG_LINE_SCROLL_MAX  8u

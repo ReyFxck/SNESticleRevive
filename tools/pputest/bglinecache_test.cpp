@@ -97,6 +97,10 @@ static void CheckScrollReuse()
 int main()
 {
 	CheckScrollReuse();
+#if SNPPU_BG_LINE_CACHE_LINES == 512
+	Check("upper tilemap rows have their own cache slots",
+		SnesPPUBGLineCacheIndex(1u << 11, 0u), 256u);
+#endif
 	SnesPPUBGLineCacheKeyT Key;
 	SnesBGInfoT Info;
 	Uint32 uState = 0;
@@ -133,7 +137,7 @@ int main()
 		uState, 1u, 1u, &Info), FALSE);
 
 	Check("8x8 world row", SnesPPUBGLineCacheIndex(uState, 0u),
-		((37u << 3) | 5u) & 255u);
+		((37u << 3) | 5u) & (SNPPU_BG_LINE_CACHE_LINES - 1u));
 	Check("horizontal position keeps slot",
 		SnesPPUBGLineCacheIndex(uState ^ 0x401u, 0u),
 		SnesPPUBGLineCacheIndex(uState, 0u));
@@ -144,7 +148,7 @@ int main()
 	Info.uChrSize = 1;
 	uState |= 1u << 13;
 	Check("16x16 world row", SnesPPUBGLineCacheIndex(uState, 1u),
-		((37u << 4) | (1u << 3) | 5u) & 255u);
+		((37u << 4) | (1u << 3) | 5u) & (SNPPU_BG_LINE_CACHE_LINES - 1u));
 
 	Info.uChrAddr ^= 0x1000u;
 	Check("CHR base is exact", SnesPPUBGLineCacheKeyMatches(&Key, 9u,
