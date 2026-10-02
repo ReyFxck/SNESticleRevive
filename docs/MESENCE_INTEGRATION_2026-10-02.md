@@ -69,7 +69,7 @@ state incompleto sem destruir a partida, PRG/CHR battery, reset e bancos
 MMC1/MMC3 passaram. ASan/UBSan passam no mesmo código. Builds R5900 Mesen
 com ambos os backends de áudio e a alternativa InfoNES compilam.
 
-O footprint estático text/data/bss observado no ELF Mesen/RFA é 18.120.351
+O footprint estático text/data/bss observado no ELF Mesen/RFA é 18.122.175
 bytes; InfoNES/RFA, 16.537.897. Isso não mede o heap nem garante que qualquer
 cartucho NES caiba: o core também possui cópias/dados dinâmicos da ROM.
 Nenhum cache foi aumentado para 5 MB.

@@ -55,76 +55,38 @@ Mode 7 muda os endereços afins; o fetch desse modo não se torna gratuito
 por ampliar o cache de linhas BG de outros modos. Preservar efeitos por
 scanline e a coerência das escritas faz parte da equivalência.
 
-## Urgente
+## Estado atualizado das pendências
 
-| Trabalho | Estado/evidência | Próxima verificação necessária |
-|---|---|---|
-| Mode 7 em movimento | Continua aberto após o retorno do usuário. Há otimizações gerais na PR, sem 60 FPS comprovados no aparelho. | Comparar normal e profile v3 na mesma cena/configuração; separar CPU, MDMA/HDMA, BEGIN/END e os estágios PPU. A foto 2608 deixa mais de 40 ms de CORE sem atribuição pelos medidores anteriores. Investigar histórico e dependências do caminho dominante antes de nova edição. |
-| Crash de Star Ocean | Correções gerais de MMC/FastROM e remapeamento já preparadas; não demonstram que o travamento posterior relatado foi corrigido. | Novo checkpoint no ponto do crash, revisão exata do ELF e sequência de entrada; comparar execução EE com checkpoints portáteis. |
-| Tela preta/travamento posterior de Tales | Recuperação geral do header da tradução resolve o boot no core portátil; o relato posterior permanece aberto. | Reproduzir após o diálogo no caminho PS2 e localizar CPU/APU/PPU/DMA/mapper envolvido. |
-| Spawn (USA), áudio na intro sem entrada | ROM recebida. Intro sem entrada executou 10800 frames/180 s emulados no core portátil com mixer completo; clipping muito raro no PCM capturado. Isso não certifica o mixer MMI ou a reprodução PS2. | Capturar PCM antes/depois do mixer MMI, conversão e backend; distinguir clipping, PCM incorreto e falta de amostras no transporte. |
-| Trocar audsrv pelo RFAuds2 | Fonte localizado em [ReyFxck/RFAuds2](https://github.com/ReyFxck/RFAuds2), main `6787ef5`. A PR #97 integra o adapter RFAuds2, mantendo audsrv como referência de comparação. O wrapper antigo descarta a cauda quando audsrv aceita menos bytes. | Adapter/fixtures e builds A/B prontos; validar SPU2/DMA/IRQ, menu/BGM, jogo, volume e transições no aparelho. A troca de backend não comprova sozinha o defeito de Spawn. |
-| RFAuds2 assíncrono/completo | O main original usa `sceSifCallRpc` bloqueante. Candidato isolado `fix/async-pcm-transport` no repositório RFAuds2 acrescenta envio NOWAIT, conclusão consultável e admissão parcial IOP sem espera por espaço. Compilou EE/IOP; fixtures de transporte passaram. | Adapter na #97 retém PCM/caudas em FIFO EE de 32 KiB; envio e telemetria são assíncronos, controles ocasionais síncronos. Fixture de 249680 frames e ASan/UBSan passam. FAT/Slim e playback prolongado ainda pendentes; não chamar o módulo inteiro de concluído. |
-| Super FX, issue #31 | Core funcional existe; o scheduler ainda usa 384/960 **instruções** por linha como aproximação dos clocks. | Auditar CLSR, custos de instrução/memória/cache/multiplicação e sincronização/IRQ; depois medir custo EE de dispatch, PLOT/RPIX e acessos. |
-| Completar chips existentes | A presença de classes/flags não certifica implementação completa. Lacunas confirmadas abaixo. | Inventário por comandos, registradores, memória, timing, IRQ e serialização; fixtures de comportamento antes de otimização. |
+A tabela completa e a evidência mais recente estão em
+[PENDING_FIXES](PENDING_FIXES_2026-10-02.md). A rodada acrescenta correções
+CPU R5900/PCM/MMI/concorrência, controles persistidos de FPS/diagnóstico,
+enumeração completa das unidades de armazenamento suportadas, correções
+do fluxo SMB, melhorias pequenas do SuperFX e a integração do port MesenCE.
+Nenhuma dessas entradas certifica 60 FPS ou os crashes posteriores no alvo.
 
-Do `emulog.txt` antigo foi preservada a análise de 73 janelas/2458 registros
-e os relatórios [AUDIT](WORKLOAD_AUDIT_2026-10-01.md) e
-[FOLLOWUP](WORKLOAD_FOLLOWUP_2026-10-01.md). O arquivo original completo não
-está mais neste executor após a recuperação do ambiente. A análise agregada
-de custos não identifica sozinha a exceção nem as últimas instruções de um
-crash. O usuário informou que também perdeu o original. A investigação segue com
-novos traces e o HUD v3; não depende de recuperar esse arquivo. A exceção
-específica posterior ainda precisa ser reproduzida no caminho PS2.
+### Chips: inventário e dependências que continuam abertos
 
-### Super FX: opinião da issue e comportamento observável
+DSP1/2, CX4, OBC1, S-DD1, S-RTC e SA-1 têm classes e caminhos de barramento,
+mas precisam de auditoria de completude. SuperFX mantém timing aproximado,
+apesar das correções de STOP/IRQ artificial e de bitplanes. DSP3 não tem
+executor, DSP4 é placeholder, e SPC7110/ST010/11/18 e sistema Super Game Boy
+não receberam implementação nesta rodada. Seus states também exigem uma
+extensão versionada; não se muda `sizeof(SnesStateT)` sem preservar bancos
+legados e os consumidores de ROM Lab.
 
-[Issue #31](https://github.com/ReyFxck/SNESticleRevive/issues/31),
-[comentário de emukistreez-opensoure](https://github.com/ReyFxck/SNESticleRevive/issues/31#issuecomment-5787286369):
-o comentário sugere manter 21 MHz constantes. Isso não foi aplicado.
-O programa pode escrever CLSR para selecionar velocidade; fixar o clock
-seria uma mudança de comportamento e não uma otimização do EE.
+[Issue #31](https://github.com/ReyFxck/SNESticleRevive/issues/31) permanece
+aberta. O comentário que recomenda 21 MHz constantes não substitui o
+comportamento de CLSR nem os clocks/esperas individuais do chip. Ares é
+referência desses comportamentos, não arquitetura para substituir o core.
 
-`SNGSU::GetLineInstructionBudget()` e seu caller em `ExecuteLine` declaram
-explicitamente o modelo aproximado atual. Contar instruções não demonstra
-MHz corretos; faltam os custos individuais e esperas de memória. Essa é
-uma pendência geral do core, independente dos títulos citados na issue.
-MIPS/assembly deve ser decidido depois de perfilar o caminho real e comparar
-com o código gerado; não substitui correção de timing e não garante 60 FPS.
+O `emulog.txt` antigo deixou uma análise de 73 janelas/2458 registros, mas
+não contém nesta cópia recuperada uma exceção final capaz de explicar os
+crashes posteriores. O usuário também perdeu o original. A investigação
+não fica condicionada a recuperá-lo; ainda é necessário reproduzir o ponto
+no caminho PS2. As fotos disponíveis são do NetherSX2.
 
-### Inventário inicial dos chips
-
-| Componente | Evidência do código atual |
-|---|---|
-| DSP-1/DSP-2, CX4, OBC1, S-DD1, S-RTC, SA-1 | Classes e caminhos de barramento implementados; completude/compatibilidade precisam de auditoria por subsistema. |
-| Super FX | Opções, pipeline/cache e PLOT/RPIX implementados, com timing aproximado e watchdog de desenvolvimento; não está completo. |
-| DSP-3 | Flag reconhecida e janela mapeada, mas `m_pDsp` fica NULL; não há executor DSP-3. |
-| DSP-4 | `sndsp4.cpp` é um placeholder explícito, sem comandos DSP-4. O comentário HLE em `snmemmap.cpp` está desatualizado. |
-| Super Game Boy | Flag do cartucho não demonstra emulação do sistema Game Boy; precisa de inventário dedicado. |
-| SPC7110/ST010/ST011/ST018 | Nenhum core encontrado nesta árvore. Entram no trabalho de chips ausentes. |
-
-Não foram adicionadas condições por título/CRC. Detecção e exceções
-preexistentes não foram alteradas nesta rodada. Não usar código de ares
-como arquitetura de substituição; consultar comportamento só diante de
-uma diferença específica e demonstrada.
-
-## Importante
-
-| Trabalho | Estado inicial e escopo |
-|---|---|
-| Chips ausentes | Usar o inventário acima e criar etapas independentes; a detecção de um chip não pode simular suporte funcional. |
-| SMB | Integração de rede/smbman já existe, com estados separados para DHCP, driver, protocolo, autenticação, share e browse. Protocolo atual é SMB1/NT1. Reproduzir o erro e a configuração do cliente/servidor antes de trocar componentes. |
-| Destinos de save state | Código enumera mass0/mass1/mass, MC e MMCE e considera a origem da ROM. A PR #97 permite usar um PFS já montado para escrita mesmo com ROM em USB/MC/MMCE; preserva remapeamento da origem HDD e rejeita mount ausente/reset. Explicit picker ainda lista apenas mass0/mass1/mass, enquanto Auto aceita mass2+ da origem. Enumeração completa e validação física permanecem abertas. Coprocessadores sem estado serializado são outra pendência distinta. |
-
-## Prioridade baixa
-
-| Trabalho | Dependência |
-|---|---|
-| CRT-easymode opcional on/off | Definir resultado visual e custo compatíveis com o GS; validar antes de ativar por padrão. |
-| Substituir infoNES pelo port MesenCE | Novo ZIP `MesenCE-NES-PS2-Source-MenuSafeInput-1.zip` trouxe os fontes. O Makefile NES-only compilou sem alterações; a integração permanece pendente. Adaptar vídeo/entrada/áudio e ciclo de vida ao SNESticle, comparar orçamento EE/RAM e implementar a ligação de saves antes de substituir o infoNES. O áudio standalone ainda usa `audsrv_wait_audio`. Evidência em [CACHE_CAPACITY](CACHE_CAPACITY_2026-10-02.md#fontes-recebidos-do-mesence). |
-
-FPS on/off e diagnóstico no menu, pedido anterior, continuam registrados
-para a etapa de configuração. O profile v3 continua sendo uma build separada; a versão RFA também mostra filas EE/IOP e UND.
+O CRT-easymode real continua pendente. Não foi usado o filtro Scanlines
+existente como se fosse uma implementação desse shader.
 
 ## Critério de entrega
 
@@ -142,11 +104,8 @@ comparação na branch consolidada da PR #97.
 - [Correção do destino HDD](SAVE_STATE_MOUNTED_HDD_2026-10-02.md).
 - [Transportes/telemetria do módulo](https://github.com/ReyFxck/RFAuds2/pull/1).
 
-As fotos são do NetherSX2 e não medem um PS2 físico. Quatro ELFs comparáveis
-(audsrv/RFAuds2, normal/profile), todos com a correção HDD, foram recompilados
-na branch consolidada. A fixture do adapter com ASan/UBSan, os 22 testes
-PPU/áudio/SPC/profile e a fixture do resolver HDD passam nessa base. O CI
-também executa o adapter e a fixture do relógio de FPS.
-Os testes demonstram propriedade/ordem/admissão de PCM e o resolver HDD, não
-conclusão da lista inteira. Nenhuma sonda privada de captura PCM foi incluída
-na produção. Chips, SMB, CRT/Mesen e os defeitos restantes mantêm suas etapas.
+As fotos são do NetherSX2 e não medem um PS2 físico. O relatório
+[PENDING_FIXES](PENDING_FIXES_2026-10-02.md) registra as builds, fixtures,
+limites e pendências atuais. Os relatórios anteriores conservam a evidência
+de cada rodada; suas listas de trabalho são históricas, não o status atual.
+A main não recebeu essas mudanças; a revisão permanece na PR #97.
