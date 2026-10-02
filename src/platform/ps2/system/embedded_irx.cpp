@@ -33,8 +33,12 @@ extern "C" {
        unsigned int   size_<name>_irx;
    They are included exactly once in this translation unit so the arrays
    end up as ordinary globals in the ELF. */
+#if AUDIO_RFAUDS2
+#include "rfauds2_irx.h"
+#else
 #include "audsrv_irx.h"
 #include "freesd_irx.h"
+#endif
 #include "sio2man_irx.h"
 #include "mcman_irx.h"
 #include "mcserv_irx.h"
@@ -60,7 +64,7 @@ extern "C" {
 #include "mmceman_irx.h"
 #include "mx4sio_bd_irx.h"
 
-/* Log visivel no splash de boot (real hardware) -- definido em audio_audsrv.c. */
+/* Log visivel no splash de boot (real hardware) -- definido em audio_log.c. */
 extern "C" void ScrPrintf(const char *pFormat, ...);
 extern "C" void BootImport(const char *pName, int ret);
 extern "C" void DLog(const char *fmt, ...);
@@ -82,11 +86,9 @@ struct EmbeddedEntry
    SifBindRpc and deadlock the boot.  Each one has been replaced with
    a modern PS2SDK-based path:
 
-     - audio   : PS2DEV audsrv.irx, embedded here from
-                 $(PS2SDK)/iop/irx/audsrv.irx, plus a freesd.irx
-                 fallback (used when the BIOS does not ship
-                 rom0:LIBSD).  See src/modules/sjpcm/sjpcm_rpc.c for
-                 the EE-side wrapper.
+     - audio   : selectable RFAuds2 direct SPU2 driver, or PS2DEV audsrv
+                 plus freesd for baseline comparison. The selected module
+                 is embedded; see src/modules/audio for the EE adapter.
      - cdfs    : CdfsLoadEmbeddedIrx() loads the in-tree streaming
                  cdfs.irx, which removes the stock driver's fixed
                  256-entry directory table. The browser and ROM loader
@@ -109,12 +111,16 @@ struct EmbeddedEntry
    subsystem to work; the ELF is fully self-contained. */
 static const EmbeddedEntry s_embedded[] =
 {
+#if AUDIO_RFAUDS2
+    { "RFAUDS2.IRX", rfauds2_irx, sizeof(rfauds2_irx) },
+#else
     { "AUDSRV.IRX",  audsrv_irx,  sizeof(audsrv_irx)  },
     /* freesd is the PS2SDK-supplied SPU2 driver IRX, used as a
        universal fallback when rom0:LIBSD is absent (early Japanese
        models, some emulator setups). audsrv binds to its sceSd*
        exports the same way it would to LIBSD's. */
     { "FREESD.IRX",  freesd_irx,  sizeof(freesd_irx)  },
+#endif
 };
 
 static const char *path_basename(const char *path)
