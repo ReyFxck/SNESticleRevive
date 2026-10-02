@@ -8,6 +8,7 @@
 
 #include "types.h"
 #include "ps2dma.h"
+#include "sntargetprofile.h"
 #include "gs.h"
 
 #define DMA_DEBUG (CODE_DEBUG || 1)
@@ -114,6 +115,7 @@ void DmaExecGIFChain(Uint128 *pTag)
 
 void DmaSyncGIF()
 {
+	SNTARGET_BEGIN(_targetGIFWait);
 	int timeout=10*1000*1000;
 
     // sync dma
@@ -128,4 +130,5 @@ void DmaSyncGIF()
 		GS_BGCOLOUR = 0x0000FF;
 	}
 	#endif
+	SNTARGET_END(GIFWait, _targetGIFWait);
 }

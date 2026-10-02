@@ -22,6 +22,7 @@
 #include "snmask.h"
 #include "prof.h"
 #include "sndbglog.h"
+#include "sntargetprofile.h"
 #if CODE_PLATFORM == CODE_PS2
 #include "ps2mem.h"
 #define SNPPU_BG_PLANE_LOOKUP \
@@ -2085,10 +2086,14 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	Uint32 _tObjA = ProfCtrGetCycle();
 #endif
 	if (uFetchLayers & SNESPPU_MASK_OBJ)
+	{
+		SNTARGET_BEGIN(_targetOBJFetch);
 		nObjLine = _FetchOBJ(m_Objs, m_ObjLine[iLine], m_nObjLine[iLine],
 			ObjLine, SNPPU_MAXOBJCHR, iLine, (pRegs->obsel & 7) << 13,
 			_SnesPPUOBJNameSelect(pRegs->obsel), m_pPPU->GetVramPtr(0),
 			m_pPPU->IsObjInterlace(), bOddField);
+		SNTARGET_END(OBJ, _targetOBJFetch);
+	}
 	else
 		nObjLine = 0;
 #if SNDBG_LOG

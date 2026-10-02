@@ -15,6 +15,7 @@
 #include "sntiming.h"
 #include "sndebug.h"
 #include "sndbglog.h"
+#include "sntargetprofile.h"
 
 #define SNPPU_VERSION_5C77 (0x01)
 #define SNPPU_VERSION_5C78 (0x03)
@@ -1128,7 +1129,9 @@ void SnesPPU::Sync(Uint32 uLine)
 				Uint32 _tPPU = ProfCtrGetCycle();
 				g_DbgPPURenderLines++;
 #endif
-				m_pRender->RenderLine(m_uLine);;
+				SNTARGET_BEGIN(_targetPPU);
+				m_pRender->RenderLine(m_uLine);
+				SNTARGET_END(PPU, _targetPPU);
 #if SNDBG_LOG
 				g_TmgCycPPU += ProfCtrGetCycle() - _tPPU;
 #endif

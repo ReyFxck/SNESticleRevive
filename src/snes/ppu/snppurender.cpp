@@ -23,6 +23,7 @@
 #include "snmaskop.h"
 #include "prof.h"
 #include "sndbglog.h"
+#include "sntargetprofile.h"
 #if CODE_PLATFORM == CODE_PS2
 #include "ps2mem.h"
 #include "ps2dma.h"
@@ -430,11 +431,13 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 #if SNDBG_LOG
 		Uint32 _tObjUpdate = ProfCtrGetCycle();
 #endif
+		SNTARGET_BEGIN(_targetOBJUpdate);
 		UpdateOBJ(pRenderInfo->uObjY, pRenderInfo->uObjSize);
 		PROF_ENTER("UpdateOBJVisibility");
 		UpdateOBJVisibility(pRenderInfo->uObjY, pRenderInfo->uObjSize,
 			pRegs->oampri.w, SNESPPU_OBJ_NUM);
 		PROF_LEAVE("UpdateOBJVisibility");
+		SNTARGET_END(OBJ, _targetOBJUpdate);
 #if SNDBG_LOG
 		{
 			Uint32 _dObjUpdate = ProfCtrGetCycle() - _tObjUpdate;

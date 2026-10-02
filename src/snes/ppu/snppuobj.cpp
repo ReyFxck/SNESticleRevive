@@ -17,6 +17,7 @@
 #include "snmask.h"
 #include "prof.h"
 #include "sndbglog.h"
+#include "sntargetprofile.h"
 
 // OBSEL.5-7 escolhe dois tamanhos. Os modos 6/7 sao retangulares e nao
 // podem ser representados por um unico shift, como fazia o renderer antigo.
@@ -78,6 +79,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	if (nObjLine <= 0)
 		return;
 
+	SNTARGET_BEGIN(_targetOBJDraw);
 	PROF_ENTER("_RenderOBJPlanar");
 
 	/* Os buffers de destino possuem exatamente oito palavras. O renderer
@@ -228,6 +230,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	}
 
 	PROF_LEAVE("_RenderOBJPlanar");
+	SNTARGET_END(OBJ, _targetOBJDraw);
 }
 
 void _DecodeOBJEX(Uint8 *pObjEx, SnesRenderObjT *pObjs, Int32 nObjs, Uint32 uBaseSize)

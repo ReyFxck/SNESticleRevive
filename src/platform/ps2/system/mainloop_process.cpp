@@ -18,6 +18,7 @@
 #include "mainloop_iop.h"
 #include "mainloop_safe_frameskip.h"
 #include "mainloop_region_cadence.h"
+#include "mainloop_target_profile.h"
 #include "gskit_backend.h"
 
 #include "types.h"
@@ -62,6 +63,63 @@ static Uint32 _iframetex=0;
  */
 static MainLoopRegionCadenceT s_SnesRegionCadence = { 0, 0, 0 };
 
+#if SNES_TARGET_PROFILE
+MainLoopTargetProfileSnapshotT g_MainLoopTargetProfile;
+
+static void _MainLoopTargetProfileFinish(Bool bGameplay,
+    Uint32 uLoopStart, Uint32 uNow)
+{
+    struct WindowT
+    {
+        Uint32 Start, Loops, SourceFrames, RenderedFrames;
+        Uint64 Core, PPU, OBJ, SPC, Mix, Audio, GIFWait;
+        Uint64 Prep, Submit, Flip, Work;
+    };
+    static WindowT window;
+    if (!bGameplay)
+    {
+        memset(&window, 0, sizeof(window));
+        g_MainLoopTargetProfile.Ready = FALSE;
+        return;
+    }
+    if (!window.Loops) window.Start = uLoopStart;
+    window.Loops++;
+    window.SourceFrames += g_SnesTargetProfile.SourceFrames;
+    window.RenderedFrames += g_SnesTargetProfile.RenderedFrames;
+    window.Core += g_SnesTargetProfile.Core;
+    window.PPU += g_SnesTargetProfile.PPU;
+    window.OBJ += g_SnesTargetProfile.OBJ;
+    window.SPC += g_SnesTargetProfile.SPC;
+    window.Mix += g_SnesTargetProfile.Mix;
+    window.Audio += g_SnesTargetProfile.Audio;
+    window.GIFWait += g_SnesTargetProfile.GIFWait;
+    window.Prep += _MainLoop_DiagPrepCount;
+    window.Submit += _MainLoop_DiagSubmitCount;
+    window.Flip += _MainLoop_DiagFlipCount;
+    window.Work += uNow - uLoopStart - _MainLoop_DiagFlipCount;
+    Uint32 uElapsed = uNow - window.Start;
+    if (uElapsed < SNTARGET_COUNT_HZ) return;
+
+    MainLoopTargetProfileSnapshotT *p = &g_MainLoopTargetProfile;
+    p->SourceRate10 = SnesTargetProfileRate10(window.SourceFrames, uElapsed);
+    p->PresentRate10 = SnesTargetProfileRate10(window.Loops, uElapsed);
+    p->RenderRate10 = SnesTargetProfileRate10(window.RenderedFrames, uElapsed);
+    p->WorkMs10 = SnesTargetProfileMillis10(window.Work, window.Loops);
+    p->CoreMs10 = SnesTargetProfileMillis10(window.Core, window.Loops);
+    p->PPUMs10 = SnesTargetProfileMillis10(window.PPU, window.Loops);
+    p->OBJMs10 = SnesTargetProfileMillis10(window.OBJ, window.Loops);
+    p->SPCMs10 = SnesTargetProfileMillis10(window.SPC, window.Loops);
+    p->MixMs10 = SnesTargetProfileMillis10(window.Mix, window.Loops);
+    p->AudioMs10 = SnesTargetProfileMillis10(window.Audio, window.Loops);
+    p->GIFWaitMs10 = SnesTargetProfileMillis10(window.GIFWait, window.Loops);
+    p->PrepMs10 = SnesTargetProfileMillis10(window.Prep, window.Loops);
+    p->SubmitMs10 = SnesTargetProfileMillis10(window.Submit, window.Loops);
+    p->FlipMs10 = SnesTargetProfileMillis10(window.Flip, window.Loops);
+    p->Ready = TRUE;
+    memset(&window, 0, sizeof(window));
+}
+#endif
+
 static void _MainLoopResetSnesRegionCadence(void)
 {
     MainLoopRegionCadenceReset(&s_SnesRegionCadence);
@@ -69,9 +127,12 @@ static void _MainLoopResetSnesRegionCadence(void)
 
 Bool MainLoopProcess()
 {
-#if SNDBG_LOG
+#if SNDBG_LOG || SNES_TARGET_PROFILE
     Uint32 uLoopStart = ProfCtrGetCycle();
     Bool bSnesAtStart = _pSnes && _pSystem == _pSnes && !_bMenu;
+#endif
+#if SNES_TARGET_PROFILE
+    memset(&g_SnesTargetProfile, 0, sizeof(g_SnesTargetProfile));
 #endif
     NetPlayRPCInputT NetInput;
 
@@ -337,6 +398,11 @@ Bool MainLoopProcess()
 	_MenuRuntimeUpdate();
 
 	MainLoopRender();
+
+#if SNES_TARGET_PROFILE
+    _MainLoopTargetProfileFinish(bSnesAtStart && _pSystem == _pSnes &&
+        !_bMenu && !_MainLoop_BlackScreen, uLoopStart, ProfCtrGetCycle());
+#endif
 
 #if SNDBG_LOG
     /* Measure the whole application iteration, including audio enqueue and

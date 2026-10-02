@@ -82,6 +82,18 @@ endif
 SNES_DIAG_ENABLED := $(if $(filter-out 0,$(SNES_DIAGNOSTICS)),1,0)
 SNES_DIAG_DEEP := $(if $(filter 2,$(SNES_DIAGNOSTICS)),1,0)
 
+# A separate target-side HUD measures frames and coarse stages without the
+# per-instruction/per-pixel diagnostic counters or continuous SIO logging.
+SNES_TARGET_PROFILE ?= 0
+ifneq ($(filter 0 1,$(SNES_TARGET_PROFILE)),$(SNES_TARGET_PROFILE))
+$(error SNES_TARGET_PROFILE must be 0 or 1)
+endif
+ifeq ($(SNES_TARGET_PROFILE),1)
+ifneq ($(SNES_DIAGNOSTICS),0)
+$(error Use SNES_TARGET_PROFILE=1 with SNES_DIAGNOSTICS=0)
+endif
+endif
+
 # Caches independentes: OBJ e BG fisico compartilham linhas 4bpp, enquanto
 # SNES_BG_CACHE controla apenas os caches de linha BG/hires ja decodificada.
 # Cada camada pode ser desligada separadamente para comparacao A/B.
@@ -125,6 +137,7 @@ CHARSET_FLAGS := -finput-charset=UTF-8 -fexec-charset=UTF-8
 CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
+	-DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
@@ -134,6 +147,7 @@ CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
+	-DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
@@ -642,7 +656,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
+	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -1346,6 +1360,7 @@ help:
 	printf "  PROFILE=1                    Enable on-screen profiler (press R3 in-game)\n"; \
 	printf "  SNES_DIAGNOSTICS=1           Universal low-overhead SNES diagnostic report\n"; \
 	printf "  SNES_DIAGNOSTICS=2           Automatic deep PPU/DMA/chip capture\n"; \
+	printf "  SNES_TARGET_PROFILE=1        Coarse target timing HUD (diagnostics=0)\n"; \
 	printf "  SNES_OBJ_CACHE=0             Disable OBJ 4bpp CHR cache for A/B tests\n"; \
 	printf "  SNES_BG_CHR_CACHE=0          Disable physical BG 2bpp/4bpp cache for A/B\n"; \
 	printf "  SNES_BG_CACHE=0              Disable decoded BG/hires line caches for A/B\n"; \

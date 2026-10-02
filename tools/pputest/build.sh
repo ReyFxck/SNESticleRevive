@@ -12,6 +12,10 @@ set -e
 cd "$(dirname "$0")"
 ROOT=../..
 
+"${CXX:-g++}" -O2 -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
+    -I "$ROOT/src/common/base" -I "$ROOT/src/snes/core" \
+    targetprofile_test.cpp -o targetprofile_test
+
 "${CXX:-g++}" -O2 -ffunction-sections -fdata-sections \
     -Wl,--gc-sections \
     -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 \

@@ -18,7 +18,12 @@
 #include "sntiming.h"
 #include "sndebug.h"
 #include "sndbglog.h"
+#include "sntargetprofile.h"
 #include "snppubglinecache.h"
+
+#if SNES_TARGET_PROFILE
+SnesTargetProfileFrameT g_SnesTargetProfile;
+#endif
 
 #ifndef SNESTICLE_ROMLAB
 #define SNESTICLE_ROMLAB 0
@@ -427,7 +432,9 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 #if SNDBG_LOG
         Uint32 _tAPU = ProfCtrGetCycle();
 #endif
+        SNTARGET_BEGIN(_targetSPC);
         SNSPCExecute(&m_Spc, nCycles);
+        SNTARGET_END(SPC, _targetSPC);
 #if SNDBG_LOG
         g_TmgCycAPU += ProfCtrGetCycle() - _tAPU;
 #endif
@@ -2306,7 +2313,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 	Uint32 _tMix = ProfCtrGetCycle();
 #endif
+	SNTARGET_BEGIN(_targetMix);
 	m_SpcDspMixer.Mix(pSound);
+	SNTARGET_END(Mix, _targetMix);
 #if SNDBG_LOG
 	g_TmgCycMix += ProfCtrGetCycle() - _tMix;
 #endif
@@ -2330,7 +2339,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 			_tMix = ProfCtrGetCycle();
 #endif
+			SNTARGET_BEGIN(_targetSilentMix);
 			m_SpcDspSilentMixer.Mix(NULL);
+			SNTARGET_END(Mix, _targetSilentMix);
 #if SNDBG_LOG
 			g_TmgCycMix += ProfCtrGetCycle() - _tMix;
 #endif

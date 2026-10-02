@@ -171,7 +171,7 @@ extern Float32 _MainLoop_fOutputIntensity;
 
 /* ---- Function entrypoints across mainloop_*.cpp ------------------- */
 
-#if SNDBG_LOG
+#if SNDBG_LOG || SNES_TARGET_PROFILE
 /* Last display's frontend phases, separate from core/scanline DMA timing. */
 extern Uint32 _MainLoop_DiagPrepCount;
 extern Uint32 _MainLoop_DiagSubmitCount;

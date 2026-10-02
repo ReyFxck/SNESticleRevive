@@ -40,6 +40,7 @@
     any time-based estimation.
 */
 
+#include "sntargetprofile.h"
 #include <tamtypes.h>
 #include <kernel.h>
 #include <stdarg.h>
@@ -273,7 +274,9 @@ int Aud_Buffered(void)
 
     if (!sjpcm_inited) return 0;
 
+    SNTARGET_BEGIN(_targetAudioQuery);
     bytes = audsrv_queued();
+    SNTARGET_END(Audio, _targetAudioQuery);
     if (bytes < 0) return 0;
 
     return bytes / AUD_BYTES_PER_SAMPLE;
@@ -285,7 +288,9 @@ int Aud_Available(void)
 
     if (!sjpcm_inited) return 0;
 
+    SNTARGET_BEGIN(_targetAudioAvailable);
     bytes = audsrv_available();
+    SNTARGET_END(Audio, _targetAudioAvailable);
     if (bytes < 0) return 0;
 
     return bytes / AUD_BYTES_PER_SAMPLE;
@@ -306,6 +311,7 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
     if (size <= 0) return;
     if (size > AUD_MAX_ENQUEUE_SAMPLES) size = AUD_MAX_ENQUEUE_SAMPLES;
 
+    SNTARGET_BEGIN(_targetAudioEnqueue);
     for (i = 0; i < size; i++)
     {
         _interleave_buf[i * 2 + 0] = left[i];
@@ -321,6 +327,7 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
 
     if (audsrv_play_audio((const char *)_interleave_buf, bytes) >= 0)
         sjpcm_playing = 1;
+    SNTARGET_END(Audio, _targetAudioEnqueue);
 }
 
 /*
