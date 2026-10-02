@@ -10,6 +10,7 @@
 #define _SNDBGLOG_H
 
 #include "types.h"
+#include "profclock.h"
 
 /* The normal build keeps the counters out of every emulated instruction.
    A diagnostic build can opt in with -DSNDBG_LOG=1 (the Makefile exposes a
@@ -42,7 +43,7 @@
 /* Contrato estavel consumido por scripts e comparacoes entre jogos. */
 #define SNDBG_SCHEMA             "snesdiag-v1"
 #define SNDBG_FRAME_PERIOD       120u
-#define SNDBG_EE_COUNT_HZ        147456000u
+#define SNDBG_EE_COUNT_HZ        PROFCTR_COUNT_HZ
 #define SNDBG_SLOW_PERCENT       105u
 #define SNDBG_CAPTURE_COOLDOWN   60u
 #define SNDBG_AUTO_CAPTURE_PERIOD SNDBG_FRAME_PERIOD

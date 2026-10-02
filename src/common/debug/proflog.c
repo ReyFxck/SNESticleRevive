@@ -135,7 +135,7 @@ static void _ProfLogPrintSummary(ProfLogSectionT *pSection, Int32 nSections)
 		pSection++;
 	}
 
-	DLog("[prof] ==== end (CP0 Count ~2457600 cyc = 16.67ms at 147.456MHz) ====");
+	DLog("[prof] ==== end (CP0 Count 4915200 cyc = 16.67ms at 294.912MHz) ====");
 }
 
 void ProfLogNew(ProfLogT *pLog, Int32 MaxLogEntries)

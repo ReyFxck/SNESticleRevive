@@ -16,6 +16,12 @@ static void Check(const char *name, Uint32 got, Uint32 expected)
 int main()
 {
 	const Uint64 second = SNTARGET_COUNT_HZ;
+	/* Raw Count fixtures must not be derived from the implementation's
+	   clock constant: that would let a bus-clock mixup pass again. */
+	Check("raw 60 Hz Count cadence", SnesTargetProfileRate10(60, 294912000u), 600);
+	Check("raw 30 Hz Count cadence", SnesTargetProfileRate10(30, 294912000u), 300);
+	Check("raw one VBlank", SnesTargetProfileMillis10(4915200u, 1), 166);
+	Check("raw 20 ms work", SnesTargetProfileMillis10(5898240u, 1), 200);
 	Check("NTSC source", SnesTargetProfileRate10(120, second * 2), 600);
 	Check("PAL source with NTSC presentation", SnesTargetProfileRate10(100, second * 2), 500);
 	Check("30 rendered / 60 executed", SnesTargetProfileRate10(60, second * 2), 300);

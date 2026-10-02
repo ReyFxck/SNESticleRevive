@@ -73,8 +73,12 @@ throughput ceiling instead of making the logger itself steal frame time:
 
 `capacity` is the speed of the measured emulation work on the EE, not the
 number of host VBlanks that were presented. A frame is marked slow only above
-105% of the active output budget: 2,457,600 EE Count ticks at 60 Hz or
-2,949,120 at 50 Hz. ROM region is reported separately from the PS2's physical
+105% of the active output budget: 4,915,200 EE Count ticks at 60 Hz or
+5,898,240 at 50 Hz. CP0 Count advances at the 294.912 MHz EE clock; the
+147.456 MHz bus clock belongs to the separate T0-T3 timers. Older builds
+used that bus clock for Count, halving capacity estimates and doubling
+the normalized budget cost. Raw counts and subsystem ratios remain usable.
+ROM region is reported separately from the PS2's physical
 refresh rate, so a PAL ROM on an NTSC console is not given a false 20 ms budget.
 
 ## Deep capture

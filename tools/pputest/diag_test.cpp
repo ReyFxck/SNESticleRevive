@@ -40,8 +40,8 @@ int main()
 		SnesDbgAutoCaptureDue(SNDBG_AUTO_CAPTURE_PERIOD), FALSE);
 	Check("next-window deep sample",
 		SnesDbgAutoCaptureDue(SNDBG_AUTO_CAPTURE_PERIOD + 1u), TRUE);
-	Check("NTSC budget", uNtscBudget, 2457600u);
-	Check("PAL budget", uPalBudget, 2949120u);
+	Check("NTSC budget", uNtscBudget, 4915200u);
+	Check("PAL budget", uPalBudget, 5898240u);
 	Check("zero Hz fallback", SnesDbgFrameBudget(0), uNtscBudget);
 	Check("at 105 percent is not slow",
 		SnesDbgFrameIsSlow(uNtscLimit, uNtscBudget), FALSE);

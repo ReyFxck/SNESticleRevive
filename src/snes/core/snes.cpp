@@ -2516,9 +2516,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			Uint32 uMinCyc = (g_TmgWinMinCyc == 0xFFFFFFFFu)
 				? 0u : g_TmgWinMinCyc;
 			Uint32 ratio = avg ? (Uint32)(((Uint64)g_TmgWinMaxCyc * 100u) / avg) : 0;
-			/* CP0 Count avanca a metade do clock de 294.912 MHz da EE. */
+			/* CP0 Count uses the EE clock, not the half-rate bus clock. */
 			Uint32 fps10 = avg
-				? (Uint32)(1474560000ull / (Uint64)avg) : 0;
+				? (Uint32)((Uint64)SNDBG_EE_COUNT_HZ * 10u / (Uint64)avg) : 0;
 			Uint32 pM7   = (Uint32)(((Uint64)g_TmgWinSumM7  * 100u) / sum);
 			Uint32 pObj  = (Uint32)(((Uint64)g_TmgWinSumObj * 100u) / sum);
 			Uint32 pPPU  = (Uint32)(((Uint64)g_TmgWinSumPPU * 100u) / sum);

@@ -3,12 +3,13 @@
 #define _SNTARGETPROFILE_H
 
 #include "types.h"
+#include "profclock.h"
 
 #ifndef SNES_TARGET_PROFILE
 #define SNES_TARGET_PROFILE 0
 #endif
 
-#define SNTARGET_COUNT_HZ 147456000u
+#define SNTARGET_COUNT_HZ PROFCTR_COUNT_HZ
 
 /* Means are per presentation iteration, including hidden emulation frames.
    Nested measurements are inclusive: OBJ belongs to PPU, and audio RPC to
