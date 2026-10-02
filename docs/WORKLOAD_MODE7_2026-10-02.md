@@ -1,5 +1,10 @@
 # Mode 7: mapa e nuvens girando
 
+Atualização posterior: o lote direto agora suporta 12 linhas, e o fetch wrap
+usa coordenadas agrupadas com validação R5900. Os números abaixo conservam a
+medição histórica de oito linhas. Resultados atuais e limites estão em
+[rodada de desempenho](PERFORMANCE_FOLLOWUP_2026-10-02.md).
+
 Base da rodada: `08478bd`, na mesma branch de revisão da PR #97.
 A main continua baseada em `6c6eb4a`; este trabalho depende das melhorias
 anteriores já testadas pelo usuário na branch.

@@ -1,6 +1,18 @@
-# Capacidade dos caches: investigação antes de reservar 5 MB
+# Capacidade dos caches: investigação e configuração atual
 
-Base examinada: candidato `287161e`, derivado da main `6c6eb4a`.
+Atualização: por solicitação do usuário, o padrão agora soma **3171005 bytes,
+3,0241 MiB**, duplicando os conjuntos de linhas de mundo BG de 256 para 512.
+Mantém duas vias; não aumenta o número de comparações por consulta. As linhas
+separadas por 256 no mapa vertical de 512 pixels deixam de disputar o mesmo
+conjunto. A coerência e as chaves permanecem completas. Pode-se retornar à
+capacidade anterior com `SNES_BG_CACHE_LINES=256`. O alcance de CHR já cobre
+a VRAM inteira e o fetch Mode 7 continua sendo independente deste cache.
+Essa capacidade foi pedida explicitamente; os probes históricos de mais vias
+abaixo **não medem** o ganho da nova configuração. Regressões e limitações
+estão na [rodada atual](PERFORMANCE_FOLLOWUP_2026-10-02.md).
+
+O restante deste relatório conserva a investigação histórica na base
+`287161e`, derivada da main `6c6eb4a`.
 Esta etapa mede oportunidades de reutilização; não muda o tamanho dos
 caches, os pixels, o áudio ou a temporização do emulador.
 
@@ -124,4 +136,5 @@ A compilação não demonstra integração ou velocidade. O frontend do port
 inicializa seu próprio GS/IOP/áudio; `Ps2Audio` ainda espera espaço via
 `audsrv_wait_audio`. A substituição do infoNES precisa adaptar vídeo,
 entrada, áudio, saves e ciclo de vida aos componentes existentes do
-SNESticle. O port NES não substitui o core SNES e ainda não foi integrado.
+SNESticle. O port NES não substitui o core SNES. Sua integração posterior está em
+[MesenCE](MESENCE_INTEGRATION_2026-10-02.md).

@@ -49,15 +49,16 @@ compila normalmente, mas probes desligados não leem Count; a fixture testa
 10.000 chamadas desligadas. `SNES_TARGET_PROFILE=0` pode excluir as sondas
 na compilação; `SNES_DIAGNOSTICS=2` continua sendo uma build de debug.
 
-Destinos suportados agora enumeram mass0..9, alias mass, mc0..7, MMCE e HDD
+Destinos suportados agora enumeram mass0..9, alias mass, mc0/mc1, MMCE e HDD
 montado. IDs de preferências antigas são preservados. USB e MX4SIO podem
 compartilhar a enumeração mass. Auto também considera um HDD gravável já
-montado, mesmo com ROM de outro dispositivo. O teste confere 22 raízes e
+montado, mesmo com ROM de outro dispositivo. O teste confere 16 raízes e
 cada preferência. Os leitores/escritores de bancos reais passam com miniz
 e sanitizers para payload SNES legado e Mesen variável, raw/deflate, CRC,
 limites, ROM/core/slot, falta de memória e bancos incompletos.
 SMB não é apresentado como destino gravável de states;
-a interface de formatação de cartão continua limitada às portas nativas.
+a interface de formatação de cartão continua limitada às portas nativas. Os IDs antigos mc2..7 ficam preservados para migração de
+preferências, mas não aparecem mais na lista de destinos.
 
 O SMB teve três defeitos de frontend corrigidos: ausência de mass2..9/mc2..7
 na descoberta de configuração, SD-only sem carregar MX4SIO e overflow no
@@ -89,7 +90,7 @@ Veja [integração MesenCE](MESENCE_INTEGRATION_2026-10-02.md).
 | Pedido | Limite atual |
 |---|---|
 | Mode 7/movimento/Top Gear a 60 FPS | Há otimizações gerais e atribuição mais completa; faltam frame times comparáveis no PS2 para confirmar o gargalo residual e o ganho. Nenhum teste host/modelo equivale a FPS físico. |
-| Star Ocean/Tales, travadas posteriores | Correções gerais de boot/mapper/CPU existem, mas o ponto posterior informado não foi reproduzido no caminho PS2. Sem ele, não há confirmação da causa ou da correção. |
+| Star Ocean/Tales, travadas posteriores | Em Tales tr2 foi reproduzido um bloqueio no core portátil a partir do frame 4510: CPU aguarda a APU, SPC executa em 0000/0002 e as portas param de responder. Isso também existe na referência 27007e5; falta localizar a primeira transição incorreta e confirmar equivalência com o relato no PS2. Star ainda não teve o crash posterior reproduzido. |
 | Spawn e outros jogos com som estourado | Corrigidos defeitos de saída, resampler, MMI e concorrência; falta playback prolongado no alvo e atribuição do defeito específico. |
 | RFAuds2 totalmente concluído | Streaming assíncrono implementado; controles ainda podem ser síncronos. FAT/Slim, DMA/IRQ e transições precisam de teste. |
 | SuperFX completo/issue #31 | O budget permanece 384/960 instruções por linha. Faltam clocks individuais, custos de memória/cache, multiplicação e sincronização CPU/GSU. Fixar 21 MHz não seria uma otimização equivalente. |
@@ -100,9 +101,12 @@ Veja [integração MesenCE](MESENCE_INTEGRATION_2026-10-02.md).
 | CRT-easymode | Não implementado. O shader usa cálculo por texel que o GS fixo não executa diretamente; faltam implementação equivalente e medição dos custos de EE/VU/readback. O filtro Scanlines existente não foi renomeado. |
 | MesenCE completo no aparelho | Bridge e fixtures passam; faltam testes físicos, mappers/batteries especiais, discos e acessórios. |
 
-Os caches gráficos padrão permanecem em aproximadamente 1,8669 MiB.
-A investigação de capacidade não justificou 5 MB; aumentar RAM reservada
-sem reduzir misses relevantes pode piorar localidade e tirar heap dos jogos.
+A nova configuração de linhas BG tem 512 linhas de mundo, mantendo duas vias
+e a mesma coerência. Os caches gráficos somados passam a 3171005 bytes,
+aproximadamente 3,0241 MiB. `SNES_BG_CACHE_LINES=256` permite comparar com
+a capacidade anterior; isso não aumenta os caches físicos de CPU nem adiciona
+armazenamento útil ao CHR que já cobre toda a VRAM. Ver
+[rodada de desempenho](PERFORMANCE_FOLLOWUP_2026-10-02.md).
 
 O diff final não contém sondas privadas de ROM/PCM. O conjunto compila em
 R5900 com Mesen/RFA, Mesen/audsrv e InfoNES/RFA, e os testes host relevantes

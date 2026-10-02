@@ -38,7 +38,7 @@ pad, GS, IOP ou SPU2.
   o port ignorava esse tamanho quando a RAM volátil era zero.
 - States: snapshots usam Serializer versão 4, um payload variável `MCE1`
   com tamanho máximo de 10 MiB e a compressão/CRC do container SNESticle.
-  O state NROM da fixture tem 24.004 bytes; memória é alocada ao salvar/carregar,
+  O state NROM da fixture NTSC tem 24.442 bytes; memória é alocada ao salvar/carregar,
   não reservada como cache gráfico. States InfoNES são reconhecidos como
   incompatíveis e precisam do build legado. Um load incompleto faz rollback
   da máquina atual, em vez de misturar campos antigos e novos.
@@ -69,7 +69,7 @@ state incompleto sem destruir a partida, PRG/CHR battery, reset e bancos
 MMC1/MMC3 passaram. ASan/UBSan passam no mesmo código. Builds R5900 Mesen
 com ambos os backends de áudio e a alternativa InfoNES compilam.
 
-O footprint estático text/data/bss observado no ELF Mesen/RFA é 18.122.175
+O footprint estático text/data/bss observado antes da rodada de otimização no ELF Mesen/RFA era 18.122.175
 bytes; InfoNES/RFA, 16.537.897. Isso não mede o heap nem garante que qualquer
 cartucho NES caiba: o core também possui cópias/dados dinâmicos da ROM.
 Nenhum cache foi aumentado para 5 MB.
@@ -80,3 +80,20 @@ volátil, FDS/discos, VS Dual System e acessórios ainda precisam de validação
 e ligação ao frontend. O teste MMC3 verifica bancos/state, não uma suíte
 completa de IRQs. A integração não certifica desempenho, vídeo, som ou
 transições de menu no PS2 físico e não altera a arquitetura do SNES.
+
+## Rodada de desempenho
+
+A compilação Mesen passou de O1 para O2, mantendo os flags conservadores do
+projeto e sem fast-math. O loop PPU Run é instanciado junto aos corpos de Exec,
+ProcessScanlineImpl, LoadTileInfo e GetPixelColor, com inline explícito nos
+helpers medidos; IsRenderingEnabled virou um getter inline. A PPU continua
+executando cada dot, IRQ, fetch, avaliação de sprite e transição de estado.
+NesConfig é acessado pelo ponteiro EmuSettings já mantido pela PPU.
+
+O mixer usa uma tabela exata de 65.598 bytes somente com canais em volume 100
+e panning central; outros ajustes mantêm as expressões originais. Deltas são
+limpos ao consumir seus timestamps, evitando zerar o array inteiro por frame.
+A conversão 96→48 kHz seleciona os endpoints exatos do polinômio Hermite
+nas fases inteiras, preservando histórico, startup, pending e volume. Outras
+fases/ratios continuam no caminho genérico. Veja as provas, o perfil e os
+limites em [desempenho](PERFORMANCE_FOLLOWUP_2026-10-02.md).
