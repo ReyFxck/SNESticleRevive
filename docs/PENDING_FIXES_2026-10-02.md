@@ -53,7 +53,10 @@ Destinos suportados agora enumeram mass0..9, alias mass, mc0..7, MMCE e HDD
 montado. IDs de preferências antigas são preservados. USB e MX4SIO podem
 compartilhar a enumeração mass. Auto também considera um HDD gravável já
 montado, mesmo com ROM de outro dispositivo. O teste confere 22 raízes e
-cada preferência. SMB não é apresentado como destino gravável de states;
+cada preferência. Os leitores/escritores de bancos reais passam com miniz
+e sanitizers para payload SNES legado e Mesen variável, raw/deflate, CRC,
+limites, ROM/core/slot, falta de memória e bancos incompletos.
+SMB não é apresentado como destino gravável de states;
 a interface de formatação de cartão continua limitada às portas nativas.
 
 O SMB teve três defeitos de frontend corrigidos: ausência de mass2..9/mc2..7

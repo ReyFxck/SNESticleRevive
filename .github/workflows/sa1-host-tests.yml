@@ -52,6 +52,8 @@ jobs:
         run: SANITIZE=1 bash ./tools/rfauds2test/build.sh
       - name: Test mounted state destination enumeration
         run: python3 tools/statetest/check_roots.py
+      - name: Test legacy and Mesen state bank payloads
+        run: python3 tools/statetest/check_payloads.py
       - name: Test SMB frontend configuration and RPC flow
         run: python3 tools/smbtest/check_smb.py
       - name: Test MesenCE frontend with sanitizers
