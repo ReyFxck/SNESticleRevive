@@ -13,11 +13,14 @@
 
 /* Means are per presentation iteration, including hidden emulation frames.
    Nested measurements are inclusive: OBJ belongs to PPU, and audio RPC to
-   Mix. GIF waits also belong to the caller that issued them. */
+   Mix. CPU includes register traps (and their PPU/APU work), MDMA/HDMA
+   include their register side effects, and GIF waits belong to their caller.
+   These rows must not be added together as mutually exclusive costs. */
 typedef struct SnesTargetProfileFrameT
 {
 	Uint32 Core, PPU, OBJ, SPC, Mix, Audio, GIFWait;
 	Uint32 BGFetch, BGDraw, Output;
+	Uint32 CPU, MDMA, HDMA, RenderBegin, RenderEnd;
 	Uint32 SourceFrames, RenderedFrames;
 } SnesTargetProfileFrameT;
 

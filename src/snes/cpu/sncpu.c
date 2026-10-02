@@ -12,6 +12,7 @@
 #include "types.h"
 #include "sndisasm.h"
 #include "sncpu.h"
+#include "sntargetprofile.h"
 
 volatile Uint32 g_SNCPU_SA1BusTrackEnabled = 0;
 volatile Uint32 g_SNCPU_SA1BusEventCount = 0;
@@ -918,7 +919,9 @@ Bool SNCPUExecute(SNCpuT *pCpu)
 
     // execute cpu cycles
     pCpu->bRunning = TRUE;
+    SNTARGET_BEGIN(_targetCPU);
     _SNCPU_pExecuteFunc(pCpu);
+    SNTARGET_END(CPU, _targetCPU);
     pCpu->bRunning = FALSE;
 
     // restore cycle count if we were just aborted

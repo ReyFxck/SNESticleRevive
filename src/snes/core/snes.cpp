@@ -1691,7 +1691,9 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
                 // so, execute DMA for remainder of CPU time
                 // this function automatically subtracts from the CPU cycle count as it transfers each byte
 #if 1
+                SNTARGET_BEGIN(_targetMDMA);
                 m_DMAC.ProcessMDMA();
+                SNTARGET_END(MDMA, _targetMDMA);
 #else
                 {
                     int n = m_Cpu.Cycles;
@@ -2064,7 +2066,9 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 		Uint32 _tHDMA = ProfCtrGetCycle();
 #endif
+        SNTARGET_BEGIN(_targetHDMA);
         m_DMAC.ProcessHDMA(m_uLine);
+        SNTARGET_END(HDMA, _targetHDMA);
 #if SNDBG_LOG
 		g_TmgCycHDMA += ProfCtrGetCycle() - _tHDMA;
 #endif
@@ -2216,7 +2220,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 
 	m_DMAC.BeginHDMA();
 
+	SNTARGET_BEGIN(_targetRenderBegin);
 	m_PPURender.BeginRender(pTarget);
+	SNTARGET_END(RenderBegin, _targetRenderBegin);
 	m_PPU.BeginFrame();
 
 	/* Arm the active port-2 light gun for this field. Super Scope and Justifier
@@ -2262,7 +2268,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	SyncPPU();
 
 	m_PPU.EndFrame();
+	SNTARGET_BEGIN(_targetRenderEnd);
 	m_PPURender.EndRender();
+	SNTARGET_END(RenderEnd, _targetRenderEnd);
 
 	// confirmed:
 	// nmi is triggered from hi->lo transition (edge level interrupt)
