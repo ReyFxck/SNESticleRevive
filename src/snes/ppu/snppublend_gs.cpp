@@ -45,9 +45,10 @@ extern "C" {
 	(PS2MEM_SCRATCHPAD + SNPPU_DMA_HIRES_OFFSET)
 #define SNPPU_DMA_HIRES_BYTES (512 * sizeof(Uint16))
 
-/* Normal direct lines borrow the hires staging area until a hires/math
-   boundary flushes them. No pending batch survives End() into the mixer. */
-#define SNPPU_DIRECT_BATCH_LINES 8u
+/* Normal direct lines use the entire 3 KiB staging area before the lookup
+   table. Their texture has 16 rows; batches stop at 12 rows before a
+   hires/math boundary flushes them. No pending batch survives End() into the mixer. */
+#define SNPPU_DIRECT_BATCH_LINES 12u
 typedef char SNPPUDirectBatchLayoutCheck[
 	(SNPPU_DMA_HIRES_OFFSET + SNPPU_DIRECT_BATCH_LINES * 256u <=
 	 PS2MEM_SNES_LOOKUP_OFFSET) ? 1 : -1];
@@ -808,11 +809,11 @@ static void _SNPPUBlendBuildList(SNPPUDmaListT *pList,
 			GS_SET_FRAME((uOutAddr/0x20), 512/64, GS_PSMCT16, 0));
 #if SNPPUBLEND_PAL32
 		GSGifRegAD(GS_REG_TEX0_1,
-			GS_SET_TEX0(pList->uInputAddr, 256/64, GS_PSMT8, 8, 3,
+			GS_SET_TEX0(pList->uInputAddr, 256/64, GS_PSMT8, 8, 4,
 				1, 0, pList->uPalAddr, GS_PSMCT32, 0, 0, 1));
 #else
 		GSGifRegAD(GS_REG_TEX0_1,
-			GS_SET_TEX0(pList->uInputAddr, 256/64, GS_PSMT8, 8, 3,
+			GS_SET_TEX0(pList->uInputAddr, 256/64, GS_PSMT8, 8, 4,
 				1, 0, pList->uPalAddr, GS_PSMCT16, 1, 0, 1));
 #endif
 		pList->pXYOffset = (Uint64 *)GSListGetUncachedPtr();
