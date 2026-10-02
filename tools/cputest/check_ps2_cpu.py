@@ -28,16 +28,28 @@ for a,n in [(BASE,SIZE),(CPU,0x10000),(STACK,0x10000),(RET,4096)]:uc.mem_map(a,n
 for name in ['_SNCpuDecimalADC8','_SNCpuDecimalADC16','_SNCpuDecimalSBC8','_SNCpuDecimalSBC16']:
  getattr(lib,name).argtypes=[ctypes.c_uint32]*3;getattr(lib,name).restype=ctypes.c_uint32
 calls={symbols[name]:getattr(lib,name) for name in ['_SNCpuDecimalADC8','_SNCpuDecimalADC16','_SNCpuDecimalSBC8','_SNCpuDecimalSBC16']}
+TRAPREAD=RET+64;TRAPWRITE=RET+128
 trace=[]
 def hook(cpu,address,size,data):
  if len(trace)<1000:trace.append(address)
- if address in calls:
+ if address in (TRAPREAD,TRAPWRITE):
+  addr=cpu.reg_read(regs.UC_MIPS_REG_5)&0xffffffff
+  current=struct.unpack('<i',cpu.mem_read(CPU+20,4))[0]
+  cpu.mem_write(CPU+20,struct.pack('<i',current-3))
+  if address==TRAPREAD:
+   value=cpu.mem_read(BASE+addr,1)[0]^cpu.mem_read(CPU+52,1)[0]
+   cpu.reg_write(regs.UC_MIPS_REG_2,value)
+  else:
+   value=(cpu.reg_read(regs.UC_MIPS_REG_6)&255)^0x3c
+   cpu.mem_write(BASE+addr,bytes([value]))
+  cpu.reg_write(regs.UC_MIPS_REG_PC,cpu.reg_read(regs.UC_MIPS_REG_RA))
+ elif address in calls:
   values=[cpu.reg_read(getattr(regs,'UC_MIPS_REG_'+str(i)))&0xffffffff for i in (4,5,6)]
   cpu.reg_write(regs.UC_MIPS_REG_2,calls[address](*values));cpu.reg_write(regs.UC_MIPS_REG_PC,cpu.reg_read(regs.UC_MIPS_REG_RA))
 uc.hook_add(UC_HOOK_CODE,hook)
 banks=b''.join(struct.pack('<IIIBBBB',BASE,0,0,8,255,0,0) for _ in range(SIZE//8192))
 rng=random.Random(713);zero=bytes(SIZE)
-def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain"):
+def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False):
  global trace
  state=bytearray(60);a=0x1234;x=0x17;y=0x21;s=0x1ff
  struct.pack_into('<HHHHBBHII',state,0,a,x,y,s,p,mode,dp,pc,0x020000)
@@ -45,7 +57,11 @@ def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_
  uc.mem_write(BASE,zero);ctypes.memset(mem,0,SIZE)
  updates={pc:bytes([op,0x34,0x12,0x03,0xea,0xea]),0xffe0:bytes(range(32)),0x0100:bytes([0x34,0x12,0x07])*85}
  for addr,v in updates.items():uc.mem_write(BASE+addr,v);ctypes.memmove(ctypes.addressof(mem.contents)+addr,v,len(v))
- uc.mem_write(CPU,bytes(state)+banks)
+ mapped=bytearray(banks)
+ if traps:
+  for bank in (1,16): struct.pack_into('<IIIBBBB',mapped,bank*16,0,TRAPREAD,TRAPWRITE,8,0,0,0)
+ uc.mem_write(CPU,bytes(state)+mapped)
+ lib.FixtureTraps(int(traps))
  cstate=(ctypes.c_ubyte*60).from_buffer_copy(state);lib.FixtureRun(cstate)
  for i in range(1,32):uc.reg_write(getattr(regs,'UC_MIPS_REG_'+str(i)),0)
  uc.reg_write(regs.UC_MIPS_REG_4,CPU);uc.reg_write(regs.UC_MIPS_REG_SP,STACK+0xff00);uc.reg_write(regs.UC_MIPS_REG_RA,RET)
@@ -71,5 +87,10 @@ if __name__=='__main__':
     for cycles in [0,-1,1,40]:
      result=check(op,pc=pc,cycles=cycles,core=core);n+=1
      if result:fails.append(result);print(json.dumps({'core':core,**result}),flush=True)
+ for core in ['SNCPUExecute_ASM_Plain','SNCPUExecute_ASM']:
+  for e,flags in [(1,0x34),(0,0x34),(0,0x04)]:
+   for op in range(256):
+    result=check(op,e,flags,dp=0x2100,core=core,traps=True);n+=1
+    if result:fails.append(result);print(json.dumps({'core':core,'traps':True,**result}),flush=True)
  print('cases',n,'failures',len(fails))
  raise SystemExit(bool(fails))

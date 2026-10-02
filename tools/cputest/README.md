@@ -26,3 +26,5 @@ mix values, sample ordering, saturation and destination guards against
 `clamp((clamp(main >> 7) * mainVolume + echo * echoVolume) >> 6)`.
 The scalar contract intentionally includes the existing PS2 main clamp;
 it does not assume that the portable legacy echo loop is equivalent.
+
+The linked checks also exercise valid trapped data banks ($2000 and $020000), including callbacks that consume cycles and observe open bus. The bank-zero shortcut assumes direct WRAM in the existing SNES map; fixtures retain that contract.
