@@ -1,4 +1,4 @@
-/* Optional target-side timing; normal builds contain none of these probes. */
+/* Optional target-side timing; disabled runtime probes do not read Count. */
 #ifndef _SNTARGETPROFILE_H
 #define _SNTARGETPROFILE_H
 

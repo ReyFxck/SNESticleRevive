@@ -45,6 +45,7 @@ jobs:
           python3 -m pip install unicorn==2.1.4 pyelftools==0.32
           python3 tools/cputest/check_ps2_cpu.py build/SNESticle.elf
           python3 tools/cputest/check_ps2_echo.py build/SNESticle.elf
+          python3 tools/superfxtest/check_ps2_planes.py
 
       - name: Upload experimental ELF
         uses: actions/upload-artifact@v4
