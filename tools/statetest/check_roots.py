@@ -55,13 +55,19 @@ int main() {
  MainLoopStateRootT roots[MAINLOOP_STATE_MAX_ROOTS];
  strcpy(_RomPath,"mass0:/game.sfc");
  int count = _MainLoopStateBuildRoots(MAINLOOP_STATEDEVICE_AUTO,roots);
- assert(count==22);
+ assert(count==16);
  std::set<std::string> names;
  for (int i=0;i<count;i++) assert(names.insert(roots[i].Root).second);
  for (int i=0;i<MAINLOOP_STATEMANAGER_STORAGE_NUM;i++) {
   const char *path=_MainLoop_StateManagerStorage[i].pPath;
   auto device=_MainLoopStateManagerStorageDevice(i);
-  assert(_MainLoopStateManagerStorageAvailable(i));
+  if (!_MainLoopStateManagerStorageAvailable(i)) {
+   assert(i>=MAINLOOP_STATEMANAGER_MC2 && i<=MAINLOOP_STATEMANAGER_MC7);
+   MainLoopStateSetPreferredRoot(path);
+   count=_MainLoopStateBuildRoots(device,roots);
+   assert(count==2 && !strcmp(roots[0].Root,"mc0:") && !strcmp(roots[1].Root,"mc1:"));
+   continue;
+  }
   MainLoopStateSetPreferredRoot(path);
   count=_MainLoopStateBuildRoots(device,roots);
   char expected[16]; int bytes=(int)(strchr(path,':')-path)+1;
@@ -83,7 +89,7 @@ int main() {
  MainLoopStateSetPreferredRoot("smb:");
  count=_MainLoopStateBuildRoots(MAINLOOP_STATEDEVICE_AUTO,roots);
  assert(count==MAINLOOP_MEMCARD_UNITS);
- puts("state roots: PASS (22 roots, exact preferences, legacy IDs, MX4SIO-only, read-only enumeration)");
+ puts("state roots: PASS (16 roots, native mc0/mc1, hidden old MC preferences, exact preferences, legacy IDs, MX4SIO-only, read-only enumeration)");
 }
 ''')
 with tempfile.TemporaryDirectory(prefix='state-roots-') as directory:

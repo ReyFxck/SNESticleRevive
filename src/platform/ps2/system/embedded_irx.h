@@ -80,8 +80,9 @@ int  SmbLoadEmbeddedIrx(void);
 
 /* FatFs volume numbers are 0..9. Both USB and MX4SIO use massN:. */
 #define MAINLOOP_MASS_UNITS 10
-/* mcman maps unit&1 to the port and unit>>1 to one of four slots. */
-#define MAINLOOP_MEMCARD_UNITS 8
+/* Native card ports exposed by this frontend. Do not list unattached
+   multitap slots as six additional memory cards. */
+#define MAINLOOP_MEMCARD_UNITS 2
 
 /* USB + BDM fixado: FreeUsbd/usbd_mini + bdm + FatFs + usbmass_bd,
    lendo FAT/exFAT/MBR/GPT e enumerando massN: por drive. */

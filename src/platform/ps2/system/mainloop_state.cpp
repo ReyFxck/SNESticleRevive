@@ -1529,12 +1529,9 @@ static Bool _MainLoopStateIsMemCardRoot(
     Int32 nRootBytes)
 {
     return _MainLoopStateIsNumberedRoot(
-        pPath,
-        "mc",
-        2,
-        pRoot,
-        nRootBytes
-    );
+        pPath, "mc", 2, pRoot, nRootBytes
+    ) && strlen(pRoot) == 4 && pRoot[2] >= '0' &&
+        pRoot[2] < '0' + MAINLOOP_MEMCARD_UNITS;
 }
 
 static Bool _MainLoopStateIsMMCERoot(
@@ -1649,7 +1646,8 @@ static Int32 _MainLoopStateBuildRoots(
         _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, FALSE);
     }
 
-    if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD) &&
+    if (MAINLOOP_MEMCARD_UNITS > 2 &&
+        (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD) &&
         _MainLoop_StateRootHint >= MAINLOOP_STATE_ROOT_HINT_MC2 &&
         _MainLoop_StateRootHint <= MAINLOOP_STATE_ROOT_HINT_MC7)
     {

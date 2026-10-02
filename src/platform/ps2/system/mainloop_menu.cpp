@@ -261,6 +261,10 @@ char *_MainLoopStateMenuEntries[] =
 
 static Bool _MainLoopStateManagerStorageAvailable(Int32 iStorage)
 {
+        /* Keep old numeric IDs for persisted preferences, but skip the
+           former unprobed mc2..7 entries when cycling the visible menu. */
+        if (iStorage >= MAINLOOP_STATEMANAGER_MC2 && iStorage <= MAINLOOP_STATEMANAGER_MC7)
+                return FALSE;
         if (iStorage >= MAINLOOP_STATEMANAGER_MASS2 && iStorage <= MAINLOOP_STATEMANAGER_MASS9)
                 return MassStorageIsEnabled() || Mx4sioIsEnabled();
         switch (iStorage)
