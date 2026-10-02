@@ -724,6 +724,37 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	uAddr &= 0xFFFF;
 
+	/* PPU ports are the frequent CPU/HDMA writes and are disjoint from
+	   every cartridge device window below. Preserve their original queue,
+	   bus timing and side effects before testing unrelated chip state. */
+	if (uAddr >= 0x2100 && uAddr < 0x2140)
+	{
+		/* Memory data ports need the live H/V position. Flush older queued
+		   control/address writes, then perform this bus transaction now so
+		   active-display restrictions are decided at the original access. */
+		if (uAddr == 0x2104 || uAddr == 0x2116 || uAddr == 0x2117 ||
+		    uAddr == 0x2118 || uAddr == 0x2119 || uAddr == 0x2122)
+		{
+#if SNPPU_WRITEQUEUE
+			pSnes->SyncPPU();
+#endif
+			pSnes->m_PPU.WriteTimed(
+				uAddr, uData, pSnes->m_uLine, pSnes->GetSCPULineClock());
+		}
+		else
+		{
+			/* Other decoded PPU writes keep the low-cost scanline queue. */
+#if SNPPU_WRITEQUEUE
+			while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
+				pSnes->SyncPPU();
+#else
+			pSnes->SyncPPU();
+			pSnes->m_PPU.Write8(uAddr, uData);
+#endif
+		}
+		return;
+	}
+
 	if (pSnes->m_bSA1)
 	{
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
@@ -787,67 +818,39 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		return;
 	}
 
-	if (uAddr >= 0x2100 && uAddr < 0x2140)
+	switch(uAddr)
 	{
-		/* Memory data ports need the live H/V position. Flush older queued
-		   control/address writes, then perform this bus transaction now so
-		   active-display restrictions are decided at the original access. */
-		if (uAddr == 0x2104 || uAddr == 0x2116 || uAddr == 0x2117 ||
-		    uAddr == 0x2118 || uAddr == 0x2119 || uAddr == 0x2122)
-		{
-#if SNPPU_WRITEQUEUE
-			pSnes->SyncPPU();
-#endif
-			pSnes->m_PPU.WriteTimed(
-				uAddr, uData, pSnes->m_uLine, pSnes->GetSCPULineClock());
-		}
-		else
-		{
-			/* Other decoded PPU writes keep the low-cost scanline queue. */
-#if SNPPU_WRITEQUEUE
-			while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
-				pSnes->SyncPPU();
-#else
-			pSnes->SyncPPU();
-			pSnes->m_PPU.Write8(uAddr, uData);
-#endif
-		}
-	} else
-	{
-		switch(uAddr)
-		{
-			case 0x2180:	// WMDATA
-				// write directly to ram
-				pSnes->m_Ram[pSnes->m_IO.m_Regs.wmadd] = uData;
-				// increment memory address
-				pSnes->m_IO.m_Regs.wmadd++;
-				pSnes->m_IO.m_Regs.wmadd &= 0x1FFFF;
-				break;
-			case 0x2181:	// WMADDL
-				pSnes->m_IO.m_Regs.wmadd &= ~0x0000FF;
-				pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 0;
-				break;
+		case 0x2180:	// WMDATA
+			// write directly to ram
+			pSnes->m_Ram[pSnes->m_IO.m_Regs.wmadd] = uData;
+			// increment memory address
+			pSnes->m_IO.m_Regs.wmadd++;
+			pSnes->m_IO.m_Regs.wmadd &= 0x1FFFF;
+			break;
+		case 0x2181:	// WMADDL
+			pSnes->m_IO.m_Regs.wmadd &= ~0x0000FF;
+			pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 0;
+			break;
 
-			case 0x2182:	// WMADDM
-				pSnes->m_IO.m_Regs.wmadd &= ~0x00FF00;
-				pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 8;
-				break;
+		case 0x2182:	// WMADDM
+			pSnes->m_IO.m_Regs.wmadd &= ~0x00FF00;
+			pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 8;
+			break;
 
-			case 0x2183:	// WMADDH
-				pSnes->m_IO.m_Regs.wmadd &= ~0xFF0000;
-				pSnes->m_IO.m_Regs.wmadd |= (uData & 0x01) << 16;
-				break;
+		case 0x2183:	// WMADDH
+			pSnes->m_IO.m_Regs.wmadd &= ~0xFF0000;
+			pSnes->m_IO.m_Regs.wmadd |= (uData & 0x01) << 16;
+			break;
 
-			default:
-				/* $2184-$21FF has no B-bus register behind it.  Writes are
-				   ignored; in particular, the old Donkey Kong-specific $2184
-				   exception was just one instance of this generic rule. */
-				if (uAddr >= 0x2184 && uAddr <= 0x21FF)
-					break;
-				/* All other locations in this trap page are base-console open
-				   bus/expansion space. Device-owned windows were handled above. */
+		default:
+			/* $2184-$21FF has no B-bus register behind it.  Writes are
+			   ignored; in particular, the old Donkey Kong-specific $2184
+			   exception was just one instance of this generic rule. */
+			if (uAddr >= 0x2184 && uAddr <= 0x21FF)
 				break;
-		}
+			/* All other locations in this trap page are base-console open
+			   bus/expansion space. Device-owned windows were handled above. */
+			break;
 	}
 }
 
