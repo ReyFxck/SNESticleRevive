@@ -7,6 +7,11 @@ superior continua em movimento. CPU, SPC/DSP, HDMA, avaliação de OAM e
 composição continuam ativos. A taxa G do NetherSX2 não identifica a taxa
 de frames SNES executados, nem o subsistema responsável pelo custo.
 
+**Correção posterior:** as fotos 2592–2595 revelaram uma constante de clock
+incorreta neste build: CP0 Count avança a 294.912.000 Hz, não a 147.456.000 Hz.
+FPS exibido ficava pela metade e tempos em dobro. O build v2 corrige isso;
+veja [a análise e entrega v2](WORKLOAD_TARGET_V2_2026-10-02.md).
+
 ## Dependências conferidas
 
 O normal usa CPU ASM Plain para ROMs comuns, SPC C, mixer DSP/MMI e renderer
@@ -41,7 +46,7 @@ pequena não estabelece um ganho de FPS para a corrida.
 ## Medidor separado do normal
 
 `SNES_TARGET_PROFILE=1`, combinado com `SNES_DIAGNOSTICS=0`, habilita um HUD
-com amostras de EE Count a 147.456.000 Hz. Não há contadores por instrução
+com amostras de EE Count (corrigidas no v2 para 294.912.000 Hz). Não há contadores por instrução
 ou pixel, nem novos logs contínuos SIO. As sondas e o HUD têm custo; o ELF
 normal continua compilando tudo isso fora. A mudança de modo participa do
 marcador de recompilação para impedir mistura de objetos.
