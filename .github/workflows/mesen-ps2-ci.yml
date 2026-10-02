@@ -610,7 +610,7 @@ jobs:
           Export branch: backup/mesen-ps2-source-export-20261002
           This archive is the fully reconstructed work/port after all PS2 CI patches.
           EOF
-          tar -czf mesence-nes-ps2-source.tar.gz -C work/port .
+          tar -chzf mesence-nes-ps2-source.tar.gz -C work/port .
 
       - name: Upload PS2 source tree
         uses: actions/upload-artifact@v4
