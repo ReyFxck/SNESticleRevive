@@ -460,7 +460,9 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 	   later visible line, so fades cannot expose stale pixels. */
 	if ((pRegs->inidisp & 0x80u) || !(pRegs->inidisp & 0x0Fu))
 	{
+		SNTARGET_BEGIN(_targetClear);
 		m_pBlend->Clear(&m_pRenderInfo->BlendInfo, iLine);
+		SNTARGET_END(Output, _targetClear);
 		return;
 	}
 
@@ -486,7 +488,9 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 #if SNDBG_LOG
 			g_DbgHiresLineCacheHits++;
 #endif
+			SNTARGET_BEGIN(_targetCachedHires);
 			m_pBlend->ExecHires512(pHiresLineCache->uPixels, iLine);
+			SNTARGET_END(Output, _targetCachedHires);
 			return;
 		}
 		/* Two consecutive observations are required before paying the 1 KiB
@@ -659,6 +663,7 @@ static Bool bPrint = TRUE;
 #endif
 
 		// perform color blending of main+sub
+		SNTARGET_BEGIN(_targetOutput);
 #if SNDBG_LOG
 		g_TmgCycColorMath += ProfCtrGetCycle() - _tColorMath;
 		Uint32 _tBlend = ProfCtrGetCycle();
@@ -731,6 +736,7 @@ static Bool bPrint = TRUE;
 #if SNDBG_LOG
 		g_TmgCycBlend += ProfCtrGetCycle() - _tBlend;
 #endif
+		SNTARGET_END(Output, _targetOutput);
 	}
 }
 

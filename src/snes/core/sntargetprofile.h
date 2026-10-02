@@ -17,6 +17,7 @@
 typedef struct SnesTargetProfileFrameT
 {
 	Uint32 Core, PPU, OBJ, SPC, Mix, Audio, GIFWait;
+	Uint32 BGFetch, BGDraw, Output;
 	Uint32 SourceFrames, RenderedFrames;
 } SnesTargetProfileFrameT;
 

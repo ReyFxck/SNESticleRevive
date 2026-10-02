@@ -10,6 +10,7 @@ struct MainLoopTargetProfileSnapshotT
 	Uint32 SourceRate10, PresentRate10, RenderRate10, WorkMs10;
 	Uint32 CoreMs10, PPUMs10, OBJMs10, SPCMs10, MixMs10, AudioMs10;
 	Uint32 GIFWaitMs10, PrepMs10, SubmitMs10, FlipMs10;
+	Uint32 BGFetchMs10, BGDrawMs10, OutputMs10;
 	Bool Ready;
 };
 extern MainLoopTargetProfileSnapshotT g_MainLoopTargetProfile;

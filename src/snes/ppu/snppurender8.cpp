@@ -2064,6 +2064,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 
 	PROF_ENTER("DecodeBGInfo");
+	SNTARGET_BEGIN(_targetBGInfo);
 	if (uBGMode == 7)
 	{
 		/* _FetchMode7 le os registradores diretamente. Depois da busca, o
@@ -2080,6 +2081,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		DecodeBGInfo(BGInfo);
 	}
 	PROF_LEAVE("DecodeBGInfo");
+	SNTARGET_END(BGFetch, _targetBGInfo);
 #if SNDBG_LOG
 	g_TmgCycBGInfo += ProfCtrGetCycle() - _tBGInfo;
 #endif
@@ -2131,6 +2133,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	}
 #endif
 	PROF_LEAVE("FetchOBJ");
+	SNTARGET_BEGIN(_targetBGFetch);
 
 	if ((pRegs->bgmode&7)!=7)
 	{
@@ -2479,7 +2482,9 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		}
 	}
 
+	SNTARGET_END(BGFetch, _targetBGFetch);
 	PROF_ENTER("RenderBG");
+	SNTARGET_BEGIN(_targetBGMain);
 #if SNDBG_LOG
 	Uint32 _tBGMain = ProfCtrGetCycle();
 #endif
@@ -2511,6 +2516,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[0], (tmw&SNESPPU_MASK_BG1) ? &pBGWindow[0] : NULL, BGInfo[0].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG1, NULL, bBG3Pri ? &BG3Pri : NULL, BGInfo[0].Priority, bRendered, BGInfo[0].uScrollX);
 	if (!bRendered)
 		_ClearLinePlanar((SNMaskT *)pMain8, 8);
+	SNTARGET_END(BGDraw, _targetBGMain);
 #if SNDBG_LOG
 	g_TmgCycBGMain += ProfCtrGetCycle() - _tBGMain;
 #endif
@@ -2566,6 +2572,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNDBG_LOG
 	Uint32 _tBGSub = ProfCtrGetCycle();
 #endif
+	SNTARGET_BEGIN(_targetBGSub);
 	if (pRegs->cgwsel & 0x02)
 	{
 		// coloradd/sub subscreen
@@ -2604,6 +2611,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			BGInfo[0].Priority, bRendered, BGInfo[0].uScrollX);
 	if (!bRendered)
 		_ClearLinePlanar((SNMaskT *)pSub8, 8);
+	SNTARGET_END(BGDraw, _targetBGSub);
 #if SNDBG_LOG
 	g_TmgCycBGSub += ProfCtrGetCycle() - _tBGSub;
 #endif

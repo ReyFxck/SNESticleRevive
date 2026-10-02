@@ -73,6 +73,7 @@ static void _MainLoopTargetProfileFinish(Bool bGameplay,
     {
         Uint32 Start, Loops, SourceFrames, RenderedFrames;
         Uint64 Core, PPU, OBJ, SPC, Mix, Audio, GIFWait;
+        Uint64 BGFetch, BGDraw, Output;
         Uint64 Prep, Submit, Flip, Work;
     };
     static WindowT window;
@@ -93,6 +94,9 @@ static void _MainLoopTargetProfileFinish(Bool bGameplay,
     window.Mix += g_SnesTargetProfile.Mix;
     window.Audio += g_SnesTargetProfile.Audio;
     window.GIFWait += g_SnesTargetProfile.GIFWait;
+    window.BGFetch += g_SnesTargetProfile.BGFetch;
+    window.BGDraw += g_SnesTargetProfile.BGDraw;
+    window.Output += g_SnesTargetProfile.Output;
     window.Prep += _MainLoop_DiagPrepCount;
     window.Submit += _MainLoop_DiagSubmitCount;
     window.Flip += _MainLoop_DiagFlipCount;
@@ -112,6 +116,9 @@ static void _MainLoopTargetProfileFinish(Bool bGameplay,
     p->MixMs10 = SnesTargetProfileMillis10(window.Mix, window.Loops);
     p->AudioMs10 = SnesTargetProfileMillis10(window.Audio, window.Loops);
     p->GIFWaitMs10 = SnesTargetProfileMillis10(window.GIFWait, window.Loops);
+    p->BGFetchMs10 = SnesTargetProfileMillis10(window.BGFetch, window.Loops);
+    p->BGDrawMs10 = SnesTargetProfileMillis10(window.BGDraw, window.Loops);
+    p->OutputMs10 = SnesTargetProfileMillis10(window.Output, window.Loops);
     p->PrepMs10 = SnesTargetProfileMillis10(window.Prep, window.Loops);
     p->SubmitMs10 = SnesTargetProfileMillis10(window.Submit, window.Loops);
     p->FlipMs10 = SnesTargetProfileMillis10(window.Flip, window.Loops);

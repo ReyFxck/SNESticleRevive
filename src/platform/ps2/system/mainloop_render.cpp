@@ -262,11 +262,13 @@ static void _MainLoopDrawTargetProfile()
     const MainLoopTargetProfileSnapshotT *p = &g_MainLoopTargetProfile;
     FontSelect(2);
     Int32 h = FontGetHeight() + 1;
-    Int32 y = 237 - h * 5;
+    /* Gameplay crops the 240-line UI canvas. Keep the complete panel
+       above line 216 so the 224-line SNES aperture includes its footer. */
+    Int32 y = 216 - h * 6;
     PolyTexture(NULL);
     PolyBlend(TRUE);
     PolyColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-    PolyRect(3.0f, (Float32)y - 1.0f, 250.0f, (Float32)(h * 5 + 1));
+    PolyRect(3.0f, (Float32)y - 1.0f, 250.0f, (Float32)(h * 6 + 1));
     FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     if (!p->Ready)
     {
@@ -283,6 +285,9 @@ static void _MainLoopDrawTargetProfile()
     y += h;
     FontPrintf(6, y, "PPU %u.%u OBJ %u.%u GIF %u.%u",
         TARGET_FMT(p->PPUMs10), TARGET_FMT(p->OBJMs10), TARGET_FMT(p->GIFWaitMs10));
+    y += h;
+    FontPrintf(6, y, "FETCH %u.%u BG %u.%u OUT %u.%u",
+        TARGET_FMT(p->BGFetchMs10), TARGET_FMT(p->BGDrawMs10), TARGET_FMT(p->OutputMs10));
     y += h;
     FontPrintf(6, y, "SPC %u.%u MIX %u.%u IOP %u.%u",
         TARGET_FMT(p->SPCMs10), TARGET_FMT(p->MixMs10), TARGET_FMT(p->AudioMs10));
