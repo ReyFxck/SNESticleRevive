@@ -42,6 +42,12 @@ com chaves completas; o hires conserva saídas quando o estado se repete.
 Escritas VRAM/CGRAM e alterações relevantes invalidam o resultado.
 Eles não guardam save states nem substituem armazenamento persistente.
 
+A investigação posterior de capacidade está em
+[CACHE_CAPACITY](CACHE_CAPACITY_2026-10-02.md). Simular 4/8 vias não recuperou
+hits extras na intro de Trials ou no replay Mode 5; na intro/demo de Top Gear,
+oito vias recuperariam 58829 hits, 5,93% dos misses atuais. Isso não mede FPS
+nem o custo de busca no EE. Nenhum cache foi ampliado nesta etapa.
+
 Mais RAM reservada não prova mais desempenho. É preciso medir hits/misses,
 reutilização após expulsão, bytes copiados e invalidações. Rotação/escala
 Mode 7 muda os endereços afins; o fetch desse modo não se torna gratuito
@@ -114,7 +120,7 @@ uma diferença específica e demonstrada.
 | Trabalho | Dependência |
 |---|---|
 | CRT-easymode opcional on/off | Definir resultado visual e custo compatíveis com o GS; validar antes de ativar por padrão. |
-| Substituir infoNES pelo port MesenCE | ZIP recebido contém somente mesence-ps2.elf e audsrv.irx, sem fontes. O link do repositório/branch do port foi solicitado ao usuário. Comparar orçamento EE/RAM, áudio, interface e saves antes da integração. |
+| Substituir infoNES pelo port MesenCE | Novo ZIP `MesenCE-NES-PS2-Source-MenuSafeInput-1.zip` trouxe os fontes. O Makefile NES-only compilou sem alterações; a integração permanece pendente. Adaptar vídeo/entrada/áudio e ciclo de vida ao SNESticle, comparar orçamento EE/RAM e implementar a ligação de saves antes de substituir o infoNES. O áudio standalone ainda usa `audsrv_wait_audio`. Evidência em [CACHE_CAPACITY](CACHE_CAPACITY_2026-10-02.md#fontes-recebidos-do-mesence). |
 
 FPS on/off e diagnóstico no menu, pedido anterior, continuam registrados
 para a etapa de configuração. O profile v3 continua sendo uma build separada; a versão RFA também mostra filas EE/IOP e UND.
