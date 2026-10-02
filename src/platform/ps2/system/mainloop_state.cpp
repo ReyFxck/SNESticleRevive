@@ -733,8 +733,7 @@ Bool MainLoopStateDeviceAvailable(MainLoopStateDeviceE eDevice)
 
         case MAINLOOP_STATEDEVICE_HDD:
             return HddSupportIsEnabled() &&
-                   (!strncmp(_RomPath, "hdd0:", 5) ||
-                    !strncmp(_RomPath, "pfs0:", 5));
+                   (HddIsMounted() || !strncmp(_RomPath, "hdd0:", 5));
 
         default:
             return FALSE;
@@ -1521,12 +1520,21 @@ static Bool _MainLoopStateGetHddRoot(Char *pRoot, Int32 nRootBytes)
 
     if (!strncmp(_RomPath, "pfs0:", 5))
     {
+        if (!HddIsMounted()) return FALSE;
         snprintf(pRoot, nRootBytes, "pfs0:");
         return TRUE;
     }
 
-    if (strncmp(_RomPath, "hdd0:", 5) ||
-        !HddSupportIsEnabled() ||
+    /* A USB/MC/MMCE ROM may still save to a partition selected earlier
+       in the browser. Preserve ROM-origin remapping for hdd0: below. */
+    if (strncmp(_RomPath, "hdd0:", 5))
+    {
+        if (!HddIsMounted()) return FALSE;
+        snprintf(pRoot, nRootBytes, "pfs0:");
+        return TRUE;
+    }
+
+    if (!HddSupportIsEnabled() ||
         HddLoadEmbeddedIrx() < 0)
     {
         return FALSE;
