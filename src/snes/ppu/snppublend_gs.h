@@ -70,6 +70,10 @@ class SNPPUBlendGS : public ISNPPUBlend
 	Int32 m_iDirectFirstLine;
 	Uint32 m_nDirectLines;
 	Bool m_bDirectSparsePalette;
+	Bool m_bSparsePaletteListReady;
+	Uint64 m_uSparsePaletteGroups;
+	PaletteT *m_pSparsePaletteSource;
+	SNPPUDmaListT *m_pSparseRenderList;
 
 	void FlushDirectLines();
 

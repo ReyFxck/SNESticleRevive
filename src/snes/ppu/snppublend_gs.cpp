@@ -451,8 +451,16 @@ static void _GPFifoUploadTexture(int TBP, int TBW, int xofs, int yofs,
 Uint128 *SNPPUBlendGS::BuildSparsePaletteList(PaletteT *pPalette,
 	Uint64 uDirtyGroups, SNPPUDmaListT *pRenderList)
 {
-	/* Write through the uncached alias: this list is rebuilt after every GIF
-	   sync and must be visible to DMAC immediately without flushing the EE's
+	/* Raster palette writes often touch the same CLUT groups on consecutive
+	   lines. The wrapper describes addresses and geometry, not color values:
+	   CopyDirtyPalette has already refreshed its DMA-owned source after the
+	   GIF wait. Retain this exact chain while all three dependencies match. */
+	if (m_bSparsePaletteListReady && m_uSparsePaletteGroups == uDirtyGroups &&
+	    m_pSparsePaletteSource == pPalette && m_pSparseRenderList == pRenderList)
+		return m_SparsePaletteDmaList;
+
+	/* On a wrapper miss, write through the uncached alias after GIF sync.
+	   The list must be visible to DMAC without flushing the EE's
 	   complete 8 KiB data cache. */
 	Uint128 *pBuild = (Uint128 *)PS2MEM_UNCACHED(m_SparsePaletteDmaList);
 	Uint32 iRow;
@@ -497,6 +505,10 @@ Uint128 *SNPPUBlendGS::BuildSparsePaletteList(PaletteT *pPalette,
 	GSDmaNext(pRenderList->Data);
 	GSListEnd();
 	__asm__ __volatile__ ("sync.l");
+	m_uSparsePaletteGroups = uDirtyGroups;
+	m_pSparsePaletteSource = pPalette;
+	m_pSparseRenderList = pRenderList;
+	m_bSparsePaletteListReady = TRUE;
 	return m_SparsePaletteDmaList;
 }
 
@@ -1000,6 +1012,7 @@ SNPPUBlendGS::SNPPUBlendGS(Uint32 uVramAddr, Uint32 uOutAddr)
 	m_bHiresDmaListReady = FALSE;
 	m_nDirectLines = 0;
 	m_pDirectExecList = NULL;
+	m_bSparsePaletteListReady = FALSE;
 
     pList->uPalAddr        = uVramAddr + 0x000;
     pList->uInputAddr      = uVramAddr + 0x080 ;
