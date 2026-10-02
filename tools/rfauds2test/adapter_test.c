@@ -4,6 +4,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <kernel.h>
 #include <rfauds2/rfauds2.h>
 #include "audio.h"
 
@@ -18,6 +21,28 @@ static unsigned int zero_accepts, partial_accepts, yield_count, underruns;
 static int pending, completed, running, cached_valid;
 static int fail_poll, errors;
 static rfauds2_stats cache;
+static pthread_mutex_t audio_lock = PTHREAD_MUTEX_INITIALIZER;
+static _Thread_local int locked;
+static atomic_int threaded;
+int CreateSema(ee_sema_t *semaphore)
+{
+    assert(semaphore->init_count == 1 && semaphore->max_count == 1);
+    return 1;
+}
+int WaitSema(int id)
+{
+    assert(id == 1 && !locked);
+    assert(pthread_mutex_lock(&audio_lock) == 0);
+    locked = 1;
+    return 0;
+}
+int SignalSema(int id)
+{
+    assert(id == 1 && locked);
+    locked = 0;
+    assert(pthread_mutex_unlock(&audio_lock) == 0);
+    return 0;
+}
 
 static void snapshot(void)
 {
@@ -72,6 +97,7 @@ int RotateThreadReadyQueue(int priority)
 void DLog(const char *fmt, ...) { (void)fmt; ++errors; }
 static int control(void)
 {
+    assert(locked);
     assert(pending == 0);
     ++sync_controls;
     snapshot();
@@ -95,6 +121,7 @@ int rfauds2_flush(void)
 }
 int rfauds2_submit_s16_async(const s16 *pcm, u32 frames)
 {
+    assert(locked);
     assert(!pending && frames > 0 && frames <= RFAUDS2_ASYNC_MAX_FRAMES);
     memcpy(request, pcm, frames * 4);
     request_frames = frames;
@@ -105,6 +132,8 @@ int rfauds2_submit_s16_async(const s16 *pcm, u32 frames)
 }
 int rfauds2_submit_poll(u32 *result)
 {
+    assert(locked);
+    if (atomic_load(&threaded)) advance();
     assert(pending == 1);
     if (!completed) return 0;
     if (fail_poll) { fail_poll = 0; pending = completed = 0; return -9; }
@@ -115,6 +144,7 @@ int rfauds2_submit_poll(u32 *result)
 }
 int rfauds2_get_stats_async(void)
 {
+    assert(locked);
     assert(!pending);
     pending = 2; completed = 0; delay = 2;
     ++async_queries;
@@ -122,6 +152,8 @@ int rfauds2_get_stats_async(void)
 }
 int rfauds2_get_stats_poll(rfauds2_stats *stats)
 {
+    assert(locked);
+    if (atomic_load(&threaded)) advance();
     assert(pending == 2);
     if (!completed) return 0;
     pending = completed = 0;
@@ -130,6 +162,7 @@ int rfauds2_get_stats_poll(rfauds2_stats *stats)
 }
 int rfauds2_get_cached_stats(rfauds2_stats *stats)
 {
+    assert(locked);
     if (!cached_valid) return -1;
     *stats = cache;
     return 0;
@@ -173,6 +206,16 @@ static void drain(void)
 static void reset_oracle(void)
 {
     played_frames = expected_frames = 0;
+}
+static void *service_thread(void *unused)
+{
+    (void)unused;
+    while (atomic_load(&threaded)) {
+        Aud_Service();
+        (void)Aud_Available();
+        (void)Aud_Buffered();
+    }
+    return NULL;
 }
 int main(void)
 {
@@ -218,6 +261,17 @@ int main(void)
     }
     assert(sync_controls == controls && !sync_queries);
     assert(!errors);
+    /* Main producer and I/O helper race at the public boundary. All mock
+       protocol progress is inside that boundary during this stress phase. */
+    Aud_Clearbuff(); reset_oracle();
+    pthread_t helper;
+    atomic_store(&threaded, 1);
+    assert(pthread_create(&helper, NULL, service_thread, NULL) == 0);
+    for (i = 0; i < 50; i++) enqueue(3071, 0);
+    Aud_Wait();
+    atomic_store(&threaded, 0);
+    assert(pthread_join(helper, NULL) == 0);
+    drain();
     Aud_Quit(); assert(!Aud_IsInitialized());
     assert(Aud_Available() == 0 && Aud_Buffered() == 0);
     /* A fatal completion is surfaced once and disables the adapter; do
@@ -229,6 +283,6 @@ int main(void)
     advance(); advance(); Aud_Service();
     assert(errors == 1 && !Aud_IsInitialized());
     Aud_Service(); assert(errors == 1);
-    printf("adapter_test: PASS (249680 stereo frames, prefix retries, source reuse, wrap, controls, small blocking packet, async occupancy, transport failure)\n");
+    printf("adapter_test: PASS (prefix retries, source reuse, wrap, controls, concurrent helper/producer, async occupancy, transport failure)\n");
     return 0;
 }

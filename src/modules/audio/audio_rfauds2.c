@@ -19,6 +19,23 @@ static int s_ready, s_play_requested, s_running;
 enum { AUD_IDLE, AUD_SUBMIT, AUD_STATS };
 static int s_pending;
 
+static void Locked_Aud_Service(void);
+static int Locked_Aud_Init(int sync, int buffersize, int maxenqueuesamples);
+static void Locked_Aud_Enqueue(short *left, short *right, int size, int wait);
+static void Locked_Aud_EnqueueAsync(short *left, short *right, int size);
+static void Locked_Aud_BufferedAsyncStart(void);
+static int Locked_Aud_Buffered(void);
+static int Locked_Aud_BufferedAsyncGet(void);
+static int Locked_Aud_Available(void);
+static void Locked_Aud_Wait(void);
+static void Locked_Aud_Setvol(unsigned int volume);
+static void Locked_Aud_Clearbuff(void);
+static void Locked_Aud_Pause(void);
+static void Locked_Aud_Play(void);
+static void Locked_Aud_Quit(void);
+static int Locked_Aud_IsInitialized(void);
+static int Locked_Aud_GetOutputStats(AudOutputStatsT *output);
+
 static int Aud_Result(int result, const char *operation)
 {
     if (result < 0) {
@@ -102,14 +119,14 @@ static void Aud_Pump(void)
     }
 }
 
-void Aud_Service(void)
+static void Locked_Aud_Service(void)
 {
     SNTARGET_BEGIN(_targetAudioService);
     Aud_Pump();
     SNTARGET_END(Audio, _targetAudioService);
 }
 
-int Aud_Init(int sync, int buffersize, int maxenqueuesamples)
+static int Locked_Aud_Init(int sync, int buffersize, int maxenqueuesamples)
 {
     int result;
     (void)sync; (void)buffersize; (void)maxenqueuesamples;
@@ -131,7 +148,7 @@ int Aud_Init(int sync, int buffersize, int maxenqueuesamples)
     return 0;
 }
 
-void Aud_Enqueue(short *left, short *right, int size, int wait)
+static void Locked_Aud_Enqueue(short *left, short *right, int size, int wait)
 {
     unsigned int i, count, space, contiguous;
     if (!s_ready || !left || !right || size <= 0) return;
@@ -162,33 +179,33 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
         Aud_Pump();
     }
     SNTARGET_END(Audio, _targetAudioEnqueue);
-    if (wait) Aud_Wait();
+    if (wait) Locked_Aud_Wait();
 }
 
-void Aud_EnqueueAsync(short *left, short *right, int size)
+static void Locked_Aud_EnqueueAsync(short *left, short *right, int size)
 {
-    Aud_Enqueue(left, right, size, 0);
+    Locked_Aud_Enqueue(left, right, size, 0);
 }
 
-void Aud_BufferedAsyncStart(void) { Aud_Service(); }
+static void Locked_Aud_BufferedAsyncStart(void) { Locked_Aud_Service(); }
 
-int Aud_Buffered(void)
+static int Locked_Aud_Buffered(void)
 {
     rfauds2_stats stats;
     if (!s_ready) return 0;
-    Aud_Service();
+    Locked_Aud_Service();
     if (rfauds2_get_cached_stats(&stats) < 0) return (int)s_count;
     return (int)(s_count + stats.queued_frames);
 }
 
-int Aud_BufferedAsyncGet(void) { return Aud_Buffered(); }
+static int Locked_Aud_BufferedAsyncGet(void) { return Locked_Aud_Buffered(); }
 
-int Aud_Available(void)
+static int Locked_Aud_Available(void)
 {
     rfauds2_stats stats;
     unsigned int space, ee_space;
     if (!s_ready) return 0;
-    Aud_Service();
+    Locked_Aud_Service();
     if (rfauds2_get_cached_stats(&stats) < 0) return 0;
     /* Keep BGM's demand tied to IOP occupancy, not the 8192-frame EE FIFO.
        An in-flight prefix is still included in s_count until acknowledged. */
@@ -199,14 +216,14 @@ int Aud_Available(void)
     return (int)(space < ee_space ? space : ee_space);
 }
 
-void Aud_Wait(void)
+static void Locked_Aud_Wait(void)
 {
     while (s_ready && (s_count || s_pending == AUD_SUBMIT)) {
         Aud_Collect();
         /* A legacy small blocking block need not wait for more producers. */
         Aud_TryStart(1);
         if (s_count) {
-            Aud_Service();
+            Locked_Aud_Service();
             RotateThreadReadyQueue(0);
         }
     }
@@ -214,14 +231,14 @@ void Aud_Wait(void)
     Aud_TryStart(1);
 }
 
-void Aud_Setvol(unsigned int volume)
+static void Locked_Aud_Setvol(unsigned int volume)
 {
     if (!s_ready) return;
     Aud_Collect();
     if (s_ready) Aud_Result(rfauds2_set_volume(volume & 0x3fffu), "volume");
 }
 
-void Aud_Clearbuff(void)
+static void Locked_Aud_Clearbuff(void)
 {
     if (!s_ready) return;
     Aud_Collect();
@@ -233,12 +250,12 @@ void Aud_Clearbuff(void)
     s_play_requested = 0;
 }
 
-void Aud_Pause(void) { Aud_Clearbuff(); }
-void Aud_Play(void) { if (s_ready) s_play_requested = 1; }
-void Aud_Quit(void) { Aud_Clearbuff(); s_ready = 0; }
-int Aud_IsInitialized(void) { return s_ready; }
+static void Locked_Aud_Pause(void) { Locked_Aud_Clearbuff(); }
+static void Locked_Aud_Play(void) { if (s_ready) s_play_requested = 1; }
+static void Locked_Aud_Quit(void) { Locked_Aud_Clearbuff(); s_ready = 0; }
+static int Locked_Aud_IsInitialized(void) { return s_ready; }
 
-int Aud_GetOutputStats(AudOutputStatsT *output)
+static int Locked_Aud_GetOutputStats(AudOutputStatsT *output)
 {
     rfauds2_stats stats;
     if (!s_ready || !output || rfauds2_get_cached_stats(&stats) < 0) return 0;
@@ -248,4 +265,137 @@ int Aud_GetOutputStats(AudOutputStatsT *output)
     output->silent_frames = stats.silent_frames;
     output->backpressure_waits = s_backpressure_waits;
     return 1;
+}
+
+/* The menu I/O helper and the main EE thread can both call this adapter.
+   Serialize the FIFO and single RPC slot. Never hold interrupts disabled
+   while waiting for a reply; the RPC completion itself needs the IOP/SIF.
+   Aud_Init runs before the frontend starts its helper thread. */
+static int s_audio_lock = -1;
+static void Aud_Lock(void) { if (s_audio_lock >= 0) WaitSema(s_audio_lock); }
+static void Aud_Unlock(void) { if (s_audio_lock >= 0) SignalSema(s_audio_lock); }
+
+void Aud_Service(void)
+{
+    Aud_Lock();
+    Locked_Aud_Service();
+    Aud_Unlock();
+}
+
+int Aud_Init(int sync, int buffersize, int maxenqueuesamples)
+{
+    if (s_audio_lock < 0) {
+        ee_sema_t semaphore;
+        memset(&semaphore, 0, sizeof(semaphore));
+        semaphore.init_count = semaphore.max_count = 1;
+        s_audio_lock = CreateSema(&semaphore);
+        if (s_audio_lock < 0) return s_audio_lock;
+    }
+    Aud_Lock();
+    int result = Locked_Aud_Init(sync, buffersize, maxenqueuesamples);
+    Aud_Unlock();
+    return result;
+}
+
+void Aud_Enqueue(short *left, short *right, int size, int wait)
+{
+    Aud_Lock();
+    Locked_Aud_Enqueue(left, right, size, wait);
+    Aud_Unlock();
+}
+
+void Aud_EnqueueAsync(short *left, short *right, int size)
+{
+    Aud_Lock();
+    Locked_Aud_EnqueueAsync(left, right, size);
+    Aud_Unlock();
+}
+
+void Aud_BufferedAsyncStart(void)
+{
+    Aud_Lock();
+    Locked_Aud_BufferedAsyncStart();
+    Aud_Unlock();
+}
+
+int Aud_Buffered(void)
+{
+    Aud_Lock();
+    int result = Locked_Aud_Buffered();
+    Aud_Unlock();
+    return result;
+}
+
+int Aud_BufferedAsyncGet(void)
+{
+    Aud_Lock();
+    int result = Locked_Aud_BufferedAsyncGet();
+    Aud_Unlock();
+    return result;
+}
+
+int Aud_Available(void)
+{
+    Aud_Lock();
+    int result = Locked_Aud_Available();
+    Aud_Unlock();
+    return result;
+}
+
+void Aud_Wait(void)
+{
+    Aud_Lock();
+    Locked_Aud_Wait();
+    Aud_Unlock();
+}
+
+void Aud_Setvol(unsigned int volume)
+{
+    Aud_Lock();
+    Locked_Aud_Setvol(volume);
+    Aud_Unlock();
+}
+
+void Aud_Clearbuff(void)
+{
+    Aud_Lock();
+    Locked_Aud_Clearbuff();
+    Aud_Unlock();
+}
+
+void Aud_Pause(void)
+{
+    Aud_Lock();
+    Locked_Aud_Pause();
+    Aud_Unlock();
+}
+
+void Aud_Play(void)
+{
+    Aud_Lock();
+    Locked_Aud_Play();
+    Aud_Unlock();
+}
+
+void Aud_Quit(void)
+{
+    Aud_Lock();
+    Locked_Aud_Quit();
+    Aud_Unlock();
+}
+
+int Aud_IsInitialized(void)
+{
+    Aud_Lock();
+    int result = Locked_Aud_IsInitialized();
+    Aud_Unlock();
+    return result;
+}
+
+int Aud_GetOutputStats(AudOutputStatsT *output)
+{
+    Aud_Lock();
+    int result = Locked_Aud_GetOutputStats(output);
+    Aud_Unlock();
+    return result;
 }
