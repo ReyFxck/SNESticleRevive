@@ -8,7 +8,7 @@ import concurrent.futures,pathlib,re,subprocess,sys,os
 root,out=map(pathlib.Path,sys.argv[1:])
 sources=re.findall(r'src/third_party/mesence/[^\s\\]+\.cpp',(root/'src/third_party/mesence/mesence_sources.mk').read_text())
 sources+=['src/nes/mesence/mesence_bridge.cpp','tools/mesencetest/bridge_test.cpp']
-flags=['-std=c++20','-O1','-ffunction-sections','-fdata-sections','-DPS2_PORT','-DMESEN_NES_ONLY','-I'+str(root/'src/third_party/mesence/src'),'-I'+str(root/'src/third_party/mesence/src/Core'),'-I'+str(root/'src/nes/mesence')]
+flags=['-std=c++20','-O2','-ffunction-sections','-fdata-sections','-DPS2_PORT','-DMESEN_NES_ONLY','-I'+str(root/'src/third_party/mesence/src'),'-I'+str(root/'src/third_party/mesence/src/Core'),'-I'+str(root/'src/nes/mesence')]
 if os.environ.get('SANITIZE')=='1': flags+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
 latest_header=max(p.stat().st_mtime for p in (root/'src/third_party/mesence').rglob('*') if p.suffix in ('.h','.hpp','.ipp'))
 import json
@@ -26,6 +26,11 @@ for src in ['miniz.c','miniz_tdef.c','miniz_tinfl.c','miniz_zip.c']:
  subprocess.run(['gcc','-O1','-c',str(root/'src/third_party/miniz'/src),'-o',str(target)],check=True)
  objects.append(str(target))
 subprocess.run(['g++',*flags,*objects,'-Wl,--gc-sections','-pthread','-o',str(out/'bridge_test')],check=True)
+subprocess.run(['g++',*flags,str(root/'tools/mesencetest/audio_equivalence_test.cpp'),
+ str(root/'tools/mesencetest/OriginalHermiteResampler.cpp'),
+ str(root/'src/third_party/mesence/src/Utilities/Audio/HermiteResampler.cpp'),
+ '-o',str(out/'audio_equivalence_test')],check=True)
+subprocess.run([str(out/'audio_equivalence_test')],check=True)
 stamp.write_text(json.dumps(flags))
 PY
 "$OUT/bridge_test"

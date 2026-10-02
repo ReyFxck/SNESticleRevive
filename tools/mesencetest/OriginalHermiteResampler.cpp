@@ -1,17 +1,17 @@
 #include "pch.h"
-#include "HermiteResampler.h"
+#include "OriginalHermiteResampler.h"
 
 //Adapted from http://paulbourke.net/miscellaneous/interpolation/
 //Original author: Paul Bourke ("Any source code found here may be freely used provided credits are given to the author.")
-int16_t HermiteResampler::HermiteInterpolate(const int16_t values[4], double mu)
+int16_t OriginalHermiteResampler::HermiteInterpolate(double values[4], double mu)
 {
 	double m0, m1, mu2, mu3;
 	double a0, a1, a2, a3;
 
 	mu2 = mu * mu;
 	mu3 = mu2 * mu;
-	m0 = (values[1] - values[0]) / 2.0 + (values[2] - values[1]) / 2.0;
-	m1 = (values[2] - values[1]) / 2.0 + (values[3] - values[2]) / 2.0;
+	m0 = (values[1] - values[0]) / 2 + (values[2] - values[1]) / 2;
+	m1 = (values[2] - values[1]) / 2 + (values[3] - values[2]) / 2;
 	a0 = 2 * mu3 - 3 * mu2 + 1;
 	a1 = mu3 - 2 * mu2 + mu;
 	a2 = mu3 - mu2;
@@ -21,15 +21,15 @@ int16_t HermiteResampler::HermiteInterpolate(const int16_t values[4], double mu)
 	return (int16_t)std::clamp(output, -32768.0, 32767.0);
 }
 
-void HermiteResampler::PushSample(int16_t prevValues[4], int16_t sample)
+void OriginalHermiteResampler::PushSample(double prevValues[4], int16_t sample)
 {
 	prevValues[0] = prevValues[1];
 	prevValues[1] = prevValues[2];
 	prevValues[2] = prevValues[3];
-	prevValues[3] = sample;
+	prevValues[3] = (double)sample;
 }
 
-void HermiteResampler::Reset()
+void OriginalHermiteResampler::Reset()
 {
 	for(int i = 0; i < 4; i++) {
 		_prevLeft[i] = 0.0;
@@ -38,23 +38,23 @@ void HermiteResampler::Reset()
 	_fraction = 0.0;
 }
 
-void HermiteResampler::SetVolume(double volume)
+void OriginalHermiteResampler::SetVolume(double volume)
 {
 	_volume = (int32_t)(volume * 256);
 }
 
-void HermiteResampler::SetSampleRates(double srcRate, double dstRate)
+void OriginalHermiteResampler::SetSampleRates(double srcRate, double dstRate)
 {
 	_rateRatio = srcRate / dstRate;
 }
 
-uint32_t HermiteResampler::GetPendingCount()
+uint32_t OriginalHermiteResampler::GetPendingCount()
 {
 	return (uint32_t)_pendingSamples.size() / 2;
 }
 
 template<bool addMode>
-void HermiteResampler::WriteSample(int16_t* out, uint32_t pos, int16_t left, int16_t right)
+void OriginalHermiteResampler::WriteSample(int16_t* out, uint32_t pos, int16_t left, int16_t right)
 {
 	if(addMode) {
 		out[pos] = (int16_t)std::clamp<int32_t>(out[pos] + ((left * _volume) >> 8), INT16_MIN, INT16_MAX);
@@ -66,7 +66,7 @@ void HermiteResampler::WriteSample(int16_t* out, uint32_t pos, int16_t left, int
 }
 
 template<bool addMode>
-uint32_t HermiteResampler::Resample(int16_t* in, uint32_t inSampleCount, int16_t* out, size_t maxOutSampleCount, bool fillToMax)
+uint32_t OriginalHermiteResampler::Resample(int16_t* in, uint32_t inSampleCount, int16_t* out, size_t maxOutSampleCount, bool fillToMax)
 {
 	maxOutSampleCount *= 2;
 	if(_pendingSamples.size() >= maxOutSampleCount) {
@@ -91,30 +91,6 @@ uint32_t HermiteResampler::Resample(int16_t* in, uint32_t inSampleCount, int16_t
 			_right = in[inSampleCount * 2 - 1];
 			outPos += count;
 		}
-	} else if(_rateRatio == 2.0 && (_fraction == 0.0 || _fraction == 1.0 || _fraction == 2.0)) {
-		/* 96 -> 48 kHz visits only exact Hermite endpoints. Values are
-		   source int16 samples, so endpoint selection equals the original
-		   double polynomial bit for bit, including startup and chunk edges.
-		   Keep the original push/output order and pending/volume semantics. */
-		uint32_t phase = (uint32_t)_fraction;
-		for(uint32_t i = 0; i < inSampleCount * 2; i += 2) {
-			if(phase <= 1) {
-				_left = _prevLeft[phase + 1];
-				_right = _prevRight[phase + 1];
-				if(outPos + 2 <= maxOutSampleCount) {
-					WriteSample<addMode>(out, outPos, _left, _right);
-					outPos += 2;
-				} else {
-					_pendingSamples.push_back(_left);
-					_pendingSamples.push_back(_right);
-				}
-				phase += 2;
-			}
-			PushSample(_prevLeft, in[i]);
-			PushSample(_prevRight, in[i + 1]);
-			--phase;
-		}
-		_fraction = (double)phase;
 	} else {
 		for(uint32_t i = 0; i < inSampleCount * 2; i += 2) {
 			while(_fraction <= 1.0) {
@@ -149,5 +125,5 @@ uint32_t HermiteResampler::Resample(int16_t* in, uint32_t inSampleCount, int16_t
 	return outPos / 2;
 }
 
-template uint32_t HermiteResampler::Resample<true>(int16_t* in, uint32_t inSampleCount, int16_t* out, size_t maxOutSampleCount, bool fillToMax);
-template uint32_t HermiteResampler::Resample<false>(int16_t* in, uint32_t inSampleCount, int16_t* out, size_t maxOutSampleCount, bool fillToMax);
+template uint32_t OriginalHermiteResampler::Resample<true>(int16_t* in, uint32_t inSampleCount, int16_t* out, size_t maxOutSampleCount, bool fillToMax);
+template uint32_t OriginalHermiteResampler::Resample<false>(int16_t* in, uint32_t inSampleCount, int16_t* out, size_t maxOutSampleCount, bool fillToMax);

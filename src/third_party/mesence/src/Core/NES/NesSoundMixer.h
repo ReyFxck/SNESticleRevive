@@ -52,6 +52,9 @@ private:
 	uint32_t _clockRate = 0;
 
 	bool _hasPanning = false;
+#ifdef PS2_PORT
+	bool _unityMix = false;
+#endif
 
 	__forceinline double GetChannelOutput(AudioChannel channel, bool forRightChannel);
 	__forceinline int16_t GetOutputVolume(bool forRightChannel);

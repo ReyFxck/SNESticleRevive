@@ -1,11 +1,11 @@
 #pragma once
 #include "pch.h"
 
-class HermiteResampler
+class OriginalHermiteResampler
 {
 private:
-	int16_t _prevLeft[4] = {};
-	int16_t _prevRight[4] = {};
+	double _prevLeft[4] = {};
+	double _prevRight[4] = {};
 	int32_t _volume = 256;
 	double _rateRatio = 1.0;
 	double _fraction = 0.0;
@@ -15,8 +15,8 @@ private:
 
 	vector<int16_t> _pendingSamples;
 
-	__forceinline int16_t HermiteInterpolate(const int16_t values[4], double mu);
-	__forceinline void PushSample(int16_t prevValues[4], int16_t sample);
+	__forceinline int16_t HermiteInterpolate(double values[4], double mu);
+	__forceinline void PushSample(double prevValues[4], int16_t sample);
 
 	template<bool addMode>
 	void WriteSample(int16_t* out, uint32_t pos, int16_t left, int16_t right);

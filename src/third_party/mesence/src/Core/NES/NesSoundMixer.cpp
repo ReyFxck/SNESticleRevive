@@ -1,5 +1,8 @@
 #include "pch.h"
 #include "NES/NesSoundMixer.h"
+#ifdef PS2_PORT
+#include "NES/NesMixerLookup.h"
+#endif
 #include "NES/NesConsole.h"
 #include "NES/NesConstants.h"
 #include "NES/NesTypes.h"
@@ -165,6 +168,11 @@ void NesSoundMixer::UpdateRates(bool forceUpdate)
 		}
 	}
 	_hasPanning = hasPanning;
+#ifdef PS2_PORT
+	_unityMix = !hasPanning;
+	for(uint32_t i = 0; i < MaxChannelCount; ++i)
+		_unityMix = _unityMix && cfg.ChannelVolumes[i] == 100;
+#endif
 }
 
 double NesSoundMixer::GetChannelOutput(AudioChannel channel, bool forRightChannel)
@@ -178,6 +186,21 @@ double NesSoundMixer::GetChannelOutput(AudioChannel channel, bool forRightChanne
 
 int16_t NesSoundMixer::GetOutputVolume(bool forRightChannel)
 {
+#ifdef PS2_PORT
+	if(_unityMix) {
+		int32_t s1 = _currentOutput[0], s2 = _currentOutput[1];
+		int32_t t = _currentOutput[2], n = _currentOutput[3], d = _currentOutput[4];
+		if((uint32_t)s1 <= 15 && (uint32_t)s2 <= 15 &&
+		   (uint32_t)t <= 15 && (uint32_t)n <= 15 && (uint32_t)d <= 127) {
+			/* Expansion gains are exact integers at these settings too.
+			   Intermediate sums fit int32 and the final narrowing matches
+			   the original int16 result, without per-delta soft double calls. */
+			int32_t output = MesenceNativeMixer(_currentOutput);
+			if(output >= INT16_MIN && output <= INT16_MAX)
+				return (int16_t)output;
+		}
+	}
+#endif
 	double squareOutput = GetChannelOutput(AudioChannel::Square1, forRightChannel) + GetChannelOutput(AudioChannel::Square2, forRightChannel);
 	double tndOutput = GetChannelOutput(AudioChannel::DMC, forRightChannel) + 2.7516713261 * GetChannelOutput(AudioChannel::Triangle, forRightChannel) + 1.8493587125 * GetChannelOutput(AudioChannel::Noise, forRightChannel);
 
@@ -209,6 +232,7 @@ void NesSoundMixer::EndFrame(uint32_t time)
 		uint32_t stamp = _timestamps[i];
 		for(uint32_t j = 0; j < MaxChannelCount; j++) {
 			_currentOutput[j] += _channelOutput[j][stamp];
+			_channelOutput[j][stamp] = 0;
 		}
 
 		int16_t currentOutput = GetOutputVolume(false) * 4;
@@ -228,7 +252,8 @@ void NesSoundMixer::EndFrame(uint32_t time)
 	}
 
 	//Reset everything
+	/* Every AddDelta appends its timestamp. Once all unique timestamps
+	   have been consumed above, every nonzero cell has been cleared. */
 	_timestamps.clear();
-	memset(_channelOutput, 0, sizeof(_channelOutput));
 }
 
