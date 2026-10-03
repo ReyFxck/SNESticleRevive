@@ -17,11 +17,13 @@
 #include "snppuchrcache.h"
 #include "snppuhires.h"
 #include "snppuhirlinecache.h"
+#include "snppumathidentity.h"
 #include "rendersurface.h"
 #include "snmask.h"
 #include "snmaskop.h"
 #include "prof.h"
 #include "sndbglog.h"
+#include "sntargetprofile.h"
 #if CODE_PLATFORM == CODE_PS2
 #include "ps2mem.h"
 #include "ps2dma.h"
@@ -366,16 +368,6 @@ static void _SnesPPUBuildPseudoHiresLine(
 	}
 }
 
-#if CODE_PLATFORM == CODE_PS2
-static void _SnesPPUBuildNativeHires512(
-	Uint32 *pOut, const SNPPUBlendInfoT *pInfo, const Uint16 *pCGRAM,
-	Uint32 uIntensity)
-{
-	_SnesPPUPrepareHiresPalette(pCGRAM, uIntensity);
-	SnesPPUBuildHiresOutput32(pOut, pInfo->uMain8, pInfo->uSub8,
-		_SnesPPU_HiresPalette16);
-}
-#endif
 
 void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 {
@@ -439,11 +431,13 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 #if SNDBG_LOG
 		Uint32 _tObjUpdate = ProfCtrGetCycle();
 #endif
+		SNTARGET_BEGIN(_targetOBJUpdate);
 		UpdateOBJ(pRenderInfo->uObjY, pRenderInfo->uObjSize);
 		PROF_ENTER("UpdateOBJVisibility");
 		UpdateOBJVisibility(pRenderInfo->uObjY, pRenderInfo->uObjSize,
 			pRegs->oampri.w, SNESPPU_OBJ_NUM);
 		PROF_LEAVE("UpdateOBJVisibility");
+		SNTARGET_END(OBJ, _targetOBJUpdate);
 #if SNDBG_LOG
 		{
 			Uint32 _dObjUpdate = ProfCtrGetCycle() - _tObjUpdate;
@@ -466,7 +460,9 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 	   later visible line, so fades cannot expose stale pixels. */
 	if ((pRegs->inidisp & 0x80u) || !(pRegs->inidisp & 0x0Fu))
 	{
+		SNTARGET_BEGIN(_targetClear);
 		m_pBlend->Clear(&m_pRenderInfo->BlendInfo, iLine);
+		SNTARGET_END(Output, _targetClear);
 		return;
 	}
 
@@ -492,7 +488,9 @@ void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 #if SNDBG_LOG
 			g_DbgHiresLineCacheHits++;
 #endif
+			SNTARGET_BEGIN(_targetCachedHires);
 			m_pBlend->ExecHires512(pHiresLineCache->uPixels, iLine);
+			SNTARGET_END(Output, _targetCachedHires);
 			return;
 		}
 		/* Two consecutive observations are required before paying the 1 KiB
@@ -646,7 +644,26 @@ static Bool bPrint = TRUE;
 			}
 		}
 
+#if CODE_PLATFORM == CODE_PS2
+		/* CGADSUB selects sources, not necessarily visible pixels. Once the
+		   effective math mask is empty, an unclipped, full-brightness normal
+		   line has exactly the same result as palette-expanded main pixels.
+		   Native/pseudo hires still need both screens as visible dots. */
+		if (!bDirectMain && !(pRegs->setini & SNESPPU_SETINI_PSEUDOHIR) &&
+		    (pRegs->bgmode & 7) != 5 && (pRegs->bgmode & 7) != 6 &&
+		    (pRegs->cgwsel & 0xC0) == 0 && m_pPPU->GetIntensity() == 15 &&
+		    (SNMaskIsEmpty(&ColorMask[1]) ||
+		     SnesPPUMathIsIdentity(&ColorMask[1], &ColorMask[2],
+		        &pRenderInfo->SubAddSubMask, (pRegs->cgwsel & 0x02u) != 0,
+		        SNPPUColorConvert15to32(pRegs->coldata))))
+		{
+			bDirectMain = TRUE;
+			bFixedSub = FALSE;
+		}
+#endif
+
 		// perform color blending of main+sub
+		SNTARGET_BEGIN(_targetOutput);
 #if SNDBG_LOG
 		g_TmgCycColorMath += ProfCtrGetCycle() - _tColorMath;
 		Uint32 _tBlend = ProfCtrGetCycle();
@@ -654,28 +671,26 @@ static Bool bPrint = TRUE;
 		if (bMode56HiresSimple)
 		{
 #if CODE_PLATFORM == CODE_PS2
-			Uint32 HiresLine[256] _ALIGN(64);
-			_SnesPPUBuildNativeHires512(
-				HiresLine, pBlendInfo, m_pPPU->GetCGData(),
-				m_pPPU->GetIntensity());
-			m_pBlend->ExecHires512((const Uint16 *)HiresLine, iLine);
+			_SnesPPUPrepareHiresPalette(m_pPPU->GetCGData(), m_pPPU->GetIntensity());
+			Uint16 *pCachePixels = NULL;
+#if SNPPU_BG_CACHE
+			if (pHiresLineCache && bHiresLineCachePromote)
+				pCachePixels = pHiresLineCache->uPixels;
+#endif
+			Bool bProduced = m_pBlend->ExecHiresIndexed(
+				pBlendInfo->uMain8, pBlendInfo->uSub8,
+				_SnesPPU_HiresPalette16, iLine, pCachePixels);
 #if SNPPU_BG_CACHE
 			if (pHiresLineCache)
 			{
 				if (bHiresLineCachePromote)
-				{
-					memcpy(pHiresLineCache->uPixels, HiresLine,
-						sizeof(pHiresLineCache->uPixels));
-					/* Publish readiness only after all 512 pixels exist. */
-					pHiresLineCache->uReady = TRUE;
-				} else
-				{
-					/* Remember only the cheap candidate key on a first miss. */
+					pHiresLineCache->uReady = bProduced;
+				else
 					SnesPPUHiresLineCacheSetKey(&pHiresLineCache->Key,
-						_SnesPPU_OutputGeneration, iLine,
-						&HiresLineState);
-				}
+						_SnesPPU_OutputGeneration, iLine, &HiresLineState);
 			}
+#else
+			(void)bProduced;
 #endif
 #else
 			m_pBlend->Exec(
@@ -721,6 +736,7 @@ static Bool bPrint = TRUE;
 #if SNDBG_LOG
 		g_TmgCycBlend += ProfCtrGetCycle() - _tBlend;
 #endif
+		SNTARGET_END(Output, _targetOutput);
 	}
 }
 

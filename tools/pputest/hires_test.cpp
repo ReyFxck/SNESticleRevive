@@ -17,6 +17,24 @@
 
 static int g_Failures;
 
+class CaptureHiresBlend : public ISNPPUBlend
+{
+public:
+	Uint16 Pixels[512];
+	Int32 Line;
+	void Begin(CRenderSurface *) override {}
+	void Exec(SNPPUBlendInfoT *, Int32, Uint32, SNMaskT *, Bool, Uint32, Bool) override {}
+	void ExecHires512(const Uint16 *pPixels, Int32 iLine) override
+	{
+		std::memcpy(Pixels, pPixels, sizeof(Pixels));
+		Line = iLine;
+	}
+	void Clear(SNPPUBlendInfoT *, Int32) override {}
+	void End() override {}
+	void UpdatePalette(SNPPUBlendInfoT *, Uint16 *, Uint32) override {}
+	void UpdatePaletteEntry(SNPPUBlendInfoT *, Uint32, Uint32, Uint32) override {}
+};
+
 static void Check(const char *pName, Uint64 uGot, Uint64 uExpected)
 {
 	if (uGot != uExpected)
@@ -103,8 +121,22 @@ static void TestHiresPalette()
 
 	for (intensity = 0; intensity <= 15u; ++intensity)
 	{
+		CaptureHiresBlend blend;
+		Uint16 cached[528];
+		std::memset(cached, 0xA5, sizeof(cached));
 		SnesPPUBuildHiresPalette16(palette, cgram, intensity);
 		SnesPPUBuildHiresOutput32(output, mainLine, subLine, palette);
+		blend.ExecHiresIndexed(mainLine, subLine, palette, 37, cached + 8);
+		Check("indexed output preserves line", blend.Line, 37);
+		Check("indexed output and cache", std::memcmp(blend.Pixels, cached + 8, 1024) == 0, TRUE);
+		Check("indexed output pixels", std::memcmp(blend.Pixels, output, 1024) == 0, TRUE);
+		for (Uint32 guard = 0; guard < 8; ++guard)
+		{
+			Check("indexed cache leading guard", cached[guard], 0xA5A5);
+			Check("indexed cache trailing guard", cached[520 + guard], 0xA5A5);
+		}
+		blend.ExecHiresIndexed(mainLine, subLine, palette, 38);
+		Check("indexed output without admission", std::memcmp(blend.Pixels, output, 1024) == 0, TRUE);
 
 		for (i = 0; i < 256u; ++i)
 		{

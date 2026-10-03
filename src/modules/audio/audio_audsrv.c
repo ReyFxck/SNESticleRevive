@@ -40,78 +40,15 @@
     any time-based estimation.
 */
 
+#include "sntargetprofile.h"
 #include <tamtypes.h>
 #include <kernel.h>
-#include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <audsrv.h>
-#include <sio.h>
 
 #include "audio.h"
-
-/* ScrPrintf goes to the on-screen log (and stays there during the
-   splash). Plain printf on EE-side never reaches the emulator console
-   in this project, but ScrPrintf does survive long enough to be seen
-   in a screenshot of the boot screen. Forward-declare it here so we
-   don't have to drag the C++ mainloop_ui.h into this C file. */
-extern void ScrPrintf(const char *pFormat, ...);
-
-/* Diagnostic printf helper for this project.
-
-   Plain printf() on the EE never seems to reach NetherSX2 / PCSX2's
-   emulator log file in this codebase (some piece of the libc->SIF->IOP
-   stdout wiring is missing). What *does* reach the emulator log is the
-   EE SIO TX FIFO at 0x1000f180: PCSX2 captures bytes written to it and
-   emits them on the EE_SIO log channel, which lands in the same console
-   /log file as the IOP "loadmodule:" / "audsrv_adpcm_init()" lines.
-
-   We therefore route diagnostics through sio_putsn() (writes to EE SIO
-   TX FIFO byte-by-byte) and also mirror them to ScrPrintf so the user
-   sees them on the on-screen splash log. sio_init() is called lazily
-   on first use with the standard 38400 8N1 setting.
-
-   Tag: each line is prefixed with "[snes-aud] " so the user can grep
-   the log file. */
-static int   _sio_inited = 0;
-/* Universal SNES records carry several named counters. Keep one complete
-   schema line intact instead of silently cutting it at the old 256 bytes. */
-static char  _dlog_buf[512];
-
-/* Non-static so other translation units can extern it for one-off
-   audio-path tracing. Mirror of the local prototype:
-       extern void DLog(const char *fmt, ...);
-   See mainloop_process.cpp / sjpcmbuffer.cpp where this is called
-   via that extern declaration. */
-void DLog(const char *fmt, ...)
-{
-    va_list ap;
-    int n;
-
-    if (!_sio_inited)
-    {
-        sio_init(38400, 0, 0, 0, 0);
-        _sio_inited = 1;
-    }
-
-    va_start(ap, fmt);
-    /* Leave one byte for a forced newline and one for the terminator. */
-    n = vsnprintf(_dlog_buf, sizeof(_dlog_buf) - 1, fmt, ap);
-    va_end(ap);
-    if (n < 0) return;
-    if (n >= (int)sizeof(_dlog_buf) - 1) n = sizeof(_dlog_buf) - 2;
-
-    /* Make sure the line ends with \n so the emulator log flushes it. */
-    if (n == 0 || _dlog_buf[n - 1] != '\n')
-    {
-        _dlog_buf[n++] = '\n';
-        _dlog_buf[n]   = '\0';
-    }
-
-    sio_putsn(_dlog_buf);
-}
 
 /*
     Output is fixed 48000 Hz / 16 bit / stereo (SPU2 native).
@@ -273,7 +210,9 @@ int Aud_Buffered(void)
 
     if (!sjpcm_inited) return 0;
 
+    SNTARGET_BEGIN(_targetAudioQuery);
     bytes = audsrv_queued();
+    SNTARGET_END(Audio, _targetAudioQuery);
     if (bytes < 0) return 0;
 
     return bytes / AUD_BYTES_PER_SAMPLE;
@@ -285,7 +224,9 @@ int Aud_Available(void)
 
     if (!sjpcm_inited) return 0;
 
+    SNTARGET_BEGIN(_targetAudioAvailable);
     bytes = audsrv_available();
+    SNTARGET_END(Audio, _targetAudioAvailable);
     if (bytes < 0) return 0;
 
     return bytes / AUD_BYTES_PER_SAMPLE;
@@ -306,6 +247,7 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
     if (size <= 0) return;
     if (size > AUD_MAX_ENQUEUE_SAMPLES) size = AUD_MAX_ENQUEUE_SAMPLES;
 
+    SNTARGET_BEGIN(_targetAudioEnqueue);
     for (i = 0; i < size; i++)
     {
         _interleave_buf[i * 2 + 0] = left[i];
@@ -321,6 +263,7 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
 
     if (audsrv_play_audio((const char *)_interleave_buf, bytes) >= 0)
         sjpcm_playing = 1;
+    SNTARGET_END(Audio, _targetAudioEnqueue);
 }
 
 /*
@@ -355,4 +298,12 @@ void Aud_Wait(void)
 int Aud_IsInitialized(void)
 {
     return sjpcm_inited;
+}
+
+void Aud_Service(void) {}
+
+int Aud_GetOutputStats(AudOutputStatsT *stats)
+{
+    (void)stats;
+    return 0;
 }

@@ -78,6 +78,12 @@ int  PadLoadEmbeddedIrx(void);
 int  NetIfLoadEmbeddedIrx(void);
 int  SmbLoadEmbeddedIrx(void);
 
+/* FatFs volume numbers are 0..9. Both USB and MX4SIO use massN:. */
+#define MAINLOOP_MASS_UNITS 10
+/* Native card ports exposed by this frontend. Do not list unattached
+   multitap slots as six additional memory cards. */
+#define MAINLOOP_MEMCARD_UNITS 2
+
 /* USB + BDM fixado: FreeUsbd/usbd_mini + bdm + FatFs + usbmass_bd,
    lendo FAT/exFAT/MBR/GPT e enumerando massN: por drive. */
 int  UsbBdmLoadEmbeddedIrx(void);
@@ -97,6 +103,9 @@ int  UsbBdmGetLastError(void);
 int  HddSupportIsEnabled(void);
 void HddSupportSetEnabled(int enabled);
 int  HddLoadEmbeddedIrx(void);
+/* A writable PFS partition already mounted by this runtime. Query only;
+   never starts a driver or chooses/mounts a partition. Reset clears it. */
+int  HddIsMounted(void);
 
 /* MMCE (MemCard PRO2 / SD2PSX via mmceman) -> mmce0:/mmce1:.  O driver e'
    carregado sob demanda.  Depois da carga, cada porta e' validada com o

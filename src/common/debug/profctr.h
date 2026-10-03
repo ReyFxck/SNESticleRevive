@@ -9,6 +9,8 @@
 #ifndef _PROFCTR_H
 #define _PROFCTR_H
 
+#include "profclock.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */

@@ -18,17 +18,11 @@ extern "C" {
 #include "audio.h"
 };
 
-/* Output gain for the emulated game audio (SNES/NES). The SPU2/audsrv
-   volume is already at 100%, so to match players like Snes9x/RetroArch we
-   raise the PCM amplitude here, with int16 saturation (loud games clip
-   rather than wrap around).
-
-   The user-facing "Game Volume" (Video Config) is 0..100, where 100 maps
-   to AUDMIXBUFFER_BASE_GAIN_PCT (the loudness this build shipped with) and
-   0 mutes:  gainPct = s_gameVolume * BASE / 100.  This single AudMixBuffer
-   instance (_AudMix) is shared by SNES and NES, so the control applies to
-   both. */
-#define AUDMIXBUFFER_BASE_GAIN_PCT 200
+/* Game Volume 100 preserves the mixer PCM. A 200% software boost clipped
+   valid loud mixes before audsrv, and also processed every output sample
+   at the default setting. Lower settings attenuate; listening-volume
+   amplification belongs after the emulator's PCM, not in the SNES DSP. */
+#define AUDMIXBUFFER_BASE_GAIN_PCT 100
 
 static int s_gameVolume = 100;   /* 0..100 (Video Config); 100 = base gain */
 
@@ -57,6 +51,8 @@ void AudMixBuffer::Reset()
     m_iPrevSample[0] = 0;
     m_iPrevSample[1] = 0;
     m_nOutSamples = 0;
+    m_nResamplePending = 0;
+    memset(m_ResamplePending, 0, sizeof(m_ResamplePending));
     m_uLastOutput = 0;
     m_uFrameSamplePhase = 0;
     memset(m_OutData, 0, sizeof(m_OutData));
@@ -96,156 +92,114 @@ Int32 AudMixBuffer::GetOutputSamples()
     return nSamples;
 }
 
-/*
- * Cubic Lagrange 2:3 up-sampler (32 kHz SNES -> 48 kHz SPU2).
- *
- * For each input pair [s_i, s_{i+1}] we emit 3 output samples at
- * fractional times 0, 2/3, 4/3 (in units of one 32 kHz sample):
- *
- *   y[3k+0] = s_{2k}                                       (passthrough)
- *   y[3k+1] = cubic_lagrange(s_{2k-1}, s_{2k},   s_{2k+1}, s_{2k+2}) @ 2/3
- *   y[3k+2] = cubic_lagrange(s_{2k},   s_{2k+1}, s_{2k+2}, s_{2k+3}) @ 1/3
- *
- * Cubic Lagrange phase 2/3 coefficients (scaled by 81):
- *   c = [-4, +30, +60, -5] / 81           (sum = 81)
- * Cubic Lagrange phase 1/3 coefficients (scaled by 81):
- *   c = [-5, +60, +30, -4] / 81           (sum = 81)
- *
- * Replaces the linear 2-tap interpolator that this function used to
- * carry. Linear interpolation has a sinc^2 frequency response, which
- * leaves significant spectral images above the input Nyquist (16 kHz)
- * and is responsible for the "weird / harsh / metallic" artefacts
- * that show up on SPC700-rendered audio with high-frequency content
- * (cymbals, brass, FM-style leads). Cubic Lagrange's response is much
- * closer to an ideal low-pass at f_s_in/2 and suppresses those images
- * by ~20 dB at f_s_in, while still being cheap enough to run on the
- * EE (6 mults + 6 adds per 3 output samples).
- *
- * State carried across calls is exactly one input sample (s_{-1})
- * per channel, stored in *pPrevSample. The very last pair in a chunk
- * doesn't have its full 4-tap lookahead window available yet (we
- * haven't asked the SPC engine for those samples), so we degrade
- * that pair to plain linear interpolation. With ~800 input samples
- * per video frame this affects at most 3 output samples per frame
- * out of ~1200 (~0.25%), which is inaudible.
- */
-Int32 AudMixBuffer::ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples, Int32 *pPrevSample)
+/* Cubic Lagrange 32 -> 48 kHz, at phases 0, 2/3 and 4/3 per input
+   pair. Keep the two lookahead samples rather than changing the filter at
+   each caller's boundary. This adds at most three source samples of delay
+   and makes the PCM independent of input chunk size, including odd chunks. */
+static void AudConvertPair(Int16 *pOut, Int32 hist, const Int16 *pIn)
 {
-    Int32 hist = *pPrevSample;
+    Int32 s0 = pIn[0], s1 = pIn[1], s2 = pIn[2], s3 = pIn[3];
+    Int32 y;
+    pOut[0] = (Int16)s0;
+    y = -4 * hist + 30 * s0 + 60 * s1 - 5 * s2;
+    y = (y >= 0 ? y + 40 : y - 40) / 81;
+    if (y > 32767) y = 32767;
+    if (y < -32768) y = -32768;
+    pOut[1] = (Int16)y;
+    y = -5 * s0 + 60 * s1 + 30 * s2 - 4 * s3;
+    y = (y >= 0 ? y + 40 : y - 40) / 81;
+    if (y > 32767) y = 32767;
+    if (y < -32768) y = -32768;
+    pOut[2] = (Int16)y;
+}
+
+Int32 AudMixBuffer::ConvertSamples2to3(Int16 *pOut, Int16 *pIn,
+    Int32 nSamples, Int32 *pPrevSample, Int16 *pPending, Int32 *pPendingCount)
+{
     Int16 *pOutStart = pOut;
-    Int32 i;
+    Int32 hist = *pPrevSample;
+    Int32 pending = *pPendingCount;
+    Int32 consumed = 0;
 
-    if (nSamples < 2) return 0;
-
-    /* Main path: cubic Lagrange. Requires 2 samples of lookahead
-       beyond the current pair (s_{2k+2}, s_{2k+3}). */
-    for (i = 0; i + 3 < nSamples; i += 2)
+    /* Only boundary pairs use this staging path. As soon as the pending
+       pair comes entirely from pIn, process contiguous input directly. */
+    while (pending)
     {
-        Int32 s0 = pIn[i];
-        Int32 s1 = pIn[i + 1];
-        Int32 s2 = pIn[i + 2];
-        Int32 s3 = pIn[i + 3];
-        Int32 y;
-
-        /* phase 0 - passthrough */
-        pOut[0] = (Int16)s0;
-
-        /* phase 2/3 between s0 and s1, using [hist, s0, s1, s2] */
-        y = -4 * hist + 30 * s0 + 60 * s1 - 5 * s2;
-        y = (y >= 0 ? y + 40 : y - 40) / 81;
-        if (y > 32767)  y = 32767;
-        if (y < -32768) y = -32768;
-        pOut[1] = (Int16)y;
-
-        /* phase 1/3 (= 4/3 from s0) between s1 and s2, using [s0, s1, s2, s3] */
-        y = -5 * s0 + 60 * s1 + 30 * s2 - 4 * s3;
-        y = (y >= 0 ? y + 40 : y - 40) / 81;
-        if (y > 32767)  y = 32767;
-        if (y < -32768) y = -32768;
-        pOut[2] = (Int16)y;
-
-        hist = s1;
+        while (pending < 4 && consumed < nSamples)
+            pPending[pending++] = pIn[consumed++];
+        if (pending < 4)
+        {
+            *pPendingCount = pending;
+            *pPrevSample = hist;
+            return (Int32)(pOut - pOutStart);
+        }
+        AudConvertPair(pOut, hist, pPending);
+        pOut += 3;
+        hist = pPending[1];
+        pPending[0] = pPending[2];
+        pPending[1] = pPending[3];
+        pending = 2;
+        if (consumed >= 2)
+        {
+            consumed -= 2;
+            pending = 0;
+        }
+    }
+    for (; consumed + 3 < nSamples; consumed += 2)
+    {
+        AudConvertPair(pOut, hist, pIn + consumed);
+        hist = pIn[consumed + 1];
         pOut += 3;
     }
-
-    /* Tail path: last pair(s) without the 4-tap lookahead window.
-       Fall back to plain linear interpolation. */
-    for (; i + 1 < nSamples; i += 2)
-    {
-        Int32 s0 = pIn[i];
-        Int32 s1 = pIn[i + 1];
-        Int32 s2 = (i + 2 < nSamples) ? pIn[i + 2] : s1;
-
-        pOut[0] = (Int16)s0;
-        pOut[1] = (Int16)((s0 + 2 * s1) / 3);
-        pOut[2] = (Int16)((2 * s1 + s2) / 3);
-
-        hist = s1;
-        pOut += 3;
-    }
-
+    while (consumed < nSamples)
+        pPending[pending++] = pIn[consumed++];
+    *pPendingCount = pending;
     *pPrevSample = hist;
     return (Int32)(pOut - pOutStart);
 }
 
 Int32 AudMixBuffer::ConvertSamplesStereo_32000(Int16 *pLeftSamples, Int16 *pRightSamples, Int16 *pOutLeft, Int16 *pOutRight, Int32 nInSamples)
 {
-    Int32 nOutSamples;
-
-    if (nInSamples > AUDMIXBUFFER_MAXENQUEUE*2/3) nInSamples = AUDMIXBUFFER_MAXENQUEUE*2/3;
-
+    Int32 leftPending = m_nResamplePending;
+    Int32 rightPending = m_nResamplePending;
     PROF_ENTER("Aud_Convert");
-    ConvertSamples2to3(pOutLeft, pLeftSamples, nInSamples, &m_iPrevSample[0]);
-    nOutSamples=ConvertSamples2to3(pOutRight, pRightSamples, nInSamples, &m_iPrevSample[1]);
+    ConvertSamples2to3(pOutLeft, pLeftSamples, nInSamples,
+        &m_iPrevSample[0], m_ResamplePending[0], &leftPending);
+    Int32 nOutSamples = ConvertSamples2to3(pOutRight, pRightSamples, nInSamples,
+        &m_iPrevSample[1], m_ResamplePending[1], &rightPending);
+    m_nResamplePending = rightPending;
     PROF_LEAVE("Aud_Convert");
-
     return nOutSamples;
 }
 
 void AudMixBuffer::OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSamples, Int32 nSamples)
 {
-    Int16 *pOutLeft, *pOutRight;
-    Int32 nOutSamples;
-
-    // determine output space required (estimate)
-    switch (m_uSampleRate)
+    while (nSamples > 0)
     {
-        case 24000:
-            nOutSamples = nSamples * 2;
-            break;
-        case 32000:
-            nOutSamples = nSamples * 6 / 4;
-            break;
-        default:
-        case 48000:
-            nOutSamples = nSamples;
-            break;
-    }
-
-    // check for buffer overflow
-    if ((m_nOutSamples + nOutSamples) > AUDMIXBUFFER_MAXENQUEUE)
-    {
-        return;
-    }
-
-    // buffer samples locally
-    pOutLeft    = m_OutData[0] + m_nOutSamples;
-    pOutRight   = m_OutData[1] + m_nOutSamples;
-
-    switch(m_uSampleRate)
-    {
-        case 32000:
-            m_nOutSamples += ConvertSamplesStereo_32000(pLeftSamples, pRightSamples, pOutLeft, pOutRight, nSamples);
-            break;
-
-        default:
-        case 24000:
-        case 48000:
-            // leave data as is
-            memcpy(pOutLeft, pLeftSamples, nSamples * sizeof(Int16));
-            memcpy(pOutRight, pRightSamples, nSamples * sizeof(Int16));
-            m_nOutSamples += nSamples;
-            break;
+        Int32 freeSamples = AUDMIXBUFFER_MAXENQUEUE - m_nOutSamples;
+        /* With <=3 saved source samples, every two additional samples
+           produce at most three output frames. Reserve whole pairs. */
+        Int32 maxInput = m_uSampleRate == 32000 ? (freeSamples / 3) * 2 : freeSamples;
+        if (!maxInput)
+        {
+            Flush();
+            continue;
+        }
+        Int32 count = nSamples < maxInput ? nSamples : maxInput;
+        Int16 *pOutLeft = m_OutData[0] + m_nOutSamples;
+        Int16 *pOutRight = m_OutData[1] + m_nOutSamples;
+        if (m_uSampleRate == 32000)
+            m_nOutSamples += ConvertSamplesStereo_32000(
+                pLeftSamples, pRightSamples, pOutLeft, pOutRight, count);
+        else
+        {
+            memcpy(pOutLeft, pLeftSamples, count * sizeof(Int16));
+            memcpy(pOutRight, pRightSamples, count * sizeof(Int16));
+            m_nOutSamples += count;
+        }
+        pLeftSamples += count;
+        pRightSamples += count;
+        nSamples -= count;
     }
 }
 
@@ -257,27 +211,8 @@ void AudMixBuffer::Flush()
 
     if (nOutSamples > 0)
     {
-        if (nOutSamples & 1)
-        {
-            // uh oh
-            #if CODE_DEBUG
-            printf("Sample count not even! %d\n", nOutSamples);
-            #endif
-            nOutSamples &= ~1;
-        }
-
-        if (nOutSamples > AUDMIXBUFFER_MAXENQUEUE)
-        {
-            // uh oh
-            #if CODE_DEBUG
-            printf("Sample buffer overflow! %d\n", nOutSamples);
-            #endif
-            nOutSamples = AUDMIXBUFFER_MAXENQUEUE;
-        }
-
-        /* Apply the Game Volume gain with saturation, just before enqueue,
-           so it covers every sample-rate path (32k resampled and 48k
-           passthrough).  gainPct==100 (Game Volume 50) is unity -> skip. */
+        /* Apply volume after resampling for every sample-rate path.
+           Game Volume 100 is unity and skips the complete gain pass. */
         {
             Int32 gainPct = (s_gameVolume * AUDMIXBUFFER_BASE_GAIN_PCT) / 100;
             if (gainPct != 100)

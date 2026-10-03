@@ -382,7 +382,8 @@ void CNetworkScreen::BuildDisplayText(char *output, int outputSize,
     for (i = start; i < length && out < outputSize - 4 && i < start + 14; ++i)
     {
         if (editing && i == m_iTextCursor) output[out++] = '[';
-        output[out++] = password ? '*' : text[i];
+        /* The character picker must be readable while entering a password. */
+        output[out++] = password && !editing ? '*' : text[i];
         if (editing && i == m_iTextCursor) output[out++] = ']';
     }
     if (editing && m_iTextCursor == length && out < outputSize - 4)

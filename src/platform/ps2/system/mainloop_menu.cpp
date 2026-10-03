@@ -192,6 +192,20 @@ enum MainLoopStateManagerStorageE
         MAINLOOP_STATEMANAGER_MMCE0,
         MAINLOOP_STATEMANAGER_MMCE1,
         MAINLOOP_STATEMANAGER_HDD,
+        MAINLOOP_STATEMANAGER_MASS2,
+        MAINLOOP_STATEMANAGER_MASS3,
+        MAINLOOP_STATEMANAGER_MASS4,
+        MAINLOOP_STATEMANAGER_MASS5,
+        MAINLOOP_STATEMANAGER_MASS6,
+        MAINLOOP_STATEMANAGER_MASS7,
+        MAINLOOP_STATEMANAGER_MASS8,
+        MAINLOOP_STATEMANAGER_MASS9,
+        MAINLOOP_STATEMANAGER_MC2,
+        MAINLOOP_STATEMANAGER_MC3,
+        MAINLOOP_STATEMANAGER_MC4,
+        MAINLOOP_STATEMANAGER_MC5,
+        MAINLOOP_STATEMANAGER_MC6,
+        MAINLOOP_STATEMANAGER_MC7,
 
         MAINLOOP_STATEMANAGER_STORAGE_NUM
 };
@@ -211,7 +225,21 @@ static const MainLoopStateManagerStorageT _MainLoop_StateManagerStorage[] =
         { "mc1:",   "mc1:/SNESticle/" },
         { "mmce0:", "mmce0:/SNESticle/" },
         { "mmce1:", "mmce1:/SNESticle/" },
-        { "Internal HDD", "hdd0:" }
+        { "Internal HDD", "hdd0:" },
+        { "mass2:", "mass2:/SNESticle/" },
+        { "mass3:", "mass3:/SNESticle/" },
+        { "mass4:", "mass4:/SNESticle/" },
+        { "mass5:", "mass5:/SNESticle/" },
+        { "mass6:", "mass6:/SNESticle/" },
+        { "mass7:", "mass7:/SNESticle/" },
+        { "mass8:", "mass8:/SNESticle/" },
+        { "mass9:", "mass9:/SNESticle/" },
+        { "mc2:", "mc2:/SNESticle/" },
+        { "mc3:", "mc3:/SNESticle/" },
+        { "mc4:", "mc4:/SNESticle/" },
+        { "mc5:", "mc5:/SNESticle/" },
+        { "mc6:", "mc6:/SNESticle/" },
+        { "mc7:", "mc7:/SNESticle/" }
 };
 
 static Int32 _MainLoop_StateManagerStorageIndex =
@@ -233,12 +261,18 @@ char *_MainLoopStateMenuEntries[] =
 
 static Bool _MainLoopStateManagerStorageAvailable(Int32 iStorage)
 {
+        /* Keep old numeric IDs for persisted preferences, but skip the
+           former unprobed mc2..7 entries when cycling the visible menu. */
+        if (iStorage >= MAINLOOP_STATEMANAGER_MC2 && iStorage <= MAINLOOP_STATEMANAGER_MC7)
+                return FALSE;
+        if (iStorage >= MAINLOOP_STATEMANAGER_MASS2 && iStorage <= MAINLOOP_STATEMANAGER_MASS9)
+                return MassStorageIsEnabled() || Mx4sioIsEnabled();
         switch (iStorage)
         {
                 case MAINLOOP_STATEMANAGER_MASS0:
                 case MAINLOOP_STATEMANAGER_MASS1:
                 case MAINLOOP_STATEMANAGER_MASS:
-                        return MassStorageIsEnabled() ? TRUE : FALSE;
+                        return (MassStorageIsEnabled() || Mx4sioIsEnabled()) ? TRUE : FALSE;
 
                 case MAINLOOP_STATEMANAGER_MMCE0:
                         return (MmceProbeAvailableSlots() & 1) ? TRUE : FALSE;
@@ -305,6 +339,10 @@ static void _MainLoopStateManagerCycleStorage(Int32 iDirection)
 
 static MainLoopStateDeviceE _MainLoopStateManagerStorageDevice(Int32 iStorage)
 {
+        if (iStorage >= MAINLOOP_STATEMANAGER_MC2 && iStorage <= MAINLOOP_STATEMANAGER_MC7)
+                return MAINLOOP_STATEDEVICE_MEMCARD;
+        if (iStorage >= MAINLOOP_STATEMANAGER_MASS2 && iStorage <= MAINLOOP_STATEMANAGER_MASS9)
+                return MAINLOOP_STATEDEVICE_USB;
         switch (iStorage)
         {
                 case MAINLOOP_STATEMANAGER_MASS0:
@@ -365,12 +403,16 @@ void _MainLoopStateMenuSyncStorage()
                 iStorage = MAINLOOP_STATEMANAGER_MASS0;
         else if (!strncmp(Root, "mass1:", 6))
                 iStorage = MAINLOOP_STATEMANAGER_MASS1;
+        else if (!strncmp(Root, "mass", 4) && Root[4] >= '2' && Root[4] <= '9' && Root[5] == ':')
+                iStorage = MAINLOOP_STATEMANAGER_MASS2 + Root[4] - '2';
         else if (!strncmp(Root, "mass:", 5))
                 iStorage = MAINLOOP_STATEMANAGER_MASS;
         else if (!strncmp(Root, "mc0:", 4))
                 iStorage = MAINLOOP_STATEMANAGER_MC0;
         else if (!strncmp(Root, "mc1:", 4))
                 iStorage = MAINLOOP_STATEMANAGER_MC1;
+        else if (!strncmp(Root, "mc", 2) && Root[2] >= '2' && Root[2] <= '7' && Root[3] == ':')
+                iStorage = MAINLOOP_STATEMANAGER_MC2 + Root[2] - '2';
         else if (!strncmp(Root, "mmce0:", 6))
                 iStorage = MAINLOOP_STATEMANAGER_MMCE0;
         else if (!strncmp(Root, "mmce1:", 6))

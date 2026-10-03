@@ -81,9 +81,9 @@ Uint8 SNSDD1::ReadReg(Uint32 uAddr)
 void SNSDD1::WriteReg(Uint32 uAddr, Uint8 uData)
 {
     Uint32 r = uAddr & 7;
+    if (r >= 4 && m_Reg[r] != uData)
+        m_bMapDirty = TRUE;
     m_Reg[r] = uData;
-    if (r >= 4)
-        m_bMapDirty = TRUE;   // $4804-$4807: o mapa de bancos mudou
 }
 
 // Descompressor

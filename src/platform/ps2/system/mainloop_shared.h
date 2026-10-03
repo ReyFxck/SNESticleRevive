@@ -111,7 +111,9 @@ extern NesSystem      *_pNes;
 extern NesRom         *_pNesRom;
 extern NesFDSBios     *_pNesFDSBios;
 extern NesDisk        *_pNesFDSDisk;
+#if !NES_MESENCE
 extern NesStateT       _NesState;
+#endif
 extern Int32           _MainLoop_iDisk;
 extern Bool            _MainLoop_bDiskInserted;
 
@@ -170,6 +172,13 @@ extern Bool    _MainLoop_SRAMUpdated;
 extern Float32 _MainLoop_fOutputIntensity;
 
 /* ---- Function entrypoints across mainloop_*.cpp ------------------- */
+
+#if SNDBG_LOG || SNES_TARGET_PROFILE
+/* Last display's frontend phases, separate from core/scanline DMA timing. */
+extern Uint32 _MainLoop_DiagPrepCount;
+extern Uint32 _MainLoop_DiagSubmitCount;
+extern Uint32 _MainLoop_DiagFlipCount;
+#endif
 
 void MainLoopRender();
 Bool MainLoopReinitVideo();

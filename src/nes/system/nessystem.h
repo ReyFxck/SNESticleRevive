@@ -1,11 +1,13 @@
 /* nessystem.h
  *
- * Emu::System wrapper that owns the InfoNES NES core for the PS2 build.
+ * Emu::System wrapper for the selected PS2 NES backend.
+ * MesenCE is the default; NES_BACKEND=infones retains the legacy core and
+ * its fixed snapshots. Mesen snapshots have a distinct variable payload.
  *
  * Mirrors the structure of SnesSystem (snes.h) so the mainloop's polymorphic
  * dispatch through Emu::System* works identically for NES and SNES.
  *
- * Current cartridge support:
+ * Legacy InfoNES cartridge support (the Mesen bridge is separate):
  *   - SetRom() seeds InfoNES globals (NesHeader, ROM, VROM, optional CHR
  *     RAM) and runs InfoNES_Init() / InfoNES_Reset() for the cartridge.
  *   - ExecuteFrame() steps the InfoNES core for exactly one NES frame; its
@@ -32,6 +34,9 @@
 
 #include "nesrom.h"
 #include "nesstate.h"
+#if NES_MESENCE
+#include "../mesence/mesence_bridge.h"
+#endif
 
 
 class NesMMU; /* Phase 5 - FDS disk-swap mux. Forward-declared so other
@@ -65,9 +70,19 @@ public:
     virtual const char *GetString(StringE eString);
     virtual Uint32 GetSampleRate();
 
+#if NES_MESENCE
+    Bool          SnapshotState();
+    Bool          AllocateState(Uint32 bytes);
+    Uint8        *GetSnapshotData();
+    Uint32        GetSnapshotBytes();
+    Bool          RestoreSnapshot();
+    Uint32        GetFrameRate();
+#else
+    Uint32        GetFrameRate() { return 60; }
     /* NES-only typed hooks used by mainloop_state.cpp. */
     void          SaveState(NesStateT *pState);
     Bool          RestoreState(NesStateT *pState);
+#endif
     Bool          IsRomReady() const          {return m_bRomReady;}
 
     /* FDS disk swapping (Phase 5). The current build returns NULL so
@@ -77,7 +92,11 @@ public:
     void          SetNesDisk(NesDisk *pDisk) {m_pNesDisk = pDisk;}
 
 private:
+#if NES_MESENCE
+    struct MesenceCore *m_pCore;
+#else
     void          DiagnosticPaint(class CRenderSurface *pTarget);
+#endif
 
     NesRom    *m_pNesRom;     /* current cartridge image, owned by mainloop */
     NesDisk   *m_pNesDisk;    /* current FDS disk     (Phase 5) */

@@ -82,12 +82,26 @@ endif
 SNES_DIAG_ENABLED := $(if $(filter-out 0,$(SNES_DIAGNOSTICS)),1,0)
 SNES_DIAG_DEEP := $(if $(filter 2,$(SNES_DIAGNOSTICS)),1,0)
 
+# Optional timing is controlled in Configurations and off at startup.
+# Deep diagnostic builds retain their separate compile-time probes.
+SNES_TARGET_PROFILE ?= $(if $(filter 0,$(SNES_DIAGNOSTICS)),1,0)
+ifneq ($(filter 0 1,$(SNES_TARGET_PROFILE)),$(SNES_TARGET_PROFILE))
+$(error SNES_TARGET_PROFILE must be 0 or 1)
+endif
+ifeq ($(SNES_TARGET_PROFILE),1)
+ifneq ($(SNES_DIAGNOSTICS),0)
+$(error Use SNES_TARGET_PROFILE=1 with SNES_DIAGNOSTICS=0)
+endif
+endif
+
 # Caches independentes: OBJ e BG fisico compartilham linhas 4bpp, enquanto
 # SNES_BG_CACHE controla apenas os caches de linha BG/hires ja decodificada.
 # Cada camada pode ser desligada separadamente para comparacao A/B.
 SNES_OBJ_CACHE ?= 1
 SNES_BG_CHR_CACHE ?= 1
 SNES_BG_CACHE ?= 1
+# 512 rows raises the combined graphics caches from 1.87 to 3.02 MiB.
+SNES_BG_CACHE_LINES ?= 512
 
 # Safe host recovery: after a missed VBlank, execute the missing emulated
 # frame(s) without redrawing them before producing the next visible frame.
@@ -122,21 +136,53 @@ CONSERVATIVE_FLAGS := \
 
 CHARSET_FLAGS := -finput-charset=UTF-8 -fexec-charset=UTF-8
 
+# The supplied MesenCE port replaces the NES core only. Legacy snapshots
+# can still be opened with NES_BACKEND=infones.
+NES_BACKEND ?= mesence
+ifeq ($(NES_BACKEND),mesence)
+NES_MESENCE := 1
+include src/third_party/mesence/mesence_sources.mk
+NES_SOURCES := $(MESENCE_CORE_SOURCES) src/nes/mesence/mesence_bridge.cpp src/nes/system/nessystem_mesence.cpp
+else ifeq ($(NES_BACKEND),infones)
+NES_MESENCE := 0
+NES_SOURCES := src/third_party/nes_snd_emu/Blip_Buffer.cpp src/third_party/nes_snd_emu/Nes_Apu.cpp src/third_party/nes_snd_emu/Nes_Oscs.cpp src/nes/core/InfoNES.cpp src/nes/cpu/K6502.cpp src/nes/apu/InfoNES_pAPU.cpp src/nes/mapper/InfoNES_Mapper.cpp src/nes/system/InfoNES_System_PS2.cpp src/nes/system/nessystem.cpp
+else
+$(error NES_BACKEND must be mesence or infones)
+endif
+
+# Experimental output comparison. The SNES mixer/resampler is shared.
+AUDIO_BACKEND ?= rfauds2
+ifeq ($(AUDIO_BACKEND),rfauds2)
+AUDIO_RFAUDS2 := 1
+AUDIO_SOURCE := src/modules/audio/audio_rfauds2.c src/third_party/rfauds2/src/ee/client.c
+AUDIO_LIBS :=
+AUDIO_IRX_NAMES := rfauds2
+else ifeq ($(AUDIO_BACKEND),audsrv)
+AUDIO_RFAUDS2 := 0
+AUDIO_SOURCE := src/modules/audio/audio_audsrv.c
+AUDIO_LIBS := -laudsrv
+AUDIO_IRX_NAMES := audsrv freesd
+else
+$(error AUDIO_BACKEND must be audsrv or rfauds2)
+endif
+
 CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
+	-DNES_MESENCE=$(NES_MESENCE) -DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
-	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) -DSNPPU_BG_LINE_CACHE_LINES=$(SNES_BG_CACHE_LINES) \
 	-DSNESTICLE_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) \
 	-DSNESTICLE_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES)
 
 CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
+	-DNES_MESENCE=$(NES_MESENCE) -DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
-	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) -DSNPPU_BG_LINE_CACHE_LINES=$(SNES_BG_CACHE_LINES) \
 	-DSNESTICLE_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) \
 	-DSNESTICLE_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES)
 
@@ -255,6 +301,7 @@ INCS := \
 	-I$(CURDIR)/src/modules/netplay \
 	-I$(CURDIR)/src/modules/netplay/protocol \
 	-I$(CURDIR)/src/modules/audio \
+	-I$(CURDIR)/src/third_party/rfauds2/include \
 	-I$(CURDIR)/src/platform/ps2 \
 	-I$(CURDIR)/src/platform/ps2/cdvd \
 	-I$(CURDIR)/src/platform/ps2/common \
@@ -314,10 +361,10 @@ LIBS := \
 	-lps2_drivers \
 	-lpoweroff -lfileXio -lcdvd \
 	-lmc -lpad -lnetman -lps2ip \
-	-laudsrv \
+	$(AUDIO_LIBS) \
 	-lpatches \
 	-lcglue \
-	-ldebug -lkernel -lc -lm -lstdc++ -lgcc
+	-ldebug -lkernel -lc -lm -lstdc++ -lsupc++ -latomic -lgcc
 
 SRCS := \
     src/platform/ps2/ps2sdk_stubs.c \
@@ -403,7 +450,8 @@ SRCS := \
 	src/platform/ps2/lowlevel/ps2dma.c \
 	src/common/render/rendersurface.cpp \
 	src/common/render/audmixbuffer.cpp \
-	src/modules/audio/audio_audsrv.c \
+	src/modules/audio/audio_log.c \
+	$(AUDIO_SOURCE) \
 	src/snes/cpu/sn65816.S \
 	src/snes/cpu/sn65816_plain.S \
 	src/snes/cpu/sncpu.c \
@@ -476,16 +524,8 @@ SRCS := \
 	src/platform/ps2/system/mainloop_bgm.cpp \
 	src/platform/ps2/system/global_alloc.cpp \
 	src/platform/ps2/system/embedded_irx.cpp \
-	src/third_party/nes_snd_emu/Blip_Buffer.cpp \
-	src/third_party/nes_snd_emu/Nes_Apu.cpp \
-	src/third_party/nes_snd_emu/Nes_Oscs.cpp \
-	src/nes/core/InfoNES.cpp \
-	src/nes/cpu/K6502.cpp \
-	src/nes/apu/InfoNES_pAPU.cpp \
-	src/nes/mapper/InfoNES_Mapper.cpp \
-	src/nes/system/InfoNES_System_PS2.cpp \
 	src/nes/system/nesrom.cpp \
-	src/nes/system/nessystem.cpp
+	$(NES_SOURCES)
 
 OBJS := \
 	$(patsubst src/%.c,$(OBJ_DIR)/%.o,$(filter %.c,$(SRCS))) \
@@ -550,7 +590,7 @@ SDK_EXTRA_IRX := ioptrap.irx poweroff.irx
 # The legacy iaddis CDVD.IRX is also no longer needed. The in-tree
 # cdfs_stream.irx registers cdfs: and streams directories instead of using
 # PS2SDK cdfs.irx's fixed 256-entry table.
-EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip smbman cdfs_stream usbd bdm bdmfs_fatfs usbmass_bd ps2atad ps2hdd mmceman mx4sio_bd
+EMBED_IRX_NAMES := $(AUDIO_IRX_NAMES) sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip smbman cdfs_stream usbd bdm bdmfs_fatfs usbmass_bd ps2atad ps2hdd mmceman mx4sio_bd
 
 # Pin the complete SIO2 storage/input group to one verified PS2SDK revision.
 # This prevents a future SDK update from mixing an incompatible sio2man with
@@ -583,6 +623,7 @@ EMBED_HEADERS := $(patsubst %,$(EMBED_DIR)/%_irx.h,$(EMBED_IRX_NAMES))
 UI_ICONS_IIF_PATH := $(CURDIR)/src/platform/ps2/ui/assets/ui_icons.iif
 UI_ICONS_HEADER   := $(EMBED_DIR)/ui_icons_iif.h
 
+RFAUDS2_IRX_PATH ?= $(CURDIR)/irx/rfauds2.irx
 AUDSRV_IRX_PATH  ?= $(PS2SDK)/iop/irx/audsrv.irx
 FREESD_IRX_PATH  ?= $(PS2SDK)/iop/irx/freesd.irx
 PS2DEV9_IRX_PATH ?= $(PS2SDK)/iop/irx/ps2dev9.irx
@@ -612,6 +653,9 @@ PS2HDD_IRX_PATH      ?= $(PS2SDK)/iop/irx/ps2hdd.irx
 all: check-env $(TARGET)
 
 check-env: ensure-ps2dev
+ifeq ($(AUDIO_BACKEND),rfauds2)
+	@test -f "$(RFAUDS2_IRX_PATH)" || (echo "ERROR: required RFAuds2 IRX not found: $(RFAUDS2_IRX_PATH)"; exit 1)
+endif
 	@test -d "$(PS2SDK)" || (echo "ERROR: PS2SDK not found at $(PS2SDK)"; exit 1)
 	@test -d "$(IRX_DIR)" || (echo "ERRO: pasta de IRX nao encontrada em $(IRX_DIR)"; exit 1)
 	@test -f "$(SIO2MAN_IRX_PATH)" || (echo "ERROR: required SIO2MAN IRX not found: $(SIO2MAN_IRX_PATH)"; exit 1)
@@ -642,7 +686,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
+	mode='MESENCE_OPT=O2 NES_BACKEND=$(NES_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND) SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_BG_CACHE_LINES=$(SNES_BG_CACHE_LINES) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -657,6 +701,8 @@ $(EMBED_DIR):
 # value, with internal "#ifndef __<label>__" header guards. Renaming to .h
 # lets us include each generated file exactly once into embedded_irx.cpp,
 # which keeps the array definitions as ordinary file-scope globals.
+$(EMBED_DIR)/rfauds2_irx.h: $(RFAUDS2_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,rfauds2_irx)
 $(EMBED_DIR)/audsrv_irx.h: $(AUDSRV_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,audsrv_irx)
 $(EMBED_DIR)/freesd_irx.h: $(FREESD_IRX_PATH) | $(EMBED_DIR)
@@ -796,6 +842,14 @@ $(OBJS): $(BUILD_CONFIG_FILE)
 
 $(OBJ_DIR)/%.o: src/%.c | $(OBJ_DIR)
 	$(call RUN_COMPILE,CC,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
+# Isolate the supplied C++20 port's RTTI/exceptions and compiler
+# settings from the legacy SNES core and frontend. No standalone PS2 drivers.
+MESENCE_FLAGS = $(filter-out -O2 -fno-exceptions -fno-rtti -fpermissive,$(CXXFLAGS)) -O2 -std=gnu++20 -DPS2_PORT -DMESEN_NES_ONLY -Isrc/third_party/mesence/src -Isrc/third_party/mesence/src/Core
+$(OBJ_DIR)/third_party/mesence/%.o: src/third_party/mesence/%.cpp | $(OBJ_DIR)
+	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) $(DEPFLAGS) -c "$<" -o "$@")
+$(OBJ_DIR)/nes/mesence/mesence_bridge.o: src/nes/mesence/mesence_bridge.cpp | $(OBJ_DIR)
+	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(MESENCE_FLAGS) $(DEPFLAGS) -c "$<" -o "$@")
+
 $(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
 	$(call RUN_COMPILE,CXX,$<,$(EE_CXX) $(CXXFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
 $(OBJ_DIR)/%.o: src/%.s | $(OBJ_DIR)
@@ -1346,6 +1400,7 @@ help:
 	printf "  PROFILE=1                    Enable on-screen profiler (press R3 in-game)\n"; \
 	printf "  SNES_DIAGNOSTICS=1           Universal low-overhead SNES diagnostic report\n"; \
 	printf "  SNES_DIAGNOSTICS=2           Automatic deep PPU/DMA/chip capture\n"; \
+	printf "  SNES_TARGET_PROFILE=1        Coarse target timing HUD (diagnostics=0)\n"; \
 	printf "  SNES_OBJ_CACHE=0             Disable OBJ 4bpp CHR cache for A/B tests\n"; \
 	printf "  SNES_BG_CHR_CACHE=0          Disable physical BG 2bpp/4bpp cache for A/B\n"; \
 	printf "  SNES_BG_CACHE=0              Disable decoded BG/hires line caches for A/B\n"; \

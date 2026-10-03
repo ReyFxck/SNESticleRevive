@@ -132,9 +132,8 @@ private:
     Uint8  m_RomBuffer;      // byte pre-lido de ROM[ROMBR:R14]
     Bool   m_RomBufValid;
 
-    // watchdog: se o programa rodar demais sem STOP (ex.: opcodes ainda
-    // incompletos durante o desenvolvimento), forca a parada e devolve o
-    // controle ao SNES, evitando travar a EE.
+    // One-shot long-job diagnostic. Execution is bounded by Run's slice,
+    // so this counter never forces STOP or an emulated interrupt.
     Uint32 m_Runaway;
     Bool   m_WatchdogReported; // uma unica captura por Reset, somente em erro
 

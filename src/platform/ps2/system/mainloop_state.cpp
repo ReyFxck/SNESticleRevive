@@ -463,13 +463,17 @@ Bool _MainLoopCheckSRAM()
  * cannot destroy the last known-good state.
  */
 
+#if NES_MESENCE
+#include "../../../nes/mesence/mesence_bridge.h"
+#endif
+
 #define MAINLOOP_STATE_SLOT_NUM       5
 #define MAINLOOP_STATE_BANK_NUM       2
 /* The outer container remains version 1 for compatibility with existing SNES
    banks. Reserved[2] identifies the core; NesStateT has its own version. */
 #define MAINLOOP_STATE_FORMAT_VERSION 1
 #define MAINLOOP_STATE_HEADER_BYTES   64
-#define MAINLOOP_STATE_MAX_ROOTS      8
+#define MAINLOOP_STATE_MAX_ROOTS      (MAINLOOP_MASS_UNITS + MAINLOOP_MEMCARD_UNITS + 4)
 #define MAINLOOP_STATE_MAX_CANDIDATES (MAINLOOP_STATE_MAX_ROOTS * MAINLOOP_STATE_BANK_NUM * 2)
 #define MAINLOOP_STATE_PAYLOAD_RAW     0
 #define MAINLOOP_STATE_PAYLOAD_DEFLATE 1
@@ -555,6 +559,20 @@ enum MainLoopStateRootHintE
     MAINLOOP_STATE_ROOT_HINT_MMCE0,
     MAINLOOP_STATE_ROOT_HINT_MMCE1,
     MAINLOOP_STATE_ROOT_HINT_HDD,
+    MAINLOOP_STATE_ROOT_HINT_MASS2,
+    MAINLOOP_STATE_ROOT_HINT_MASS3,
+    MAINLOOP_STATE_ROOT_HINT_MASS4,
+    MAINLOOP_STATE_ROOT_HINT_MASS5,
+    MAINLOOP_STATE_ROOT_HINT_MASS6,
+    MAINLOOP_STATE_ROOT_HINT_MASS7,
+    MAINLOOP_STATE_ROOT_HINT_MASS8,
+    MAINLOOP_STATE_ROOT_HINT_MASS9,
+    MAINLOOP_STATE_ROOT_HINT_MC2,
+    MAINLOOP_STATE_ROOT_HINT_MC3,
+    MAINLOOP_STATE_ROOT_HINT_MC4,
+    MAINLOOP_STATE_ROOT_HINT_MC5,
+    MAINLOOP_STATE_ROOT_HINT_MC6,
+    MAINLOOP_STATE_ROOT_HINT_MC7,
 
     MAINLOOP_STATE_ROOT_HINT_NUM
 };
@@ -592,16 +610,28 @@ static Uint32 _MainLoopStateGetSystemId()
 
 static Uint32 _MainLoopStateGetPayloadBytes()
 {
-    return _pSystem == _pNes
-        ? (Uint32)sizeof(_NesState)
-        : (Uint32)sizeof(_SnesState);
+    if (_pSystem == _pNes)
+    {
+#if NES_MESENCE
+        return _pNes->GetSnapshotBytes();
+#else
+        return sizeof(_NesState);
+#endif
+    }
+    return sizeof(_SnesState);
 }
 
 static Uint8 *_MainLoopStateGetPayloadData()
 {
-    return _pSystem == _pNes
-        ? (Uint8 *)&_NesState
-        : (Uint8 *)&_SnesState;
+    if (_pSystem == _pNes)
+    {
+#if NES_MESENCE
+        return _pNes->GetSnapshotData();
+#else
+        return (Uint8 *)&_NesState;
+#endif
+    }
+    return (Uint8 *)&_SnesState;
 }
 
 static void _MainLoopStateSetMessage(const Char *pFormat, ...)
@@ -703,9 +733,15 @@ void MainLoopStateSetPreferredRoot(const Char *pRoot)
     {
         if (!strncmp(pRoot, "mass0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS0;
         else if (!strncmp(pRoot, "mass1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS1;
+        else if (!strncmp(pRoot, "mass", 4) && pRoot[4] >= '2' &&
+                 pRoot[4] <= '9' && pRoot[5] == ':')
+            Hint = MAINLOOP_STATE_ROOT_HINT_MASS2 + pRoot[4] - '2';
         else if (!strncmp(pRoot, "mass:", 5)) Hint = MAINLOOP_STATE_ROOT_HINT_MASS;
         else if (!strncmp(pRoot, "mc0:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC0;
         else if (!strncmp(pRoot, "mc1:", 4)) Hint = MAINLOOP_STATE_ROOT_HINT_MC1;
+        else if (!strncmp(pRoot, "mc", 2) && pRoot[2] >= '2' &&
+                 pRoot[2] <= '7' && pRoot[3] == ':')
+            Hint = MAINLOOP_STATE_ROOT_HINT_MC2 + pRoot[2] - '2';
         else if (!strncmp(pRoot, "mmce0:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE0;
         else if (!strncmp(pRoot, "mmce1:", 6)) Hint = MAINLOOP_STATE_ROOT_HINT_MMCE1;
         else if (!strncmp(pRoot, "hdd0:", 5) || !strncmp(pRoot, "pfs0:", 5))
@@ -723,7 +759,7 @@ Bool MainLoopStateDeviceAvailable(MainLoopStateDeviceE eDevice)
             return TRUE;
 
         case MAINLOOP_STATEDEVICE_USB:
-            return MassStorageIsEnabled() ? TRUE : FALSE;
+            return (MassStorageIsEnabled() || Mx4sioIsEnabled()) ? TRUE : FALSE;
 
         case MAINLOOP_STATEDEVICE_MEMCARD:
             return TRUE;
@@ -733,8 +769,7 @@ Bool MainLoopStateDeviceAvailable(MainLoopStateDeviceE eDevice)
 
         case MAINLOOP_STATEDEVICE_HDD:
             return HddSupportIsEnabled() &&
-                   (!strncmp(_RomPath, "hdd0:", 5) ||
-                    !strncmp(_RomPath, "pfs0:", 5));
+                   (HddIsMounted() || !strncmp(_RomPath, "hdd0:", 5));
 
         default:
             return FALSE;
@@ -805,6 +840,13 @@ static Bool _MainLoopStateConfigPathIsWritable(const Char *pPath)
 /* Optional filesystems are not resident during boot anymore.  Reads must be
    side-effect free (state.cfg discovery must never start USB); writes happen
    only after an explicit user action and may start the selected USB stack. */
+static Bool _MainLoopStateEnsureMassDriver()
+{
+    if (UsbBdmIsLoaded() || Mx4sioIsLoaded()) return TRUE;
+    if (MassStorageIsEnabled() && UsbBdmLoadEmbeddedIrx() >= 0) return TRUE;
+    return Mx4sioIsEnabled() && Mx4sioLoadIfEnabled() >= 0 && Mx4sioIsLoaded();
+}
+
 static Bool _MainLoopStatePathDeviceReady(const Char *pPath, Bool bStart)
 {
     if (!pPath)
@@ -818,8 +860,7 @@ static Bool _MainLoopStatePathDeviceReady(const Char *pPath, Bool bStart)
         {
             return TRUE;
         }
-        return bStart && MassStorageIsEnabled() &&
-               UsbBdmLoadEmbeddedIrx() >= 0;
+        return bStart && _MainLoopStateEnsureMassDriver();
     }
 
     if (!strncmp(pPath, "cdfs:", 6) || !strncmp(pPath, "cdrom", 5))
@@ -1488,12 +1529,9 @@ static Bool _MainLoopStateIsMemCardRoot(
     Int32 nRootBytes)
 {
     return _MainLoopStateIsNumberedRoot(
-        pPath,
-        "mc",
-        2,
-        pRoot,
-        nRootBytes
-    );
+        pPath, "mc", 2, pRoot, nRootBytes
+    ) && strlen(pRoot) == 4 && pRoot[2] >= '0' &&
+        pRoot[2] < '0' + MAINLOOP_MEMCARD_UNITS;
 }
 
 static Bool _MainLoopStateIsMMCERoot(
@@ -1521,12 +1559,21 @@ static Bool _MainLoopStateGetHddRoot(Char *pRoot, Int32 nRootBytes)
 
     if (!strncmp(_RomPath, "pfs0:", 5))
     {
+        if (!HddIsMounted()) return FALSE;
         snprintf(pRoot, nRootBytes, "pfs0:");
         return TRUE;
     }
 
-    if (strncmp(_RomPath, "hdd0:", 5) ||
-        !HddSupportIsEnabled() ||
+    /* A USB/MC/MMCE ROM may still save to a partition selected earlier
+       in the browser. Preserve ROM-origin remapping for hdd0: below. */
+    if (strncmp(_RomPath, "hdd0:", 5))
+    {
+        if (!HddIsMounted()) return FALSE;
+        snprintf(pRoot, nRootBytes, "pfs0:");
+        return TRUE;
+    }
+
+    if (!HddSupportIsEnabled() ||
         HddLoadEmbeddedIrx() < 0)
     {
         return FALSE;
@@ -1588,6 +1635,25 @@ static Int32 _MainLoopStateBuildRoots(
         MmceSupportIsEnabled())
     {
         iMMCESlots = MmceProbeAvailableSlots();
+    }
+
+    if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady &&
+        _MainLoop_StateRootHint >= MAINLOOP_STATE_ROOT_HINT_MASS2 &&
+        _MainLoop_StateRootHint <= MAINLOOP_STATE_ROOT_HINT_MASS9)
+    {
+        snprintf(Root, sizeof(Root), "mass%u:",
+            (unsigned)(_MainLoop_StateRootHint - MAINLOOP_STATE_ROOT_HINT_MASS2 + 2));
+        _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, FALSE);
+    }
+
+    if (MAINLOOP_MEMCARD_UNITS > 2 &&
+        (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD) &&
+        _MainLoop_StateRootHint >= MAINLOOP_STATE_ROOT_HINT_MC2 &&
+        _MainLoop_StateRootHint <= MAINLOOP_STATE_ROOT_HINT_MC7)
+    {
+        snprintf(Root, sizeof(Root), "mc%u:",
+            (unsigned)(_MainLoop_StateRootHint - MAINLOOP_STATE_ROOT_HINT_MC2 + 2));
+        _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, TRUE);
     }
 
     /* A Storage choice made in Save States is an exact root preference.
@@ -1693,15 +1759,24 @@ static Int32 _MainLoopStateBuildRoots(
 
     if ((bAuto || eDevice == MAINLOOP_STATEDEVICE_USB) && bMassReady)
     {
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mass0:", "mass0:", FALSE);
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mass1:", "mass1:", FALSE);
+        for (Int32 unit = 0; unit < MAINLOOP_MASS_UNITS; unit++)
+        {
+            snprintf(Root, sizeof(Root), "mass%d:", (int)unit);
+            _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, FALSE);
+        }
         _MainLoopStateAddRoot(pRoots, &nRoots, "mass:", "mass:", FALSE);
     }
 
+    if (bAuto && _MainLoopStateGetHddRoot(Root, sizeof(Root)))
+        _MainLoopStateAddRoot(pRoots, &nRoots, Root, "Internal HDD", FALSE);
+
     if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MEMCARD)
     {
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mc0:", "mc0:", TRUE);
-        _MainLoopStateAddRoot(pRoots, &nRoots, "mc1:", "mc1:", TRUE);
+        for (Int32 unit = 0; unit < MAINLOOP_MEMCARD_UNITS; unit++)
+        {
+            snprintf(Root, sizeof(Root), "mc%d:", (int)unit);
+            _MainLoopStateAddRoot(pRoots, &nRoots, Root, Root, TRUE);
+        }
     }
 
     if (bAuto || eDevice == MAINLOOP_STATEDEVICE_MMCE)
@@ -2021,6 +2096,17 @@ static Int32 _MainLoopStateReadHeader(
         return -1;
     }
 
+#if NES_MESENCE
+    if (_pSystem == _pNes)
+    {
+        /* Distinguish variable Mesen snapshots from fixed InfoNES banks. */
+        if (pHeader->Reserved[4] != MESENCE_STATE_FORMAT ||
+            pHeader->Reserved[3] <= 16 ||
+            pHeader->Reserved[3] > MESENCE_MAX_STATE_BYTES)
+            return -1;
+        nExpectedPayloadBytes = pHeader->Reserved[3];
+    }
+#endif
     bPayloadLayoutValid =
         (pHeader->Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW &&
          pHeader->nPayloadBytes == nExpectedPayloadBytes) ||
@@ -2074,6 +2160,18 @@ static Bool _MainLoopStateReadPayload(
         return FALSE;
     }
 
+#if NES_MESENCE
+    if (_pSystem == _pNes)
+    {
+        nStateBytes = Header.Reserved[3];
+        if (!_pNes->AllocateState(nStateBytes))
+        {
+            fclose(pFile);
+            return FALSE;
+        }
+        pStateData = _pNes->GetSnapshotData();
+    }
+#endif
     if (Header.Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW)
     {
         nRead = fread(pStateData, 1, nStateBytes, pFile);
@@ -2314,8 +2412,7 @@ Bool _MainLoopLoadState()
     }
 
     if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_USB &&
-        !UsbBdmIsLoaded() && !Mx4sioIsLoaded() &&
-        UsbBdmLoadEmbeddedIrx() < 0)
+        !_MainLoopStateEnsureMassDriver())
     {
         _MainLoopStateSetMessage("USB driver failed (%d).",
                                  UsbBdmGetLastError());
@@ -2352,7 +2449,11 @@ Bool _MainLoopLoadState()
         if (bPayloadOK)
         {
             bRestoreOK = _pSystem == _pNes
+#if NES_MESENCE
+                ? _pNes->RestoreSnapshot()
+#else
                 ? _pNes->RestoreState(&_NesState)
+#endif
                 : _pSnes->RestoreState(&_SnesState);
         }
 
@@ -2453,8 +2554,7 @@ Bool _MainLoopSaveState()
     }
 
     if (_MainLoop_StateDevice == MAINLOOP_STATEDEVICE_USB &&
-        !UsbBdmIsLoaded() && !Mx4sioIsLoaded() &&
-        UsbBdmLoadEmbeddedIrx() < 0)
+        !_MainLoopStateEnsureMassDriver())
     {
         _MainLoopStateSetMessage("USB driver failed (%d).",
                                  UsbBdmGetLastError());
@@ -2501,12 +2601,14 @@ Bool _MainLoopSaveState()
        ~500 KB structure. Fast deflate substantially cuts slow memory-card
        I/O while keeping the on-disk format backward compatible: version-1
        raw banks still load, and Reserved[0] advertises compressed banks. */
-    pStateData = _MainLoopStateGetPayloadData();
-    nStateBytes = _MainLoopStateGetPayloadBytes();
     if (_pSystem == _pNes)
     {
+#if NES_MESENCE
+        if (!_pNes->SnapshotState())
+#else
         _pNes->SaveState(&_NesState);
         if (_NesState.uMagic != NES_STATE_MAGIC)
+#endif
         {
             _MainLoopStateSetMessage("Could not snapshot the NES mapper state.");
             return FALSE;
@@ -2516,6 +2618,8 @@ Bool _MainLoopSaveState()
     {
         _pSnes->SaveState(&_SnesState);
     }
+    pStateData = _MainLoopStateGetPayloadData();
+    nStateBytes = _MainLoopStateGetPayloadBytes();
     uPayloadCRC = (Uint32)mz_crc32(
         MZ_CRC32_INIT,
         pStateData,
@@ -2638,6 +2742,13 @@ Bool _MainLoopSaveState()
                 ? uStoredCRC
                 : 0;
         Header.Reserved[2] = _MainLoopStateGetSystemId();
+#if NES_MESENCE
+        if (_pSystem == _pNes)
+        {
+            Header.Reserved[3] = nStateBytes;
+            Header.Reserved[4] = MESENCE_STATE_FORMAT;
+        }
+#endif
 
         ML_TRACE("State save path: %s", Path);
         if (_MainLoopStateWriteBank(

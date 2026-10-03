@@ -918,7 +918,7 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 // S-DD1 ($4804-$4807). Cada registrador escolhe um segmento de 1MB da ROM
 // para um grupo de 16 bancos: $4804->$C0-$CF, $4805->$D0-$DF, $4806->$E0-$EF,
 // $4807->$F0-$FF. Star Ocean troca esses segmentos para enxergar seus 6MB.
-void SnesSystem::RemapSDD1(void)
+void SnesSystem::RemapSDD1(Uint32 uGroupMask)
 {
 	Uint8 *pRomData  = m_pRom->GetData();
 	Uint32 uRomBytes = m_pRom->GetBytes();
@@ -933,11 +933,14 @@ void SnesSystem::RemapSDD1(void)
 
 	for (g = 0; g < 4; g++)
 	{
+		if (!(uGroupMask & (1u << g)))
+			continue;
 		Uint32 uSeg     = m_SDD1.BankSegment(g);
 		Uint32 uRomOff  = (uSeg * 0x100000) % uRomBytes;
 		Uint32 uBankBase = (0xC0 + g * 0x10) << 16;   // $C00000 / $D00000 / ...
 
-		SNCPUSetMemSpeed(&m_Cpu, uBankBase, 0x100000, SNCPU_CYCLE_SLOW);
+		/* MMC selects ROM data only. The S-CPU's $420D MEMSEL retains
+		   ownership of FastROM timing when a cartridge window changes. */
 		SNCPUSetBank    (&m_Cpu, uBankBase, 0x100000, pRomData + uRomOff, FALSE);
 	}
 

@@ -1,0 +1,5 @@
+MesenCE NES / PS2 generated source tree
+MesenCE base: 20ba206cef5ba207c21203176d02cb9f43dda9fb
+Reference functional build commit: 7e9bbb541c4af444201a0c131ca2565135cbb2b4
+Export branch: backup/mesen-ps2-source-export-20261002
+This archive is the fully reconstructed work/port after all PS2 CI patches.

@@ -19,6 +19,8 @@ class AudMixBuffer : public CMixBuffer
     Int32   m_nOutSamples;
 
     Int32   m_iPrevSample[2];
+    Int16   m_ResamplePending[2][4];
+    Int32   m_nResamplePending;
     Uint32  m_uSampleRate;
     Uint32  m_uFrameRate;
     Bool    m_bAsync;
@@ -26,7 +28,9 @@ class AudMixBuffer : public CMixBuffer
 
 	Uint32	m_uLastOutput;
 
-    Int32   ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples, Int32 *pPrevSample);
+    Int32   ConvertSamples2to3(Int16 *pOut, Int16 *pIn, Int32 nSamples,
+                              Int32 *pPrevSample, Int16 *pPending,
+                              Int32 *pPendingCount);
     Int32   ConvertSamplesStereo_32000(Int16 *pLeftSamples, Int16 *pRightSamples, Int16 *pOutLeft, Int16 *pOutRight, Int32 nInSamples);
 
 public:
@@ -34,6 +38,8 @@ public:
 
     void SetSampleRate(Uint32 uSampleRate)
     {
+        if (m_uSampleRate != uSampleRate)
+            Reset();
         m_uSampleRate = uSampleRate;
         m_uFrameSamplePhase = 0;
     }

@@ -32,18 +32,38 @@ jobs:
           ./tools/pputest/chrcache_test
           ./tools/pputest/chrcache_obj_only_test
           ./tools/pputest/bglinecache_test
+          ./tools/pputest/vramstamp_test
           ./tools/pputest/mask_alignment_test
           ./tools/pputest/hires_test
           ./tools/pputest/audioschedule_test
+          ./tools/pputest/audio_output_test
           ./tools/pputest/mode7_test
           ./tools/pputest/queue_test
           ./tools/pputest/spcio_test
           ./tools/pputest/spc700_test
           ./tools/pputest/dspmix_test
+          ./tools/pputest/mixer_feedback_test
           ./tools/pputest/safe_frameskip_test
           ./tools/pputest/regioncadence_test
           ./tools/pputest/diag_test
           ./tools/pputest/brightness_test
+          ./tools/pputest/targetprofile_test
+      - name: Test asynchronous RFAuds2 PCM adapter
+        run: SANITIZE=1 bash ./tools/rfauds2test/build.sh
+      - name: Test mounted state destination enumeration
+        run: python3 tools/statetest/check_roots.py
+      - name: Test legacy and Mesen state bank payloads
+        run: python3 tools/statetest/check_payloads.py
+      - name: Test SMB frontend configuration and RPC flow
+        run: python3 tools/smbtest/check_smb.py
+      - name: Test MesenCE frontend with sanitizers
+        run: SANITIZE=1 bash tools/mesencetest/build.sh
+      - name: Test NES frontend controller mapping
+        run: python3 tools/mesencetest/check_input.py
+      - name: Build and test SuperFX core
+        run: |
+          bash tools/superfxtest/build.sh
+          ./tools/superfxtest/gsu_test
       - name: Build ROM loader tests
         run: ./tools/romtest/build.sh
       - name: Run ROM loader tests

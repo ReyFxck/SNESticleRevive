@@ -22,4 +22,7 @@ g++ -O0 -g -fsigned-char -fpermissive \
     -I "$ROOT/src/snes/core" \
     gsu_test.cpp sngsu.cpp -o gsu_test
 
+g++ -O2 -I "$ROOT/src/common/base" -I "$ROOT/src/snes/core" \
+    planes_test.cpp planes_fixture.cpp -o planes_test
+./planes_test
 echo "OK -> ./gsu_test"

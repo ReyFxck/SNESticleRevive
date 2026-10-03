@@ -314,7 +314,7 @@ static Bool _SNRomIsValidCartInfo(SNRomInfoT *pCartInfo)
    the candidate for normal selection, while the legacy Type-1 fallback below
    remains available when neither physical location can be scored yet. */
 static Int32 _SNRomHeaderScore(const Uint8 *pRom, Uint32 uRomBytes,
-	Uint32 uHeaderOffset, Bool bLoHeader)
+	Uint32 uHeaderOffset, Bool bLoHeader, Bool bRequireChecksum = TRUE)
 {
 	const SNRomInfoT *pCartInfo;
 	Uint16 uReset;
@@ -330,14 +330,16 @@ static Int32 _SNRomHeaderScore(const Uint8 *pRom, Uint32 uRomBytes,
 		return -1000;
 
 	pCartInfo = (const SNRomInfoT *)(pRom + uHeaderOffset);
-	if (!_SNRomIsValidCartInfo((SNRomInfoT *)pCartInfo))
+	const Bool bValidChecksum =
+		_SNRomIsValidCartInfo((SNRomInfoT *)pCartInfo);
+	if (bRequireChecksum && !bValidChecksum)
 		return -1000;
 
 	/* Zero/FFFF is technically complementary but is much weaker evidence
 	   than the non-zero checksum pair found in commercial dumps. */
-	if (pCartInfo->Checksum && pCartInfo->InverseChecksum)
+	if (bValidChecksum && pCartInfo->Checksum && pCartInfo->InverseChecksum)
 		nScore += 8;
-	else
+	else if (bValidChecksum)
 		nScore += 1;
 
 	uMapLow = pCartInfo->RomMakeup & 0x0F;
@@ -357,6 +359,18 @@ static Int32 _SNRomHeaderScore(const Uint8 *pRom, Uint32 uRomBytes,
 	}
 	if (nPrintable >= 16) nScore += 4;
 	else if (nPrintable >= 8) nScore += 1;
+
+	/* Patched/homebrew images need not update the checksum pair. Only the
+	   last-resort pass accepts them, with independent structural evidence.
+	   Never let random data at another header location trigger deinterleave. */
+	if (!bValidChecksum &&
+	    (((pCartInfo->RomMakeup & 0xF0) != 0x20 &&
+	      (pCartInfo->RomMakeup & 0xF0) != 0x30) ||
+	     (bLoHeader ? !(uMapLow == 0 || uMapLow == 2 || uMapLow == 3)
+	                : !(uMapLow == 1 || uMapLow == 5)) ||
+	     nPrintable < 16 || pCartInfo->RomSize >= 0x10 ||
+	     pCartInfo->SRAMSize > 8 || pCartInfo->Country >= 14))
+		return -1000;
 
 	uReset = (Uint16)(pRom[uHeaderOffset + 0x3C] |
 	                  (pRom[uHeaderOffset + 0x3D] << 8));
@@ -388,8 +402,11 @@ static Int32 _SNRomHeaderScore(const Uint8 *pRom, Uint32 uRomBytes,
 		nScore -= 8;
 		break;
 	default:
+		if (!bValidChecksum) return -1000;
 		break;
 	}
+	if (!bValidChecksum && (uOpcode == 0x00 || uOpcode == 0xFF || uOpcode == 0xCC))
+		return -1000;
 
 	return nScore;
 }
@@ -1108,6 +1125,24 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 			{
 				pCartInfo = pCandidates[i];
 				m_eMapping = eCandidateMap[i];
+			}
+		}
+		if (!pCartInfo)
+		{
+			/* Preserve all checksum-valid and copier recovery decisions above.
+			   Checksums are metadata, not a cartridge bus requirement: a linear
+			   image with a coherent mapper/header/reset may still be runnable. */
+			nBestScore = -1000;
+			for (i = 0; i < 4; i++)
+			{
+				Int32 nScore = _SNRomHeaderScore(m_pRomData, m_uRomBytes,
+					uHeaderOffsets[i], bLoCandidate[i], FALSE);
+				if (nScore > -1000 && nScore >= nBestScore)
+				{
+					nBestScore = nScore;
+					pCartInfo = pCandidates[i];
+					m_eMapping = eCandidateMap[i];
+				}
 			}
 		}
 	}

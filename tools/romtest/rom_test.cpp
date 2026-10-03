@@ -306,6 +306,67 @@ static void TestPinocchioFalseType1Regression(void)
 		"diagnostico deve identificar HiROM");
 }
 
+static void TestStaleChecksumHeaders(void)
+{
+	static const Uint32 offsets[] = { 0x7FC0, 0xFFC0, 0x407FC0, 0x40FFC0 };
+	static const Uint8 modes[] = { 0x20, 0x31, 0x20, 0x35 };
+	static const SNRomMappingE maps[] = {
+		SNROM_MAPPING_LOROM, SNROM_MAPPING_HIROM,
+		SNROM_MAPPING_EXLOROM, SNROM_MAPPING_EXHIROM
+	};
+	for (Uint32 i = 0; i < 4; i++)
+	{
+		std::vector<Uint8> rom(i < 2 ? 0x100000 : 0x600000, 0xFF);
+		PutHeader(rom, offsets[i], "PATCHED HEADER", modes[i], 0x1234,
+			0x8000, offsets[i] - 0x7FC0);
+		SNRomInfoT *info = (SNRomInfoT *)&rom[offsets[i]];
+		info->Checksum = 0xFFFF; // stale pair, independent of ROM identity
+		info->RomType = 2;
+		info->SRAMSize = 3;
+		if (i == 3)
+			memcpy(&rom[0xFFC0], info, 0x40); // duplicated legacy header
+
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"stale-checksum image must load");
+		CHECK(snesRom.m_eMapping == maps[i],
+			"structural fallback must select the physical mapper");
+		CHECK(snesRom.GetRomTitle() &&
+			!strcmp(snesRom.GetRomTitle(), "PATCHED HEADER"),
+			"structural fallback must preserve header metadata");
+		CHECK(snesRom.GetSRAMBytes() == 8192,
+			"stale checksum must not discard SRAM metadata");
+		CHECK(!memcmp(snesRom.GetData(), &rom[0], rom.size()),
+			"structural fallback must leave linear payload unchanged");
+	}
+
+	/* A valid header retains precedence even over a plausible opposite
+	   candidate. Bad reset vectors must never qualify without a checksum. */
+	for (Uint32 valid = 0; valid < 2; valid++)
+	{
+		std::vector<Uint8> rom(0x100000, 0xFF);
+		PutHeader(rom, 0xFFC0, "UNTRUSTED HEADER", 0x31, 0x1234,
+			valid ? 0x8000 : 0x0000, 0x8000);
+		((SNRomInfoT *)&rom[0xFFC0])->Checksum = 0xFFFF;
+		if (valid)
+			PutHeader(rom, 0x7FC0, "VALID HEADER", 0x20, 0x5678,
+				0x8000, 0);
+		CMemFileIO io;
+		SnesRom snesRom;
+		io.Open(&rom[0], (Uint32)rom.size());
+		CHECK(snesRom.LoadRom(&io) == Emu::Rom::LOADERROR_NONE,
+			"header precedence fixture must load");
+		CHECK(valid ? (snesRom.GetRomTitle() &&
+			!strcmp(snesRom.GetRomTitle(), "VALID HEADER"))
+			: snesRom.GetRomTitle() == NULL,
+			"fallback must preserve valid precedence and reject bad reset");
+		CHECK(!memcmp(snesRom.GetData(), &rom[0], rom.size()),
+			"untrusted opposite candidate must not shuffle ROM blocks");
+	}
+}
+
 static void TestRealType1StillWorks(void)
 {
 	std::vector<Uint8> linear(0x100000, 0xFF);
@@ -537,6 +598,7 @@ int main(void)
 	TestSA1HeaderDetection();
 	TestVideoRegionHeaderCodes();
 	TestPinocchioFalseType1Regression();
+	TestStaleChecksumHeaders();
 	TestRealType1StillWorks();
 	Test24MbitBoardDetection();
 	Test128KSramBoardDetection();

@@ -15,6 +15,7 @@
 #include "file.h"
 #include "mainloop_exec.h"
 #include "mainloop_shared.h"
+#include "sntargetprofile.h"
 
 /* MAINLOOP_SNESSTATEDEBUG lives in mainloop_shared.h (included above). */
 
@@ -48,7 +49,16 @@ Bool _ExecuteSnes(CRenderSurface *pSurface, CMixBuffer *pMixBuffer, Emu::SysInpu
             SNSPCSetExecuteFunc(SNSPCExecute_C);
 
 		    PROF_ENTER("SnesExecuteFrame");
+		    SNTARGET_BEGIN(_targetCore);
 		    _pSystem->ExecuteFrame(pInput, pSurface, pMixBuffer, eMode);
+		    SNTARGET_END(Core, _targetCore);
+#if SNES_TARGET_PROFILE
+            if (SnesTargetProfileIsEnabled())
+            {
+                g_SnesTargetProfile.SourceFrames++;
+                if (pSurface) g_SnesTargetProfile.RenderedFrames++;
+            }
+#endif
 		    PROF_LEAVE("SnesExecuteFrame");
             #else
 

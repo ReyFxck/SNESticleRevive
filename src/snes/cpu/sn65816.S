@@ -553,7 +553,11 @@
 
 #define SNCPU_GET_PC(_dest)   		\
 		lwu		t0,SP_PCBank	   ;\
-        subu	_dest, R_PC, t0
+        subu	_dest, R_PC, t0 ;\
+        andi	_dest,_dest,0xFFFF ;\
+        lbu		t0,14(R_pCpu) ;\
+        sll		t0,t0,16 ;\
+        or		_dest,_dest,t0
 
 // set lower 16-bits of PC and 8-bit PB
 // PB is always stored in CPU struct
@@ -1216,10 +1220,11 @@ _SNCPU_Write16_Fast:
         sb		R_Data, 0(t0)							// store low byte
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
         sb		t1, 1(t0)								// store high byte
+		sb		t1,SNCPU_uOpenBus	// recorder clobbers t1, including its delay slot
 		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
 		jr		ra
-        sb		t1,SNCPU_uOpenBus
+        nop
 
 _SNCPU_Write16Trap:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
@@ -2351,12 +2356,14 @@ _SNCPUExecute_Loop:
 
 		lwu		t1,SP_PCBank
 		subu	R_Addr,R_PC,t1
-		addiu	R_CpuCycle,R_CpuCycle,1
 		lbu		R_Data,0(R_PC)
 
 		blez	R_Cycles, _SNCPUExecute_Done
         addiu	R_PC,R_PC,1
 
+        // Only count the opcode when it will execute. The terminal probe
+        // above rewinds PC at Done and must not advance the 5A22 math clock.
+        addiu	R_CpuCycle,R_CpuCycle,1
         subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
@@ -2959,6 +2966,7 @@ _SNCPU_MVN_X0_Normal:
 		// WAI; PC already points at the following instruction.
 		ori		t0,t0,SNCPU_SIGNAL_WAI		// set wai signal
 		sb		t0,SNCPU_uSignal
+		addiu	R_CpuCycle,R_CpuCycle,3	// same entry cost as the C core
 		move	R_Cycles,zr
 		j		_SNCPUExecute_DoneNoRewind
 		nop
@@ -2985,6 +2993,7 @@ _WAI_SkipIRQ:
 		lbu		t0,SNCPU_uSignal
 		ori		t0,t0,SNCPU_SIGNAL_STP
 		sb		t0,SNCPU_uSignal
+		addiu	R_CpuCycle,R_CpuCycle,3
 		move	R_Cycles,zr
 		j		_SNCPUExecute_DoneNoRewind
 		nop

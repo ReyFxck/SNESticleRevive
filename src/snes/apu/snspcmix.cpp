@@ -728,7 +728,10 @@ static void _SNSpcDspMemset64(Uint64 *pDest, Int32 nDwords)
 __attribute__((noinline))
 void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMainVol, Int32 iEchoVol)
 {
-
+	/* The DSP supplies aligned groups of eight samples. All six operands
+	   are modified by the loop, and PMULTH/PMADDH overwrite HI/LO. Describe
+	   that contract even with noinline: input-only operands permit aliases
+	   and fail to describe the stores to the compiler. */
 	__asm__ __volatile__ (
 		"pcpyh       %4,%4           \n"
 		"pcpyld      %4,%4,%4           \n"
@@ -742,7 +745,7 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 
 		".set noreorder \n"
 		".align 3           \n"
-		"_MixEchoPS2_Loop:         \n"
+		"1:         \n"
 		"lq          $8,0x00(%1)     \n"    // $8 = 4x main samples
 		"lq          $9,0x10(%1)     \n"    // $9 = 4x main samples
 		"lq         $10,0x00(%2)     \n"    // $10  = 8x echo samples
@@ -772,14 +775,14 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, Int16 *pEcho, Int32 nSamples, Int32 iMa
 
 		"addiu      %3,%3,-8         \n"
 		"addiu      %1,%1,0x20       \n"
-		"bgtz       %3,_MixEchoPS2_Loop \n"
+		"bgtz       %3,1b \n"
 		"addiu      %2,%2,0x10       \n"
 
 		".set reorder \n"
 
+		: "+&r" (pOut), "+&r" (pMain), "+&r" (pEcho), "+&r" (nSamples), "+&r" (iMainVol), "+&r" (iEchoVol)
 		:
-		: "r" (pOut), "r" (pMain), "r" (pEcho), "r" (nSamples), "r" (iMainVol), "r" (iEchoVol)
-		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15"
+		: "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "hi", "lo", "memory"
 		);
 }
 #endif
@@ -1114,14 +1117,17 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		// check mute
 		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40))
 		{
-			/* The DSP evaluates voices in order. Voice N can therefore use the
-			   same-sample output of voice N-1 as its PMON input. */
-			_SNSpcDspMemset64((Uint64 *)m_iVoiceOutput,
-				(sizeof(Int16) * nSamples + 7) / 8);
+			/* DSP writes were synchronized above and registers stay stable for
+			   this block. PMON bit 0 is ignored; only a following modulated voice
+			   consumes the full preceding voice-output buffer. */
+			const Uint32 uPitchModMask =
+				m_pDsp->GetReg(SNSPCDSP_REG_PMON) & 0xFEu;
 
 			for (iChannel=0; iChannel < SNSPCDSP_CHANNEL_NUM; iChannel++)
 			{
 				Bool bVoiceOutputReady = FALSE;
+				const Bool bNextUsesPitchMod =
+					(uPitchModMask & (2u << iChannel)) != 0;
 				#if CODE_DEBUG
 				if (_ChMask & (1<<iChannel))
 				#endif
@@ -1137,8 +1143,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 
 					/* PMON bit 0 is ignored by hardware. For voices 1-7, the
 					   previous voice output already lives in VoiceOutput. */
-					if (iChannel > 0 &&
-					    (m_pDsp->GetReg(SNSPCDSP_REG_PMON) & (1<<iChannel)))
+					if (uPitchModMask & (1u << iChannel))
 						pPitchMod = m_iVoiceOutput;
 
 					bMix = OutputSample(iChannel, pSampleData,
@@ -1155,13 +1160,23 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 							pSampleData = m_iNoiseSample;
 						}
 
-						/* Build the unscaled voice output once. It feeds both OUTX
-						   and the following voice's PMON path. */
-						_SNSpcDspBuildVoiceOutput(
-							m_iVoiceOutput, pSampleData,
-							pData->EnvData, nSamples);
-						GetChannel(iChannel)->outx =
-							(Uint8)(m_iVoiceOutput[nSamples - 1] >> 8);
+						/* OUTX observes the last sample of this block. Build all
+						   samples only when the next voice uses PMON; main/echo
+						   retain their separate, unchanged raw envelope math. */
+						if (bNextUsesPitchMod)
+						{
+							_SNSpcDspBuildVoiceOutput(
+								m_iVoiceOutput, pSampleData,
+								pData->EnvData, nSamples);
+							GetChannel(iChannel)->outx =
+								(Uint8)(m_iVoiceOutput[nSamples - 1] >> 8);
+						}
+						else
+						{
+							GetChannel(iChannel)->outx = (Uint8)(
+								SNSpcDspVoiceOutput(pSampleData[nSamples - 1],
+									pData->EnvData[nSamples - 1]) >> 8);
+						}
 						bVoiceOutputReady = TRUE;
 
 						// mix channel into main and echo buffers
@@ -1188,7 +1203,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 
 				/* A silent/ended voice modulates the next voice with zero, not
 				   stale output from the previous channel. */
-				if (!bVoiceOutputReady)
+				if (bNextUsesPitchMod && !bVoiceOutputReady)
 					_SNSpcDspMemset64((Uint64 *)m_iVoiceOutput,
 						(sizeof(Int16) * nSamples + 7) / 8);
 			}

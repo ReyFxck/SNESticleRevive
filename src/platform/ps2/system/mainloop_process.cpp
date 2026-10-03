@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "mainloop_debug.h"
 #include "mainloop.h"
@@ -17,6 +18,8 @@
 #include "mainloop_iop.h"
 #include "mainloop_safe_frameskip.h"
 #include "mainloop_region_cadence.h"
+#include "mainloop_target_profile.h"
+#include "mainloop_telemetry.h"
 #include "gskit_backend.h"
 
 #include "types.h"
@@ -44,6 +47,39 @@ extern "C" {
 #include "audio.h"
 };
 
+static Bool s_ShowFPS = FALSE;
+MainLoopFPSSnapshotT g_MainLoopFPS;
+Bool MainLoopFPSIsEnabled() { return s_ShowFPS; }
+void MainLoopFPSSetEnabled(Bool enabled)
+{
+    s_ShowFPS = enabled;
+    g_MainLoopFPS.Ready = FALSE;
+}
+
+static void MainLoopFPSFinish(Bool gameplay, Uint32 start,
+                             Uint32 sourceFrames, Uint32 drawnFrames)
+{
+    struct WindowT { Uint32 Start, Source, Draw, Present; };
+    static WindowT window;
+    if (!s_ShowFPS || !gameplay)
+    {
+        memset(&window, 0, sizeof(window));
+        g_MainLoopFPS.Ready = FALSE;
+        return;
+    }
+    if (!window.Present) window.Start = start;
+    window.Source += sourceFrames;
+    window.Draw += drawnFrames;
+    window.Present++;
+    Uint32 elapsed = ProfCtrGetCycle() - window.Start;
+    if (elapsed < PROFCTR_COUNT_HZ) return;
+    g_MainLoopFPS.SourceRate10 = SnesTargetProfileRate10(window.Source, elapsed);
+    g_MainLoopFPS.DrawRate10 = SnesTargetProfileRate10(window.Draw, elapsed);
+    g_MainLoopFPS.PresentRate10 = SnesTargetProfileRate10(window.Present, elapsed);
+    g_MainLoopFPS.Ready = TRUE;
+    memset(&window, 0, sizeof(window));
+}
+
 static Uint32 _iframetex=0;
 
 /*
@@ -61,6 +97,81 @@ static Uint32 _iframetex=0;
  */
 static MainLoopRegionCadenceT s_SnesRegionCadence = { 0, 0, 0 };
 
+#if SNES_TARGET_PROFILE
+MainLoopTargetProfileSnapshotT g_MainLoopTargetProfile;
+
+static void _MainLoopTargetProfileFinish(Bool bGameplay,
+    Uint32 uLoopStart, Uint32 uNow)
+{
+    struct WindowT
+    {
+        Uint32 Start, Loops, SourceFrames, RenderedFrames;
+        Uint64 Core, PPU, OBJ, SPC, Mix, Audio, GIFWait;
+        Uint64 BGFetch, BGDraw, Output;
+        Uint64 CPU, MDMA, HDMA, RenderBegin, RenderEnd;
+        Uint64 Prep, Submit, Flip, Work;
+    };
+    static WindowT window;
+    if (!bGameplay || !SnesTargetProfileIsEnabled())
+    {
+        if (window.Loops) memset(&window, 0, sizeof(window));
+        g_MainLoopTargetProfile.Ready = FALSE;
+        return;
+    }
+    if (!window.Loops) window.Start = uLoopStart;
+    window.Loops++;
+    window.SourceFrames += g_SnesTargetProfile.SourceFrames;
+    window.RenderedFrames += g_SnesTargetProfile.RenderedFrames;
+    window.Core += g_SnesTargetProfile.Core;
+    window.PPU += g_SnesTargetProfile.PPU;
+    window.OBJ += g_SnesTargetProfile.OBJ;
+    window.SPC += g_SnesTargetProfile.SPC;
+    window.Mix += g_SnesTargetProfile.Mix;
+    window.Audio += g_SnesTargetProfile.Audio;
+    window.GIFWait += g_SnesTargetProfile.GIFWait;
+    window.BGFetch += g_SnesTargetProfile.BGFetch;
+    window.BGDraw += g_SnesTargetProfile.BGDraw;
+    window.Output += g_SnesTargetProfile.Output;
+    window.CPU += g_SnesTargetProfile.CPU;
+    window.MDMA += g_SnesTargetProfile.MDMA;
+    window.HDMA += g_SnesTargetProfile.HDMA;
+    window.RenderBegin += g_SnesTargetProfile.RenderBegin;
+    window.RenderEnd += g_SnesTargetProfile.RenderEnd;
+    window.Prep += _MainLoop_DiagPrepCount;
+    window.Submit += _MainLoop_DiagSubmitCount;
+    window.Flip += _MainLoop_DiagFlipCount;
+    window.Work += uNow - uLoopStart - _MainLoop_DiagFlipCount;
+    Uint32 uElapsed = uNow - window.Start;
+    if (uElapsed < SNTARGET_COUNT_HZ) return;
+
+    MainLoopTargetProfileSnapshotT *p = &g_MainLoopTargetProfile;
+    p->SourceRate10 = SnesTargetProfileRate10(window.SourceFrames, uElapsed);
+    p->PresentRate10 = SnesTargetProfileRate10(window.Loops, uElapsed);
+    p->RenderRate10 = SnesTargetProfileRate10(window.RenderedFrames, uElapsed);
+    p->WorkMs10 = SnesTargetProfileMillis10(window.Work, window.Loops);
+    p->CoreMs10 = SnesTargetProfileMillis10(window.Core, window.Loops);
+    p->PPUMs10 = SnesTargetProfileMillis10(window.PPU, window.Loops);
+    p->OBJMs10 = SnesTargetProfileMillis10(window.OBJ, window.Loops);
+    p->SPCMs10 = SnesTargetProfileMillis10(window.SPC, window.Loops);
+    p->MixMs10 = SnesTargetProfileMillis10(window.Mix, window.Loops);
+    p->AudioMs10 = SnesTargetProfileMillis10(window.Audio, window.Loops);
+    p->GIFWaitMs10 = SnesTargetProfileMillis10(window.GIFWait, window.Loops);
+    p->BGFetchMs10 = SnesTargetProfileMillis10(window.BGFetch, window.Loops);
+    p->BGDrawMs10 = SnesTargetProfileMillis10(window.BGDraw, window.Loops);
+    p->OutputMs10 = SnesTargetProfileMillis10(window.Output, window.Loops);
+    p->CPUMs10 = SnesTargetProfileMillis10(window.CPU, window.Loops);
+    p->MDMAMs10 = SnesTargetProfileMillis10(window.MDMA, window.Loops);
+    p->HDMAMs10 = SnesTargetProfileMillis10(window.HDMA, window.Loops);
+    p->RenderBeginMs10 = SnesTargetProfileMillis10(window.RenderBegin, window.Loops);
+    p->RenderEndMs10 = SnesTargetProfileMillis10(window.RenderEnd, window.Loops);
+    p->PrepMs10 = SnesTargetProfileMillis10(window.Prep, window.Loops);
+    p->SubmitMs10 = SnesTargetProfileMillis10(window.Submit, window.Loops);
+    p->FlipMs10 = SnesTargetProfileMillis10(window.Flip, window.Loops);
+    p->Ready = TRUE;
+    memset(&window, 0, sizeof(window));
+}
+#endif
+
 static void _MainLoopResetSnesRegionCadence(void)
 {
     MainLoopRegionCadenceReset(&s_SnesRegionCadence);
@@ -68,6 +179,19 @@ static void _MainLoopResetSnesRegionCadence(void)
 
 Bool MainLoopProcess()
 {
+#if SNDBG_LOG || SNES_TARGET_PROFILE
+    Uint32 uLoopStart = (SNDBG_LOG || SnesTargetProfileIsEnabled()) ? ProfCtrGetCycle() : 0;
+    Bool bSnesAtStart = _pSnes && _pSystem == _pSnes && !_bMenu;
+#endif
+#if SNES_TARGET_PROFILE
+    if (SnesTargetProfileIsEnabled())
+        memset(&g_SnesTargetProfile, 0, sizeof(g_SnesTargetProfile));
+#endif
+    Uint32 fpsStart = s_ShowFPS ? ProfCtrGetCycle() : 0;
+    Emu::System *fpsSystem = _pSystem;
+    Uint32 fpsFrameBefore = (s_ShowFPS && fpsSystem) ? fpsSystem->GetFrame() : 0;
+    Uint32 fpsDrawnFrames = 0;
+    Aud_Service();
     NetPlayRPCInputT NetInput;
 
     PROF_ENTER("Frame");
@@ -227,9 +351,25 @@ Bool MainLoopProcess()
 
             if (_pSystem == _pNes)
             {
-                /* NES is a 60 Hz source in the current integration. */
+#if NES_MESENCE
+                Uint32 sourceHz = _pNes->GetFrameRate();
+                Uint32 hostHz = (Uint32)GSK_GetRefreshHz();
+                _AudMix->SetFrameRate(sourceHz);
+                Bool allowed = NetInput.eGameState == NETPLAY_GAMESTATE_IDLE &&
+                    !s_pMovieClip->IsPlaying() && !s_pMovieClip->IsRecording();
+                Uint32 hidden = MainLoopSafeFrameskipTake(allowed);
+                Uint32 extra = 0;
+                Bool hold = FALSE;
+                if (hidden) _MainLoopResetSnesRegionCadence();
+                else MainLoopRegionCadenceStep(&s_SnesRegionCadence, allowed,
+                    sourceHz, hostHz, &extra, &hold);
+                hidden += extra;
+#else
                 _AudMix->SetFrameRate(60);
                 _MainLoopResetSnesRegionCadence();
+                Uint32 hidden = 0;
+                Bool hold = FALSE;
+#endif
 
                 /* The shared VRAM block is 256 KiB either way:
                    NES = 256x256 RGBA32, SNES = 512x256 RGBA5551.
@@ -241,11 +381,18 @@ Bool MainLoopProcess()
                     TextureSetFilter(&_OutTex, g_GskTextureFilter);
                 }
                 PROF_ENTER("NesExecuteFrame");
-                _pNes->ExecuteFrame(&Input, pSurface, pMixBuffer, eMode);
+                for (Uint32 i = 0; i < hidden; ++i)
+                    _pNes->ExecuteFrame(&Input, NULL, pMixBuffer, eMode);
+                if (!hold)
+                    _pNes->ExecuteFrame(&Input, pSurface, pMixBuffer, eMode);
                 PROF_LEAVE("NesExecuteFrame");
-                PROF_ENTER("NesTexUpload");
-                TextureUpload(&_OutTex, pSurface->GetLinePtr(0));
-                PROF_LEAVE("NesTexUpload");
+                if (!hold)
+                {
+                    PROF_ENTER("NesTexUpload");
+                    TextureUpload(&_OutTex, pSurface->GetLinePtr(0));
+                    PROF_LEAVE("NesTexUpload");
+                }
+                bProducedFrame = hold ? FALSE : TRUE;
             }
             else
             {
@@ -315,7 +462,10 @@ Bool MainLoopProcess()
                 }
             }
             if (bProducedFrame)
+            {
                 _iframetex^=1;
+                fpsDrawnFrames = 1;
+            }
         }
 
         Aud_BufferedAsyncStart();
@@ -332,6 +482,63 @@ Bool MainLoopProcess()
 	_MenuRuntimeUpdate();
 
 	MainLoopRender();
+    if (s_ShowFPS)
+        MainLoopFPSFinish(!_bMenu && fpsSystem && _pSystem == fpsSystem &&
+            !_MainLoop_BlackScreen, fpsStart,
+            _pSystem == fpsSystem && fpsSystem ? fpsSystem->GetFrame() - fpsFrameBefore : 0,
+            fpsDrawnFrames);
+    else
+        MainLoopFPSFinish(FALSE, 0, 0, 0);
+
+#if SNES_TARGET_PROFILE
+    _MainLoopTargetProfileFinish(bSnesAtStart && _pSystem == _pSnes &&
+        !_bMenu && !_MainLoop_BlackScreen, uLoopStart,
+        SnesTargetProfileIsEnabled() ? ProfCtrGetCycle() : 0);
+#endif
+
+#if SNDBG_LOG
+    /* Measure the whole application iteration, including audio enqueue and
+       presentation. The old core counter ends before frontend finish/flip. */
+    struct FrameWindowT
+    {
+        Uint32 uSession, nFrames, uMinWork, uMaxWork;
+        Uint64 uLoop, uPrep, uSubmit, uFlip;
+    };
+    static FrameWindowT window;
+    Bool bSnesDisplay = bSnesAtStart && _pSystem == _pSnes &&
+        !_bMenu && !_MainLoop_BlackScreen;
+    if (!bSnesDisplay || window.uSession != g_DbgSessionId)
+    {
+        memset(&window, 0, sizeof(window));
+        window.uSession = g_DbgSessionId;
+    }
+    if (bSnesDisplay)
+    {
+        Uint32 uLoop = ProfCtrGetCycle() - uLoopStart;
+        Uint32 uWork = uLoop - _MainLoop_DiagFlipCount;
+        if (!window.nFrames || uWork < window.uMinWork) window.uMinWork = uWork;
+        if (uWork > window.uMaxWork) window.uMaxWork = uWork;
+        window.uLoop += uLoop;
+        window.uPrep += _MainLoop_DiagPrepCount;
+        window.uSubmit += _MainLoop_DiagSubmitCount;
+        window.uFlip += _MainLoop_DiagFlipCount;
+        if (++window.nFrames == SNDBG_FRAME_PERIOD)
+        {
+            DLog("[ps2-frame] session=%u input=%u host-hz=%u display-frames=%u count avg loop/prep/submit/flip=%u/%u/%u/%u work min/avg/max=%u/%u/%u",
+                (unsigned)window.uSession, (unsigned)_uInputFrame,
+                (unsigned)g_DbgHostRefreshHz, (unsigned)window.nFrames,
+                (unsigned)(window.uLoop / window.nFrames),
+                (unsigned)(window.uPrep / window.nFrames),
+                (unsigned)(window.uSubmit / window.nFrames),
+                (unsigned)(window.uFlip / window.nFrames),
+                (unsigned)window.uMinWork,
+                (unsigned)((window.uLoop - window.uFlip) / window.nFrames),
+                (unsigned)window.uMaxWork);
+            memset(&window, 0, sizeof(window));
+            window.uSession = g_DbgSessionId;
+        }
+    }
+#endif
 
     PROF_LEAVE("Frame");
 

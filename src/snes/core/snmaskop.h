@@ -26,6 +26,12 @@ void SNMaskLeft(SNMaskT *pMask, Int32 iPos);
 void SNMaskSHR(SNMaskT *pDestMask, const Uint8 *pSrcMask, Int32 nBits);
 void SNMaskSHL(SNMaskT *pDestMask, const Uint8 *pSrcMask, Int32 nBits);
 
+static inline Bool SNMaskIsEmpty(const SNMaskT *pMask)
+{
+	return (pMask->uMask64[0] | pMask->uMask64[1] |
+	        pMask->uMask64[2] | pMask->uMask64[3]) == 0;
+}
+
 #if !SNMASKOP_INLINE
 
 void SNMaskClear(SNMaskT *pDest);

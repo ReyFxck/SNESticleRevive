@@ -10,11 +10,18 @@
 #define _SNPPUBGLINECACHE_H
 
 #include "types.h"
+#include <string.h>
 #include "snppurender.h"
 
-#define SNPPU_BG_LINE_CACHE_LINES 256u
+#ifndef SNPPU_BG_LINE_CACHE_LINES
+#define SNPPU_BG_LINE_CACHE_LINES 512u
+#endif
+#if SNPPU_BG_LINE_CACHE_LINES != 256 && SNPPU_BG_LINE_CACHE_LINES != 512
+#error BG line cache supports 256 or 512 world rows
+#endif
 #define SNPPU_BG_LINE_PIXELS      (33u * 8u)
 #define SNPPU_BG_LINE_MASK_BYTES  40u
+#define SNPPU_BG_LINE_SCROLL_MAX  8u
 
 #ifndef SNPPU_BG_LINE_CACHE_WAYS
 #define SNPPU_BG_LINE_CACHE_WAYS 2u
@@ -95,6 +102,53 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 	       pKey->uBitDepth == pInfo->uBitDepth &&
 	       pKey->uPalBase == pInfo->uPalBase &&
 	       pKey->uPriority == pInfo->Priority;
+}
+
+/* Reuse an overlapping 33-cell window only when every other fetch input is
+   exact. Normal 16x16 maps have two 8-dot cells per horizontal map entry;
+   native hires has one logical cell (two physical CHR halves) per entry. */
+_INLINE Int32 SnesPPUBGLineCacheScrollStep(
+	const SnesPPUBGLineCacheKeyT *pKey, Uint32 uGeneration,
+	Uint32 uVramState, Uint32 uBG, Uint32 uMode, const SnesBGInfoT *pInfo)
+{
+	const Bool bHalfX = uMode == 1u && pInfo->uChrSize;
+	const Uint32 uXMask = 0x041Fu | (bHalfX ? 0x1000u : 0u);
+	Uint32 uSameXState = (uVramState & ~uXMask) | (pKey->uVramState & uXMask);
+	if (!SnesPPUBGLineCacheKeyMatches(pKey, uGeneration,
+		uSameXState, uBG, uMode, pInfo)) return 0;
+	Uint32 uOldX = (pKey->uVramState & 31u) | ((pKey->uVramState >> 5) & 32u);
+	Uint32 uNewX = (uVramState & 31u) | ((uVramState >> 5) & 32u);
+	if (bHalfX)
+	{
+		uOldX = (uOldX << 1) | ((pKey->uVramState >> 12) & 1u);
+		uNewX = (uNewX << 1) | ((uVramState >> 12) & 1u);
+	}
+	Uint32 uMask = bHalfX ? 127u : 63u;
+	Uint32 uDelta = (uNewX - uOldX) & uMask;
+	if (uDelta && uDelta <= SNPPU_BG_LINE_SCROLL_MAX)
+		return (Int32)uDelta;
+	Uint32 uReverseDelta = (uOldX - uNewX) & uMask;
+	return uReverseDelta && uReverseDelta <= SNPPU_BG_LINE_SCROLL_MAX
+		? -(Int32)uReverseDelta : 0;
+}
+
+/* Both pixel buffers are 8-byte aligned. Retain at least 25 cells; beyond
+   eight exposed cells use the ordinary decoder instead of paying for a
+   mostly discarded row. Sources and destinations are separate buffers. */
+_INLINE void SnesPPUBGLineCacheCopyOverlap(
+	Uint8 *pDest, Uint8 *pOpaque, Uint8 *pPriority,
+	const Uint8 *pSource, const Uint8 *pSourceOpaque,
+	const Uint8 *pSourcePriority, Int32 nStep)
+{
+	Uint32 nExposed = (Uint32)(nStep > 0 ? nStep : -nStep);
+	Uint32 nOverlap = 33u - nExposed;
+	Uint32 uSourceCell = nStep > 0 ? nExposed : 0u;
+	Uint32 uDestCell = nStep > 0 ? 0u : nExposed;
+	for (Uint32 i = 0; i < nOverlap; ++i)
+		((Uint64 *)pDest)[uDestCell + i] =
+			((const Uint64 *)pSource)[uSourceCell + i];
+	memcpy(pOpaque + uDestCell, pSourceOpaque + uSourceCell, nOverlap);
+	memcpy(pPriority + uDestCell, pSourcePriority + uSourceCell, nOverlap);
 }
 
 #endif // _SNPPUBGLINECACHE_H

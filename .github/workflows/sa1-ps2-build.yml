@@ -40,6 +40,14 @@ jobs:
           file build/SNESticle.elf
           ls -lh build/SNESticle.elf
 
+      - name: Check linked CPU and echo assembly
+        run: |
+          python3 -m pip install unicorn==2.1.4 pyelftools==0.32
+          python3 tools/cputest/check_ps2_cpu.py build/SNESticle.elf
+          python3 tools/cputest/check_ps2_echo.py build/SNESticle.elf
+          python3 tools/superfxtest/check_ps2_planes.py
+          python3 tools/pputest/check_ps2_mode7.py --cxx "$HOME/.local/ps2dev/ee/bin/mips64r5900el-ps2-elf-g++"
+
       - name: Upload experimental ELF
         uses: actions/upload-artifact@v4
         with:

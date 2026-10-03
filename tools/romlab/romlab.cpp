@@ -28,6 +28,7 @@ extern "C" {
 #include "snspc_c.h"
 }
 #include "snppucolor.h"
+#include "snppurender.h"
 #include "snstate.h"
 
 #include "input_movie.h"
@@ -990,6 +991,83 @@ static bool CheckNoMAD1Map()
     return true;
 }
 
+static bool CheckSDD1MapAndSpeed()
+{
+    SNSDD1 chip;
+    chip.ClearMapDirty();
+    chip.WriteReg(0x4804, chip.BankSegment(0));
+    if (chip.MapDirty()) return false;
+    chip.WriteReg(0x4804, 5);
+    chip.WriteReg(0x4804, 5);
+    if (!chip.MapDirty()) return false; // repeated write cannot cancel a change
+    chip.ClearMapDirty();
+    chip.WriteReg(0x4800, 0xFF);
+    chip.WriteReg(0x4801, 0xA5);
+    if (chip.MapDirty() || !chip.DmaEnabled(0) || chip.DmaEnabled(1))
+        return false;
+
+    std::vector<uint8_t> image = BuildSelfTestRom();
+    image.resize(0x600000, 0xFF);
+    SNRomInfoT *header = (SNRomInfoT *)&image[0x7FC0];
+    header->RomMakeup = 0x32;
+    header->RomType = 0x45;
+    header->RomSize = 0x0D;
+    for (Uint32 segment = 0; segment < 6; segment++)
+        for (Uint32 page = 0; page < 128; page++)
+            image[segment * 0x100000 + page * SNCPU_BANK_SIZE + 0x100] =
+                (Uint8)(segment * 37 + page);
+
+    CMemFileIO file;
+    file.Open(image.data(), (Uint32)image.size());
+    SnesRom rom;
+    if (rom.LoadRom(&file) != Emu::Rom::LOADERROR_NONE ||
+        !(rom.m_Flags & SNROM_FLAG_SDD1)) return false;
+    SnesSystem system;
+    system.SetSnesRom(&rom);
+    system.Reset();
+    SNCpuT *cpu = system.GetCpu();
+    Uint8 expectedSegments[4] = { 0, 1, 2, 3 };
+    for (Uint32 fast = 0; fast < 2; fast++)
+    {
+        SNCPUWrite8(cpu, 0x420D, (Uint8)fast);
+        for (Uint32 group = 0; group < 4; group++)
+        {
+            Uint8 segment = (Uint8)(fast ? group : 5 - group);
+            SNCPUWrite8(cpu, 0x4804 + group, segment);
+            SNCPUWrite8(cpu, 0x4804 + group, segment);
+            expectedSegments[group] = segment;
+            for (Uint32 checkGroup = 0; checkGroup < 4; checkGroup++)
+            {
+                for (Uint32 page = 0; page < 128; page++)
+                {
+                    Uint32 address = 0xC00000 + checkGroup * 0x100000 +
+                                     page * SNCPU_BANK_SIZE + 0x100;
+                    if (SNCPURead8(cpu, address) !=
+                            (Uint8)(expectedSegments[checkGroup] * 37 + page) ||
+                        cpu->Bank[address >> SNCPU_BANK_SHIFT].uBankCycle !=
+                            (fast ? SNCPU_CYCLE_FAST : SNCPU_CYCLE_SLOW))
+                        return false;
+                }
+            }
+        }
+    }
+    SNCPUWrite8(cpu, 0x4804, 5);
+    system.Reset();
+    for (Uint32 group = 0; group < 4; group++)
+    {
+        SNCPUWrite8(cpu, 0x4804 + group, (Uint8)group);
+        for (Uint32 page = 0; page < 128; page++)
+        {
+            Uint32 address = 0xC00000 + group * 0x100000 +
+                             page * SNCPU_BANK_SIZE + 0x100;
+            if (SNCPURead8(cpu, address) != (Uint8)(group * 37 + page) ||
+                cpu->Bank[address >> SNCPU_BANK_SHIFT].uBankCycle != SNCPU_CYCLE_SLOW)
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool CheckSuperScopeBeamLatch()
 {
     std::vector<uint8_t> image = BuildSelfTestRom();
@@ -1066,8 +1144,229 @@ static bool CheckJustifierBeamLatch()
     return h == 200u && v == 91u;
 }
 
+/* HDMA can keep the same world row while fine X changes between lines.
+   Compare warm masks with a fresh decode; this failed before FETCHPAL was
+   consumed by the indexed renderer. */
+static bool CheckBGFineXRendering()
+{
+    unsigned cases = 0;
+    for (unsigned mode : {1u, 5u})
+    for (unsigned large : {0u, 1u})
+    {
+        std::vector<uint8_t> expected;
+        for (unsigned cold = 0; cold < 2; ++cold)
+        {
+            SnesPPU ppu;
+            SnesPPURender render{};
+            render.SetPPU(&ppu);
+            ppu.SetPPURender(&render);
+            ppu.Reset();
+            uint32_t seed = 0xF1E65816;
+            for (unsigned i = 0; i < SNESPPU_VRAM_NUMWORDS; ++i)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                *ppu.GetVramPtr(i) = (Uint16)(seed >> 16);
+            }
+            for (unsigned i = 0; i < 256; ++i)
+                ppu.GetCGData()[i] = (Uint16)((i * 317u) & 0x7FFFu);
+            render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+            auto *regs = const_cast<SnesPPURegsT *>(ppu.GetRegs());
+            regs->inidisp = 15;
+            regs->bgmode = (Uint8)(mode | (large ? 0x30u : 0));
+            regs->bg1sc = 0xC3;
+            regs->bg2sc = 0xE3;
+            regs->bg12nba = 0x40;
+            regs->tm = regs->ts = 3;
+            regs->cgwsel = 2;
+            regs->cgadsub = 0x63;
+            CRenderSurface surface;
+            surface.Alloc(256, 224, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+            render.BeginRender(&surface);
+            for (unsigned line = 1; line <= 224; ++line)
+            {
+                regs->bg1hofs.w = (Uint16)((line / 32u) * 8u + (line & 7u));
+                regs->bg2hofs.w = (Uint16)((1023u - line) & 1023u);
+                regs->bg1vofs.w = (Uint16)((13u - line) & 1023u);
+                regs->bg2vofs.w = (Uint16)((19u - line) & 1023u);
+                if (cold) render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+                render.RenderLine((Int32)line);
+                auto *pixels = surface.GetLinePtr((Int32)line - 1);
+                if (!cold) expected.insert(expected.end(), pixels, pixels + 1024);
+                else if (memcmp(expected.data() + (line - 1u) * 1024u, pixels, 1024))
+                {
+                    fprintf(stderr, "BG fine X diverged: mode=%u large=%u line=%u\n", mode, large, line);
+                    render.EndRender();
+                    return false;
+                }
+            }
+            render.EndRender();
+        }
+        ++cases;
+    }
+    printf("BG fine X renderer: PASS (%u scenes; fixed world Y, HDMA scroll, opacity, priority, main/sub)\n", cases);
+    return true;
+}
+
+/* Compare a moving synthetic PPU scene with a cold renderer on every line.
+   No ROM, timing, or host-performance assumption is involved. */
+static bool CheckBGScrollRendering()
+{
+    for (unsigned mode : {1u, 5u})
+    for (unsigned large : {0u, 1u})
+    for (unsigned maps : {0u, 3u})
+    {
+        std::vector<uint8_t> expected;
+        for (unsigned cold = 0; cold < 2; ++cold)
+        {
+            SnesPPU ppu;
+            SnesPPURender render{};
+            render.SetPPU(&ppu);
+            ppu.SetPPURender(&render);
+            ppu.Reset();
+            uint32_t seed = 0x65816;
+            for (unsigned i = 0; i < SNESPPU_VRAM_NUMWORDS; ++i)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                *ppu.GetVramPtr(i) = (Uint16)(seed >> 16);
+            }
+            for (unsigned i = 0; i < 256; ++i)
+                ppu.GetCGData()[i] = (Uint16)((i * 317u) & 0x7FFFu);
+            render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+            SnesPPURegsT *regs = const_cast<SnesPPURegsT *>(ppu.GetRegs());
+            regs->inidisp = 15;
+            regs->bgmode = (Uint8)(mode | (large ? 0x30u : 0));
+            regs->bg1sc = (Uint8)(0xC0u | maps);
+            regs->bg2sc = (Uint8)(0xE0u | maps);
+            regs->bg12nba = 0x40;
+            regs->tm = regs->ts = 3;
+            regs->cgwsel = 2;
+            CRenderSurface surface;
+            surface.Alloc(256, 8, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+            size_t position = 0;
+            for (unsigned step = 0; step < 408; ++step)
+            {
+                /* Cross map/quadrant wrap points in both directions, change
+                   fine X, and reject reuse after vertical movement. */
+                unsigned distance = step < 136 ? 1u : step < 272 ? 8u : 9u;
+                unsigned phase = step % 136u;
+                unsigned x = (phase < 68 ? phase : 135 - phase) * distance * 8u;
+                regs->bg1hofs.w = (Uint16)((x + (step & 7u)) & 1023u);
+                regs->bg2hofs.w = (Uint16)((1023u - x) & 1023u);
+                regs->bg1vofs.w = (Uint16)((step / 64u) * 8u);
+                regs->bg2vofs.w = 3;
+                regs->cgadsub = (Uint8)((step & 16u) ? 0x63 : 0);
+                if ((step % 31u) == 0)
+                {
+                    unsigned address = (step * 23u) & 0x7FFFu;
+                    *ppu.GetVramPtr(address) ^= 0x55AA;
+                    render.UpdateVRAM(address);
+                }
+                render.BeginRender(&surface);
+                for (unsigned line = 1; line <= 8; ++line)
+                {
+                    if (cold) render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+                    render.RenderLine((Int32)line);
+                    const uint8_t *pixels = surface.GetLinePtr((Int32)line - 1);
+                    if (!cold)
+                        expected.insert(expected.end(), pixels, pixels + 1024);
+                    else if (memcmp(expected.data() + position, pixels, 1024))
+                    {
+                        fprintf(stderr, "BG scroll diverged: mode=%u large=%u maps=%u step=%u line=%u\n",
+                                mode, large, maps, step, line);
+                        render.EndRender();
+                        return false;
+                    }
+                    position += 1024;
+                }
+                render.EndRender();
+            }
+        }
+    }
+    printf("BG scroll renderer: PASS (Mode 1/5, tile sizes, map wraps, fine X, priorities, color math, VRAM writes)\n");
+    return true;
+}
+
+/* Sources selected by CGADSUB can be entirely absent after composition.
+   Compare their output with math disabled across clipping/brightness/hires.
+   BG2 remains enabled on TS, making a dropped visible hires screen detectable. */
+static bool CheckEmptyMathRendering()
+{
+    unsigned cases = 0;
+    for (unsigned mode : {1u, 5u, 6u, 7u})
+    for (unsigned pseudo : {0u, 8u})
+    for (unsigned cgw : {2u, 0x32u, 0xC2u, 0xE2u})
+    for (unsigned brightness : {0u, 7u, 15u})
+    {
+        std::vector<uint8_t> expected;
+        for (unsigned math : {0u, 0x12u})
+        {
+            std::unique_ptr<SnesPPU> ppuStorage(new SnesPPU);
+            std::unique_ptr<SnesPPURender> renderStorage(new SnesPPURender{});
+            SnesPPU &ppu = *ppuStorage;
+            SnesPPURender &render = *renderStorage;
+            render.SetPPU(&ppu);
+            ppu.SetPPURender(&render);
+            ppu.Reset();
+            uint32_t seed = 0x2131;
+            for (unsigned i = 0; i < SNESPPU_VRAM_NUMWORDS; ++i)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                *ppu.GetVramPtr(i) = (Uint16)(seed >> 16);
+            }
+            for (unsigned i = 0; i < 256; ++i)
+                ppu.GetCGData()[i] = (Uint16)((i * 317u) & 0x7FFFu);
+            render.UpdateVRAMRange(0, SNESPPU_VRAM_NUMWORDS);
+            SnesPPURegsT *regs = const_cast<SnesPPURegsT *>(ppu.GetRegs());
+            regs->inidisp = (Uint8)brightness;
+            regs->bgmode = (Uint8)mode;
+            regs->setini = (Uint8)pseudo;
+            regs->bg1sc = 0xC0;
+            regs->bg2sc = 0xE0;
+            regs->bg12nba = 0x40;
+            regs->tm = 1;
+            regs->ts = 2;
+            regs->cgwsel = (Uint8)cgw;
+            /* The portable blender's legacy simple pseudo-hires path expects
+               a GS backend. Keep both reference scenes on its general path. */
+            regs->cgadsub = (Uint8)((!math && pseudo && mode != 5 && mode != 6) ? 8u : math);
+            regs->m7a.w = 277; regs->m7c.w = (Uint16)-141;
+            regs->m7b.w = 91; regs->m7d.w = 240;
+            CRenderSurface surface;
+            surface.Alloc(256, 8, PixelFormatGetByEnum(PIXELFORMAT_RGBA8));
+            render.BeginRender(&surface);
+            for (unsigned line = 1; line <= 8; ++line)
+            {
+                render.RenderLine((Int32)line);
+                const uint8_t *pixels = surface.GetLinePtr((Int32)line - 1);
+                if (!math) expected.insert(expected.end(), pixels, pixels + 1024);
+                else if (memcmp(expected.data() + (line - 1) * 1024, pixels, 1024))
+                {
+                    fprintf(stderr, "Empty math diverged: mode=%u pseudo=%u cgw=%02X bright=%u line=%u\n",
+                            mode, pseudo, cgw, brightness, line);
+                    render.EndRender();
+                    return false;
+                }
+            }
+            render.EndRender();
+        }
+        cases++;
+    }
+    printf("Empty math renderer: PASS (%u scenes; clipping, brightness, TS, native/pseudo hires)\n", cases);
+    return true;
+}
+
 static int SelfTestCommand()
 {
+    if (!CheckEmptyMathRendering()) return 1;
+    if (!CheckBGFineXRendering()) return 1;
+    if (!CheckBGScrollRendering())
+        return 1;
+    if (!CheckSDD1MapAndSpeed())
+    {
+        fprintf(stderr, "ROM Lab self-test: S-DD1 map/FastROM timing failed\n");
+        return 1;
+    }
+
     if (!CheckExHiRomSramMirrors())
     {
         fprintf(stderr, "ROM Lab self-test: ExHiROM SRAM mirrors failed\n");

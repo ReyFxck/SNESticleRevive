@@ -181,8 +181,66 @@ static void CheckFetchEquivalence()
 	}
 }
 
+static void CheckFetchBoundaries()
+{
+	static Uint8 Vram[0x20000];
+	static const Int32 positions[] = {
+		-262145, -2049, -1, 0, 2047, 2048, 262143, 262144, 524287
+	};
+	static const Int32 steps[] = {
+		-65536, -32769, -32768, -257, -1, 0, 1, 257, 32768, 32769, 65536
+	};
+	static const Int32 lengths[] = { -1, 0, 1, 2, 3, 4, 5, 7, 8, 31, 255, 256 };
+	typedef void (*FetchT)(Uint8 *, Int32, const Uint8 *, Int32, Int32, Int32, Int32);
+	static const FetchT reference[] = {
+		ReferenceFetchRepeat, ReferenceFetchClamp, ReferenceFetchBlack
+	};
+	static const FetchT implementation[] = {
+		SnesPPUMode7FetchRepeat, SnesPPUMode7FetchClamp, SnesPPUMode7FetchBlack
+	};
+	Uint32 random = 0xB07D4A11u;
+	for (Uint32 i = 0; i < sizeof(Vram); i++) Vram[i] = (Uint8)NextRandom(&random);
+	for (Int32 x : positions)
+		for (Int32 y : positions)
+			for (Int32 dx : steps)
+				for (Int32 length : lengths)
+					for (Int32 mode = 0; mode < 3; mode++)
+					{
+						Uint8 expected[264], got[264];
+						std::memset(expected, 0xA5, sizeof(expected));
+						std::memset(got, 0xA5, sizeof(got));
+						/* Deliberately unaligned destination and unchanged guards.
+						   Swap direction to cross both map/tile boundaries. */
+						reference[mode](expected + 1, length, Vram, x, y, dx, -dx);
+						implementation[mode](got + 1, length, Vram, x, y, dx, -dx);
+						if (std::memcmp(expected, got, sizeof(got)))
+						{
+							std::printf("FAIL boundary fetch mode=%d x/y=%d/%d step=%d length=%d\n",
+								mode, x, y, dx, length);
+							g_Failures++;
+							return;
+						}
+					}
+}
+
+static void CheckByteGather()
+{
+	Uint32 random = 5129;
+	for (Uint32 bits = 0; bits < 256; ++bits)
+		for (Uint32 trial = 0; trial < 256; ++trial)
+		{
+			Uint64 data = 0;
+			for (Uint32 b = 0; b < 8; ++b)
+				data |= (Uint64)((NextRandom(&random) & 127u) |
+					(((bits >> b) & 1u) << 7)) << (b * 8);
+			Check("eight byte MSBs including random low bits",
+				SnesPPUMode7ByteHighBits(data), bits);
+		}
+}
+
 int main()
 {
+	CheckByteGather();
 	Uint32 uRandom = 0x4D374B91u;
 	Int32 i;
 
@@ -191,6 +249,7 @@ int main()
 	Check("clip positive", SnesPPUMode7Clip(0x1234), 0x234);
 	Check("clip negative", SnesPPUMode7Clip(0x2001), -1023);
 	CheckFetchEquivalence();
+	CheckFetchBoundaries();
 
 	for (i = 0; i < 1000000 && !g_Failures; i++)
 	{

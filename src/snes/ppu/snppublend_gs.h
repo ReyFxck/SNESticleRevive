@@ -19,6 +19,11 @@ struct SNPPUDmaListT
     Uint64      *pAddSub;
     Uint64      *pIntensity;
     Uint64      *pXYOffset;
+	Uint64      *pDirectTrxReg;
+	Uint16      *pDirectImageCount;
+	Uint16      *pDirectRefCount;
+	Uint64      *pDirectUVEnd;
+	Uint64      *pDirectXYZEnd;
 
     Uint32      uPalAddr;
     Uint32      uInputAddr;
@@ -44,11 +49,14 @@ class SNPPUBlendGS : public ISNPPUBlend
 {
     SNPPUDmaListT m_DmaList _ALIGN(16);
     SNPPUDmaListT m_DmaListWithPalette _ALIGN(16);
+    SNPPUDmaListT m_DirectDmaList _ALIGN(16);
+    SNPPUDmaListT m_DirectDmaListWithPalette _ALIGN(16);
     SNPPUBlendInfoT *m_pDmaBlendInfo;
     Bool m_bPaletteDirty;
     Bool m_bAttribPalettesUploaded;
     Bool m_bDmaListHasIntensity;
-	Bool m_bDmaListDirectMain;
+	Bool m_bDmaListReady;
+	Bool m_bDirectDmaListReady;
 	Bool m_bDmaListFixedSub;
 	Uint128 m_HiresDmaList[32] _ALIGN(16);
 	Uint128 m_SparsePaletteDmaList[
@@ -57,6 +65,17 @@ class SNPPUBlendGS : public ISNPPUBlend
 	Bool m_bHiresDmaListReady;
 	Uint32 m_uPaletteDirty[8];
 	Uint32 m_nPaletteDirty;
+	SNPPUDmaListT *m_pDirectExecList;
+	Uint64 m_uDirectDirtyGroups;
+	Int32 m_iDirectFirstLine;
+	Uint32 m_nDirectLines;
+	Bool m_bDirectSparsePalette;
+	Bool m_bSparsePaletteListReady;
+	Uint64 m_uSparsePaletteGroups;
+	PaletteT *m_pSparsePaletteSource;
+	SNPPUDmaListT *m_pSparseRenderList;
+
+	void FlushDirectLines();
 
 	void MarkPaletteEntryDirty(Uint32 uAddr);
 	void MarkPaletteAllDirty();
@@ -64,6 +83,7 @@ class SNPPUBlendGS : public ISNPPUBlend
 	Uint64 GetDirtyPaletteGroups() const;
 	Uint128 *BuildSparsePaletteList(PaletteT *pPalette,
 		Uint64 uDirtyGroups, SNPPUDmaListT *pRenderList);
+	void SubmitHiresLine(Int32 iLine);
 
 public:
     SNPPUBlendGS(Uint32 uVramAddr, Uint32 uOutAddr);
@@ -73,6 +93,8 @@ public:
         Uint32 uFixedColor32, SNMaskT *pColorMask, Bool bAddSub,
         Uint32 uIntensity, Bool bFixedSub=FALSE);
     virtual void ExecHires512(const Uint16 *pLine512, Int32 iLine);
+    virtual Bool ExecHiresIndexed(const Uint8 *pMain, const Uint8 *pSub,
+        const Uint16 *pPalette, Int32 iLine, Uint16 *pCache = NULL);
     virtual void Clear(SNPPUBlendInfoT *pInfo, Int32 iLine);
     virtual void End();
     virtual void UpdatePalette(SNPPUBlendInfoT *pInfo, Uint16 *pCGRam, Uint32 uIntensity);

@@ -18,7 +18,13 @@
 #include "sntiming.h"
 #include "sndebug.h"
 #include "sndbglog.h"
+#include "sntargetprofile.h"
 #include "snppubglinecache.h"
+
+#if SNES_TARGET_PROFILE
+SnesTargetProfileFrameT g_SnesTargetProfile;
+Bool g_SnesTargetProfileEnabled = FALSE;
+#endif
 
 #ifndef SNESTICLE_ROMLAB
 #define SNESTICLE_ROMLAB 0
@@ -161,6 +167,7 @@ Uint32 g_DbgBGChrCacheBypasses = 0;
 Uint32 g_DbgBGChrCacheInvalidations = 0;
 Uint32 g_DbgBGLineCacheHits = 0;
 Uint32 g_DbgBGLineCacheMisses = 0;
+Uint32 g_DbgBGLineCacheScrolls = 0;
 Uint32 g_DbgBGLineCacheBypasses = 0;
 Uint32 g_DbgHiresLineCacheHits = 0;
 Uint32 g_DbgHiresLineCacheMisses = 0;
@@ -328,6 +335,7 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrCacheInvalidations = 0;
 	g_DbgBGLineCacheHits = 0;
 	g_DbgBGLineCacheMisses = 0;
+	g_DbgBGLineCacheScrolls = 0;
 	g_DbgBGLineCacheBypasses = 0;
 	g_DbgHiresLineCacheHits = 0;
 	g_DbgHiresLineCacheMisses = 0;
@@ -425,7 +433,9 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 #if SNDBG_LOG
         Uint32 _tAPU = ProfCtrGetCycle();
 #endif
+        SNTARGET_BEGIN(_targetSPC);
         SNSPCExecute(&m_Spc, nCycles);
+        SNTARGET_END(SPC, _targetSPC);
 #if SNDBG_LOG
         g_TmgCycAPU += ProfCtrGetCycle() - _tAPU;
 #endif
@@ -722,6 +732,37 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	uAddr &= 0xFFFF;
 
+	/* PPU ports are the frequent CPU/HDMA writes and are disjoint from
+	   every cartridge device window below. Preserve their original queue,
+	   bus timing and side effects before testing unrelated chip state. */
+	if (uAddr >= 0x2100 && uAddr < 0x2140)
+	{
+		/* Memory data ports need the live H/V position. Flush older queued
+		   control/address writes, then perform this bus transaction now so
+		   active-display restrictions are decided at the original access. */
+		if (uAddr == 0x2104 || uAddr == 0x2116 || uAddr == 0x2117 ||
+		    uAddr == 0x2118 || uAddr == 0x2119 || uAddr == 0x2122)
+		{
+#if SNPPU_WRITEQUEUE
+			pSnes->SyncPPU();
+#endif
+			pSnes->m_PPU.WriteTimed(
+				uAddr, uData, pSnes->m_uLine, pSnes->GetSCPULineClock());
+		}
+		else
+		{
+			/* Other decoded PPU writes keep the low-cost scanline queue. */
+#if SNPPU_WRITEQUEUE
+			while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
+				pSnes->SyncPPU();
+#else
+			pSnes->SyncPPU();
+			pSnes->m_PPU.Write8(uAddr, uData);
+#endif
+		}
+		return;
+	}
+
 	if (pSnes->m_bSA1)
 	{
 		if (uAddr >= 0x2200 && uAddr <= 0x23FF)
@@ -785,67 +826,39 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		return;
 	}
 
-	if (uAddr >= 0x2100 && uAddr < 0x2140)
+	switch(uAddr)
 	{
-		/* Memory data ports need the live H/V position. Flush older queued
-		   control/address writes, then perform this bus transaction now so
-		   active-display restrictions are decided at the original access. */
-		if (uAddr == 0x2104 || uAddr == 0x2116 || uAddr == 0x2117 ||
-		    uAddr == 0x2118 || uAddr == 0x2119 || uAddr == 0x2122)
-		{
-#if SNPPU_WRITEQUEUE
-			pSnes->SyncPPU();
-#endif
-			pSnes->m_PPU.WriteTimed(
-				uAddr, uData, pSnes->m_uLine, pSnes->GetSCPULineClock());
-		}
-		else
-		{
-			/* Other decoded PPU writes keep the low-cost scanline queue. */
-#if SNPPU_WRITEQUEUE
-			while (!pSnes->m_PPU.EnqueueWrite(pSnes->m_uLine, uAddr, uData))
-				pSnes->SyncPPU();
-#else
-			pSnes->SyncPPU();
-			pSnes->m_PPU.Write8(uAddr, uData);
-#endif
-		}
-	} else
-	{
-		switch(uAddr)
-		{
-			case 0x2180:	// WMDATA
-				// write directly to ram
-				pSnes->m_Ram[pSnes->m_IO.m_Regs.wmadd] = uData;
-				// increment memory address
-				pSnes->m_IO.m_Regs.wmadd++;
-				pSnes->m_IO.m_Regs.wmadd &= 0x1FFFF;
-				break;
-			case 0x2181:	// WMADDL
-				pSnes->m_IO.m_Regs.wmadd &= ~0x0000FF;
-				pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 0;
-				break;
+		case 0x2180:	// WMDATA
+			// write directly to ram
+			pSnes->m_Ram[pSnes->m_IO.m_Regs.wmadd] = uData;
+			// increment memory address
+			pSnes->m_IO.m_Regs.wmadd++;
+			pSnes->m_IO.m_Regs.wmadd &= 0x1FFFF;
+			break;
+		case 0x2181:	// WMADDL
+			pSnes->m_IO.m_Regs.wmadd &= ~0x0000FF;
+			pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 0;
+			break;
 
-			case 0x2182:	// WMADDM
-				pSnes->m_IO.m_Regs.wmadd &= ~0x00FF00;
-				pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 8;
-				break;
+		case 0x2182:	// WMADDM
+			pSnes->m_IO.m_Regs.wmadd &= ~0x00FF00;
+			pSnes->m_IO.m_Regs.wmadd |= (uData & 0xFF) << 8;
+			break;
 
-			case 0x2183:	// WMADDH
-				pSnes->m_IO.m_Regs.wmadd &= ~0xFF0000;
-				pSnes->m_IO.m_Regs.wmadd |= (uData & 0x01) << 16;
-				break;
+		case 0x2183:	// WMADDH
+			pSnes->m_IO.m_Regs.wmadd &= ~0xFF0000;
+			pSnes->m_IO.m_Regs.wmadd |= (uData & 0x01) << 16;
+			break;
 
-			default:
-				/* $2184-$21FF has no B-bus register behind it.  Writes are
-				   ignored; in particular, the old Donkey Kong-specific $2184
-				   exception was just one instance of this generic rule. */
-				if (uAddr >= 0x2184 && uAddr <= 0x21FF)
-					break;
-				/* All other locations in this trap page are base-console open
-				   bus/expansion space. Device-owned windows were handled above. */
+		default:
+			/* $2184-$21FF has no B-bus register behind it.  Writes are
+			   ignored; in particular, the old Donkey Kong-specific $2184
+			   exception was just one instance of this generic rule. */
+			if (uAddr >= 0x2184 && uAddr <= 0x21FF)
 				break;
-		}
+			/* All other locations in this trap page are base-console open
+			   bus/expansion space. Device-owned windows were handled above. */
+			break;
 	}
 }
 
@@ -1021,7 +1034,8 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		pSnes->m_SDD1.WriteReg(uAddr, uData);
 		if (pSnes->m_SDD1.MapDirty())
 		{
-			pSnes->RemapSDD1();
+			/* Each MMC register owns one independent 1 MiB ROM window. */
+			pSnes->RemapSDD1(1u << (uAddr & 3u));
 			pSnes->m_SDD1.ClearMapDirty();
 		}
 	} else
@@ -1484,6 +1498,10 @@ void SnesSystem::Reset()
 		m_pRom && m_pRom->m_eVideoType == SNROM_VIDEO_PAL ? TRUE : FALSE);
 
 	m_SDD1.Reset();
+	/* Resetting MMC registers must reset the actual bank bindings too.
+	   Repeated writes of the default segments no longer rebuild that map. */
+	if (m_bSDD1)
+		RemapSDD1();
 
 	// So' o cartucho com S-RTC deve tocar o relogio do host (time/gmtime).
 	// Antes isso rodava no boot de TODO jogo -> se time()/gmtime() falhar no
@@ -1674,7 +1692,9 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
                 // so, execute DMA for remainder of CPU time
                 // this function automatically subtracts from the CPU cycle count as it transfers each byte
 #if 1
+                SNTARGET_BEGIN(_targetMDMA);
                 m_DMAC.ProcessMDMA();
+                SNTARGET_END(MDMA, _targetMDMA);
 #else
                 {
                     int n = m_Cpu.Cycles;
@@ -2047,7 +2067,9 @@ void SnesSystem::ExecuteLine()
 #if SNDBG_LOG
 		Uint32 _tHDMA = ProfCtrGetCycle();
 #endif
+        SNTARGET_BEGIN(_targetHDMA);
         m_DMAC.ProcessHDMA(m_uLine);
+        SNTARGET_END(HDMA, _targetHDMA);
 #if SNDBG_LOG
 		g_TmgCycHDMA += ProfCtrGetCycle() - _tHDMA;
 #endif
@@ -2199,7 +2221,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 
 	m_DMAC.BeginHDMA();
 
+	SNTARGET_BEGIN(_targetRenderBegin);
 	m_PPURender.BeginRender(pTarget);
+	SNTARGET_END(RenderBegin, _targetRenderBegin);
 	m_PPU.BeginFrame();
 
 	/* Arm the active port-2 light gun for this field. Super Scope and Justifier
@@ -2245,7 +2269,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	SyncPPU();
 
 	m_PPU.EndFrame();
+	SNTARGET_BEGIN(_targetRenderEnd);
 	m_PPURender.EndRender();
+	SNTARGET_END(RenderEnd, _targetRenderEnd);
 
 	// confirmed:
 	// nmi is triggered from hi->lo transition (edge level interrupt)
@@ -2296,7 +2322,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 	Uint32 _tMix = ProfCtrGetCycle();
 #endif
+	SNTARGET_BEGIN(_targetMix);
 	m_SpcDspMixer.Mix(pSound);
+	SNTARGET_END(Mix, _targetMix);
 #if SNDBG_LOG
 	g_TmgCycMix += ProfCtrGetCycle() - _tMix;
 #endif
@@ -2320,7 +2348,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 #if SNDBG_LOG
 			_tMix = ProfCtrGetCycle();
 #endif
+			SNTARGET_BEGIN(_targetSilentMix);
 			m_SpcDspSilentMixer.Mix(NULL);
+			SNTARGET_END(Mix, _targetSilentMix);
 #if SNDBG_LOG
 			g_TmgCycMix += ProfCtrGetCycle() - _tMix;
 #endif
@@ -2495,9 +2525,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			Uint32 uMinCyc = (g_TmgWinMinCyc == 0xFFFFFFFFu)
 				? 0u : g_TmgWinMinCyc;
 			Uint32 ratio = avg ? (Uint32)(((Uint64)g_TmgWinMaxCyc * 100u) / avg) : 0;
-			/* CP0 Count avanca a metade do clock de 294.912 MHz da EE. */
+			/* CP0 Count uses the EE clock, not the half-rate bus clock. */
 			Uint32 fps10 = avg
-				? (Uint32)(1474560000ull / (Uint64)avg) : 0;
+				? (Uint32)((Uint64)SNDBG_EE_COUNT_HZ * 10u / (Uint64)avg) : 0;
 			Uint32 pM7   = (Uint32)(((Uint64)g_TmgWinSumM7  * 100u) / sum);
 			Uint32 pObj  = (Uint32)(((Uint64)g_TmgWinSumObj * 100u) / sum);
 			Uint32 pPPU  = (Uint32)(((Uint64)g_TmgWinSumPPU * 100u) / sum);
@@ -2640,10 +2670,11 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGChrCacheMisses,
 				(unsigned)g_DbgBGChrCacheBypasses,
 				(unsigned)g_DbgBGChrCacheInvalidations);
-			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u",
+			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u scroll=%u",
 				(unsigned)g_DbgBGLineCacheHits,
 				(unsigned)g_DbgBGLineCacheMisses,
-				(unsigned)g_DbgBGLineCacheBypasses);
+				(unsigned)g_DbgBGLineCacheBypasses,
+				(unsigned)g_DbgBGLineCacheScrolls);
 			DLog("[snes-hires-line-cache] hit/miss/bypass=%u/%u/%u",
 				(unsigned)g_DbgHiresLineCacheHits,
 				(unsigned)g_DbgHiresLineCacheMisses,
