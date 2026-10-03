@@ -28,12 +28,9 @@ NesMemoryManager::NesMemoryManager(NesConsole* console, BaseMapper* mapper)
 		throw std::runtime_error("unsupported memory size");
 	}
 
-	_ramReadHandlers = new INesMemoryHandler*[NesMemoryManager::CpuMemorySize];
-	_ramWriteHandlers = new INesMemoryHandler*[NesMemoryManager::CpuMemorySize];
-
-	for(int i = 0; i < NesMemoryManager::CpuMemorySize; i++) {
-		_ramReadHandlers[i] = &_openBusHandler;
-		_ramWriteHandlers[i] = &_openBusHandler;
+	for(int i = 0; i < 0x100; i++) {
+		_ramReadHandlers[i].handler = &_openBusHandler;
+		_ramWriteHandlers[i].handler = &_openBusHandler;
 	}
 
 	RegisterIODevice(_internalRamHandler.get());	
@@ -42,9 +39,6 @@ NesMemoryManager::NesMemoryManager(NesConsole* console, BaseMapper* mapper)
 NesMemoryManager::~NesMemoryManager()
 {
 	delete[] _internalRam;
-
-	delete[] _ramReadHandlers;
-	delete[] _ramWriteHandlers;
 }
 
 void NesMemoryManager::Reset(bool softReset)
@@ -56,13 +50,56 @@ void NesMemoryManager::Reset(bool softReset)
 	_mapper->Reset(softReset);
 }
 
-void NesMemoryManager::InitializeMemoryHandlers(INesMemoryHandler** memoryHandlers, INesMemoryHandler* handler, vector<uint16_t> *addresses, bool allowOverride)
+void NesMemoryManager::HandlerPage::Set(uint8_t offset, INesMemoryHandler* value)
+{
+	if(!split) {
+		if(value == handler) return;
+		unique_ptr<INesMemoryHandler*[]> entries(new INesMemoryHandler*[0x100]);
+		std::fill_n(entries.get(), 0x100, handler);
+		split = std::move(entries);
+		handler = nullptr;
+	}
+	split[offset] = value;
+}
+
+void NesMemoryManager::HandlerPage::Compact()
+{
+	if(!split) return;
+	INesMemoryHandler* value = split[0];
+	for(int i = 1; i < 0x100; i++) {
+		if(split[i] != value) return;
+	}
+	handler = value;
+	split.reset();
+}
+
+void NesMemoryManager::InitializeMemoryHandlers(HandlerPage* memoryHandlers, INesMemoryHandler* handler, vector<uint16_t> *addresses, bool allowOverride)
 {
 	for(uint16_t address : *addresses) {
-		if(!allowOverride && memoryHandlers[address] != &_openBusHandler && memoryHandlers[address] != handler) {
+		HandlerPage& page = memoryHandlers[address >> 8];
+		INesMemoryHandler* current = page.Get((uint8_t)address);
+		if(!allowOverride && current != &_openBusHandler && current != handler) {
 			throw std::runtime_error("Can't override existing mapping");
 		}
-		memoryHandlers[address] = handler;
+		page.Set((uint8_t)address, handler);
+	}
+	for(int i = 0; i < 0x100; i++) memoryHandlers[i].Compact();
+}
+
+void NesMemoryManager::SetHandlerRange(HandlerPage* memoryHandlers, INesMemoryHandler* handler, uint32_t start, uint32_t end)
+{
+	// Whole pages can change ownership without allocating split tables.
+	while(start <= end) {
+		HandlerPage& page = memoryHandlers[start >> 8];
+		if((start & 0xFF) == 0 && end - start >= 0xFF) {
+			page.handler = handler;
+			page.split.reset();
+			start += 0x100;
+		} else {
+			uint32_t last = std::min(end, start | 0xFF);
+			do { page.Set((uint8_t)start++, handler); } while(start <= last);
+			page.Compact();
+		}
 	}
 }
 
@@ -77,16 +114,12 @@ void NesMemoryManager::RegisterIODevice(INesMemoryHandler*handler)
 
 void NesMemoryManager::RegisterWriteHandler(INesMemoryHandler* handler, uint32_t start, uint32_t end)
 {
-	for(uint32_t i = start; i <= end; i++) {
-		_ramWriteHandlers[i] = handler;
-	}
+	SetHandlerRange(_ramWriteHandlers, handler, start, end);
 }
 
 void NesMemoryManager::RegisterReadHandler(INesMemoryHandler* handler, uint32_t start, uint32_t end)
 {
-	for(uint32_t i = start; i <= end; i++) {
-		_ramReadHandlers[i] = handler;
-	}
+	SetHandlerRange(_ramReadHandlers, handler, start, end);
 }
 
 void NesMemoryManager::UnregisterIODevice(INesMemoryHandler*handler)
@@ -95,11 +128,15 @@ void NesMemoryManager::UnregisterIODevice(INesMemoryHandler*handler)
 	handler->GetMemoryRanges(ranges);
 
 	for(uint16_t address : *ranges.GetRAMReadAddresses()) {
-		_ramReadHandlers[address] = &_openBusHandler;
+		_ramReadHandlers[address >> 8].Set((uint8_t)address, &_openBusHandler);
 	}
 
 	for(uint16_t address : *ranges.GetRAMWriteAddresses()) {
-		_ramWriteHandlers[address] = &_openBusHandler;
+		_ramWriteHandlers[address >> 8].Set((uint8_t)address, &_openBusHandler);
+	}
+	for(int i = 0; i < 0x100; i++) {
+		_ramReadHandlers[i].Compact();
+		_ramWriteHandlers[i].Compact();
 	}
 }
 
@@ -110,7 +147,7 @@ uint8_t* NesMemoryManager::GetInternalRam()
 
 uint8_t NesMemoryManager::DebugRead(uint16_t addr)
 {
-	uint8_t value = _ramReadHandlers[addr]->PeekRam(addr);
+	uint8_t value = _ramReadHandlers[addr >> 8].Get((uint8_t)addr)->PeekRam(addr);
 	if(_cheatManager->HasCheats<CpuType::Nes>()) {
 		_cheatManager->ApplyCheat<CpuType::Nes>(addr, value);
 	}
@@ -124,7 +161,11 @@ uint16_t NesMemoryManager::DebugReadWord(uint16_t addr)
 
 uint8_t NesMemoryManager::Read(uint16_t addr, MemoryOperationType operationType)
 {
-	uint8_t value = _ramReadHandlers[addr]->ReadRam(addr);
+	INesMemoryHandler* handler = _ramReadHandlers[addr >> 8].Get((uint8_t)addr);
+	// Check the actual registered owner, not merely the address: cartridges
+	// and peripherals can override internal RAM or individual registers.
+	uint8_t value = handler == _internalRamHandler.get()
+		? _internalRam[addr & (_internalRamSize - 1)] : handler->ReadRam(addr);
 	if(_cheatManager->HasCheats<CpuType::Nes>()) {
 		_cheatManager->ApplyCheat<CpuType::Nes>(addr, value);
 	}
@@ -138,7 +179,12 @@ uint8_t NesMemoryManager::Read(uint16_t addr, MemoryOperationType operationType)
 void NesMemoryManager::Write(uint16_t addr, uint8_t value, MemoryOperationType operationType)
 {
 	if(_emu->ProcessMemoryWrite<CpuType::Nes>(addr, value, operationType)) {
-		_ramWriteHandlers[addr]->WriteRam(addr, value);
+		INesMemoryHandler* handler = _ramWriteHandlers[addr >> 8].Get((uint8_t)addr);
+		if(handler == _internalRamHandler.get()) {
+			_internalRam[addr & (_internalRamSize - 1)] = value;
+		} else {
+			handler->WriteRam(addr, value);
+		}
 		_openBusHandler.SetOpenBus(value, false);
 	}
 }
@@ -146,9 +192,9 @@ void NesMemoryManager::Write(uint16_t addr, uint8_t value, MemoryOperationType o
 void NesMemoryManager::DebugWrite(uint16_t addr, uint8_t value, bool disableSideEffects)
 {
 	if(addr <= 0x1FFF) {
-		_ramWriteHandlers[addr]->WriteRam(addr, value);
+		_ramWriteHandlers[addr >> 8].Get((uint8_t)addr)->WriteRam(addr, value);
 	} else {
-		INesMemoryHandler* handler = _ramReadHandlers[addr];
+		INesMemoryHandler* handler = _ramReadHandlers[addr >> 8].Get((uint8_t)addr);
 		if(handler) {
 			if(disableSideEffects) {
 				if(handler == _mapper) {

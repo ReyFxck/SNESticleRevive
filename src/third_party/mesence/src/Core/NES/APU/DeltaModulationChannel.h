@@ -45,8 +45,17 @@ public:
 	void Reset(bool softReset);
 	void Serialize(Serializer& s) override;
 
-	bool IrqPending(uint32_t cyclesToRun);
-	bool NeedToRun();
+	bool IrqPending(uint32_t cyclesToRun) {
+		if(_irqEnabled && _bytesRemaining > 0) {
+			uint32_t cyclesToEmptyBuffer = (_bitsRemaining + (_bytesRemaining-1)* 8) * _timer.GetPeriod();
+			return cyclesToRun >= cyclesToEmptyBuffer;
+		}
+		return false;
+	}
+	bool NeedToRun() {
+		if(_needToRun) ProcessClock();
+		return _needToRun;
+	}
 	bool GetStatus();
 	void GetMemoryRanges(MemoryRanges &ranges) override;
 	void WriteRam(uint16_t addr, uint8_t value) override;

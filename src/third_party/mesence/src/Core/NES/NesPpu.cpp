@@ -1019,7 +1019,7 @@ template<class T> void NesPpu<T>::ProcessSpriteEvaluationEnd()
 	}
 }
 
-template<class T> void NesPpu<T>::ProcessSpriteEvaluation()
+template<class T> MESENCE_PPU_INLINE void NesPpu<T>::ProcessSpriteEvaluation()
 {
 	if(IsRenderingEnabled() || (_region == ConsoleRegion::Pal && _scanline >= _palSpriteEvalScanline)) {
 		if(_cycle < 65) {

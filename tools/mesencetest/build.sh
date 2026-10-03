@@ -26,6 +26,9 @@ for src in ['miniz.c','miniz_tdef.c','miniz_tinfl.c','miniz_zip.c']:
  subprocess.run(['gcc','-O1','-c',str(root/'src/third_party/miniz'/src),'-o',str(target)],check=True)
  objects.append(str(target))
 subprocess.run(['g++',*flags,*objects,'-Wl,--gc-sections','-pthread','-o',str(out/'bridge_test')],check=True)
+core_objects=[obj for obj in objects if not obj.endswith('tools_mesencetest_bridge_test.cpp.o')]
+subprocess.run(['g++',*flags,str(root/'tools/mesencetest/hotpath_test.cpp'),*core_objects,
+ '-Wl,--gc-sections','-pthread','-o',str(out/'hotpath_test')],check=True)
 subprocess.run(['g++',*flags,str(root/'tools/mesencetest/audio_equivalence_test.cpp'),
  str(root/'tools/mesencetest/OriginalHermiteResampler.cpp'),
  str(root/'src/third_party/mesence/src/Utilities/Audio/HermiteResampler.cpp'),
@@ -34,3 +37,4 @@ subprocess.run([str(out/'audio_equivalence_test')],check=True)
 stamp.write_text(json.dumps(flags))
 PY
 "$OUT/bridge_test"
+"$OUT/hotpath_test"

@@ -22,6 +22,20 @@ nonlinear base-channel combinations and 100,000 expansion-channel sums against
 the original double mixer expressions. Other volume/panning settings retain the
 original mixer path.
 
+`hotpath_test` checks RAM mirrors, partial register pages, read/write overrides,
+open bus and the last CPU address. Its CPU trace covers every opcode with 32
+operand/register/flag patterns in NTSC, PAL and Dendy (24,576 cases), compared
+with hashes recorded from main `321abdac` before the changes. A 600-frame
+rendering/OAM-DMA/DMC workload also checks exact video, serialized states and
+527,278 stereo PCM frames against that reference. These are original generated
+programs, and these checks do not measure physical PS2 performance.
+
+Run `tools/mesencetest/build/hotpath_test 1500` for the optional host benchmark
+(1,500 NTSC plus 1,500 PAL frames). It hashes video and audio in both builds,
+so its elapsed time includes that verification work. LeakSanitizer needs a
+host that permits its process inspection; `ASAN_OPTIONS=detect_leaks=0` leaves
+ASan and UBSan enabled when that inspection is blocked.
+
 `python3 tools/mesencetest/check_input.py` compiles the actual frontend mapping
 and checks every combination, both turbo phases and disconnected pads. With the
 default PS2 mapping, Cross=A, Square=B, Circle=turbo A, Triangle=turbo B; both

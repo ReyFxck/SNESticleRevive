@@ -5,6 +5,9 @@
 #include "Shared/Interfaces/IConsole.h"
 #include "Debugger/DebugTypes.h"
 #include "Utilities/safe_ptr.h"
+#include "NES/BaseMapper.h"
+#include "NES/APU/NesApu.h"
+#include "NES/NesControlManager.h"
 
 class Emulator;
 class NesCpu;
@@ -91,7 +94,13 @@ public:
 	Emulator* GetEmulator();
 	NesConfig& GetNesConfig();
 
-	void ProcessCpuClock();
+	// Visible to the CPU cycle loop: retain mapper/APU/controller ordering
+	// while avoiding an extra out-of-line dispatcher on every CPU clock.
+	void ProcessCpuClock() {
+		if(_mapper->HasCpuClockHook()) _mapper->ProcessCpuClock();
+		_apu->ProcessCpuClock();
+		if(_controlManager->HasPendingWrites()) _controlManager->ProcessWrites();
+	}
 
 	Epsm* GetEpsm();
 

@@ -57,7 +57,7 @@ protected:
 
 	void ProcessScanlineFirstCycle();
 	MESENCE_PPU_INLINE __forceinline void ProcessScanlineImpl();
-	__forceinline void ProcessSpriteEvaluation();
+	MESENCE_PPU_INLINE __forceinline void ProcessSpriteEvaluation();
 	__noinline void ProcessSpriteEvaluationStart();
 	__noinline void ProcessSpriteEvaluationEnd();
 

@@ -89,18 +89,6 @@ NesConfig& NesConsole::GetNesConfig()
 	return _emu->GetSettings()->GetNesConfig();
 }
 
-void NesConsole::ProcessCpuClock() 
-{
-	if(_mapper->HasCpuClockHook()) {
-		_mapper->ProcessCpuClock();
-	}
-
-	_apu->ProcessCpuClock();
-	if(_controlManager->HasPendingWrites()) {
-		_controlManager->ProcessWrites();
-	}
-}
-
 Epsm* NesConsole::GetEpsm()
 {
 	return _mapper->GetEpsm();

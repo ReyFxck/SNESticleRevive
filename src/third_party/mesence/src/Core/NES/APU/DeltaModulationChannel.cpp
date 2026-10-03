@@ -163,17 +163,6 @@ void DeltaModulationChannel::Run(uint32_t targetCycle)
 	}
 }
 
-bool DeltaModulationChannel::IrqPending(uint32_t cyclesToRun)
-{
-	if(_irqEnabled && _bytesRemaining > 0) {
-		uint32_t cyclesToEmptyBuffer = (_bitsRemaining + (_bytesRemaining-1)* 8) * _timer.GetPeriod();
-		if(cyclesToRun >= cyclesToEmptyBuffer) {
-			return true;
-		}
-	}
-	return false;
-}
-
 bool DeltaModulationChannel::GetStatus()
 {
 	return _bytesRemaining > 0;
@@ -287,14 +276,6 @@ void DeltaModulationChannel::ProcessClock()
 	}
 
 	_needToRun = _disableDelay || _transferStartDelay || _bytesRemaining;
-}
-
-bool DeltaModulationChannel::NeedToRun()
-{
-	if(_needToRun) {
-		ProcessClock();
-	}
-	return _needToRun;
 }
 
 ApuDmcState DeltaModulationChannel::GetState()

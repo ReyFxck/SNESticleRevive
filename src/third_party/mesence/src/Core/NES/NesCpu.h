@@ -24,16 +24,13 @@ public:
 	static constexpr uint16_t IRQVector = 0xFFFE;
 
 private:
-	typedef void(NesCpu::*Func)();
-
 	uint64_t _masterClock;
 	uint8_t _ppuOffset;
 	uint8_t _startClockCount;
 	uint8_t _endClockCount;
 	uint16_t _operand;
 
-	Func _opTable[256];
-	NesAddrMode _addrMode[256];
+	static const NesAddrMode _addrMode[256];
 	NesAddrMode _instAddrMode;
 
 	bool _needHalt = false;
@@ -112,11 +109,7 @@ private:
 
 	void SetZeroNegativeFlags(uint8_t value)
 	{
-		if(value == 0) {
-			SetFlags(PSFlags::Zero);
-		} else if(value & 0x80) {
-			SetFlags(PSFlags::Negative);
-		}
+		_state.PS |= (value & PSFlags::Negative) | (value == 0 ? PSFlags::Zero : 0);
 	}
 
 	bool CheckPageCrossed(uint16_t valA, int8_t valB)

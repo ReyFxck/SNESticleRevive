@@ -16,7 +16,6 @@ class NesConsole;
 class NesMemoryManager : public ISerializable
 {
 private:
-	static constexpr int CpuMemorySize = 0x10000;
 	static const int NesInternalRamSize = 0x800;
 	static const int FamicomBoxInternalRamSize = 0x2000;
 
@@ -30,10 +29,23 @@ private:
 
 	OpenBusHandler _openBusHandler = {};
 	unique_ptr<INesMemoryHandler> _internalRamHandler;
-	INesMemoryHandler** _ramReadHandlers = nullptr;
-	INesMemoryHandler** _ramWriteHandlers = nullptr;
+	// Most 256-byte CPU pages have a single handler. Only pages with split
+	// registers (e.g. $40xx) need a per-address table. Keep the hot directory
+	// in a few KiB instead of two 65536-pointer arrays on the EE.
+	struct HandlerPage {
+		INesMemoryHandler* handler = nullptr;
+		unique_ptr<INesMemoryHandler*[]> split;
+		INesMemoryHandler* Get(uint8_t offset) const {
+			return handler ? handler : split[offset];
+		}
+		void Set(uint8_t offset, INesMemoryHandler* value);
+		void Compact();
+	};
+	HandlerPage _ramReadHandlers[0x100];
+	HandlerPage _ramWriteHandlers[0x100];
 
-	void InitializeMemoryHandlers(INesMemoryHandler** memoryHandlers, INesMemoryHandler* handler, vector<uint16_t>* addresses, bool allowOverride);
+	void InitializeMemoryHandlers(HandlerPage* memoryHandlers, INesMemoryHandler* handler, vector<uint16_t>* addresses, bool allowOverride);
+	void SetHandlerRange(HandlerPage* memoryHandlers, INesMemoryHandler* handler, uint32_t start, uint32_t end);
 
 protected:
 	void Serialize(Serializer& s) override;
