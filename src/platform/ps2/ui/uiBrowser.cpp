@@ -1916,18 +1916,13 @@ void CBrowserScreen::SetDir(const Char *pDir)
             AddEntry("host:", BROWSER_ENTRYTYPE_DRIVE, 0);
         if (SmbSupportIsEnabled())
             AddEntry("smb:", BROWSER_ENTRYTYPE_DRIVE, 0);
-        /* USB/HD via BDM: cada pendrive, HD externo USB e o HD INTERNO
-           (FAT/exFAT, via ata_bd) viram uma unidade massN:.  A ordem
-           depende da deteccao, entao listamos algumas; as vazias so'
-           abrem sem conteudo. */
+        /* Keep the root menu limited to the two normal BDM units. Other
+           massN: paths remain valid for direct paths and saved preferences;
+           enumerating all possible units here exposes empty phantom drives. */
         if (MassStorageIsEnabled() || Mx4sioIsEnabled())
         {
-            for (Int32 unit = 0; unit < MAINLOOP_MASS_UNITS; unit++)
-            {
-                Char root[16];
-                snprintf(root, sizeof(root), "mass%d:", (int)unit);
-                AddEntry(root, BROWSER_ENTRYTYPE_DRIVE, 0);
-            }
+            AddEntry("mass0:", BROWSER_ENTRYTYPE_DRIVE, 0);
+            AddEntry("mass1:", BROWSER_ENTRYTYPE_DRIVE, 0);
         }
         /* HD interno (APA): so' listado se o usuario LIGOU o suporte a HDD
            nas configs.  A carga dos modulos (dev9/atad/hdd) e' preguicosa,
