@@ -13,9 +13,6 @@ on:
 permissions:
   contents: read
 
-env:
-  PS2DEV_CACHE_KEY: ps2dev-${{ runner.os }}-${{ runner.arch }}-v2
-
 jobs:
   # ---------- PS2 ELF Build Matrix ----------
   ps2-build-matrix:
@@ -61,6 +58,9 @@ jobs:
             nes_backend: infones
             pack: 1
             artifact_name: SNESticle-release-infones
+
+    env:
+      PS2DEV_CACHE_KEY: ps2dev-${{ runner.os }}-${{ runner.arch }}-v2
 
     steps:
       - name: Checkout
