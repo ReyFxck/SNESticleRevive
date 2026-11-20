@@ -59,9 +59,6 @@ jobs:
             pack: 1
             artifact_name: SNESticle-release-infones
 
-    env:
-      PS2DEV_CACHE_KEY: ps2dev-${{ runner.os }}-${{ runner.arch }}-v2
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,7 +69,7 @@ jobs:
           path: |
             ~/.local/ps2dev
             ~/.cache/ps2dev
-          key: ${{ env.PS2DEV_CACHE_KEY }}-${{ matrix.name }}
+          key: ps2dev-ubuntu-24.04-v2-${{ matrix.name }}
 
       - name: Ensure PS2DEV toolchain
         run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
