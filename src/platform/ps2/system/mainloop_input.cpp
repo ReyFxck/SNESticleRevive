@@ -355,21 +355,8 @@ void _MainLoopInputProcess(Uint32 buttons)
 		return;
 	}
 
-	#if 1
-	/* Profiler/deep diagnostic capture: R3 (right-stick click) OR hold L2+R2.
-	   L2+R2 is easy to reach on the NetherSX2 touch layout (L3/R3 usually
-	   aren't shown there) and isn't used by SNES/NES games. */
-	if ((trigger & PAD_R3) ||
-	    (((buttons & PAD_L2) && (buttons & PAD_R2)) && (trigger & (PAD_L2 | PAD_R2))))
-	{
-	        #if PROF_ENABLED
-		ProfStartProfile(1);
-	        #endif
-		#if SNDBG_DEEP
-		if (_pSystem == _pSnes)
-			SnesDbgRequestCapture(SNDBG_CAPTURE_MANUAL);
-		#endif
-	}
+	/* Diagnóstico contínuo/ao vivo: captura automática periódica enquanto joga.
+	   Não requer input do usuário - o sistema monitora gargalos em tempo real. */
 
     #ifdef DEBUG // CODE_DEBUG
 	if (trigger & PAD_L2)

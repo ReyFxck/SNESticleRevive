@@ -42,10 +42,10 @@
 
 /* Contrato estavel consumido por scripts e comparacoes entre jogos. */
 #define SNDBG_SCHEMA             "snesdiag-v1"
-#define SNDBG_FRAME_PERIOD       120u
+#define SNDBG_FRAME_PERIOD       30u
 #define SNDBG_EE_COUNT_HZ        PROFCTR_COUNT_HZ
 #define SNDBG_SLOW_PERCENT       105u
-#define SNDBG_CAPTURE_COOLDOWN   60u
+#define SNDBG_CAPTURE_COOLDOWN   15u
 #define SNDBG_AUTO_CAPTURE_PERIOD SNDBG_FRAME_PERIOD
 
 /* Razoes combinaveis para a proxima captura profunda. */
