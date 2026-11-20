@@ -588,5 +588,4 @@ void _MainLoopInputProcess(Uint32 buttons)
 		}
 
 	}
-#endif
 }
