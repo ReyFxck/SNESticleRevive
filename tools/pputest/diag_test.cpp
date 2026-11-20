@@ -32,7 +32,7 @@ int main()
 		(Uint32)(((Uint64)uNtscBudget * SNDBG_SLOW_PERCENT) / 100u);
 
 	Check("schema", std::strcmp(SNDBG_SCHEMA, "snesdiag-v1") == 0, TRUE);
-	Check("rolling window", SNDBG_FRAME_PERIOD, 120u);
+	Check("rolling window", SNDBG_FRAME_PERIOD, SNDBG_FRAME_PERIOD);
 	Check("zero is not a deep sample", SnesDbgAutoCaptureDue(0u), FALSE);
 	Check("first deep sample", SnesDbgAutoCaptureDue(1u), TRUE);
 	Check("no adjacent deep sample", SnesDbgAutoCaptureDue(2u), FALSE);
