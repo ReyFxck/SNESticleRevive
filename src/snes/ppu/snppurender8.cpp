@@ -1768,7 +1768,41 @@ static _INLINE void _DecodeOBJRow4(SnesChrLookupT *pLookup, Uint8 *pHFlip,
 	*pOpaque = pHFlip[uPlane0 | uPlane1 | uPlane2 | uPlane3];
 }
 
-static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList, SnesRenderObj8T *pObjLine, Int32 MaxObj8Line, Int32 iLine, Uint32 uBaseAddr, Uint32 uNameSelect, Uint16 *pVram, Bool bObjInterlace, Bool bOddField)
+/* Quick check if sprite at [x, x+width) overlaps with window mask.
+   Returns TRUE if there's any overlap (sprite should be rendered). */
+static Bool _SnesPPUOBJOverlapsWindow(Int32 x, Int32 width, const SNMaskT *pWindow)
+{
+	if (!pWindow)
+		return TRUE;  // no window = fully visible
+
+	if (x >= 256 || x + width <= 0)
+		return FALSE;  // completely off-screen
+
+	Int32 start = x < 0 ? 0 : x;
+	Int32 end = x + width;
+	if (end > 256)
+		end = 256;
+
+	Int32 startWord = start >> 5;
+	Int32 endWord = (end - 1) >> 5;
+
+	for (Int32 w = startWord; w <= endWord; w++)
+	{
+		Uint32 wordMask = pWindow->uMask32[w];
+		if (wordMask)
+		{
+			if (w == startWord && start & 31)
+				wordMask &= ~((1u << (start & 31)) - 1);
+			if (w == endWord && (end & 31))
+				wordMask &= (1u << (end & 31)) - 1;
+			if (wordMask)
+				return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList, SnesRenderObj8T *pObjLine, Int32 MaxObj8Line, Int32 iLine, Uint32 uBaseAddr, Uint32 uNameSelect, Uint16 *pVram, Bool bObjInterlace, Bool bOddField, const SNMaskT *pObjWindow)
 {
 	Int32 nObjLine = 0;
 #if SNDBG_LOG && SNPPU_OBJ_CACHE
@@ -1804,6 +1838,11 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 		ObjX = pObj->uPosX;
 		ObjX<<=32-9;
 		ObjX>>=32-9;
+
+		/* Early window culling: skip sprites completely outside OBJ window.
+		   This avoids expensive tile fetch for clipped sprites (e.g., HUD). */
+		if (pObjWindow && !_SnesPPUOBJOverlapsWindow(ObjX, (Int32)uSize, pObjWindow))
+			continue;
 		ObjY = (Int32)_SnesPPUOBJLineY(
 			iLine, pObj->uPosY, pObj->uHeight, pObj->uVXOR,
 			bObjInterlace, bOddField);
@@ -2097,7 +2136,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		nObjLine = _FetchOBJ(m_Objs, m_ObjLine[iLine], m_nObjLine[iLine],
 			ObjLine, SNPPU_MAXOBJCHR, iLine, (pRegs->obsel & 7) << 13,
 			_SnesPPUOBJNameSelect(pRegs->obsel), m_pPPU->GetVramPtr(0),
-			m_pPPU->IsObjInterlace(), bOddField);
+			m_pPPU->IsObjInterlace(), bOddField,
+			(tmw & SNESPPU_MASK_OBJ) ? &pBGWindow[4] : NULL);
 		SNTARGET_END(OBJ, _targetOBJFetch);
 	}
 	else
