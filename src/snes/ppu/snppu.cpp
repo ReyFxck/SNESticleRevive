@@ -1267,24 +1267,27 @@ void SnesPPU::BeginFrame()
 	   This avoids mid-frame GS stalls on PS2. */
 	if (m_VramDmaBuffer.bActive && m_VramDmaBuffer.uCount > 0)
 	{
-		Bool bWindowDirty = FALSE;
+		SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
+		Bool bVramDirty = FALSE;
 		for (Uint32 i = 0; i < m_VramDmaBuffer.uCount; i++)
 		{
 			const SnesPPUVramDmaBufferT::EntryT &entry = m_VramDmaBuffer.aEntries[i];
-			if (entry.bHigh)
+			Uint32 uAddr = entry.uAddr & (SNESPPU_VRAM_NUMWORDS - 1);
+			if (pVram[uAddr].w != entry.uData)
 			{
-				WriteVMDATAH(entry.uData);
+				pVram[uAddr].w = entry.uData;
+				bVramDirty = TRUE;
 			}
-			else
-			{
-				WriteVMDATAL(entry.uData);
-			}
-			// Track if we need to update VRAM mappings
-			bWindowDirty = TRUE;
 		}
-		if (bWindowDirty && m_pRender)
+		if (bVramDirty && m_pRender)
 		{
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR | SNESPPURENDER_UPDATE_BGCHR);
+			// Also update the specific VRAM range that was modified
+			for (Uint32 i = 0; i < m_VramDmaBuffer.uCount; i++)
+			{
+				const SnesPPUVramDmaBufferT::EntryT &entry = m_VramDmaBuffer.aEntries[i];
+				m_pRender->UpdateVRAM(entry.uAddr & (SNESPPU_VRAM_NUMWORDS - 1));
+			}
 		}
 		m_VramDmaBuffer.uCount = 0;
 		m_VramDmaBuffer.bActive = FALSE;
