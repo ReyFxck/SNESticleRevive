@@ -850,49 +850,112 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		break;
 
 	case 0x2123:	// window registers
-        if (m_Regs.w12sel!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.w12sel = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.w12sel = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.w12sel != uData)
+		{
+			m_Regs.w12sel = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x2124:
-        if (m_Regs.w34sel!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.w34sel = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.w34sel = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.w34sel != uData)
+		{
+			m_Regs.w34sel = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x2125:
-        if (m_Regs.wobjsel!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.wobjsel = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.wobjsel = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.wobjsel != uData)
+		{
+			m_Regs.wobjsel = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x2126:
-        if (m_Regs.wh0!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.wh0 = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.wh0 = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.wh0 != uData)
+		{
+			m_Regs.wh0 = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x2127:
-        if (m_Regs.wh1!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.wh1 = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.wh1 = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.wh1 != uData)
+		{
+			m_Regs.wh1 = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x2128:
-        if (m_Regs.wh2!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.wh2 = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.wh2 = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.wh2 != uData)
+		{
+			m_Regs.wh2 = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x2129:
-        if (m_Regs.wh3!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.wh3 = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.wh3 = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.wh3 != uData)
+		{
+			m_Regs.wh3 = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x212A:
-        if (m_Regs.wbglog!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.wbglog = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.wbglog = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.wbglog != uData)
+		{
+			m_Regs.wbglog = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 	case 0x212B:
-        if (m_Regs.wobjlog!=uData)
-		    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		m_Regs.wobjlog = uData;
+		if (IsActiveDisplay(m_uLine))
+		{
+			m_WindowBuffer.wobjlog = uData;
+			m_WindowBuffer.bPending = TRUE;
+		}
+		else if (m_Regs.wobjlog != uData)
+		{
+			m_Regs.wobjlog = uData;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
 		break;
 
 	case 0x212C:	// TM (main screen designation)
@@ -1072,6 +1135,58 @@ void SnesPPU::BeginFrame()
 		: SNESPPU_VISIBLE_LINES_NORMAL;
 	m_bFrameInterlace =
 		(m_Regs.setini & SNESPPU_SETINI_INTERLACE) != 0;
+
+	/* Apply buffered window register changes from previous frame's active display.
+	   This avoids mid-frame GS pipeline flushes on PS2. */
+	if (m_WindowBuffer.bPending)
+	{
+		if (m_Regs.wh0 != m_WindowBuffer.wh0)
+		{
+			m_Regs.wh0 = m_WindowBuffer.wh0;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.wh1 != m_WindowBuffer.wh1)
+		{
+			m_Regs.wh1 = m_WindowBuffer.wh1;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.wh2 != m_WindowBuffer.wh2)
+		{
+			m_Regs.wh2 = m_WindowBuffer.wh2;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.wh3 != m_WindowBuffer.wh3)
+		{
+			m_Regs.wh3 = m_WindowBuffer.wh3;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.w12sel != m_WindowBuffer.w12sel)
+		{
+			m_Regs.w12sel = m_WindowBuffer.w12sel;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.w34sel != m_WindowBuffer.w34sel)
+		{
+			m_Regs.w34sel = m_WindowBuffer.w34sel;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.wobjsel != m_WindowBuffer.wobjsel)
+		{
+			m_Regs.wobjsel = m_WindowBuffer.wobjsel;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.wbglog != m_WindowBuffer.wbglog)
+		{
+			m_Regs.wbglog = m_WindowBuffer.wbglog;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		if (m_Regs.wobjlog != m_WindowBuffer.wobjlog)
+		{
+			m_Regs.wobjlog = m_WindowBuffer.wobjlog;
+			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
+		}
+		m_WindowBuffer.bPending = FALSE;
+	}
 }
 
 void SnesPPU::EndFrame()
@@ -1187,6 +1302,9 @@ void SnesPPU::Reset()
 	m_PPU2OpenBus = 0;
 	m_bCountersLatched = FALSE;
 
+	// Window buffer
+	memset(&m_WindowBuffer, 0, sizeof(m_WindowBuffer));
+
 	// confirmed:
 	m_Regs.stat77 =  SNPPU_VERSION_5C77;
 	m_Regs.stat78 =  SNPPU_VERSION_5C78;
@@ -1204,6 +1322,7 @@ SnesPPU::SnesPPU()
 	m_bVBlank = FALSE;
 	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
 	m_bFrameInterlace = FALSE;
+	memset(&m_WindowBuffer, 0, sizeof(m_WindowBuffer));
 }
 
 #ifdef SNES_DEBUG

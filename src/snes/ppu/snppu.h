@@ -278,6 +278,16 @@ private:
 	Uint8                   m_PPU2OpenBus;
 	Bool                    m_bCountersLatched;
 
+    /* Window register write buffering for active display.
+       Mid-frame window register writes ($2123-$212B) trigger GS pipeline
+       flushes on PS2. Buffer them and apply once at VBlank. */
+    struct SnesPPUWindowBufferT
+    {
+        Uint8   wh0, wh1, wh2, wh3;
+        Uint8   w12sel, w34sel, wobjsel, wbglog, wobjlog;
+        Bool    bPending;
+    } m_WindowBuffer;
+
     ISnesPPURender *        m_pRender;
 
 #if SNPPU_WRITEQUEUE
