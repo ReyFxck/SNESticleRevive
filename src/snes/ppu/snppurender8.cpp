@@ -2067,10 +2067,18 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	Uint8 uFetchLayers;
 	Bool bRendered;
 
-	/* Track last-used BG line cache index per layer for cross-index scroll reuse.
-	   When scroll changes, the line maps to a different cache index.
-	   We check the previous frame's index for scroll reuse. */
-	static Uint32 s_uLastLineCacheIndex[4] = { ~0u, ~0u, ~0u, ~0u };
+	/* Track last-used BG line cache index PER SCREEN LINE per layer for cross-index scroll reuse.
+	   When scroll changes, line Y maps to a different cache index.
+	   We check the previous frame's index FOR THE SAME LINE Y for scroll reuse. */
+	static Uint32 s_uLastLineCacheIndex[4][240];
+	static Bool s_bLastLineCacheIndexInit = FALSE;
+	if (!s_bLastLineCacheIndexInit)
+	{
+		for (Int32 i = 0; i < 4; i++)
+			for (Int32 j = 0; j < 240; j++)
+				s_uLastLineCacheIndex[i][j] = ~0u;
+		s_bLastLineCacheIndexInit = TRUE;
+	}
 
 	SNMaskT *pMain = pRenderInfo->Main;
 	SNMaskT *pSub = pRenderInfo->Sub;
@@ -2296,7 +2304,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						g_DbgBGLineCacheHits++;
 #endif
 						/* Track last-used index for cross-index scroll reuse */
-						s_uLastLineCacheIndex[iBG] = uLineCacheIndex;
+						s_uLastLineCacheIndex[iBG][iLine] = uLineCacheIndex;
 						continue;
 					}
 
@@ -2320,7 +2328,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						g_DbgBGLineCacheHits++;
 #endif
 						/* Track last-used index for cross-index scroll reuse */
-						s_uLastLineCacheIndex[iBG] = uLineCacheIndex;
+						s_uLastLineCacheIndex[iBG][iLine] = uLineCacheIndex;
 						continue;
 					}
 #endif
@@ -2345,15 +2353,15 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 
 					/* NEW: If scroll changed, the line maps to a different cache index.
-					   Check the PREVIOUS frame's index AND neighboring indices for scroll reuse.
+					   Check the PREVIOUS frame's index FOR THE SAME LINE Y AND neighboring indices.
 					   Vertical scroll changes index incrementally (±1 for fine Y, ±8 for tile Y). */
-					if (!nScrollStep && s_uLastLineCacheIndex[iBG] != ~0u)
+					if (!nScrollStep && s_uLastLineCacheIndex[iBG][iLine] != ~0u)
 					{
-						/* Check last-used index and nearby indices (scroll delta typically small) */
+						/* Check last-used index for this line and nearby indices (scroll delta typically small) */
 						static const Int32 s_aIndexDeltas[] = { 0, 1, -1, 2, -2, 8, -8, 16, -16 };
 						for (Int32 iDeltaIdx = 0; iDeltaIdx < (Int32)(sizeof(s_aIndexDeltas)/sizeof(s_aIndexDeltas[0])); iDeltaIdx++)
 						{
-							Uint32 uCheckIndex = s_uLastLineCacheIndex[iBG] + s_aIndexDeltas[iDeltaIdx];
+							Uint32 uCheckIndex = s_uLastLineCacheIndex[iBG][iLine] + s_aIndexDeltas[iDeltaIdx];
 							if (uCheckIndex >= SNPPU_BG_LINE_CACHE_LINES) continue;
 							if (uCheckIndex == uLineCacheIndex) continue; /* Already checked current index */
 
@@ -2418,7 +2426,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						g_DbgBGLineCacheScrolls++;
 #endif
 						/* Track last-used index for cross-index scroll reuse */
-						s_uLastLineCacheIndex[iBG] = uLineCacheIndex;
+						s_uLastLineCacheIndex[iBG][iLine] = uLineCacheIndex;
 					}
 
 					/* Empty entries win. Once both ways are populated, replace the
