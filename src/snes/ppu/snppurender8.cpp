@@ -2067,6 +2067,11 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	Uint8 uFetchLayers;
 	Bool bRendered;
 
+	/* Track last-used BG line cache index per layer for cross-index scroll reuse.
+	   When scroll changes, the line maps to a different cache index.
+	   We check the previous frame's index for scroll reuse. */
+	static Uint32 s_uLastLineCacheIndex[4] = { ~0u, ~0u, ~0u, ~0u };
+
 	SNMaskT *pMain = pRenderInfo->Main;
 	SNMaskT *pSub = pRenderInfo->Sub;
 	SNMaskT *pBGWindow = pRenderInfo->BGWindow;
@@ -2290,6 +2295,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNDBG_LOG
 						g_DbgBGLineCacheHits++;
 #endif
+						/* Track last-used index for cross-index scroll reuse */
+						s_uLastLineCacheIndex[iBG] = uLineCacheIndex;
 						continue;
 					}
 
@@ -2312,6 +2319,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNDBG_LOG
 						g_DbgBGLineCacheHits++;
 #endif
+						/* Track last-used index for cross-index scroll reuse */
+						s_uLastLineCacheIndex[iBG] = uLineCacheIndex;
 						continue;
 					}
 #endif
@@ -2334,6 +2343,36 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						if (nScrollStep) pNormalOverlap = pSecondary;
 					}
 #endif
+
+					/* NEW: If scroll changed, the line maps to a different cache index.
+					   Check the PREVIOUS frame's index for scroll reuse. */
+					if (!nScrollStep && s_uLastLineCacheIndex[iBG] != ~0u &&
+					    s_uLastLineCacheIndex[iBG] != uLineCacheIndex)
+					{
+						SnesPPUBGLineCacheEntryT *pLastPrimary =
+							&_SnesPPU_BGLineCache[iBG][s_uLastLineCacheIndex[iBG]];
+						if (pLastPrimary->uReady)
+						{
+							nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastPrimary->Key,
+								uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
+								iBG, uBGMode, &BGInfo[iBG]);
+							if (nScrollStep) pOverlap = pLastPrimary;
+						}
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+						if (!nScrollStep && !bHiresPair)
+						{
+							SnesPPUBGLineCacheNormalEntryT *pLastSecondary =
+								&_SnesPPU_BGLineCacheNormal[iBG][s_uLastLineCacheIndex[iBG]];
+							if (pLastSecondary->uReady)
+							{
+								nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastSecondary->Key,
+									uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
+									iBG, uBGMode, &BGInfo[iBG]);
+								if (nScrollStep) pNormalOverlap = pLastSecondary;
+							}
+						}
+#endif
+					}
 					if (nScrollStep)
 					{
 						if (pOverlap)
@@ -2361,6 +2400,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNDBG_LOG
 						g_DbgBGLineCacheScrolls++;
 #endif
+						/* Track last-used index for cross-index scroll reuse */
+						s_uLastLineCacheIndex[iBG] = uLineCacheIndex;
 					}
 
 					/* Empty entries win. Once both ways are populated, replace the
