@@ -188,9 +188,10 @@ void SnesPPU::WriteVMDATALTimed(Uint8 uData, Bool bAllow)
 	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
 	                                    (m_Regs.vmain >> 2) & 3);
 	
-	/* Defer VRAM writes during active display to avoid mid-frame GS stalls.
-	   Buffer them and apply at VBlank instead. */
-	if (!bAllow || IsActiveDisplay(m_uLine))
+	/* Defer VRAM writes during active display ONLY when explicitly not allowed
+	   (i.e., DMA during active display with bAllow=FALSE). CPU writes and VBlank
+	   DMA go through immediately to avoid breaking mid-frame sprite uploads. */
+	if (!bAllow)
 	{
 		WriteVMDATAL_Deferred(uData);
 	}
@@ -219,9 +220,10 @@ void SnesPPU::WriteVMDATAHTimed(Uint8 uData, Bool bAllow)
 	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
 	                                    (m_Regs.vmain >> 2) & 3);
 	
-	/* Defer VRAM writes during active display to avoid mid-frame GS stalls.
-	   Buffer them and apply at VBlank instead. */
-	if (!bAllow || IsActiveDisplay(m_uLine))
+	/* Defer VRAM writes during active display ONLY when explicitly not allowed
+	   (i.e., DMA during active display with bAllow=FALSE). CPU writes and VBlank
+	   DMA go through immediately to avoid breaking mid-frame sprite uploads. */
+	if (!bAllow)
 	{
 		WriteVMDATAH_Deferred(uData);
 	}
@@ -248,9 +250,9 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 	g_DbgPPURegWrites[0x19]++;
 #endif
 	
-	/* Defer VRAM writes during active display to avoid mid-frame GS stalls.
-	   Buffer them and apply at VBlank instead. */
-	if (IsActiveDisplay(m_uLine))
+	/* Defer VRAM writes during active display ONLY when explicitly not allowed.
+	   CPU writes go through immediately. */
+	if (!CanAccessVRAM(m_uLine))
 	{
 		WriteVMDATAL_Deferred(uDataL);
 		WriteVMDATAH_Deferred(uDataH);
@@ -294,9 +296,10 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 	   invalidate the renderer once for the whole burst instead of making
 	   thousands of calls through WriteVMDATALH(). */
 	
-	/* Defer VRAM writes during active display to avoid mid-frame GS stalls.
-	   Buffer them and apply at VBlank instead. */
-	if (IsActiveDisplay(m_uLine))
+	/* Defer VRAM writes during active display ONLY when VRAM access is not
+	   allowed (DMA during active display). CPU-initiated block writes and
+	   VBlank DMA go through immediately. */
+	if (!CanAccessVRAM(m_uLine))
 	{
 		while (nBytes >= 2)
 		{
@@ -1269,6 +1272,8 @@ void SnesPPU::BeginFrame()
 	{
 		SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
 		Bool bVramDirty = FALSE;
+		Uint32 uMinAddr = SNESPPU_VRAM_NUMWORDS;
+		Uint32 uMaxAddr = 0;
 		for (Uint32 i = 0; i < m_VramDmaBuffer.uCount; i++)
 		{
 			const SnesPPUVramDmaBufferT::EntryT &entry = m_VramDmaBuffer.aEntries[i];
@@ -1277,16 +1282,17 @@ void SnesPPU::BeginFrame()
 			{
 				pVram[uAddr].w = entry.uData;
 				bVramDirty = TRUE;
+				if (uAddr < uMinAddr) uMinAddr = uAddr;
+				if (uAddr > uMaxAddr) uMaxAddr = uAddr;
 			}
 		}
 		if (bVramDirty && m_pRender)
 		{
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR | SNESPPURENDER_UPDATE_BGCHR);
-			// Also update the specific VRAM range that was modified
-			for (Uint32 i = 0; i < m_VramDmaBuffer.uCount; i++)
+			// Batch VRAM updates into a single range instead of per-entry calls
+			if (uMinAddr <= uMaxAddr)
 			{
-				const SnesPPUVramDmaBufferT::EntryT &entry = m_VramDmaBuffer.aEntries[i];
-				m_pRender->UpdateVRAM(entry.uAddr & (SNESPPU_VRAM_NUMWORDS - 1));
+				m_pRender->UpdateVRAMRange(uMinAddr, uMaxAddr - uMinAddr + 1);
 			}
 		}
 		m_VramDmaBuffer.uCount = 0;
