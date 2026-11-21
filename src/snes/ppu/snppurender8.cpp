@@ -2353,51 +2353,65 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 
 					/* NEW: If scroll changed, the line maps to a different cache index.
-					   Check the PREVIOUS frame's index FOR THE SAME LINE Y AND neighboring indices.
-					   Vertical scroll changes index incrementally (±1 for fine Y, ±8 for tile Y). */
-					if (!nScrollStep && s_uLastLineCacheIndex[iBG][iLine] != ~0u)
+					   Check the PREVIOUS frame's index FOR NEIGHBORING LINES (vertical scroll shifts
+					   correspondence: line Y in frame N+1 corresponds to line Y+scroll in frame N).
+					   Also check index deltas for fine Y/tile Y changes. */
+					if (!nScrollStep)
 					{
-						/* Check last-used index for this line and nearby indices (scroll delta typically small) */
+						/* Check last-used indices for this line and neighboring lines (±2 lines)
+						   to handle vertical scrolling where correspondence shifts. */
+						static const Int32 s_aLineDeltas[] = { 0, 1, -1, 2, -2 };
 						static const Int32 s_aIndexDeltas[] = { 0, 1, -1, 2, -2, 8, -8, 16, -16 };
-						for (Int32 iDeltaIdx = 0; iDeltaIdx < (Int32)(sizeof(s_aIndexDeltas)/sizeof(s_aIndexDeltas[0])); iDeltaIdx++)
-						{
-							Uint32 uCheckIndex = s_uLastLineCacheIndex[iBG][iLine] + s_aIndexDeltas[iDeltaIdx];
-							if (uCheckIndex >= SNPPU_BG_LINE_CACHE_LINES) continue;
-							if (uCheckIndex == uLineCacheIndex) continue; /* Already checked current index */
 
-							SnesPPUBGLineCacheEntryT *pLastPrimary =
-								&_SnesPPU_BGLineCache[iBG][uCheckIndex];
-							if (pLastPrimary->uReady)
+						for (Int32 iLineDeltaIdx = 0; iLineDeltaIdx < (Int32)(sizeof(s_aLineDeltas)/sizeof(s_aLineDeltas[0])); iLineDeltaIdx++)
+						{
+							Int32 iCheckLine = iLine + s_aLineDeltas[iLineDeltaIdx];
+							if (iCheckLine < 0 || iCheckLine >= 240) continue;
+
+							Uint32 uBaseIndex = s_uLastLineCacheIndex[iBG][iCheckLine];
+							if (uBaseIndex == ~0u) continue;
+
+							for (Int32 iDeltaIdx = 0; iDeltaIdx < (Int32)(sizeof(s_aIndexDeltas)/sizeof(s_aIndexDeltas[0])); iDeltaIdx++)
 							{
-								nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastPrimary->Key,
-									uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
-									iBG, uBGMode, &BGInfo[iBG]);
-								if (nScrollStep)
+								Uint32 uCheckIndex = uBaseIndex + s_aIndexDeltas[iDeltaIdx];
+								if (uCheckIndex >= SNPPU_BG_LINE_CACHE_LINES) continue;
+								if (uCheckIndex == uLineCacheIndex) continue; /* Already checked current index */
+
+								SnesPPUBGLineCacheEntryT *pLastPrimary =
+									&_SnesPPU_BGLineCache[iBG][uCheckIndex];
+								if (pLastPrimary->uReady)
 								{
-									pOverlap = pLastPrimary;
-									break;
-								}
-							}
-#if SNPPU_BG_LINE_CACHE_WAYS > 1
-							if (!nScrollStep && !bHiresPair)
-							{
-								SnesPPUBGLineCacheNormalEntryT *pLastSecondary =
-									&_SnesPPU_BGLineCacheNormal[iBG][uCheckIndex];
-								if (pLastSecondary->uReady)
-								{
-									nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastSecondary->Key,
+									nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastPrimary->Key,
 										uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
 										iBG, uBGMode, &BGInfo[iBG]);
 									if (nScrollStep)
 									{
-										pNormalOverlap = pLastSecondary;
-										break;
+										pOverlap = pLastPrimary;
+										goto scroll_found;
 									}
 								}
-							}
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+								if (!nScrollStep && !bHiresPair)
+								{
+									SnesPPUBGLineCacheNormalEntryT *pLastSecondary =
+										&_SnesPPU_BGLineCacheNormal[iBG][uCheckIndex];
+									if (pLastSecondary->uReady)
+									{
+										nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastSecondary->Key,
+											uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
+											iBG, uBGMode, &BGInfo[iBG]);
+										if (nScrollStep)
+										{
+											pNormalOverlap = pLastSecondary;
+											goto scroll_found;
+										}
+									}
+								}
 #endif
+							}
 						}
 					}
+scroll_found:
 					if (nScrollStep)
 					{
 						if (pOverlap)
