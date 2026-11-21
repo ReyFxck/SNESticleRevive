@@ -286,7 +286,8 @@ private:
        flushes on PS2. Buffer them and apply once at VBlank. */
     struct SnesPPUWindowBufferT
     {
-        Uint8   wh0, wh1, wh2, wh3;
+        /* Only logic/select registers are buffered.
+           WH0-WH3 take effect immediately for per-scanline accuracy. */
         Uint8   w12sel, w34sel, wobjsel, wbglog, wobjlog;
         Bool    bPending;
     } m_WindowBuffer;

@@ -964,48 +964,33 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		}
 		break;
 	case 0x2126:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.wh0 = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.wh0 != uData)
+		/* WH0 (Window 1 Left) - allow immediate update during active display
+		   for per-scanline window effects (HUD clipping, speech bubbles, etc.). */
+		if (m_Regs.wh0 != uData)
 		{
 			m_Regs.wh0 = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		}
 		break;
 	case 0x2127:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.wh1 = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.wh1 != uData)
+		/* WH1 (Window 1 Right) - allow immediate update during active display. */
+		if (m_Regs.wh1 != uData)
 		{
 			m_Regs.wh1 = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		}
 		break;
 	case 0x2128:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.wh2 = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.wh2 != uData)
+		/* WH2 (Window 2 Left) - allow immediate update during active display. */
+		if (m_Regs.wh2 != uData)
 		{
 			m_Regs.wh2 = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		}
 		break;
 	case 0x2129:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.wh3 = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.wh3 != uData)
+		/* WH3 (Window 2 Right) - allow immediate update during active display. */
+		if (m_Regs.wh3 != uData)
 		{
 			m_Regs.wh3 = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
@@ -1215,29 +1200,10 @@ void SnesPPU::BeginFrame()
 		(m_Regs.setini & SNESPPU_SETINI_INTERLACE) != 0;
 
 	/* Apply buffered window register changes from previous frame's active display.
-	   This avoids mid-frame GS pipeline flushes on PS2. */
+	   This avoids mid-frame GS pipeline flushes on PS2.
+	   WH0-WH3 are NOT buffered (they take effect immediately for per-scanline effects). */
 	if (m_WindowBuffer.bPending)
 	{
-		if (m_Regs.wh0 != m_WindowBuffer.wh0)
-		{
-			m_Regs.wh0 = m_WindowBuffer.wh0;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		if (m_Regs.wh1 != m_WindowBuffer.wh1)
-		{
-			m_Regs.wh1 = m_WindowBuffer.wh1;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		if (m_Regs.wh2 != m_WindowBuffer.wh2)
-		{
-			m_Regs.wh2 = m_WindowBuffer.wh2;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		if (m_Regs.wh3 != m_WindowBuffer.wh3)
-		{
-			m_Regs.wh3 = m_WindowBuffer.wh3;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
 		if (m_Regs.w12sel != m_WindowBuffer.w12sel)
 		{
 			m_Regs.w12sel = m_WindowBuffer.w12sel;
