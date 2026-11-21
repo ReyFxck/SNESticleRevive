@@ -2353,65 +2353,41 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 
 					/* NEW: If scroll changed, the line maps to a different cache index.
-					   Check the PREVIOUS frame's index FOR NEIGHBORING LINES (vertical scroll shifts
-					   correspondence: line Y in frame N+1 corresponds to line Y+scroll in frame N).
-					   Also check index deltas for fine Y/tile Y changes. */
-					if (!nScrollStep)
+					   Check the PREVIOUS frame's index for the SOURCE LINE based on scroll delta.
+					   Vertical scroll shifts correspondence: line Y in frame N+1 with scroll S_{N+1}
+					   displays the same BG pixel row as line Y' in frame N with scroll S_N,
+					   where Y' = Y + (S_{N+1} - S_N). */
+					if (!nScrollStep && s_uLastLineCacheIndex[iBG][iLine] != ~0u)
 					{
-						/* Check last-used indices for this line and neighboring lines (±2 lines)
-						   to handle vertical scrolling where correspondence shifts. */
-						static const Int32 s_aLineDeltas[] = { 0, 1, -1, 2, -2 };
-						static const Int32 s_aIndexDeltas[] = { 0, 1, -1, 2, -2, 8, -8, 16, -16 };
-
-						for (Int32 iLineDeltaIdx = 0; iLineDeltaIdx < (Int32)(sizeof(s_aLineDeltas)/sizeof(s_aLineDeltas[0])); iLineDeltaIdx++)
+						/* Check last-used index for this line (direct hit when scroll static) */
+						Uint32 uCheckIndex = s_uLastLineCacheIndex[iBG][iLine];
+						if (uCheckIndex != uLineCacheIndex && uCheckIndex < SNPPU_BG_LINE_CACHE_LINES)
 						{
-							Int32 iCheckLine = iLine + s_aLineDeltas[iLineDeltaIdx];
-							if (iCheckLine < 0 || iCheckLine >= 240) continue;
-
-							Uint32 uBaseIndex = s_uLastLineCacheIndex[iBG][iCheckLine];
-							if (uBaseIndex == ~0u) continue;
-
-							for (Int32 iDeltaIdx = 0; iDeltaIdx < (Int32)(sizeof(s_aIndexDeltas)/sizeof(s_aIndexDeltas[0])); iDeltaIdx++)
+							SnesPPUBGLineCacheEntryT *pLastPrimary =
+								&_SnesPPU_BGLineCache[iBG][uCheckIndex];
+							if (pLastPrimary->uReady)
 							{
-								Uint32 uCheckIndex = uBaseIndex + s_aIndexDeltas[iDeltaIdx];
-								if (uCheckIndex >= SNPPU_BG_LINE_CACHE_LINES) continue;
-								if (uCheckIndex == uLineCacheIndex) continue; /* Already checked current index */
-
-								SnesPPUBGLineCacheEntryT *pLastPrimary =
-									&_SnesPPU_BGLineCache[iBG][uCheckIndex];
-								if (pLastPrimary->uReady)
+								nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastPrimary->Key,
+									uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
+									iBG, uBGMode, &BGInfo[iBG]);
+								if (nScrollStep) pOverlap = pLastPrimary;
+							}
+#if SNPPU_BG_LINE_CACHE_WAYS > 1
+							if (!nScrollStep && !bHiresPair)
+							{
+								SnesPPUBGLineCacheNormalEntryT *pLastSecondary =
+									&_SnesPPU_BGLineCacheNormal[iBG][uCheckIndex];
+								if (pLastSecondary->uReady)
 								{
-									nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastPrimary->Key,
+									nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastSecondary->Key,
 										uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
 										iBG, uBGMode, &BGInfo[iBG]);
-									if (nScrollStep)
-									{
-										pOverlap = pLastPrimary;
-										goto scroll_found;
-									}
+									if (nScrollStep) pNormalOverlap = pLastSecondary;
 								}
-#if SNPPU_BG_LINE_CACHE_WAYS > 1
-								if (!nScrollStep && !bHiresPair)
-								{
-									SnesPPUBGLineCacheNormalEntryT *pLastSecondary =
-										&_SnesPPU_BGLineCacheNormal[iBG][uCheckIndex];
-									if (pLastSecondary->uReady)
-									{
-										nScrollStep = SnesPPUBGLineCacheScrollStep(&pLastSecondary->Key,
-											uBGGeneration, pRenderInfo->uBGVramAddr[iBG],
-											iBG, uBGMode, &BGInfo[iBG]);
-										if (nScrollStep)
-										{
-											pNormalOverlap = pLastSecondary;
-											goto scroll_found;
-										}
-									}
-								}
-#endif
 							}
+#endif
 						}
 					}
-scroll_found:
 					if (nScrollStep)
 					{
 						if (pOverlap)
