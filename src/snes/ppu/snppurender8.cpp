@@ -1768,8 +1768,9 @@ static _INLINE void _DecodeOBJRow4(SnesChrLookupT *pLookup, Uint8 *pHFlip,
 	*pOpaque = pHFlip[uPlane0 | uPlane1 | uPlane2 | uPlane3];
 }
 
-/* Quick check if sprite at [x, x+width) overlaps with window mask.
-   Returns TRUE if there's any overlap (sprite should be rendered). */
+/* Quick check if sprite at [x, x+width) is COMPLETELY BLOCKED by window mask.
+   The window mask has 1 = blocked/hidden, 0 = visible.
+   Returns TRUE if sprite should be rendered (not fully blocked). */
 static Bool _SnesPPUOBJOverlapsWindow(Int32 x, Int32 width, const SNMaskT *pWindow)
 {
 	if (!pWindow)
@@ -1786,19 +1787,24 @@ static Bool _SnesPPUOBJOverlapsWindow(Int32 x, Int32 width, const SNMaskT *pWind
 	Int32 startWord = start >> 5;
 	Int32 endWord = (end - 1) >> 5;
 
+	/* Check if ANY pixel in the sprite range is visible (mask bit = 0).
+	   If all pixels are blocked (mask bit = 1), sprite is fully hidden. */
 	for (Int32 w = startWord; w <= endWord; w++)
 	{
 		Uint32 wordMask = pWindow->uMask32[w];
-		if (wordMask)
-		{
-			if (w == startWord && start & 31)
-				wordMask &= ~((1u << (start & 31)) - 1);
-			if (w == endWord && (end & 31))
-				wordMask &= (1u << (end & 31)) - 1;
-			if (wordMask)
-				return TRUE;
-		}
+		
+		/* Mask out bits outside sprite range */
+		if (w == startWord && start & 31)
+			wordMask |= (1u << (start & 31)) - 1;  // force 1 = blocked for bits before start
+		if (w == endWord && (end & 31))
+			wordMask |= ~((1u << (end & 31)) - 1);  // force 1 = blocked for bits after end
+
+		/* If any bit is 0 (visible) in the sprite range, keep the sprite */
+		if (wordMask != 0xFFFFFFFFu)
+			return TRUE;
 	}
+	
+	/* All pixels in sprite range are blocked (1) - cull it */
 	return FALSE;
 }
 
