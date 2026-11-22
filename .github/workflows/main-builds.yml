@@ -61,8 +61,12 @@ jobs:
           make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
             ${{ matrix.target }} \
             SNES_DIAGNOSTICS=${{ matrix.diagnostics }} \
-            PROFILE=${{ matrix.profile }} \
-            PACK=${{ matrix.pack }}
+            PROFILE=${{ matrix.profile }}
+
+- name: Pack ELF (release only)
+        if: matrix.pack == 1
+        run: |
+          make AUTO_INSTALL=yes COLOR=0 pack
 
       - name: Verify ELF exists and show info
         run: |
