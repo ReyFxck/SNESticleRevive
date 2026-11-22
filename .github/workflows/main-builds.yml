@@ -63,7 +63,7 @@ jobs:
             SNES_DIAGNOSTICS=${{ matrix.diagnostics }} \
             PROFILE=${{ matrix.profile }}
 
-- name: Pack ELF (release only)
+      - name: Pack ELF (release only)
         if: matrix.pack == 1
         run: |
           make AUTO_INSTALL=yes COLOR=0 pack
