@@ -225,6 +225,7 @@ public:
 	/* Deferred VRAM DMA writes for active display */
 	void                    WriteVMDATAL_Deferred(Uint8 uData);
 	void                    WriteVMDATAH_Deferred(Uint8 uData);
+	void                    WriteVMDATALH_Deferred(Uint8 uDataL, Uint8 uDataH);
 	void                    Write8(Uint32 uAddr, Uint8 uData);
 	/* CPU/DMA timed B-bus accessors. These preserve port-address side effects
 	   even when active display redirects or blocks the underlying memory. */

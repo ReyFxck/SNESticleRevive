@@ -240,6 +240,24 @@ void SnesPPU::WriteVMDATAH(Uint8 uData)
 	WriteVMDATAHTimed(uData, TRUE);
 }
 
+/* Deferred full-word VRAM write ($2118/$2119 pair) for active display DMA. */
+void SnesPPU::WriteVMDATALH_Deferred(Uint8 uDataL, Uint8 uDataH)
+{
+	if (m_VramDmaBuffer.uCount < m_VramDmaBuffer.MAX_ENTRIES)
+	{
+		Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
+		                                    (m_Regs.vmain >> 2) & 3);
+		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].uAddr = uVramAddr;
+		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].uData = (Uint16)uDataL | ((Uint16)uDataH << 8);
+		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].bHigh = 2;  // 2 = full word
+		m_VramDmaBuffer.uCount++;
+		m_VramDmaBuffer.bActive = TRUE;
+	}
+	m_Regs.vmaddr.w += m_Regs.vminc[0];
+	if (m_Regs.vminc[0])
+		m_Regs.vmaddr.w += m_Regs.vminc[1];
+}
+
 void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 {
 #if SNDBG_LOG
@@ -254,8 +272,7 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 	   CPU writes go through immediately. */
 	if (!CanAccessVRAM(m_uLine))
 	{
-		WriteVMDATAL_Deferred(uDataL);
-		WriteVMDATAH_Deferred(uDataH);
+		WriteVMDATALH_Deferred(uDataL, uDataH);
 	}
 	else
 	{
@@ -1244,9 +1261,25 @@ void SnesPPU::BeginFrame()
 		{
 			const SnesPPUVramDmaBufferT::EntryT &entry = m_VramDmaBuffer.aEntries[i];
 			Uint32 uAddr = entry.uAddr & (SNESPPU_VRAM_NUMWORDS - 1);
-			if (pVram[uAddr].w != entry.uData)
+			Uint16 uNewWord;
+			if (entry.bHigh == 2)
 			{
-				pVram[uAddr].w = entry.uData;
+				/* Full word write ($2118/$2119 pair): write both bytes */
+				uNewWord = entry.uData;
+			}
+			else if (entry.bHigh)
+			{
+				/* High byte write ($2119): preserve current low byte */
+				uNewWord = (pVram[uAddr].w & 0x00FF) | (entry.uData & 0xFF00);
+			}
+			else
+			{
+				/* Low byte write ($2118): preserve current high byte */
+				uNewWord = (pVram[uAddr].w & 0xFF00) | (entry.uData & 0x00FF);
+			}
+			if (pVram[uAddr].w != uNewWord)
+			{
+				pVram[uAddr].w = uNewWord;
 				bVramDirty = TRUE;
 				if (uAddr < uMinAddr) uMinAddr = uAddr;
 				if (uAddr > uMaxAddr) uMaxAddr = uAddr;
