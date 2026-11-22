@@ -463,7 +463,9 @@ Bool _MainLoopCheckSRAM()
  * cannot destroy the last known-good state.
  */
 
+#if NES_MESENCE
 #include "../../../nes/mesence/mesence_bridge.h"
+#endif
 
 #define MAINLOOP_STATE_SLOT_NUM       5
 #define MAINLOOP_STATE_BANK_NUM       2
@@ -478,9 +480,9 @@ Bool _MainLoopCheckSRAM()
 #define MAINLOOP_STATE_SYSTEM_SNES      0
 #define MAINLOOP_STATE_SYSTEM_NES       1
 #define MAINLOOP_STATE_RAW_BYTES \
-    (sizeof(SnesStateT) > MESENCE_MAX_STATE_BYTES \
+    (sizeof(SnesStateT) > sizeof(NesStateT) \
         ? sizeof(SnesStateT) \
-        : MESENCE_MAX_STATE_BYTES)
+        : sizeof(NesStateT))
 /* mz_compressBound() currently uses a conservative 110% + 128 bound.
    Keeping the buffer static avoids heap fragmentation on the 32 MB PS2. */
 #define MAINLOOP_STATE_COMPRESS_BYTES \

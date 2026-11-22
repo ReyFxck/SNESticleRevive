@@ -22,21 +22,41 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Release packed (~490KB) - production (built via fast + pack)
-          - name: release-packed
+          # Release stripped & packed (~490KB) - production
+          - name: release-stripped
+            target: strip
+            diagnostics: 0
+            profile: 0
+            nes_backend: mesence
+            pack: 1
+            artifact_name: SNESticle-release-stripped
+
+          # Release unstripped with symbols - for debugging
+          - name: release-unstripped
             target: fast
             diagnostics: 0
             profile: 0
+            nes_backend: mesence
             pack: 1
-            artifact_name: SNESticle-release-packed
+            artifact_name: SNESticle-release-unstripped
 
           # Debug with deep diagnostics (SNES_DIAGNOSTICS=2) - auto-capture every 30 frames
           - name: debug-diag2
             target: fast
             diagnostics: 2
             profile: 0
+            nes_backend: mesence
             pack: 0
             artifact_name: SNESticle-debug-diag2
+
+          # Release with InfoNES backend (legacy NES)
+          - name: release-infones
+            target: strip
+            diagnostics: 0
+            profile: 0
+            nes_backend: infones
+            pack: 1
+            artifact_name: SNESticle-release-infones
 
     steps:
       - name: Checkout
@@ -61,17 +81,19 @@ jobs:
           make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
             ${{ matrix.target }} \
             SNES_DIAGNOSTICS=${{ matrix.diagnostics }} \
-            PROFILE=${{ matrix.profile }}
-
-      - name: Pack ELF (release only)
-        if: matrix.pack == 1
-        run: |
-          make AUTO_INSTALL=yes COLOR=0 packed
+            PROFILE=${{ matrix.profile }} \
+            NES_BACKEND=${{ matrix.nes_backend }} \
+            PACK=${{ matrix.pack }}
 
       - name: Verify ELF exists and show info
         run: |
-          ELF_PATH="build/SNESticle.elf"
-          PACKED_PATH="build/SNESticle.packed.elf"
+          if [ "${{ matrix.target }}" = "strip" ]; then
+            ELF_PATH="build/SNESticle.stripped.elf"
+            PACKED_PATH="build/SNESticle.packed.elf"
+          else
+            ELF_PATH="build/SNESticle.elf"
+            PACKED_PATH="build/SNESticle.packed.elf"
+          fi
 
           echo "=== Main ELF ==="
           test -s "$ELF_PATH"
@@ -84,16 +106,23 @@ jobs:
             ls -lh "$PACKED_PATH"
           fi
 
+      - name: CPU verification (only for unstripped mesence builds)
+        if: matrix.target == 'fast' && matrix.nes_backend == 'mesence' && matrix.diagnostics == 0 && matrix.profile == 0
+        run: |
+          python3 -m pip install --quiet unicorn==2.1.4 pyelftools==0.32
+          ELF_PATH="build/SNESticle.elf"
+          python3 tools/cputest/check_ps2_cpu.py "$ELF_PATH"
+          python3 tools/cputest/check_ps2_echo.py "$ELF_PATH"
+
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
-          if [ "${{ matrix.pack }}" = "1" ]; then
-            # Release: only upload packed ELF (~490 KB, no debug symbols)
+          if [ "${{ matrix.target }}" = "strip" ]; then
+            cp build/SNESticle.stripped.elf "artifacts/${{ matrix.artifact_name }}.elf"
             if [ -f build/SNESticle.packed.elf ]; then
-              cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.elf"
+              cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.packed.elf"
             fi
           else
-            # Debug: upload unpacked ELF
             cp build/SNESticle.elf "artifacts/${{ matrix.artifact_name }}.elf"
             if [ -f build/SNESticle.packed.elf ]; then
               cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.packed.elf"
@@ -139,7 +168,10 @@ jobs:
 
           | Variant | Description |
           |---------|-------------|
-          | `SNESticle-release-packed.elf` | **Production build, packed (~490 KB), no debug symbols** |
+          | `SNESticle-release-stripped.elf` | Production build, stripped, packed (~490 KB) |
+          | `SNESticle-release-stripped.packed.elf` | Packed version of release build |
+          | `SNESticle-release-unstripped.elf` | Production build with symbols |
+          | `SNESticle-release-infones.elf` | Production build with InfoNES backend |
           | `SNESticle-debug-diag2.elf` | Deep diagnostics (SNES_DIAGNOSTICS=2) - auto-captura a cada 30 frames |
 
           ## Installation

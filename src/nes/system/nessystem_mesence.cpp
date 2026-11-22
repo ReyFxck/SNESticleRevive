@@ -8,7 +8,7 @@
 extern NesRom *_pNesRom;
 
 NesSystem::NesSystem() : m_pCore(MesenceCreate()), m_pNesRom(NULL),
- m_pNesDisk(NULL), m_pCHRRam(NULL), m_bRomReady(FALSE), m_uFrameTick(0)
+ m_pNesDisk(NULL), m_pCHRRam(NULL), m_bInitialized(FALSE), m_bRomReady(FALSE), m_uFrameTick(0)
 { m_uFrame=0; m_uLine=0; }
 NesSystem::~NesSystem() { MesenceDestroy(m_pCore); }
 void NesSystem::SetRom(Emu::Rom *rom) {

@@ -136,10 +136,19 @@ CONSERVATIVE_FLAGS := \
 
 CHARSET_FLAGS := -finput-charset=UTF-8 -fexec-charset=UTF-8
 
-# NES core: MesenCE (accurate, modern)
+# The supplied MesenCE port replaces the NES core only. Legacy snapshots
+# can still be opened with NES_BACKEND=infones.
+NES_BACKEND ?= mesence
+ifeq ($(NES_BACKEND),mesence)
 NES_MESENCE := 1
 include src/third_party/mesence/mesence_sources.mk
 NES_SOURCES := $(MESENCE_CORE_SOURCES) src/nes/mesence/mesence_bridge.cpp src/nes/system/nessystem_mesence.cpp
+else ifeq ($(NES_BACKEND),infones)
+NES_MESENCE := 0
+NES_SOURCES := src/third_party/nes_snd_emu/Blip_Buffer.cpp src/third_party/nes_snd_emu/Nes_Apu.cpp src/third_party/nes_snd_emu/Nes_Oscs.cpp src/nes/core/InfoNES.cpp src/nes/cpu/K6502.cpp src/nes/apu/InfoNES_pAPU.cpp src/nes/mapper/InfoNES_Mapper.cpp src/nes/system/InfoNES_System_PS2.cpp src/nes/system/nessystem.cpp
+else
+$(error NES_BACKEND must be mesence or infones)
+endif
 
 # Experimental output comparison. The SNES mixer/resampler is shared.
 AUDIO_BACKEND ?= rfauds2
@@ -677,7 +686,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='MESENCE_OPT=O2 AUDIO_BACKEND=$(AUDIO_BACKEND) SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_BG_CACHE_LINES=$(SNES_BG_CACHE_LINES) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
+	mode='MESENCE_OPT=O2 NES_BACKEND=$(NES_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND) SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_BG_CACHE_LINES=$(SNES_BG_CACHE_LINES) SNES_SAFE_FRAMESKIP=$(SNES_SAFE_FRAMESKIP) SNES_MAX_CATCHUP_FRAMES=$(SNES_MAX_CATCHUP_FRAMES) PROFILE=$(PROFILE)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi

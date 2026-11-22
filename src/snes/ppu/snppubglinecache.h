@@ -100,9 +100,7 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 	       pKey->uScrSize == pInfo->uScrSize &&
 	       pKey->uChrSize == pInfo->uChrSize &&
 	       pKey->uBitDepth == pInfo->uBitDepth &&
-	       /* uPalBase excluded: HDMA palette gradients (sky/water) change per line.
-		  Cached pixels store final palette indices; mismatch caused misses on gradient lines.
-		  Visual impact is minimal (palette shift), and most games use constant palette base. */
+	       pKey->uPalBase == pInfo->uPalBase &&
 	       pKey->uPriority == pInfo->Priority;
 }
 

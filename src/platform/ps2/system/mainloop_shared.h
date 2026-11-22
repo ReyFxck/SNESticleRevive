@@ -26,6 +26,7 @@
 #include "snrom.h"
 #include "nessystem.h"
 #include "nesrom.h"
+#include "nesstate.h"
 #include "emusys.h"
 #include "emumovie.h"
 #include "rendersurface.h"
