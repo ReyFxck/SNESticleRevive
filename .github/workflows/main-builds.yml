@@ -22,13 +22,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Release stripped & packed (~490KB) - production
-          - name: release-stripped
-            target: strip
+          # Release packed (~490KB) - production (built via fast + pack)
+          - name: release-packed
+            target: fast
             diagnostics: 0
             profile: 0
             pack: 1
-            artifact_name: SNESticle-release-stripped
+            artifact_name: SNESticle-release-packed
 
           # Debug with deep diagnostics (SNES_DIAGNOSTICS=2) - auto-capture every 30 frames
           - name: debug-diag2
@@ -66,13 +66,8 @@ jobs:
 
       - name: Verify ELF exists and show info
         run: |
-          if [ "${{ matrix.target }}" = "strip" ]; then
-            ELF_PATH="build/SNESticle.stripped.elf"
-            PACKED_PATH="build/SNESticle.packed.elf"
-          else
-            ELF_PATH="build/SNESticle.elf"
-            PACKED_PATH="build/SNESticle.packed.elf"
-          fi
+          ELF_PATH="build/SNESticle.elf"
+          PACKED_PATH="build/SNESticle.packed.elf"
 
           echo "=== Main ELF ==="
           test -s "$ELF_PATH"
@@ -88,12 +83,13 @@ jobs:
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
-          if [ "${{ matrix.target }}" = "strip" ]; then
-            # Only upload the packed ELF (~490 KB, no debug symbols)
+          if [ "${{ matrix.pack }}" = "1" ]; then
+            # Release: only upload packed ELF (~490 KB, no debug symbols)
             if [ -f build/SNESticle.packed.elf ]; then
               cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.elf"
             fi
           else
+            # Debug: upload unpacked ELF
             cp build/SNESticle.elf "artifacts/${{ matrix.artifact_name }}.elf"
             if [ -f build/SNESticle.packed.elf ]; then
               cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.packed.elf"
@@ -139,7 +135,7 @@ jobs:
 
           | Variant | Description |
           |---------|-------------|
-          | `SNESticle-release-stripped.elf` | **Production build, packed (~490 KB), no debug symbols** |
+          | `SNESticle-release-packed.elf` | **Production build, packed (~490 KB), no debug symbols** |
           | `SNESticle-debug-diag2.elf` | Deep diagnostics (SNES_DIAGNOSTICS=2) - auto-captura a cada 30 frames |
 
           ## Installation
