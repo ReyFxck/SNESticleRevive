@@ -66,7 +66,7 @@ jobs:
       - name: Pack ELF (release only)
         if: matrix.pack == 1
         run: |
-          make AUTO_INSTALL=yes COLOR=0 pack
+          make AUTO_INSTALL=yes COLOR=0 packed
 
       - name: Verify ELF exists and show info
         run: |
