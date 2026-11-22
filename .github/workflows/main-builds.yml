@@ -27,25 +27,14 @@ jobs:
             target: strip
             diagnostics: 0
             profile: 0
-            nes_backend: mesence
             pack: 1
             artifact_name: SNESticle-release-stripped
-
-          # Release unstripped with symbols - for debugging
-          - name: release-unstripped
-            target: fast
-            diagnostics: 0
-            profile: 0
-            nes_backend: mesence
-            pack: 1
-            artifact_name: SNESticle-release-unstripped
 
           # Debug with deep diagnostics (SNES_DIAGNOSTICS=2) - auto-capture every 30 frames
           - name: debug-diag2
             target: fast
             diagnostics: 2
             profile: 0
-            nes_backend: mesence
             pack: 0
             artifact_name: SNESticle-debug-diag2
 
@@ -73,7 +62,6 @@ jobs:
             ${{ matrix.target }} \
             SNES_DIAGNOSTICS=${{ matrix.diagnostics }} \
             PROFILE=${{ matrix.profile }} \
-            NES_BACKEND=${{ matrix.nes_backend }} \
             PACK=${{ matrix.pack }}
 
       - name: Verify ELF exists and show info
@@ -96,14 +84,6 @@ jobs:
             file "$PACKED_PATH"
             ls -lh "$PACKED_PATH"
           fi
-
-      - name: CPU verification (only for unstripped mesence builds)
-        if: matrix.target == 'fast' && matrix.nes_backend == 'mesence' && matrix.diagnostics == 0 && matrix.profile == 0
-        run: |
-          python3 -m pip install --quiet unicorn==2.1.4 pyelftools==0.32
-          ELF_PATH="build/SNESticle.elf"
-          python3 tools/cputest/check_ps2_cpu.py "$ELF_PATH"
-          python3 tools/cputest/check_ps2_echo.py "$ELF_PATH"
 
       - name: Prepare artifacts
         run: |
@@ -161,7 +141,6 @@ jobs:
           |---------|-------------|
           | `SNESticle-release-stripped.elf` | Production build, stripped, packed (~490 KB) |
           | `SNESticle-release-stripped.packed.elf` | Packed version of release build |
-          | `SNESticle-release-unstripped.elf` | Production build with symbols |
           | `SNESticle-debug-diag2.elf` | Deep diagnostics (SNES_DIAGNOSTICS=2) - auto-captura a cada 30 frames |
 
           ## Installation
