@@ -1244,25 +1244,9 @@ void SnesPPU::BeginFrame()
 		{
 			const SnesPPUVramDmaBufferT::EntryT &entry = m_VramDmaBuffer.aEntries[i];
 			Uint32 uAddr = entry.uAddr & (SNESPPU_VRAM_NUMWORDS - 1);
-			Uint16 uNewWord;
-			if (entry.bHigh == 2)
+			if (pVram[uAddr].w != entry.uData)
 			{
-				/* Full word write ($2118/$2119 pair): write both bytes */
-				uNewWord = entry.uData;
-			}
-			else if (entry.bHigh)
-			{
-				/* High byte write ($2119): preserve current low byte */
-				uNewWord = (pVram[uAddr].w & 0x00FF) | (entry.uData & 0xFF00);
-			}
-			else
-			{
-				/* Low byte write ($2118): preserve current high byte */
-				uNewWord = (pVram[uAddr].w & 0xFF00) | (entry.uData & 0x00FF);
-			}
-			if (pVram[uAddr].w != uNewWord)
-			{
-				pVram[uAddr].w = uNewWord;
+				pVram[uAddr].w = entry.uData;
 				bVramDirty = TRUE;
 				if (uAddr < uMinAddr) uMinAddr = uAddr;
 				if (uAddr > uMaxAddr) uMaxAddr = uAddr;
