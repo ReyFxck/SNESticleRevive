@@ -49,15 +49,6 @@ jobs:
             pack: 0
             artifact_name: SNESticle-debug-diag2
 
-          # Release with InfoNES backend (legacy NES)
-          - name: release-infones
-            target: strip
-            diagnostics: 0
-            profile: 0
-            nes_backend: infones
-            pack: 1
-            artifact_name: SNESticle-release-infones
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -171,7 +162,6 @@ jobs:
           | `SNESticle-release-stripped.elf` | Production build, stripped, packed (~490 KB) |
           | `SNESticle-release-stripped.packed.elf` | Packed version of release build |
           | `SNESticle-release-unstripped.elf` | Production build with symbols |
-          | `SNESticle-release-infones.elf` | Production build with InfoNES backend |
           | `SNESticle-debug-diag2.elf` | Deep diagnostics (SNES_DIAGNOSTICS=2) - auto-captura a cada 30 frames |
 
           ## Installation
