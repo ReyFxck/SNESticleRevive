@@ -89,9 +89,9 @@ jobs:
         run: |
           mkdir -p artifacts
           if [ "${{ matrix.target }}" = "strip" ]; then
-            cp build/SNESticle.stripped.elf "artifacts/${{ matrix.artifact_name }}.elf"
+            # Only upload the packed ELF (~490 KB, no debug symbols)
             if [ -f build/SNESticle.packed.elf ]; then
-              cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.packed.elf"
+              cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.elf"
             fi
           else
             cp build/SNESticle.elf "artifacts/${{ matrix.artifact_name }}.elf"
@@ -139,8 +139,7 @@ jobs:
 
           | Variant | Description |
           |---------|-------------|
-          | `SNESticle-release-stripped.elf` | Production build, stripped, packed (~490 KB) |
-          | `SNESticle-release-stripped.packed.elf` | Packed version of release build |
+          | `SNESticle-release-stripped.elf` | **Production build, packed (~490 KB), no debug symbols** |
           | `SNESticle-debug-diag2.elf` | Deep diagnostics (SNES_DIAGNOSTICS=2) - auto-captura a cada 30 frames |
 
           ## Installation
