@@ -7,12 +7,15 @@ sifcmd_IMPORTS_end
 
 thbase_IMPORTS_start
 I_CreateThread
+I_DeleteThread
 I_StartThread
+I_TerminateThread
 I_GetThreadId
 thbase_IMPORTS_end
 
 thsemap_IMPORTS_start
 I_CreateSema
+I_DeleteSema
 I_SignalSema
 I_iSignalSema
 I_WaitSema
