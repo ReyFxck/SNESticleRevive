@@ -10,7 +10,7 @@ compilados, ROMs, executáveis do ZIP ou drivers PS2 standalone importados.
 
 ## Ligação com o frontend existente
 
-`NES_BACKEND=mesence` é o padrão; `NES_BACKEND=infones` mantém o core e os
+`MesenCE` agora é o único backend NES compilável. A árvore InfoNES legada ainda está presente temporariamente durante a remoção em etapas; o antigo seletor `NES_BACKEND=infones` foi removido. Os
 states antigos. O bridge C mantém C++20, RTTI e exceptions nas unidades
 Mesen; o SNES e o frontend legado conservam seus flags de compilação.
 Os overrides históricos de `operator new` retornavam NULL: no build Mesen

@@ -1,5 +1,10 @@
 # src/nes/
 
+
+> **Current backend:** MesenCE is now the only NES backend selected by the build.
+> The InfoNES files below are retained temporarily only for the staged removal
+> of old frontend dependencies and are not linked into release or diag builds.
+
 NES emulation core for SNESticle Revive, based on InfoNES.
 
 ## Upstream

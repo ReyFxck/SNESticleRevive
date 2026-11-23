@@ -70,7 +70,6 @@ jobs:
             SNES_DIAGNOSTICS=0 \
             SNES_TARGET_PROFILE=0 \
             PROFILE=0 \
-            NES_BACKEND=mesence \
             PACK=0
 
       - name: Verify release CPU
@@ -108,7 +107,6 @@ jobs:
             SNES_DIAGNOSTICS=2 \
             SNES_TARGET_PROFILE=0 \
             PROFILE=0 \
-            NES_BACKEND=mesence \
             PACK=0
 
           mkdir -p artifacts

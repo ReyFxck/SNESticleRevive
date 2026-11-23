@@ -1,8 +1,10 @@
 /* nessystem.h
  *
  * Emu::System wrapper for the selected PS2 NES backend.
- * MesenCE is the default; NES_BACKEND=infones retains the legacy core and
- * its fixed snapshots. Mesen snapshots have a distinct variable payload.
+ * MesenCE is the only NES backend.  The legacy InfoNES source files are
+ * temporarily retained only so their frontend dependencies can be removed in
+ * a staged cleanup; they are no longer selectable or linked by the Makefile.
+ * Mesen snapshots use their own variable payload.
  *
  * Mirrors the structure of SnesSystem (snes.h) so the mainloop's polymorphic
  * dispatch through Emu::System* works identically for NES and SNES.
