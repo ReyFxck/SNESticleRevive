@@ -30,6 +30,7 @@
 #include "mixbuffer.h"
 #include "prof.h"
 #include "sndbglog.h"
+#include "audio_log.h"
 #include "emusys.h"
 #include "emumovie.h"
 #include "netplay_input_merge.h"
@@ -545,6 +546,13 @@ Bool MainLoopProcess()
     #if PROF_ENABLED
     ProfProcess();
     #endif
+
+#if SNDBG_LOG
+    /* File logging is intentionally pumped after frame/profiler accounting.
+       DLog() itself only appends to RAM; this is the single gameplay-time
+       storage write point, in blocks of at least 64 KiB. */
+    DLogCapturePump();
+#endif
 
     return MainLoopGetSystemAction() == MAINLOOP_SYSTEM_NONE ? TRUE : FALSE;
 }

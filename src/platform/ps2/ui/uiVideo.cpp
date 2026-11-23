@@ -28,6 +28,8 @@ extern "C" {
 #include "mainloop_smb.h"
 #include "mainloop_safe_frameskip.h"
 #include "audmixbuffer.h"
+#include "audio_log.h"
+#include "mainloop_ui.h"
 #include "mainloop_telemetry.h"
 #include "sntargetprofile.h"
 #include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
@@ -511,6 +513,19 @@ static void _VideoRow(int vy, int idx, int sel, const char *pLabel, const char *
 	FontPuts(151, vy, pValue);
 }
 
+static void _VideoRowDisabled(int vy, const char *pLabel, const char *pValue)
+{
+	if (vy < 34 || vy > 181)
+		return;
+
+	/* Deliberately no selection highlight: the item remains visible in the
+	   stable menu layout but clearly communicates that this build/origin
+	   cannot enable file logging. */
+	FontColor4f(0.34f, 0.34f, 0.34f, 1.0f);
+	FontPuts(52, vy, pLabel);
+	FontPuts(151, vy, pValue);
+}
+
 static const Int32 _VideoItemY[] =
 {
 	14, 26, 38, 50, 62, 74, 86, 98, 110,  /* Screen */
@@ -694,12 +709,23 @@ void CVideoScreen::Draw()
 
     _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[15] - scroll, 15, m_iSelect,
               I18nTranslate("FPS Counter"), MainLoopFPSIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+#if SNDBG_LOG
+    if (DLogCaptureDestinationIsAllowed())
+        _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
+                  I18nTranslate("Diagnostic File Logging"),
+                  DLogCaptureIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+    else
+        _VideoRowDisabled(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll,
+                          I18nTranslate("Diagnostic File Logging"),
+                          I18nTranslate("Unavailable"));
+#elif SNES_TARGET_PROFILE
     _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
               I18nTranslate("Diagnostics"),
-#if SNES_TARGET_PROFILE
               SnesTargetProfileIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 #else
-              I18nTranslate("Build required"));
+    _VideoRowDisabled(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll,
+                      I18nTranslate("Diagnostic File Logging"),
+                      I18nTranslate("Build required"));
 #endif
 
 	/* Storage */
@@ -889,7 +915,45 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
             MainLoopFPSSetEnabled(MainLoopFPSIsEnabled() ? FALSE : TRUE);
             break;
         case 16:
+#if SNDBG_LOG
+            if (!DLogCaptureDestinationIsAllowed())
+            {
+                MainLoopModalPrintf(60 * 3,
+                                    "Diagnostic file logging unavailable\nmc:/ and cdfs:/ are intentionally blocked");
+            }
+            else if (!DLogCaptureIsEnabled())
+            {
+                char logPath[320];
+                int result = DLogCaptureStart();
+                DLogCaptureGetPath(logPath, sizeof(logPath));
+                if (result == 0)
+                    MainLoopInfoPrintf(60 * 4,
+                                       "Diagnostic logging ON\n%s\n64 KB buffered writes",
+                                       logPath);
+                else
+                    MainLoopModalPrintf(60 * 5,
+                                        "Diagnostic logging failed (%d)\n%s\nNo fallback path was tried",
+                                        result, logPath[0] ? logPath : "(invalid ELF origin)");
+            }
+            else
+            {
+                char logPath[320];
+                unsigned int bytes = DLogCaptureBytes();
+                unsigned int dropped = DLogCaptureDroppedBytes();
+                unsigned int flushes = DLogCaptureFlushCount();
+                int result = DLogCaptureStopAndSave(logPath, sizeof(logPath));
+                if (result == 0)
+                    MainLoopInfoPrintf(60 * 5,
+                                       "Diagnostic logging OFF\n%s\n%u KB, %u flushes, %u bytes dropped",
+                                       logPath, bytes / 1024u, flushes, dropped);
+                else
+                    MainLoopModalPrintf(60 * 4,
+                                        "Diagnostic close failed (%d)\n%s",
+                                        result, logPath[0] ? logPath : "emulog.txt");
+            }
+#elif SNES_TARGET_PROFILE
             SnesTargetProfileSetEnabled(SnesTargetProfileIsEnabled() ? FALSE : TRUE);
+#endif
             break;
 		case 17:
 			MassStorageSetEnabled(!MassStorageIsEnabled());

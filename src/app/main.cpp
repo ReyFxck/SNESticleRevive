@@ -35,6 +35,7 @@
 #include "types.h"
 #include "console.h"
 #include "mainloop.h"
+#include "audio_log.h"
 
 extern "C" {
 #include "excepHandler.h"
@@ -52,7 +53,6 @@ extern "C" {
    Plain printf on the EE never reaches PCSX2/NetherSX2's emulator log
    in this build, so the only way to surface boot-phase diagnostics is
    via the EE SIO channel.  See sjpcm_rpc.c for the rationale. */
-extern "C" void DLog(const char *fmt, ...);
 
 /* The fileXio path ops table that libcglue routes fopen / opendir /
    stat / mkdir to.  It is populated by __fileXioOpsInitializeImpl()
@@ -230,6 +230,7 @@ int main(int argc, char **argv)
 	}
 
 	MainSetBootDir(_Main_pBootPath);
+	DLogCaptureSetBootPath(_Main_pBootPath, _Main_BootDir);
 
 	DLog("[boot] main: argc=%d path='%s' dir='%s'",
 	     argc, _Main_pBootPath, _Main_BootDir);
@@ -387,6 +388,13 @@ int main(int argc, char **argv)
 		while (MainLoopProcess())
 		{
 		}
+
+#if SNDBG_LOG
+		/* If the user exits while file logging is still On, commit the final
+		   partial block to the same ELF-side emulog.txt before teardown. */
+		if (DLogCaptureIsEnabled())
+			(void)DLogCaptureStopAndSave(NULL, 0);
+#endif
 
 		MainLoopShutdown();
 	}
