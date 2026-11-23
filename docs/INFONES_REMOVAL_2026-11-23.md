@@ -17,11 +17,11 @@ Removed:
 - `src/third_party/nes_snd_emu/`
 - legacy InfoNES-only include paths and backend conditionals
 
-The active NES frontend remains:
+The active NES integration is now organized as:
 
-- `src/nes/system/nesrom.*`
-- `src/nes/system/nessystem.h`
-- `src/nes/system/nessystem_mesence.cpp`
+- `src/nes/frontend/nesrom.*`
+- `src/nes/frontend/nessystem.h`
+- `src/nes/frontend/nessystem.cpp`
 - `src/nes/mesence/*`
 - `src/third_party/mesence/*`
 
@@ -31,5 +31,8 @@ Legacy NES state payloads are rejected rather than interpreted as MesenCE
 states.
 
 This change is intended to be runtime-neutral for the already-tested
-MesenCE-only configuration. Folder/name cleanup is deliberately deferred to a
-separate change so any regression can be attributed to the removal itself.
+MesenCE-only configuration. The subsequent layout-only cleanup moved the
+surviving frontend files from
+`src/nes/system/` to `src/nes/frontend/` and renamed the MesenCE-only wrapper
+implementation to `nessystem.cpp`. No save path, SRAM handling or state format
+changed as part of that cleanup.

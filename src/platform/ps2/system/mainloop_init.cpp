@@ -424,13 +424,8 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 
 	PathExtAdd(MAINLOOP_ENTRYTYPE_SNESPALETTE, (char *)"snpal");
 
-	/* Phase 2 of the NES integration: instantiate the NES core +
-	   register .nes / .fds / disksys.rom with the existing browser.
-	   PathExtAdd feeds the same CBrowserScreen that already lists
-	   .smc / .sfc, so the user gets one unified ROM picker.
-	   The NesSystem::ExecuteFrame() body is still a STUB - selecting
-	   a .nes uses the MesenCE NES core. Additional NES frontend wiring
-	   comes in Phase 3. */
+	/* Instantiate the MesenCE-backed NES system and register .nes / .fds /
+	   disksys.rom with the same browser used by SNES content. */
 	_pNes = new NesSystem();
 	_pNes->Reset();
 

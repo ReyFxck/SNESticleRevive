@@ -145,7 +145,7 @@ CHARSET_FLAGS := -finput-charset=UTF-8 -fexec-charset=UTF-8
 
 # MesenCE is the NES core. The legacy InfoNES backend has been removed.
 include src/third_party/mesence/mesence_sources.mk
-NES_SOURCES := $(MESENCE_CORE_SOURCES) src/nes/mesence/mesence_bridge.cpp src/nes/system/nessystem_mesence.cpp
+NES_SOURCES := $(MESENCE_CORE_SOURCES) src/nes/mesence/mesence_bridge.cpp src/nes/frontend/nessystem.cpp
 
 # Experimental output comparison. The SNES mixer/resampler is shared.
 AUDIO_BACKEND ?= rfauds2
@@ -321,7 +321,7 @@ INCS := \
 	-I$(CURDIR)/src/snes/ppu \
 	-I$(CURDIR)/src/snes/rom \
 	-I$(CURDIR)/src/snes/state \
-	-I$(CURDIR)/src/nes/system \
+	-I$(CURDIR)/src/nes/frontend \
 	-I$(CURDIR)/src/third_party/miniz \
 	-I$(CURDIR)/src/third_party/upng \
 	-I$(CURDIR)/src/third_party/jar \
@@ -522,7 +522,7 @@ SRCS := \
 	src/platform/ps2/system/mainloop_bgm.cpp \
 	src/platform/ps2/system/global_alloc.cpp \
 	src/platform/ps2/system/embedded_irx.cpp \
-	src/nes/system/nesrom.cpp \
+	src/nes/frontend/nesrom.cpp \
 	$(NES_SOURCES)
 
 OBJS := \

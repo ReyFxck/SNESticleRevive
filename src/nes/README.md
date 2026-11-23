@@ -1,28 +1,31 @@
 # NES support
 
-SNESticle Revive uses **MesenCE** as its NES emulation core.
+SNESticle Revive uses **MesenCE** as its only NES emulation core.
 
-The PS2-specific integration is intentionally split from the vendored core:
+The integration is split so frontend policy stays separate from the vendored
+core:
 
 ```text
 src/nes/
-├── mesence/
-│   ├── mesence_bridge.cpp   C boundary and PS2-facing MesenCE adapter
-│   ├── mesence_bridge.h
-│   └── mesence_palette.h
-└── system/
-    ├── nesrom.cpp/.h        iNES/FDS frontend ROM objects
-    ├── nessystem.h          Emu::System wrapper
-    └── nessystem_mesence.cpp
+├── frontend/
+│   ├── nesrom.cpp/.h        iNES/FDS frontend ROM objects
+│   ├── nessystem.h          Emu::System-facing NES interface
+│   └── nessystem.cpp        frontend wrapper that drives MesenCE
+└── mesence/
+    ├── mesence_bridge.cpp   C boundary around the C++20 MesenCE core
+    ├── mesence_bridge.h
+    └── mesence_palette.h
 
 src/third_party/mesence/
 └── ...                      vendored MesenCE core
 ```
 
-The old InfoNES/K6502/APU/mapper backend and its `nes_snd_emu` dependency were
-removed after the MesenCE-only build path was validated on the PS2 frontend.
+`src/nes/frontend/` owns SNESticle-facing behavior such as the `Emu::System`
+wrapper and ROM objects. `src/nes/mesence/` is the narrow adapter boundary,
+while `src/third_party/mesence/` remains the vendored upstream implementation.
 
-Save states for NES are variable-sized MesenCE serializer snapshots.  The
-outer SNESticle state container tags them with `MESENCE_STATE_FORMAT`, so old
-legacy NES state payloads are rejected instead of being interpreted as MesenCE
-states.
+SRAM paths, save-state slots/banks, the outer SNESticle state container and
+MesenCE's serializer format are intentionally unchanged by this layout cleanup.
+NES states remain variable-sized MesenCE snapshots tagged with
+`MESENCE_STATE_FORMAT`; legacy NES state payloads are rejected rather than
+interpreted as MesenCE states.

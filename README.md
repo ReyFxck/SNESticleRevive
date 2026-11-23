@@ -981,7 +981,7 @@ Release notes are published directly on the [GitHub Releases](https://github.com
 
 ```
 src/snes/      SNES core (cpu, spc, ppu, coprocessors)
-src/nes/       PS2 NES frontend + MesenCE bridge/system wrapper
+src/nes/       NES frontend + MesenCE adapter (vendored core kept in third_party)
 src/platform/  PlayStation 2 platform (gs, system, input, ui)
 src/modules/   shared modules (audio, netplay, ...)
 src/common/    shared helpers (render, base, io, debug)
