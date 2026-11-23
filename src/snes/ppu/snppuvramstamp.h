@@ -24,8 +24,7 @@ struct SnesPPUVramStampT
 	{
 		Uint32 uEpoch;
 		Uint32 uState;
-		Uint32 uInfo0;
-		Uint32 uInfo1;
+		Uint32 uConfig;
 		Uint32 uStamp;
 	};
 #endif
@@ -130,29 +129,36 @@ struct SnesPPUVramStampT
 	   The generation remains the maximum write epoch among dependencies.
 	   Because every VRAM invalidation advances the global epoch, a later write
 	   to any dependency always produces a generation newer than the cached one. */
-	Uint32 GetBGLineGeneration(Uint32 iBG, Uint32 uVramState, Uint32 uMode,
-		const SnesBGInfoT *pInfo, const SnesRenderTileT *pTiles, Uint32 nTiles)
+	/* Hot-path wrapper for decoded BG-line dependency validation.
+	   uConfigKey is an exact/conservative packing of the PPU registers that
+	   define this BG's map/CHR layout (mode, BGxSC and BG12/34NBA). Fine X/Y
+	   are removed because they select pixels inside the same dependency set. */
+	inline __attribute__((always_inline)) Uint32 GetBGLineGeneration(Uint32 iBG, Uint32 uVramState,
+		Uint32 uConfigKey, Uint32 uMode, const SnesBGInfoT *pInfo,
+		const SnesRenderTileT *pTiles, Uint32 nTiles)
 	{
 #if SNPPU_BG_CACHE_ROWMEMO
-		/* Fine X/Fine Y select pixels/rows inside the already selected tile
-		   set.  Dependency stamps cover complete physical tiles, so neither
-		   changes the set that must be validated.  Any VRAM write increments
-		   uEpoch, making this memo automatically conservative. */
 		const Uint32 uMemoState = uVramState & ~((7u << 16) | (7u << 24));
-		const Uint32 uMemoInfo0 = (pInfo->uScrAddr & 0x7FFFu) |
-			((pInfo->uChrAddr & 0x7FFFu) << 15);
-		const Uint32 uMemoInfo1 = (uMode & 7u) |
-			((Uint32)(pInfo->uScrSize & 3u) << 3) |
-			((Uint32)(pInfo->uChrSize & 1u) << 5) |
-			((Uint32)(pInfo->uBitDepth & 0x0Fu) << 6);
 		LineMemoT *pMemo = &LineMemo[iBG & 3u];
 		if (pMemo->uEpoch == uEpoch &&
 		    pMemo->uState == uMemoState &&
-		    pMemo->uInfo0 == uMemoInfo0 &&
-		    pMemo->uInfo1 == uMemoInfo1)
+		    pMemo->uConfig == uConfigKey)
 			return pMemo->uStamp;
+		return GetBGLineGenerationSlow(iBG, uVramState, uConfigKey, uMode,
+			pInfo, pTiles, nTiles, uMemoState);
+#else
+		return GetBGLineGenerationSlow(iBG, uVramState, uConfigKey, uMode,
+			pInfo, pTiles, nTiles, 0u);
 #endif
+	}
 
+	/* Cold path. Correctness rules are unchanged from faststamp-v3; keeping
+	   the large dependency walk out of the wrapper lets GCC inline the common
+	   row-memo hit on EE. */
+	__attribute__((noinline)) Uint32 GetBGLineGenerationSlow(Uint32 iBG, Uint32 uVramState,
+		Uint32 uConfigKey, Uint32 uMode, const SnesBGInfoT *pInfo,
+		const SnesRenderTileT *pTiles, Uint32 nTiles, Uint32 uMemoState)
+	{
 		static const Uint16 ScrSizeOffset[4][4] =
 		{
 			{0x0000, 0x0000, 0x0000, 0x0000},
@@ -162,9 +168,6 @@ struct SnesPPUVramStampT
 		};
 		Uint32 uStamp = 0;
 
-		/* Map dependencies. FetchBG walks horizontally and jumps to the next
-		   32-word screen row at the boundary.  Process whole horizontal spans
-		   instead of checking the stamp once per map word. */
 		Uint32 uAddr = uVramState & 0x0FFFu;
 		Uint32 nMapWords = (uMode == 1u && pInfo->uChrSize)
 			? ((nTiles + 1u) >> 1) : nTiles;
@@ -188,9 +191,6 @@ struct SnesPPUVramStampT
 			}
 		}
 
-		/* Physical CHR dependencies. Mode 1/5 BG character bases are aligned
-		   and their 2bpp/4bpp tiles cannot cross a 32-word chunk, so the old
-		   generic end-chunk test was pure overhead on this path. */
 		const Uint32 uTileShift = pInfo->uBitDepth == 2u ? 3u :
 			(pInfo->uBitDepth == 4u ? 4u : 5u);
 		const Uint32 nPhysicalTiles =
@@ -216,14 +216,19 @@ struct SnesPPUVramStampT
 		}
 
 #if SNPPU_BG_CACHE_ROWMEMO
+		LineMemoT *pMemo = &LineMemo[iBG & 3u];
 		pMemo->uEpoch = uEpoch;
 		pMemo->uState = uMemoState;
-		pMemo->uInfo0 = uMemoInfo0;
-		pMemo->uInfo1 = uMemoInfo1;
+		pMemo->uConfig = uConfigKey;
 		pMemo->uStamp = uStamp;
+#else
+		(void)iBG;
+		(void)uConfigKey;
+		(void)uMemoState;
 #endif
 		return uStamp;
 	}
+
 
 
 };

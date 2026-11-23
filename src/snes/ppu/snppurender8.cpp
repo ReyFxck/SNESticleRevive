@@ -2257,6 +2257,16 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 
 		PROF_ENTER("BGCHR");
+		/* Exact dependency-layout key for the rowmemo hot path.  Full NBA
+		   bytes are used intentionally: an unrelated nibble can only cause an
+		   extra cold validation, never stale pixels. */
+		const Uint32 uBGDepConfig[4] =
+		{
+			(Uint32)uBGMode | ((Uint32)pRegs->bg1sc << 8) | ((Uint32)pRegs->bg12nba << 16),
+			(Uint32)uBGMode | ((Uint32)pRegs->bg2sc << 8) | ((Uint32)pRegs->bg12nba << 16),
+			(Uint32)uBGMode | ((Uint32)pRegs->bg3sc << 8) | ((Uint32)pRegs->bg34nba << 16),
+			(Uint32)uBGMode | ((Uint32)pRegs->bg4sc << 8) | ((Uint32)pRegs->bg34nba << 16)
+		};
 		for (iBG=0; iBG <= 3; iBG++)
 		{
 			/* Fine X also moves opacity/priority masks. FETCHPAL is the legacy
@@ -2291,7 +2301,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					Uint32 _tLineValidate = ProfCtrGetCycle();
 #endif
 					Uint32 uBGGeneration = _SnesPPU_BGLineVram.GetBGLineGeneration(
-						(Uint32)iBG, pRenderInfo->uBGVramAddr[iBG], uBGMode, &BGInfo[iBG],
+						(Uint32)iBG, pRenderInfo->uBGVramAddr[iBG],
+						uBGDepConfig[iBG], uBGMode, &BGInfo[iBG],
 						pRenderInfo->Tiles[iBG], 33u);
 #if SNDBG_LOG
 					g_TmgCycBGLineValidate += ProfCtrGetCycle() - _tLineValidate;
