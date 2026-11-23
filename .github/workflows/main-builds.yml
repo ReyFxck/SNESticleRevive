@@ -13,8 +13,15 @@ on:
 permissions:
   contents: read
 
+# If a new commit is pushed while an older build is still running, keep only
+# the newest run for that branch. This avoids wasting ~10 minutes on obsolete
+# artifacts while iterating on performance work.
+concurrency:
+  group: main-builds-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-matrix:
+  build:
     name: PS2 Build (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -22,41 +29,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Release stripped & packed (~490KB) - production
-          - name: release-stripped
-            target: strip
+          # Production artifact: diagnostics/profile timing disabled, stripped,
+          # then packed. The artifact ZIP contains one file: SNESticle.elf.
+          - name: release
             diagnostics: 0
-            profile: 0
-            nes_backend: mesence
-            pack: 1
-            artifact_name: SNESticle-release-stripped
+            artifact_name: SNESticle-release
 
-          # Release unstripped with symbols - for debugging
-          - name: release-unstripped
-            target: fast
-            diagnostics: 0
-            profile: 0
-            nes_backend: mesence
-            pack: 1
-            artifact_name: SNESticle-release-unstripped
-
-          # Debug with deep diagnostics (SNES_DIAGNOSTICS=2) - auto-capture every 30 frames
-          - name: debug-diag2
-            target: fast
+          # Deep diagnostic artifact: keep the linked ELF unstripped so symbol
+          # addresses remain available for addr2line/crash investigation.
+          # Do not pack this build; the artifact ZIP contains one ELF only.
+          - name: diag2
             diagnostics: 2
-            profile: 0
-            nes_backend: mesence
-            pack: 0
-            artifact_name: SNESticle-debug-diag2
-
-          # Release with InfoNES backend (legacy NES)
-          - name: release-infones
-            target: strip
-            diagnostics: 0
-            profile: 0
-            nes_backend: infones
-            pack: 1
-            artifact_name: SNESticle-release-infones
+            artifact_name: SNESticle-diag2
 
     steps:
       - name: Checkout
@@ -68,7 +52,9 @@ jobs:
           path: |
             ~/.local/ps2dev
             ~/.cache/ps2dev
-          key: ps2dev-ubuntu-24.04-v2-${{ matrix.name }}
+          # The toolchain is identical for both build variants; do not waste
+          # cache storage with one copy per matrix entry.
+          key: ps2dev-ubuntu-24.04-v2
 
       - name: Ensure PS2DEV toolchain
         run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
@@ -76,118 +62,73 @@ jobs:
       - name: Clean build directory
         run: make COLOR=0 clean
 
-      - name: Build PS2 ELF (${{ matrix.name }})
+      - name: Build release
+        if: matrix.name == 'release'
         run: |
           make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
-            ${{ matrix.target }} \
-            SNES_DIAGNOSTICS=${{ matrix.diagnostics }} \
-            PROFILE=${{ matrix.profile }} \
-            NES_BACKEND=${{ matrix.nes_backend }} \
-            PACK=${{ matrix.pack }}
+            strip \
+            SNES_DIAGNOSTICS=0 \
+            SNES_TARGET_PROFILE=0 \
+            PROFILE=0 \
+            NES_BACKEND=mesence \
+            PACK=0
 
-      - name: Verify ELF exists and show info
-        run: |
-          if [ "${{ matrix.target }}" = "strip" ]; then
-            ELF_PATH="build/SNESticle.stripped.elf"
-            PACKED_PATH="build/SNESticle.packed.elf"
-          else
-            ELF_PATH="build/SNESticle.elf"
-            PACKED_PATH="build/SNESticle.packed.elf"
-          fi
-
-          echo "=== Main ELF ==="
-          test -s "$ELF_PATH"
-          file "$ELF_PATH"
-          ls -lh "$ELF_PATH"
-
-          if [ -f "$PACKED_PATH" ]; then
-            echo "=== Packed ELF ==="
-            file "$PACKED_PATH"
-            ls -lh "$PACKED_PATH"
-          fi
-
-      - name: CPU verification (only for unstripped mesence builds)
-        if: matrix.target == 'fast' && matrix.nes_backend == 'mesence' && matrix.diagnostics == 0 && matrix.profile == 0
+      - name: Verify release CPU
+        if: matrix.name == 'release'
         run: |
           python3 -m pip install --quiet unicorn==2.1.4 pyelftools==0.32
-          ELF_PATH="build/SNESticle.elf"
-          python3 tools/cputest/check_ps2_cpu.py "$ELF_PATH"
-          python3 tools/cputest/check_ps2_echo.py "$ELF_PATH"
+          python3 tools/cputest/check_ps2_cpu.py build/SNESticle.elf
+          python3 tools/cputest/check_ps2_echo.py build/SNESticle.elf
 
-      - name: Prepare artifacts
+      - name: Pack stripped release ELF
+        if: matrix.name == 'release'
         run: |
-          mkdir -p artifacts
-          if [ "${{ matrix.target }}" = "strip" ]; then
-            cp build/SNESticle.stripped.elf "artifacts/${{ matrix.artifact_name }}.elf"
-            if [ -f build/SNESticle.packed.elf ]; then
-              cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.packed.elf"
-            fi
-          else
-            cp build/SNESticle.elf "artifacts/${{ matrix.artifact_name }}.elf"
-            if [ -f build/SNESticle.packed.elf ]; then
-              cp build/SNESticle.packed.elf "artifacts/${{ matrix.artifact_name }}.packed.elf"
-            fi
-          fi
+          # Build/repair the host ps2-packer, then feed it the already-stripped
+          # ELF. This guarantees the downloadable production ELF has no debug
+          # symbols before compression.
+          make AUTO_INSTALL=yes COLOR=0 fix-packer
+          PACKER="${XDG_CACHE_HOME:-$HOME/.cache}/ps2dev/ps2-packer-src/ps2-packer"
+          test -x "$PACKER"
 
-      - name: Upload ELF artifacts
+          mkdir -p artifacts
+          "$PACKER" \
+            "$(pwd)/build/SNESticle.stripped.elf" \
+            "$(pwd)/artifacts/SNESticle.elf"
+
+          test -s artifacts/SNESticle.elf
+          echo "=== Release: stripped + packed ==="
+          file artifacts/SNESticle.elf
+          ls -lh artifacts/SNESticle.elf
+
+      - name: Build diag2 with symbols
+        if: matrix.name == 'diag2'
+        run: |
+          make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
+            fast \
+            SNES_DIAGNOSTICS=2 \
+            SNES_TARGET_PROFILE=0 \
+            PROFILE=0 \
+            NES_BACKEND=mesence \
+            PACK=0
+
+          mkdir -p artifacts
+          cp build/SNESticle.elf artifacts/SNESticle-diag2.elf
+
+          test -s artifacts/SNESticle-diag2.elf
+          echo "=== Diag2: unstripped, symbols retained ==="
+          file artifacts/SNESticle-diag2.elf
+          ls -lh artifacts/SNESticle-diag2.elf
+
+      - name: Verify artifact contains exactly one ELF
+        run: |
+          test "$(find artifacts -maxdepth 1 -type f -name '*.elf' | wc -l)" -eq 1
+          test "$(find artifacts -maxdepth 1 -type f | wc -l)" -eq 1
+          find artifacts -maxdepth 1 -type f -printf '%f\n'
+
+      - name: Upload build ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}-${{ github.sha }}
+          name: ${{ matrix.artifact_name }}
           path: artifacts/
           if-no-files-found: error
           retention-days: 30
-
-  # Create Release on tag push
-  create-release:
-    name: Create GitHub Release
-    needs: [build-matrix]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: SNESticle-*-${{ github.sha }}
-          merge-multiple: true
-
-      - name: Organize release files
-        run: |
-          mkdir -p release
-          find artifacts -name "*.elf" -exec cp {} release/ \;
-          ls -la release/
-
-      - name: Generate release notes
-        run: |
-          cat > release_notes.md << 'EOF'
-          # SNESticleRevive ${{ github.ref_name }}
-
-          ## Build Variants Included
-
-          | Variant | Description |
-          |---------|-------------|
-          | `SNESticle-release-stripped.elf` | Production build, stripped, packed (~490 KB) |
-          | `SNESticle-release-stripped.packed.elf` | Packed version of release build |
-          | `SNESticle-release-unstripped.elf` | Production build with symbols |
-          | `SNESticle-release-infones.elf` | Production build with InfoNES backend |
-          | `SNESticle-debug-diag2.elf` | Deep diagnostics (SNES_DIAGNOSTICS=2) - auto-captura a cada 30 frames |
-
-          ## Installation
-          1. Copy the desired `.elf` to your PS2 (via USB, HDD, SMB, etc.)
-          2. Launch with OPL, wLaunchELF, or your preferred launcher
-          3. For packed ELFs, they self-extract on first run
-
-          ## Changes
-          See [GitHub Releases](https://github.com/ReyFxck/SNESticleRevive/releases) or Git history.
-          EOF
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: release/*.elf
-          body_path: release_notes.md
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
-          generate_release_notes: true
