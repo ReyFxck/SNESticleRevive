@@ -88,8 +88,16 @@ _INLINE Bool SnesPPUChrCacheLookup2(const SnesPPUChrCacheT *pCache,
 	if (!(pCache->uValid2[uTile] & (1u << uRow)))
 		return FALSE;
 
+	Uint32 uOpaque = pCache->uOpaque2[uTile][uRow];
+	*pOpaque = uOpaque;
+	/* A transparent decoded row is necessarily all color-zero pixels. Avoid
+	   the 64-bit data load and byte reversal for this common case. */
+	if (!uOpaque)
+	{
+		*pData = 0;
+		return TRUE;
+	}
 	*pData = pCache->uData2[uTile][uRow];
-	*pOpaque = pCache->uOpaque2[uTile][uRow];
 	if (bHFlip)
 		SnesPPUChrCacheFlipRow(pData, pOpaque);
 	return TRUE;
@@ -119,8 +127,14 @@ _INLINE Bool SnesPPUChrCacheLookup4(const SnesPPUChrCacheT *pCache,
 	if (!(pCache->uValid4[uTile] & (1u << uRow)))
 		return FALSE;
 
+	Uint32 uOpaque = pCache->uOpaque4[uTile][uRow];
+	*pOpaque = uOpaque;
+	if (!uOpaque)
+	{
+		*pData = 0;
+		return TRUE;
+	}
 	*pData = pCache->uData4[uTile][uRow];
-	*pOpaque = pCache->uOpaque4[uTile][uRow];
 	if (bHFlip)
 		SnesPPUChrCacheFlipRow(pData, pOpaque);
 	return TRUE;

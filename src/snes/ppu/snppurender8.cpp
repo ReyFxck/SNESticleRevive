@@ -108,6 +108,37 @@ static Uint8
 #endif
 static SnesPPUVramStampT _SnesPPU_BGLineVram;
 
+/* Renderer-local mask shift for the only range used by BG fine X (0..7).
+   SNMaskSHL lives in another translation unit, so every cached BG restore and
+   decoded row used to pay a function call even though this exact 5-qword
+   operation is one of the hottest paths in Mode 1.  Keep the semantics
+   byte-for-byte identical while allowing the EE compiler to inline it. */
+static inline __attribute__((always_inline)) void _SnesPPUMaskSHL(SNMaskT *pDestMask,
+    const Uint8 *pSrcMask, Uint32 nBits)
+{
+    const Uint64 *pSrc = (const Uint64 *)pSrcMask;
+    Uint64 uSrc0 = pSrc[0];
+    Uint64 uSrc1 = pSrc[1];
+    Uint64 uSrc2 = pSrc[2];
+    Uint64 uSrc3 = pSrc[3];
+
+    if (nBits == 0)
+    {
+        pDestMask->uMask64[0] = uSrc0;
+        pDestMask->uMask64[1] = uSrc1;
+        pDestMask->uMask64[2] = uSrc2;
+        pDestMask->uMask64[3] = uSrc3;
+        return;
+    }
+
+    const Uint64 uSrc4 = pSrc[4];
+    const Uint32 nInvBits = 64u - nBits;
+    pDestMask->uMask64[0] = (uSrc0 >> nBits) | (uSrc1 << nInvBits);
+    pDestMask->uMask64[1] = (uSrc1 >> nBits) | (uSrc2 << nInvBits);
+    pDestMask->uMask64[2] = (uSrc2 >> nBits) | (uSrc3 << nInvBits);
+    pDestMask->uMask64[3] = (uSrc3 >> nBits) | (uSrc4 << nInvBits);
+}
+
 static _INLINE Bool _SnesPPURestoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
 	Uint32 iBG, Bool bHiresPair, Uint32 uFineX, Bool bCopyPixels)
@@ -118,18 +149,18 @@ static _INLINE Bool _SnesPPURestoreBGLine(
 	if (bCopyPixels)
 		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
 			SNPPU_BG_LINE_PIXELS);
-	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 		pEntry->uMainOpaque, uFineX);
-	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 		pEntry->uMainPriority, uFineX);
 	if (bHiresPair)
 	{
 		if (bCopyPixels)
 			memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
 				SNPPU_BG_LINE_PIXELS);
-		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+		_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
 			pEntry->uSubOpaque, uFineX);
-		SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+		_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
 			pEntry->uSubPriority, uFineX);
 	}
 	return TRUE;
@@ -174,9 +205,9 @@ static _INLINE void _SnesPPURestoreBGLineNormal(
 	if (bCopyPixels)
 		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
 			SNPPU_BG_LINE_PIXELS);
-	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 		pEntry->uMainOpaque, uFineX);
-	SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 		pEntry->uMainPriority, uFineX);
 }
 
@@ -2517,13 +2548,13 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						iLine, TempMask[0] + iFetchTile, SubMask[0] + iFetchTile,
 						(uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET));
 
-					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+					_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 						TempMask[0], (BGInfo[iBG].uScrollX & 7));
-					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+					_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 						TempMask[1], (BGInfo[iBG].uScrollX & 7));
-					SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+					_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
 						SubMask[0], (BGInfo[iBG].uScrollX & 7));
-					SNMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+					_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
 						SubMask[1], (BGInfo[iBG].uScrollX & 7));
 
 					if (BGInfo[iBG].uMosaic > 0)
@@ -2544,9 +2575,9 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						m_pPPU, &BGInfo[iBG], pFetchTiles, nFetchTiles,
 						iLine, TempMask[0] + iFetchTile,
 						(uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET), FALSE);
-					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+					_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 						TempMask[0], (BGInfo[iBG].uScrollX & 7));
-					SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+					_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 						TempMask[1], (BGInfo[iBG].uScrollX & 7));
 					if (BGInfo[iBG].uMosaic > 0)
 					{
@@ -2560,9 +2591,9 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				_FetchCHR((Uint8 *)pRenderInfo->BGPlanes[iBG], m_pPPU,
 					&BGInfo[iBG], pRenderInfo->Tiles[iBG], 33, iLine,
 					TempMask[0], (uBGFlags[iBG]&SNPPU_BGFLAGS_OFFSET));
-				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+				_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 					TempMask[0], (BGInfo[iBG].uScrollX & 7));
-				SNMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+				_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 					TempMask[1], (BGInfo[iBG].uScrollX & 7));
 #endif
 
