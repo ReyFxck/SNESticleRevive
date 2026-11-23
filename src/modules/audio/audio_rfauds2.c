@@ -252,7 +252,14 @@ static void Locked_Aud_Clearbuff(void)
 
 static void Locked_Aud_Pause(void) { Locked_Aud_Clearbuff(); }
 static void Locked_Aud_Play(void) { if (s_ready) s_play_requested = 1; }
-static void Locked_Aud_Quit(void) { Locked_Aud_Clearbuff(); s_ready = 0; }
+static void Locked_Aud_Quit(void)
+{
+    Locked_Aud_Clearbuff();
+    if (s_ready) {
+        rfauds2_shutdown();
+        s_ready = 0;
+    }
+}
 static int Locked_Aud_IsInitialized(void) { return s_ready; }
 
 static int Locked_Aud_GetOutputStats(AudOutputStatsT *output)
@@ -264,6 +271,7 @@ static int Locked_Aud_GetOutputStats(AudOutputStatsT *output)
     output->underruns = stats.underruns;
     output->silent_frames = stats.silent_frames;
     output->backpressure_waits = s_backpressure_waits;
+    output->missed_refills = stats.missed_refills;
     return 1;
 }
 

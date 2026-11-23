@@ -26,8 +26,12 @@ enum { ASYNC_NONE, ASYNC_SUBMIT, ASYNC_STATS };
 
 typedef char rfauds2_async_frame_limit_check[
     (RFAUDS2_ASYNC_MAX_FRAMES == RFAUDS2_RPC_MAX_FRAMES) ? 1 : -1];
+typedef char rfauds2_protocol_version_check[
+    (RFAUDS2_PROTOCOL_VERSION == RFAUDS2_RPC_PROTOCOL_VERSION) ? 1 : -1];
 typedef char rfauds2_reply_cache_line_check[
     (sizeof(g_receive) == 64) ? 1 : -1];
+typedef char rfauds2_reply_fits_cache_line_check[
+    (sizeof(rfauds2_rpc_reply) <= sizeof(g_receive)) ? 1 : -1];
 
 static void async_reply_received(void *unused)
 {
@@ -59,6 +63,7 @@ static void remember_stats(void)
     g_last_stats.max_queued_frames = g_reply.max_queued_frames;
     g_last_stats.refill_count = g_reply.refill_count;
     g_last_stats.silent_frames = g_reply.silent_frames;
+    g_last_stats.missed_refills = g_reply.missed_refills;
 
     g_stats_valid = 1;
 }
@@ -86,7 +91,8 @@ static int rpc_simple(int function)
     if (result < 0)
         return result;
 
-    if (g_reply.result >= 0) remember_stats();
+    if (g_reply.result >= 0)
+        remember_stats();
     return g_reply.result;
 }
 
@@ -114,7 +120,8 @@ static int rpc_control(int function, u32 value)
     if (result < 0)
         return result;
 
-    if (g_reply.result >= 0) remember_stats();
+    if (g_reply.result >= 0)
+        remember_stats();
     return g_reply.result;
 }
 
@@ -151,9 +158,19 @@ int rfauds2_bind(void)
 
     g_bound = 1;
 
+    /* Verify the wire/API contract before initializing or touching SPU2.
+       Older IRX builds do not implement this opcode and are rejected. */
+    result = rpc_simple(RFAUDS2_RPC_PROTOCOL);
+    if (result != (int)RFAUDS2_RPC_PROTOCOL_VERSION) {
+        g_bound = 0;
+        g_stats_valid = 0;
+        return RFAUDS2_ERROR_PROTOCOL;
+    }
+
     result = rpc_simple(RFAUDS2_RPC_INIT);
     if (result < 0) {
         g_bound = 0;
+        g_stats_valid = 0;
         return -3000 + result;
     }
 
@@ -169,7 +186,7 @@ int rfauds2_init(const void *irx, u32 irx_size)
         return RFAUDS2_ERROR_BUSY;
 
     if (irx == 0 || irx_size == 0)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
 
     module_id = SifExecModuleBuffer(
         (void *)irx,
@@ -187,12 +204,31 @@ int rfauds2_init(const void *irx, u32 irx_size)
     return rfauds2_bind();
 }
 
+int rfauds2_shutdown(void)
+{
+    int result;
+
+    if (!g_bound)
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
+
+    result = rpc_simple(RFAUDS2_RPC_SHUTDOWN);
+    if (result < 0)
+        return result;
+
+    g_bound = 0;
+    g_stats_valid = 0;
+    g_async_frames = 0;
+    g_async_operation = ASYNC_NONE;
+    memset(&g_client, 0, sizeof(g_client));
+    return 0;
+}
+
 int rfauds2_submit_s16(const s16 *samples, u32 frames)
 {
     u32 offset = 0;
 
     if (!g_bound || samples == 0)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     if (g_async_operation != ASYNC_NONE)
         return RFAUDS2_ERROR_BUSY;
 
@@ -233,7 +269,6 @@ int rfauds2_submit_s16(const s16 *samples, u32 frames)
             return g_reply.result;
 
         remember_stats();
-
         offset += count;
     }
 
@@ -247,7 +282,7 @@ int rfauds2_submit_s16_async(const s16 *samples, u32 frames)
 
     if (!g_bound || samples == 0 || frames == 0 ||
         frames > RFAUDS2_ASYNC_MAX_FRAMES)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     if (g_async_operation != ASYNC_NONE)
         return RFAUDS2_ERROR_BUSY;
 
@@ -260,9 +295,16 @@ int rfauds2_submit_s16_async(const s16 *samples, u32 frames)
     g_async_operation = ASYNC_SUBMIT;
     bytes = sizeof(u32) + frames * 2u * sizeof(s16);
 
-    result = sceSifCallRpc(&g_client, RFAUDS2_RPC_TRY_SUBMIT,
-        SIF_RPC_M_NOWAIT, &g_submit, bytes, &g_reply, sizeof(g_reply),
-        async_reply_received, 0);
+    result = sceSifCallRpc(
+        &g_client,
+        RFAUDS2_RPC_TRY_SUBMIT,
+        SIF_RPC_M_NOWAIT,
+        &g_submit,
+        bytes,
+        &g_reply,
+        sizeof(g_reply),
+        async_reply_received,
+        0);
     if (result < 0) {
         g_async_frames = 0;
         g_async_operation = ASYNC_NONE;
@@ -277,7 +319,7 @@ int rfauds2_submit_poll(u32 *accepted_frames)
     u32 frames;
 
     if (accepted_frames == 0 || g_async_operation != ASYNC_SUBMIT)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     if (sceSifCheckStatRpc(&g_client))
         return 0;
 
@@ -298,42 +340,42 @@ int rfauds2_submit_poll(u32 *accepted_frames)
 int rfauds2_start(void)
 {
     if (!g_bound)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     return rpc_simple(RFAUDS2_RPC_START);
 }
 
 int rfauds2_pause(void)
 {
     if (!g_bound)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     return rpc_simple(RFAUDS2_RPC_PAUSE);
 }
 
 int rfauds2_resume(void)
 {
     if (!g_bound)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     return rpc_simple(RFAUDS2_RPC_RESUME);
 }
 
 int rfauds2_stop(void)
 {
     if (!g_bound)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     return rpc_simple(RFAUDS2_RPC_STOP);
 }
 
 int rfauds2_flush(void)
 {
     if (!g_bound)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     return rpc_simple(RFAUDS2_RPC_FLUSH);
 }
 
 int rfauds2_set_volume(u32 volume)
 {
     if (!g_bound || volume > RFAUDS2_VOLUME_MAX)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
 
     return rpc_control(RFAUDS2_RPC_SET_VOLUME, volume);
 }
@@ -341,7 +383,7 @@ int rfauds2_set_volume(u32 volume)
 int rfauds2_set_latency_ms(u32 latency_ms)
 {
     if (!g_bound || latency_ms == 0)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
 
     return rpc_control(RFAUDS2_RPC_SET_LATENCY, latency_ms);
 }
@@ -351,39 +393,56 @@ int rfauds2_get_stats(rfauds2_stats *stats)
     int result;
 
     if (!g_bound || stats == 0)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
 
     result = rpc_simple(RFAUDS2_RPC_STATS);
     if (result < 0)
         return result;
 
     *stats = g_last_stats;
-
     return 0;
 }
 
 int rfauds2_get_stats_async(void)
 {
     int result;
-    if (!g_bound) return -1;
-    if (g_async_operation != ASYNC_NONE) return RFAUDS2_ERROR_BUSY;
+
+    if (!g_bound)
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
+    if (g_async_operation != ASYNC_NONE)
+        return RFAUDS2_ERROR_BUSY;
+
     memset(&g_reply, 0, sizeof(g_reply));
     g_async_operation = ASYNC_STATS;
-    result = sceSifCallRpc(&g_client, RFAUDS2_RPC_STATS,
-        SIF_RPC_M_NOWAIT, 0, 0, &g_reply, sizeof(g_reply),
-        async_reply_received, 0);
-    if (result < 0) g_async_operation = ASYNC_NONE;
+    result = sceSifCallRpc(
+        &g_client,
+        RFAUDS2_RPC_STATS,
+        SIF_RPC_M_NOWAIT,
+        0,
+        0,
+        &g_reply,
+        sizeof(g_reply),
+        async_reply_received,
+        0);
+    if (result < 0)
+        g_async_operation = ASYNC_NONE;
     return result;
 }
 
 int rfauds2_get_stats_poll(rfauds2_stats *stats)
 {
     int result;
-    if (stats == 0 || g_async_operation != ASYNC_STATS) return -1;
-    if (sceSifCheckStatRpc(&g_client)) return 0;
+
+    if (stats == 0 || g_async_operation != ASYNC_STATS)
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
+    if (sceSifCheckStatRpc(&g_client))
+        return 0;
+
     result = g_reply.result;
     g_async_operation = ASYNC_NONE;
-    if (result < 0) return result;
+    if (result < 0)
+        return result;
+
     remember_stats();
     *stats = g_last_stats;
     return 1;
@@ -391,7 +450,9 @@ int rfauds2_get_stats_poll(rfauds2_stats *stats)
 
 int rfauds2_get_cached_stats(rfauds2_stats *stats)
 {
-    if (!g_bound || !g_stats_valid || stats == 0) return -1;
+    if (!g_bound || !g_stats_valid || stats == 0)
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
+
     *stats = g_last_stats;
     return 0;
 }
@@ -399,6 +460,6 @@ int rfauds2_get_cached_stats(rfauds2_stats *stats)
 int rfauds2_reset_stats(void)
 {
     if (!g_bound)
-        return -1;
+        return RFAUDS2_ERROR_INVALID_ARGUMENT;
     return rpc_simple(RFAUDS2_RPC_RESET_STATS);
 }

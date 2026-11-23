@@ -262,17 +262,21 @@ char *_MainLoopStateMenuEntries[] =
 static Bool _MainLoopStateManagerStorageAvailable(Int32 iStorage)
 {
         /* Keep old numeric IDs for persisted preferences, but skip the
-           former unprobed mc2..7 entries when cycling the visible menu. */
+           former unprobed mc2..7 and mass2..9 entries when cycling the
+           visible menu. Only mass0: and mass1: are shown. */
         if (iStorage >= MAINLOOP_STATEMANAGER_MC2 && iStorage <= MAINLOOP_STATEMANAGER_MC7)
                 return FALSE;
         if (iStorage >= MAINLOOP_STATEMANAGER_MASS2 && iStorage <= MAINLOOP_STATEMANAGER_MASS9)
-                return MassStorageIsEnabled() || Mx4sioIsEnabled();
+                return FALSE;
         switch (iStorage)
         {
                 case MAINLOOP_STATEMANAGER_MASS0:
                 case MAINLOOP_STATEMANAGER_MASS1:
-                case MAINLOOP_STATEMANAGER_MASS:
                         return (MassStorageIsEnabled() || Mx4sioIsEnabled()) ? TRUE : FALSE;
+                case MAINLOOP_STATEMANAGER_MASS:
+                        /* Legacy 'mass:' alias kept for boot-device compat, but hidden
+                           from the state-manager device menu (user sees mass0/1 only). */
+                        return FALSE;
 
                 case MAINLOOP_STATEMANAGER_MMCE0:
                         return (MmceProbeAvailableSlots() & 1) ? TRUE : FALSE;

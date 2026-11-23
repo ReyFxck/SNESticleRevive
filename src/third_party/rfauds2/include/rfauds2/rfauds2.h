@@ -7,11 +7,25 @@
 extern "C" {
 #endif
 
-#define RFAUDS2_OUTPUT_RATE 48000u
-#define RFAUDS2_VOLUME_MAX  0x3FFFu
-#define RFAUDS2_ASYNC_MAX_FRAMES 960u
-#define RFAUDS2_ERROR_BUSY (-4)
-#define RFAUDS2_ERROR_PROTOCOL (-5)
+#define RFAUDS2_OUTPUT_RATE           48000u
+#define RFAUDS2_OUTPUT_BLOCK_FRAMES   512u
+#define RFAUDS2_RING_CAPACITY_FRAMES 4096u
+#define RFAUDS2_VOLUME_MAX            0x3FFFu
+#define RFAUDS2_ASYNC_MAX_FRAMES      960u
+#define RFAUDS2_PROTOCOL_VERSION      2u
+
+/* Stable device/API errors. Other negative values can be transport or
+   module-load failures and should still be treated as errors. */
+#define RFAUDS2_ERROR_INVALID_ARGUMENT (-1)
+#define RFAUDS2_ERROR_BUSY             (-4)
+#define RFAUDS2_ERROR_PROTOCOL         (-5)
+
+/* Rate-converter-specific initialization errors. */
+#define RFAUDS2_RATE_ERROR_INVALID_RATE       (-2)
+#define RFAUDS2_RATE_ERROR_INVALID_CHANNELS   (-3)
+#define RFAUDS2_RATE_ERROR_INVALID_MODE       (-4)
+#define RFAUDS2_RATE_ERROR_STEP_UNDERFLOW     (-5)
+#define RFAUDS2_RATE_ERROR_SINC_DOWNSAMPLE    (-6)
 
 typedef enum {
     RFAUDS2_RESAMPLE_NEAREST = 0,
@@ -55,13 +69,23 @@ typedef struct {
     u32 max_queued_frames;
     u32 refill_count;
     u32 silent_frames;
+    /* DMA deadlines that were missed and replaced by a dedicated silence
+       block. These are also included in underruns/silent_frames. */
+    u32 missed_refills;
 } rfauds2_stats;
 
-/* Load an embedded rfauds2.irx, bind RPC and initialize the device. */
+/* Load an embedded rfauds2.irx, verify the RPC protocol, bind and initialize
+   the device. */
 int rfauds2_init(const void *irx, u32 irx_size);
 
-/* Bind to an already-loaded rfauds2.irx and initialize the device. */
+/* Bind to an already-loaded rfauds2.irx, verify the RPC protocol and
+   initialize the device. */
 int rfauds2_bind(void);
+
+/* Stop playback and release RFAuds2's audio thread, semaphores and SPU2 DMA
+   interrupt handler. The IRX/RPC server remains resident, so rfauds2_bind()
+   can initialize it again later. */
+int rfauds2_shutdown(void);
 
 int rfauds2_submit_s16(const s16 *interleaved_stereo, u32 frames);
 /* Launch one nonblocking RPC. PCM is copied before return; frames must be
@@ -79,6 +103,9 @@ int rfauds2_resume(void);
 int rfauds2_stop(void);
 int rfauds2_flush(void);
 int rfauds2_set_volume(u32 volume);
+/* Queue capacity is quantized to the nearest 512-frame hardware block and
+   clamped to the physical ring. Shrinking below current occupancy returns
+   RFAUDS2_ERROR_BUSY; drain or flush first. */
 int rfauds2_set_latency_ms(u32 latency_ms);
 int rfauds2_get_stats(rfauds2_stats *stats);
 /* Asynchronous occupancy/telemetry query, sharing the single RPC slot.

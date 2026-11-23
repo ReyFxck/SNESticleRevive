@@ -1,8 +1,10 @@
 #include "irx_imports.h"
+#include "refill_state.h"
 #include "spu2_direct.h"
 
 #define RFAUDS2_SPU2_CORE 1u
 #define RFAUDS2_SPU2_MAX_VOLUME 0x3FFFu
+#define RFAUDS2_MAX_BLOCK_BYTES 2048u
 
 #define RFAUDS2_REG16(address) (*(volatile u16 *)(address))
 #define RFAUDS2_REG32(address) (*(volatile u32 *)(address))
@@ -85,13 +87,23 @@
 #define RFAUDS2_SPU2_EXT_INPUT (1u << 0)
 #define RFAUDS2_SPU2_DMA_MASK  (3u << 4)
 
-static volatile unsigned int g_active_block;
-static volatile int g_running;
+static rfauds2_refill_state g_refill_state;
 static u32 g_buffer_address;
 static u32 g_block_bytes;
+static unsigned char g_silence_block[RFAUDS2_MAX_BLOCK_BYTES]
+    __attribute__((aligned(64)));
 static rfauds2_spu2_transfer_callback g_callback;
 static void *g_callback_arg;
 static int g_initialized;
+
+static void clear_bytes(void *ptr, u32 size)
+{
+    unsigned char *p = (unsigned char *)ptr;
+    u32 i;
+
+    for (i = 0; i < size; ++i)
+        p[i] = 0;
+}
 
 static void rfauds2_spu2_delay(void)
 {
@@ -179,10 +191,15 @@ static void rfauds2_spu2_init_mixer(void)
     RFAUDS2_SPU2_MVOLR(1) = RFAUDS2_SPU2_MAX_VOLUME;
 }
 
-static void rfauds2_spu2_start_dma_block(unsigned int block)
+static void rfauds2_spu2_start_dma_source(unsigned int source)
 {
     unsigned int core = RFAUDS2_SPU2_CORE;
-    u32 address = g_buffer_address + g_block_bytes * block;
+    u32 address;
+
+    if (source == RFAUDS2_REFILL_SILENCE_BLOCK)
+        address = (u32)g_silence_block;
+    else
+        address = g_buffer_address + g_block_bytes * source;
 
     RFAUDS2_SPU2_DMA_ADDR(core) = address;
     RFAUDS2_SPU2_DMA_MODE(core) = 0x0010u;
@@ -196,15 +213,18 @@ static void rfauds2_spu2_start_dma_block(unsigned int block)
 
 static int rfauds2_spu2_dma_interrupt(void *arg)
 {
+    int signal_refill;
+
     (void)arg;
 
-    if (!g_running)
+    if (!g_refill_state.running)
         return 1;
 
-    g_active_block ^= 1u;
-    rfauds2_spu2_start_dma_block(g_active_block);
+    signal_refill = rfauds2_refill_state_complete(&g_refill_state);
+    rfauds2_spu2_start_dma_source(g_refill_state.active_source);
 
-    if (g_callback != (rfauds2_spu2_transfer_callback)0)
+    if (signal_refill &&
+        g_callback != (rfauds2_spu2_transfer_callback)0)
         g_callback(g_callback_arg);
 
     return 1;
@@ -239,6 +259,9 @@ int rfauds2_spu2_init(
 
     rfauds2_spu2_init_mixer();
 
+    clear_bytes(g_silence_block, sizeof(g_silence_block));
+    FlushDcache();
+
     DisableIntr(IOP_IRQ_DMA_SPU2, &disabled_irq);
     ReleaseIntrHandler(IOP_IRQ_DMA_SPU2);
 
@@ -254,8 +277,7 @@ int rfauds2_spu2_init(
         return -2;
     }
 
-    g_active_block = 0;
-    g_running = 0;
+    rfauds2_refill_state_init(&g_refill_state);
     g_initialized = 1;
     return 0;
 }
@@ -276,12 +298,13 @@ int rfauds2_spu2_start_loop(void *buffer, unsigned int total_bytes)
     if (!g_initialized || buffer == (void *)0)
         return -1;
 
-    if (total_bytes < 128u || (total_bytes & 127u) != 0u)
+    if (total_bytes < 256u || (total_bytes & 127u) != 0u)
         return -2;
 
     g_buffer_address = (u32)buffer;
     g_block_bytes = total_bytes / 2u;
-    g_active_block = 0;
+    if (g_block_bytes > RFAUDS2_MAX_BLOCK_BYTES)
+        return -3;
 
     RFAUDS2_SPU2_DMA_CHCR(core) &= ~RFAUDS2_SPU2_DMA_START;
     RFAUDS2_SPU2_CORE_ATTR(core) &= (u16)~RFAUDS2_SPU2_DMA_MASK;
@@ -290,27 +313,81 @@ int rfauds2_spu2_start_loop(void *buffer, unsigned int total_bytes)
     RFAUDS2_SPU2_TSA_LO(core) = 0;
     RFAUDS2_SPU2_XFER_CTRL(core) = (u16)(1u << core);
 
-    g_running = 1;
-    rfauds2_spu2_start_dma_block(0);
+    rfauds2_refill_state_start(&g_refill_state);
+    rfauds2_spu2_start_dma_source(0);
     return 0;
 }
 
 int rfauds2_spu2_stop(void)
 {
     unsigned int core = RFAUDS2_SPU2_CORE;
+    int interrupt_state;
 
     if (!g_initialized)
         return -1;
 
-    g_running = 0;
+    CpuSuspendIntr(&interrupt_state);
+    rfauds2_refill_state_stop(&g_refill_state);
     RFAUDS2_SPU2_DMA_CHCR(core) &= ~RFAUDS2_SPU2_DMA_START;
     RFAUDS2_SPU2_XFER_CTRL(core) = 0;
     RFAUDS2_SPU2_CORE_ATTR(core) &= (u16)~RFAUDS2_SPU2_DMA_MASK;
+    CpuResumeIntr(interrupt_state);
 
     return 0;
 }
 
+int rfauds2_spu2_shutdown(void)
+{
+    int disabled_irq;
+
+    if (!g_initialized)
+        return 0;
+
+    (void)rfauds2_spu2_stop();
+    rfauds2_spu2_set_volume(0);
+    DisableIntr(IOP_IRQ_DMA_SPU2, &disabled_irq);
+    ReleaseIntrHandler(IOP_IRQ_DMA_SPU2);
+
+    g_callback = (rfauds2_spu2_transfer_callback)0;
+    g_callback_arg = 0;
+    g_initialized = 0;
+    return 0;
+}
+
+int rfauds2_spu2_take_refill_block(void)
+{
+    int interrupt_state;
+    int block;
+
+    CpuSuspendIntr(&interrupt_state);
+    block = rfauds2_refill_state_take_pending(&g_refill_state);
+    CpuResumeIntr(interrupt_state);
+
+    return block;
+}
+
+void rfauds2_spu2_mark_block_ready(unsigned int block)
+{
+    int interrupt_state;
+
+    CpuSuspendIntr(&interrupt_state);
+    rfauds2_refill_state_mark_ready(&g_refill_state, block);
+    CpuResumeIntr(interrupt_state);
+}
+
+unsigned int rfauds2_spu2_take_missed_refills(void)
+{
+    int interrupt_state;
+    unsigned int missed;
+
+    CpuSuspendIntr(&interrupt_state);
+    missed = rfauds2_refill_state_take_missed(&g_refill_state);
+    CpuResumeIntr(interrupt_state);
+
+    return missed;
+}
+
 unsigned int rfauds2_spu2_active_block(void)
 {
-    return g_active_block & 1u;
+    return g_refill_state.active_source;
 }

@@ -154,7 +154,9 @@ endif
 AUDIO_BACKEND ?= rfauds2
 ifeq ($(AUDIO_BACKEND),rfauds2)
 AUDIO_RFAUDS2 := 1
-AUDIO_SOURCE := src/modules/audio/audio_rfauds2.c src/third_party/rfauds2/src/ee/client.c
+AUDIO_SOURCE := src/modules/audio/audio_rfauds2.c \
+	src/third_party/rfauds2/src/ee/client.c \
+	src/third_party/rfauds2/src/ee/core.c
 AUDIO_LIBS :=
 AUDIO_IRX_NAMES := rfauds2
 else ifeq ($(AUDIO_BACKEND),audsrv)

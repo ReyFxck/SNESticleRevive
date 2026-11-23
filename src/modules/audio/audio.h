@@ -39,6 +39,7 @@ void Aud_Service(void);
 typedef struct AudOutputStatsT {
     unsigned int queued_ee_frames, queued_iop_frames;
     unsigned int underruns, silent_frames, backpressure_waits;
+    unsigned int missed_refills;
 } AudOutputStatsT;
 /* Last completed telemetry, no RPC. Returns 0 when unsupported/unavailable. */
 int Aud_GetOutputStats(AudOutputStatsT *stats);

@@ -4,7 +4,13 @@
 #include <tamtypes.h>
 
 #define RFAUDS2_RPC_SID 0x52464132u /* "RFA2" */
+#define RFAUDS2_RPC_PROTOCOL_VERSION 2u
 #define RFAUDS2_RPC_MAX_FRAMES 960u
+
+/* Shared wire-level result used by both the public EE API and IOP handler. */
+#ifndef RFAUDS2_ERROR_BUSY
+#define RFAUDS2_ERROR_BUSY (-4)
+#endif
 
 enum {
     RFAUDS2_RPC_INIT = 0,
@@ -18,8 +24,9 @@ enum {
     RFAUDS2_RPC_FLUSH = 8,
     RFAUDS2_RPC_SET_LATENCY = 9,
     RFAUDS2_RPC_RESET_STATS = 10,
-    /* Partial, nonblocking ring admission. Existing opcodes stay unchanged. */
-    RFAUDS2_RPC_TRY_SUBMIT = 11
+    RFAUDS2_RPC_TRY_SUBMIT = 11,
+    RFAUDS2_RPC_PROTOCOL = 12,
+    RFAUDS2_RPC_SHUTDOWN = 13
 };
 
 #define RFAUDS2_RPC_FLAG_STARTED 0x01u
@@ -47,6 +54,7 @@ typedef struct {
     u32 max_queued_frames;
     u32 refill_count;
     u32 silent_frames;
+    u32 missed_refills;
 } rfauds2_rpc_reply;
 
 #endif

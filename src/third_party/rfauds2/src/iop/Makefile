@@ -7,7 +7,7 @@ IOP_IMPORT_INCS += \
     system/threadman
 
 IOP_INCS += -I../../include
-IOP_OBJS = main.o spu2_direct.o imports.o
+IOP_OBJS = main.o spu2_direct.o refill_state.o imports.o
 
 PS2SDKSRC ?= $(PS2SDK)
 
