@@ -63,6 +63,9 @@ static Uint64 g_TmgWinSumBGInfo = 0;
 static Uint64 g_TmgWinSumBGOffset = 0;
 static Uint64 g_TmgWinSumBGMap = 0;
 static Uint64 g_TmgWinSumBGChr = 0;
+static Uint64 g_TmgWinSumBGLineValidate = 0;
+static Uint64 g_TmgWinSumBGLineRestore = 0;
+static Uint64 g_TmgWinSumBGLineStore = 0;
 static Uint64 g_TmgWinSumBGMain = 0;
 static Uint64 g_TmgWinSumBGSub = 0;
 static Uint64 g_TmgWinSumColorMath = 0;
@@ -94,6 +97,9 @@ Uint32 g_TmgCycBGInfo = 0;
 Uint32 g_TmgCycBGOffset = 0;
 Uint32 g_TmgCycBGMap = 0;
 Uint32 g_TmgCycBGChr = 0;
+Uint32 g_TmgCycBGLineValidate = 0;
+Uint32 g_TmgCycBGLineRestore = 0;
+Uint32 g_TmgCycBGLineStore = 0;
 Uint32 g_TmgCycBGMain = 0;
 Uint32 g_TmgCycBGSub = 0;
 Uint32 g_TmgCycColorMath = 0;
@@ -262,6 +268,9 @@ static void SnesDbgResetWindow(void)
 	g_TmgWinSumBGOffset = 0;
 	g_TmgWinSumBGMap = 0;
 	g_TmgWinSumBGChr = 0;
+	g_TmgWinSumBGLineValidate = 0;
+	g_TmgWinSumBGLineRestore = 0;
+	g_TmgWinSumBGLineStore = 0;
 	g_TmgWinSumBGMain = 0;
 	g_TmgWinSumBGSub = 0;
 	g_TmgWinSumColorMath = 0;
@@ -2186,6 +2195,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	g_TmgCycBGOffset = 0;
 	g_TmgCycBGMap = 0;
 	g_TmgCycBGChr = 0;
+	g_TmgCycBGLineValidate = 0;
+	g_TmgCycBGLineRestore = 0;
+	g_TmgCycBGLineStore = 0;
 	g_TmgCycBGMain = 0;
 	g_TmgCycBGSub = 0;
 	g_TmgCycColorMath = 0;
@@ -2383,6 +2395,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 		g_TmgWinSumBGOffset += g_TmgCycBGOffset;
 		g_TmgWinSumBGMap += g_TmgCycBGMap;
 		g_TmgWinSumBGChr += g_TmgCycBGChr;
+		g_TmgWinSumBGLineValidate += g_TmgCycBGLineValidate;
+		g_TmgWinSumBGLineRestore += g_TmgCycBGLineRestore;
+		g_TmgWinSumBGLineStore += g_TmgCycBGLineStore;
 		g_TmgWinSumBGMain += g_TmgCycBGMain;
 		g_TmgWinSumBGSub += g_TmgCycBGSub;
 		g_TmgWinSumColorMath += g_TmgCycColorMath;
@@ -2615,6 +2630,12 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)(g_TmgWinSumObjDraw / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumHDMAData / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumHDMATable / g_TmgWinFrames));
+			DLog("[snes-bg-line-cost] avg validate/restore/store=%u/%u/%u cache-mode1/mode5=%u/%u",
+				(unsigned)(g_TmgWinSumBGLineValidate / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumBGLineRestore / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumBGLineStore / g_TmgWinFrames),
+				(unsigned)SNPPU_BG_CACHE_MODE1,
+				(unsigned)SNPPU_BG_CACHE_MODE5);
 			DLog("[snes-raster] ppu queued/applied/full=%u/%u/%u hdma lines/active/xfer=%u/%u/%u bg layers/reloads/chrrows=%u/%u/%u",
 				(unsigned)g_DbgPPUQueuedWrites,
 				(unsigned)g_DbgPPUAppliedWrites,

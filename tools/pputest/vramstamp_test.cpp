@@ -50,6 +50,49 @@ static void CheckFetchCoverage()
 				}
 }
 
+static void CheckFineBGLineDependencies()
+{
+	SnesBGInfoT info = {};
+	info.uScrAddr = 0x5000;
+	info.uScrSize = 0;
+	info.uChrAddr = 0x0000;
+	info.uBitDepth = 4;
+	info.uChrSize = 0;
+	SnesRenderTileT tiles[33] = {};
+	for (Uint32 i = 0; i < 33; ++i)
+		tiles[i].uTile = 0;
+
+	SnesPPUVramStampT stamps;
+	Uint32 before = stamps.GetBGLineGeneration(0, 1, &info, tiles, 33);
+	stamps.Invalidate(0x5400, 1);
+	Check(before == stamps.GetBGLineGeneration(0, 1, &info, tiles, 33),
+		"unrelated tilemap row preserves BG line");
+	stamps.Invalidate(0x5000, 1);
+	Check(before != stamps.GetBGLineGeneration(0, 1, &info, tiles, 33),
+		"used tilemap block invalidates BG line");
+
+	SnesPPUVramStampT chrStamps;
+	before = chrStamps.GetBGLineGeneration(0, 1, &info, tiles, 33);
+	chrStamps.Invalidate(0x0100, 1);
+	Check(before == chrStamps.GetBGLineGeneration(0, 1, &info, tiles, 33),
+		"unreferenced CHR tile preserves BG line");
+	chrStamps.Invalidate(0x0000, 1);
+	Check(before != chrStamps.GetBGLineGeneration(0, 1, &info, tiles, 33),
+		"referenced CHR tile invalidates BG line");
+
+	/* Normal 16x16 Mode 1 can select character +16/+17 without masking the
+	   10-bit map number first.  Keep that physical addressing exact. */
+	SnesPPUVramStampT largeStamps;
+	info.uChrSize = 1;
+	for (Uint32 i = 0; i < 33; ++i)
+		tiles[i].uTile = 0x400u + 17u;
+	before = largeStamps.GetBGLineGeneration(0, 1, &info, tiles, 33);
+	Uint32 physical = (info.uChrAddr + (0x400u + 17u) * 16u) & 0x7FFFu;
+	largeStamps.Invalidate(physical, 1);
+	Check(before != largeStamps.GetBGLineGeneration(0, 1, &info, tiles, 33),
+		"Mode 1 large-tile physical CHR address is not prematurely masked");
+}
+
 int main()
 {
 	SnesBGInfoT info = {};
@@ -76,6 +119,7 @@ int main()
 	info.uChrAddr = 0x6000;
 	Check(stamps.GetBGGeneration(0, 5, &info) == 1, "changed dependency region is re-evaluated");
 	CheckFetchCoverage();
+	CheckFineBGLineDependencies();
 	std::puts(failures ? "vramstamp_test: FAIL" : "vramstamp_test: PASS");
 	return failures ? 1 : 0;
 }

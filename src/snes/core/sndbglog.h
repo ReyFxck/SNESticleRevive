@@ -34,6 +34,12 @@
 #ifndef SNPPU_BG_CHR_CACHE
 #define SNPPU_BG_CHR_CACHE 1
 #endif
+#ifndef SNPPU_BG_CACHE_MODE1
+#define SNPPU_BG_CACHE_MODE1 1
+#endif
+#ifndef SNPPU_BG_CACHE_MODE5
+#define SNPPU_BG_CACHE_MODE5 1
+#endif
 
 #if SNDBG_DEEP && !SNDBG_LOG
 #undef SNDBG_LOG
@@ -117,6 +123,9 @@ extern Uint32 g_TmgCycBGInfo;     // decodificacao dos registradores de BG
 extern Uint32 g_TmgCycBGOffset;   // busca de offset-per-tile (modos 2/4)
 extern Uint32 g_TmgCycBGMap;      // busca/cache de entradas do tilemap
 extern Uint32 g_TmgCycBGChr;      // decodificacao das linhas de tiles BG
+extern Uint32 g_TmgCycBGLineValidate; // validacao de dependencias do line-cache
+extern Uint32 g_TmgCycBGLineRestore;  // restauracao de pixels/mascaras do line-cache
+extern Uint32 g_TmgCycBGLineStore;    // armazenamento de uma linha decodificada
 extern Uint32 g_TmgCycBGMain;     // composicao dos BGs na tela principal
 extern Uint32 g_TmgCycBGSub;      // composicao/limpeza da subtela
 extern Uint32 g_TmgCycColorMath;  // criacao das mascaras de color math

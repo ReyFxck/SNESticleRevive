@@ -43,6 +43,12 @@
 #ifndef SNPPU_BG_CHR_CACHE
 #define SNPPU_BG_CHR_CACHE (TRUE)
 #endif
+#ifndef SNPPU_BG_CACHE_MODE1
+#define SNPPU_BG_CACHE_MODE1 (TRUE)
+#endif
+#ifndef SNPPU_BG_CACHE_MODE5
+#define SNPPU_BG_CACHE_MODE5 (TRUE)
+#endif
 
 static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque);
 
@@ -2275,13 +2281,21 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				/* Keep every raster input exact. Mode 2/4/6, offset-per-tile and
 				   mosaic stay on the established decoder because reusing their
 				   rows can leave stale text, sprites or priority masks. */
-				if ((uBGMode == 1 || uBGMode == 5) &&
+				if (((uBGMode == 1 && SNPPU_BG_CACHE_MODE1) ||
+				     (uBGMode == 5 && SNPPU_BG_CACHE_MODE5)) &&
 				    !(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET) &&
 				    BGInfo[iBG].uMosaic == 0 &&
 				    iLine >= 0)
 				{
-					Uint32 uBGGeneration = _SnesPPU_BGLineVram.GetBGGeneration(
-						iBG, uBGMode, &BGInfo[iBG]);
+#if SNDBG_LOG
+					Uint32 _tLineValidate = ProfCtrGetCycle();
+#endif
+					Uint32 uBGGeneration = _SnesPPU_BGLineVram.GetBGLineGeneration(
+						(Uint32)iBG, pRenderInfo->uBGVramAddr[iBG], uBGMode, &BGInfo[iBG],
+						pRenderInfo->Tiles[iBG], 33u);
+#if SNDBG_LOG
+					g_TmgCycBGLineValidate += ProfCtrGetCycle() - _tLineValidate;
+#endif
 					Uint32 uLineCacheIndex = SnesPPUBGLineCacheIndex(
 						pRenderInfo->uBGVramAddr[iBG],
 						BGInfo[iBG].uChrSize);
@@ -2294,9 +2308,15 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						pRenderInfo->uBGVramAddr[iBG], iBG,
 						uBGMode, &BGInfo[iBG]))
 					{
+#if SNDBG_LOG
+						Uint32 _tLineRestore = ProfCtrGetCycle();
+#endif
 						_SnesPPURestoreBGLine(pPrimary, pRenderInfo,
 							iBG, bHiresPair, BGInfo[iBG].uScrollX & 7u,
 							(uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR) != 0);
+#if SNDBG_LOG
+						g_TmgCycBGLineRestore += ProfCtrGetCycle() - _tLineRestore;
+#endif
 #if SNPPU_BG_LINE_CACHE_WAYS > 1
 						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 1;
 #endif
@@ -2320,9 +2340,15 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 						pRenderInfo->uBGVramAddr[iBG], iBG,
 						uBGMode, &BGInfo[iBG]))
 					{
+#if SNDBG_LOG
+						Uint32 _tLineRestore = ProfCtrGetCycle();
+#endif
 						_SnesPPURestoreBGLineNormal(pSecondary, pRenderInfo,
 							iBG, BGInfo[iBG].uScrollX & 7u,
 							(uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR) != 0);
+#if SNDBG_LOG
+						g_TmgCycBGLineRestore += ProfCtrGetCycle() - _tLineRestore;
+#endif
 						_SnesPPU_BGLineCacheVictim[iBG][uLineCacheIndex] = 0;
 #if SNDBG_LOG
 						g_DbgBGLineCacheHits++;
@@ -2532,16 +2558,28 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNPPU_BG_CACHE && SNPPURENDER_CHR64
 				if (pLineCache)
 				{
+#if SNDBG_LOG
+					Uint32 _tLineStore = ProfCtrGetCycle();
+#endif
 					_SnesPPUStoreBGLine(pLineCache, pRenderInfo,
 						iBG, bHiresPair, TempMask[0], TempMask[1],
 						bHiresPair ? SubMask[0] : NULL,
 						bHiresPair ? SubMask[1] : NULL);
+#if SNDBG_LOG
+					g_TmgCycBGLineStore += ProfCtrGetCycle() - _tLineStore;
+#endif
 				}
 #if SNPPU_BG_LINE_CACHE_WAYS > 1
 				else if (pNormalLineCache)
 				{
+#if SNDBG_LOG
+					Uint32 _tLineStore = ProfCtrGetCycle();
+#endif
 					_SnesPPUStoreBGLineNormal(pNormalLineCache, pRenderInfo,
 						iBG, TempMask[0], TempMask[1]);
+#if SNDBG_LOG
+					g_TmgCycBGLineStore += ProfCtrGetCycle() - _tLineStore;
+#endif
 				}
 #endif
 #endif
