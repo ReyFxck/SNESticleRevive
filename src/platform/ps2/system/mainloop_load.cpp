@@ -546,7 +546,6 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
         _MainLoopSetLoadError("NES core could not initialize this cartridge");
         return FALSE;
     }
-#if NES_MESENCE
     if (pSystem == _pNes)
     {
         GSK_SetContentRegion(_pNes->GetFrameRate() == 50
@@ -557,7 +556,6 @@ Bool _MainLoopExecuteFile(const char *pFileName, Bool bLoadSRAM)
             return FALSE;
         }
     }
-#endif
 	pSystem->Reset();
     if (pSystem == _pNes && !_pNes->IsRomReady())
     {

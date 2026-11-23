@@ -463,14 +463,13 @@ Bool _MainLoopCheckSRAM()
  * cannot destroy the last known-good state.
  */
 
-#if NES_MESENCE
 #include "../../../nes/mesence/mesence_bridge.h"
-#endif
 
 #define MAINLOOP_STATE_SLOT_NUM       5
 #define MAINLOOP_STATE_BANK_NUM       2
 /* The outer container remains version 1 for compatibility with existing SNES
-   banks. Reserved[2] identifies the core; NesStateT has its own version. */
+   banks. Reserved[2] identifies the core; MesenCE NES snapshots carry their
+   own format marker in Reserved[4]. */
 #define MAINLOOP_STATE_FORMAT_VERSION 1
 #define MAINLOOP_STATE_HEADER_BYTES   64
 #define MAINLOOP_STATE_MAX_ROOTS      (MAINLOOP_MASS_UNITS + MAINLOOP_MEMCARD_UNITS + 4)
@@ -479,10 +478,15 @@ Bool _MainLoopCheckSRAM()
 #define MAINLOOP_STATE_PAYLOAD_DEFLATE 1
 #define MAINLOOP_STATE_SYSTEM_SNES      0
 #define MAINLOOP_STATE_SYSTEM_NES       1
+/* Preserve the pre-removal compression workspace size without retaining the
+   obsolete fixed NES state type.  533512 is sizeof(NesStateT) in the last
+   InfoNES-capable tree; MesenCE snapshots are variable-sized and fall back to
+   raw storage when their compressed form does not fit this workspace. */
+#define MAINLOOP_STATE_OLD_NES_RAW_BYTES 533512u
 #define MAINLOOP_STATE_RAW_BYTES \
-    (sizeof(SnesStateT) > sizeof(NesStateT) \
+    (sizeof(SnesStateT) > MAINLOOP_STATE_OLD_NES_RAW_BYTES \
         ? sizeof(SnesStateT) \
-        : sizeof(NesStateT))
+        : MAINLOOP_STATE_OLD_NES_RAW_BYTES)
 /* mz_compressBound() currently uses a conservative 110% + 128 bound.
    Keeping the buffer static avoids heap fragmentation on the 32 MB PS2. */
 #define MAINLOOP_STATE_COMPRESS_BYTES \
@@ -611,26 +615,14 @@ static Uint32 _MainLoopStateGetSystemId()
 static Uint32 _MainLoopStateGetPayloadBytes()
 {
     if (_pSystem == _pNes)
-    {
-#if NES_MESENCE
         return _pNes->GetSnapshotBytes();
-#else
-        return sizeof(_NesState);
-#endif
-    }
     return sizeof(_SnesState);
 }
 
 static Uint8 *_MainLoopStateGetPayloadData()
 {
     if (_pSystem == _pNes)
-    {
-#if NES_MESENCE
         return _pNes->GetSnapshotData();
-#else
-        return (Uint8 *)&_NesState;
-#endif
-    }
     return (Uint8 *)&_SnesState;
 }
 
@@ -2096,17 +2088,15 @@ static Int32 _MainLoopStateReadHeader(
         return -1;
     }
 
-#if NES_MESENCE
     if (_pSystem == _pNes)
     {
-        /* Distinguish variable Mesen snapshots from fixed InfoNES banks. */
+        /* Mesen snapshots are variable-sized and carry an explicit format. */
         if (pHeader->Reserved[4] != MESENCE_STATE_FORMAT ||
             pHeader->Reserved[3] <= 16 ||
             pHeader->Reserved[3] > MESENCE_MAX_STATE_BYTES)
             return -1;
         nExpectedPayloadBytes = pHeader->Reserved[3];
     }
-#endif
     bPayloadLayoutValid =
         (pHeader->Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW &&
          pHeader->nPayloadBytes == nExpectedPayloadBytes) ||
@@ -2160,7 +2150,6 @@ static Bool _MainLoopStateReadPayload(
         return FALSE;
     }
 
-#if NES_MESENCE
     if (_pSystem == _pNes)
     {
         nStateBytes = Header.Reserved[3];
@@ -2171,7 +2160,6 @@ static Bool _MainLoopStateReadPayload(
         }
         pStateData = _pNes->GetSnapshotData();
     }
-#endif
     if (Header.Reserved[0] == MAINLOOP_STATE_PAYLOAD_RAW)
     {
         nRead = fread(pStateData, 1, nStateBytes, pFile);
@@ -2449,11 +2437,7 @@ Bool _MainLoopLoadState()
         if (bPayloadOK)
         {
             bRestoreOK = _pSystem == _pNes
-#if NES_MESENCE
                 ? _pNes->RestoreSnapshot()
-#else
-                ? _pNes->RestoreState(&_NesState)
-#endif
                 : _pSnes->RestoreState(&_SnesState);
         }
 
@@ -2603,14 +2587,9 @@ Bool _MainLoopSaveState()
        raw banks still load, and Reserved[0] advertises compressed banks. */
     if (_pSystem == _pNes)
     {
-#if NES_MESENCE
         if (!_pNes->SnapshotState())
-#else
-        _pNes->SaveState(&_NesState);
-        if (_NesState.uMagic != NES_STATE_MAGIC)
-#endif
         {
-            _MainLoopStateSetMessage("Could not snapshot the NES mapper state.");
+            _MainLoopStateSetMessage("Could not snapshot the NES state.");
             return FALSE;
         }
     }
@@ -2742,13 +2721,11 @@ Bool _MainLoopSaveState()
                 ? uStoredCRC
                 : 0;
         Header.Reserved[2] = _MainLoopStateGetSystemId();
-#if NES_MESENCE
         if (_pSystem == _pNes)
         {
             Header.Reserved[3] = nStateBytes;
             Header.Reserved[4] = MESENCE_STATE_FORMAT;
         }
-#endif
 
         ML_TRACE("State save path: %s", Path);
         if (_MainLoopStateWriteBank(

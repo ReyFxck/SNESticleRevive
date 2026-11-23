@@ -79,7 +79,7 @@ em 98.304 casos host e 3.072 casos R5900. Veja
 [superfxtest](../tools/superfxtest/README.md) para contagens e limites.
 
 O port MesenCE fornecido está ligado ao frontend de vídeo, entrada, áudio,
-SRAM, states e cadence; InfoNES continua disponível para states antigos.
+SRAM, states e cadence. O backend InfoNES citado nesta auditoria histórica foi removido depois da validação do caminho MesenCE-only; states legados de NES não são migrados para o formato MesenCE.
 ASan encontrou e confirmou as correções de alocação da tabela de memória
 e memcpy de zero bytes. Todos os canais começavam mudos; agora emitem PCM.
 CHR não volátil, release da ROM e rollback de state incompleto têm fixtures.
@@ -109,6 +109,5 @@ armazenamento útil ao CHR que já cobre toda a VRAM. Ver
 [rodada de desempenho](PERFORMANCE_FOLLOWUP_2026-10-02.md).
 
 O diff final não contém sondas privadas de ROM/PCM. O conjunto compila em
-R5900 com Mesen/RFA, Mesen/audsrv e InfoNES/RFA, e os testes host relevantes
-passam. A PR continua draft: compilação, instruções modeladas e replays
+R5900 com Mesen/RFA e Mesen/audsrv, e os testes host relevantes passam. A referência InfoNES/RFA desta auditoria era histórica e o backend foi removido depois. A PR continua draft: compilação, instruções modeladas e replays
 portáteis não fecham as pendências da tabela nem autorizam merge na main.

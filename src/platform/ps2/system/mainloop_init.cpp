@@ -429,7 +429,7 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 	   PathExtAdd feeds the same CBrowserScreen that already lists
 	   .smc / .sfc, so the user gets one unified ROM picker.
 	   The NesSystem::ExecuteFrame() body is still a STUB - selecting
-	   a .nes paints a diagnostic test pattern. Real InfoNES wiring
+	   a .nes uses the MesenCE NES core. Additional NES frontend wiring
 	   comes in Phase 3. */
 	_pNes = new NesSystem();
 	_pNes->Reset();

@@ -19,7 +19,7 @@ released the source under the **MIT license**. This repository keeps that code
 alive: reorganized into logical directories, fixed, extended, and made easy to
 build and study today.
 
-On top of the SNES core, the project now also integrates **InfoNES** to bring
+On top of the SNES core, the project also integrates **MesenCE** to bring
 **NES** emulation to the **PlayStation 2**.
 
 <p align="center">
@@ -88,7 +88,7 @@ Não é obrigatório, claro haha. 💚
 
 **Systems**
 - **SNES** — the original SNESticle core (65816 ASM CPU, SPC700, PPU).
-- **NES** — via **InfoNES** (`src/nes/`), with audio wired to the PS2 audio path.
+- **NES** — via **MesenCE** (`src/third_party/mesence/` + `src/nes/` PS2 bridge), with audio wired to the shared PS2 mixer.
 
 **SNES special chips (coprocessors):**
 - **DSP‑1 / DSP‑1B** — Pilotwings, Super Mario Kart, etc. (`sndsp1`) — clean‑room
@@ -850,10 +850,10 @@ Release notes are published directly on the [GitHub Releases](https://github.com
   written clean‑room and verified host‑side against public references.
   The former ZSNES-derived DSP‑4 HLE has been removed; `sndsp4` is currently a
   project-owned placeholder pending a new GPLv3-compatible NEC DSP core.
-- **NES (InfoNES) integration**: full PS2 platform layer (render, input, audio,
-  one‑frame stepper). The five base 2A03 channels now use Shay Green's
-  cycle-timed **Nes_Snd_Emu + Blip_Buffer** at 32 kHz, and video uses Mesen2's
-  default NTSC 2C02 palette instead of the old saturated RGB555 table.
+- **NES (MesenCE) integration**: MesenCE is the sole NES backend, with the
+  PS2 bridge handling render, input, audio, SRAM and variable-size save states.
+  The former InfoNES/K6502 backend and its separate `nes_snd_emu` dependency
+  have been removed after the MesenCE-only path was validated.
 - **Video**: gsKit migration, the Video Config screen, multiple modes, and a
   **safe 480i default** (native 256x240 stays available for CRT users).
 - **Cover art**: the ROM browser shows custom images plus Libretro boxart,
@@ -894,13 +894,13 @@ Release notes are published directly on the [GitHub Releases](https://github.com
   omit the executable path instead of crashing before video initialization.
 - **Save states**: restored the dormant iaddis-era feature as a release menu
   with five slots, USB/memory-card selection, versioned files, ROM/CRC checks
-  and power-loss-safe two-bank writes; it also serializes the NES CPU, PPU,
-  pAPU, CHR RAM and complete mapper-private state.
+  and power-loss-safe two-bank writes; NES uses MesenCE's variable-size
+  serializer snapshot through the PS2 bridge.
 - **Build system**: parallel jobs, `VERBOSE`, `PROFILE`, friendlier `make help`,
   and ISO builds that honor `JOBS`.
-- **Bug fixes**: C++17 / build warnings cleaned up, plus three real
-  out‑of‑bounds bugs fixed in the InfoNES core (`APU_Reg`, mapper 19 & 45 arrays)
-  and a sequence‑point UB fixed in the 6502 core.
+- **Bug fixes**: C++17 / build warnings cleaned up along with long-running
+  SNES/PS2 frontend correctness fixes. The former InfoNES/K6502 backend has
+  since been removed in favor of MesenCE.
 
 </details>
 
@@ -956,17 +956,11 @@ Release notes are published directly on the [GitHub Releases](https://github.com
 - **SA‑1** is implemented, serialized and covered by the host SA‑1 regression
   suite. Its EE performance path still needs representative real-PS2 testing.
 
-**NES (InfoNES)**
-- Save states currently cover `.nes` cartridges; FDS state serialization is
-  not available.
-- **Performance**: heavy scenes can push a frame over the 16.6 ms budget, which
-  vsync then locks to **30 fps**; this also knocks audio and per‑scanline
-  effects out of sync. (Use `PROFILE=1` + R3 to locate hotspots.)
-- **Super Mario Bros 3** — the MMC3 status‑bar split can glitch when scrolling
-  (InfoNES uses a scanline‑approximated MMC3 IRQ, not A12‑accurate).
-- The five base 2A03 channels are implemented. Expansion audio used by some
-  Japanese/mapper-specific releases (VRC6, VRC7, MMC5, FDS and Sunsoft 5B) is
-  not yet connected, so those releases can still miss instruments.
+**NES (MesenCE)**
+- Save states currently cover `.nes` cartridges; FDS state serialization and
+  disk switching remain frontend follow-up work.
+- MesenCE is now the only NES backend; compatibility and performance issues
+  should be reported against that core/bridge path.
 
 **Video**
 - The Video Config screen exposes only **480i** and **1080i**. Legacy settings
@@ -987,7 +981,7 @@ Release notes are published directly on the [GitHub Releases](https://github.com
 
 ```
 src/snes/      SNES core (cpu, spc, ppu, coprocessors)
-src/nes/       NES core (InfoNES: core, cpu, apu, mappers, system)
+src/nes/       PS2 NES frontend + MesenCE bridge/system wrapper
 src/platform/  PlayStation 2 platform (gs, system, input, ui)
 src/modules/   shared modules (audio, netplay, ...)
 src/common/    shared helpers (render, base, io, debug)
@@ -1009,9 +1003,8 @@ traces, see [`tools/romlab`](tools/romlab/README.md).
 
 - **[iaddis/SNESticle](https://github.com/iaddis/SNESticle)** — Icer Addis, the original emulator.
 - **[nesdev-org/MesenCE](https://github.com/nesdev-org/MesenCE)** — current
-  Mesen2-derived accuracy reference for 65816, interrupts, DMA/HDMA and the
-  SNES PPU. Its documented Mode 4/5/6, SETINI, hi-res, interlace and
-  offset-per-tile behavior was used to cross-check the Revive v1.1.1 work.
+  NES emulation core used by the PS2 frontend, and also an accuracy reference
+  used during broader SNESticle Revive hardware work.
 - **[itsveenee/SNESticleAurora](https://github.com/itsveenee/SNESticleAurora)** —
   **Vinícius Nunes (@itsveenee)**; PS2-oriented SNESticle fork used as an
   additional behavioral and implementation-comparison reference for Mode 4/5/6,
@@ -1023,8 +1016,6 @@ traces, see [`tools/romlab`](tools/romlab/README.md).
 - **[tmaul/SNESticle](https://github.com/tmaul/SNESticle)** — many later improvements.
 - **[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle)** — fork used as one of the bases for this repository.
 - **Sardu** — for releasing the recovered source under the MIT license (2022).
-- **[jay-kumogata/InfoNES](https://github.com/jay-kumogata/InfoNES)** — the NES core integrated here.
-- **[game-music-emu](https://github.com/libgme/game-music-emu)** — Shay Green's Nes_Snd_Emu and Blip_Buffer used for the five cycle-timed base NES audio channels (LGPL-2.1+).
 - **[Mesen2](https://github.com/SourMesen/Mesen2)** — reference/default NTSC 2C02 palette used by the NES renderer.
 - **[upng](https://github.com/elanthis/upng)** — Sean Middleditch & Lode Vandevenne; the bundled single‑file PNG decoder used for cover art (zlib license). Extended in this repo with palette/indexed support.
 - **[libxmp-lite](https://github.com/libxmp/libxmp)** — Claudio Matsuoka and Hipolito Carraro Jr; official 4.7.2 embedded MOD/XM replay source used for tracker effects, timing and loops (MIT). The earlier PS2 integration by tatokis was the original porting reference.

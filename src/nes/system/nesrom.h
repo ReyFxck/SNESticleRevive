@@ -28,7 +28,7 @@
  *
  * Phase 2: NesRom does a real iNES header parse and stores the raw
  * data; NesDisk / NesFDSBios are skeletal (extension + name only).
- * The InfoNES core is NOT yet pointed at any of this data - that
+ * The MesenCE core receives this cartridge data through NesSystem - the
  * binding happens in NesSystem::SetRom() in Phase 3.
  */
 

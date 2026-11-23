@@ -45,9 +45,6 @@ Third-party components
 
 Third-party code keeps its own copyright and license terms. In particular:
 
-- InfoNES under src/nes/: Apache License 2.0; see src/nes/LICENSE.InfoNES.
-- Nes_Snd_Emu / Blip_Buffer under src/third_party/nes_snd_emu/:
-  GNU LGPL 2.1 or later; see its LICENSE.txt.
 - libxmp-lite under src/third_party/libxmp-lite/: MIT license.
 - upng under src/third_party/upng/: zlib license.
 - PS2SDK/ps2dev-derived components retain the notices in their source files.

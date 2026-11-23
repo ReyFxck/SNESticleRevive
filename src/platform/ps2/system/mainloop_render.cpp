@@ -412,7 +412,7 @@ void MainLoopRender()
                 if (g_GskVideoMode == GSK_VIDMODE_240P && _pSystem == _pNes)
         {
 /*
- * InfoNES 240p overscan compensation.
+ * NES 240p overscan compensation.
  *
  * Keep the NES framebuffer at its native 256x240 size and
  * preserve a 1:1 pixel mapping. Only reposition the image

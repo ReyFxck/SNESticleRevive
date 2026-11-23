@@ -14,7 +14,6 @@
 #include "snrom.h"
 #include "nessystem.h"
 #include "nesrom.h"
-#include "nesstate.h"
 #include "emusys.h"
 #include "emumovie.h"
 #include "rendersurface.h"
@@ -92,9 +91,6 @@ CWavFile _WavFile;
 Uint8 _RomData[8 * 1024 * 1024 + 1024] __attribute__((aligned(64))) __attribute__ ((section (".bss")));
 
 SnesStateT		_SnesState;
-#if !NES_MESENCE
-NesStateT		_NesState;
-#endif
 
 Emu::MovieClip *s_pMovieClip;
 

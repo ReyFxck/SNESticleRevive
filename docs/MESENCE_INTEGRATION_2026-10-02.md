@@ -10,7 +10,7 @@ compilados, ROMs, executáveis do ZIP ou drivers PS2 standalone importados.
 
 ## Ligação com o frontend existente
 
-`MesenCE` agora é o único backend NES compilável. A árvore InfoNES legada ainda está presente temporariamente durante a remoção em etapas; o antigo seletor `NES_BACKEND=infones` foi removido. Os
+`MesenCE` é o único backend NES. A árvore InfoNES/K6502/APU/mappers e o `nes_snd_emu` legado foram removidos depois que o caminho MesenCE-only foi validado; não existe mais seletor `NES_BACKEND=infones`. Os
 states antigos. O bridge C mantém C++20, RTTI e exceptions nas unidades
 Mesen; o SNES e o frontend legado conservam seus flags de compilação.
 Os overrides históricos de `operator new` retornavam NULL: no build Mesen
@@ -30,7 +30,7 @@ pad, GS, IOP ou SPU2.
   suporte aos providers/firmware desabilitados pelo port.
 - Frames: PAL/Dendy são fontes de 50 Hz e NTSC de 60 Hz. A política comum
   de cadence/catch-up pode omitir a conversão/upload do frame intermediário;
-  o core continua executando CPU, PPU e áudio desse frame. InfoNES conserva
+  o core continua executando CPU, PPU e áudio desse frame. O backend legado conservava
   seu caminho anterior, pois não executa um frame com target NULL.
 - Battery: PRG RAM normalmente é acessada sem cópia por frame. CHR RAM
   persistente usa um bundle PRG+CHR, sincronizado com o core, state e reset.
@@ -39,7 +39,7 @@ pad, GS, IOP ou SPU2.
 - States: snapshots usam Serializer versão 4, um payload variável `MCE1`
   com tamanho máximo de 10 MiB e a compressão/CRC do container SNESticle.
   O state NROM da fixture NTSC tem 24.442 bytes; memória é alocada ao salvar/carregar,
-  não reservada como cache gráfico. States InfoNES são reconhecidos como
+  não reservada como cache gráfico. States do backend legado são reconhecidos como
   incompatíveis e precisam do build legado. Um load incompleto faz rollback
   da máquina atual, em vez de misturar campos antigos e novos.
 - Ciclo de vida: unload libera console, ROM, patch, snapshots e bundle de
@@ -67,10 +67,10 @@ o console efetivo.
 originais: NTSC/PAL, entrada/vídeo, PCM audível, replay exato de 12 frames,
 state incompleto sem destruir a partida, PRG/CHR battery, reset e bancos
 MMC1/MMC3 passaram. ASan/UBSan passam no mesmo código. Builds R5900 Mesen
-com ambos os backends de áudio e a alternativa InfoNES compilam.
+com os backends de áudio suportados e o caminho MesenCE compilam. A alternativa InfoNES citada nos testes históricos não existe mais.
 
 O footprint estático text/data/bss observado antes da rodada de otimização no ELF Mesen/RFA era 18.122.175
-bytes; InfoNES/RFA, 16.537.897. Isso não mede o heap nem garante que qualquer
+bytes; o número InfoNES/RFA de 16.537.897 bytes abaixo é apenas uma medição histórica anterior à remoção. Isso não mede o heap nem garante que qualquer
 cartucho NES caiba: o core também possui cópias/dados dinâmicos da ROM.
 Nenhum cache foi aumentado para 5 MB.
 

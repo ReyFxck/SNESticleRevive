@@ -352,7 +352,6 @@ Bool MainLoopProcess()
 
             if (_pSystem == _pNes)
             {
-#if NES_MESENCE
                 Uint32 sourceHz = _pNes->GetFrameRate();
                 Uint32 hostHz = (Uint32)GSK_GetRefreshHz();
                 _AudMix->SetFrameRate(sourceHz);
@@ -365,12 +364,6 @@ Bool MainLoopProcess()
                 else MainLoopRegionCadenceStep(&s_SnesRegionCadence, allowed,
                     sourceHz, hostHz, &extra, &hold);
                 hidden += extra;
-#else
-                _AudMix->SetFrameRate(60);
-                _MainLoopResetSnesRegionCadence();
-                Uint32 hidden = 0;
-                Bool hold = FALSE;
-#endif
 
                 /* The shared VRAM block is 256 KiB either way:
                    NES = 256x256 RGBA32, SNES = 512x256 RGBA5551.

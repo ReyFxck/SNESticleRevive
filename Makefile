@@ -143,9 +143,7 @@ CONSERVATIVE_FLAGS := \
 
 CHARSET_FLAGS := -finput-charset=UTF-8 -fexec-charset=UTF-8
 
-# MesenCE is the only NES backend.  The old InfoNES source tree is kept
-# temporarily for the staged removal, but it is no longer selectable or linked.
-NES_MESENCE := 1
+# MesenCE is the NES core. The legacy InfoNES backend has been removed.
 include src/third_party/mesence/mesence_sources.mk
 NES_SOURCES := $(MESENCE_CORE_SOURCES) src/nes/mesence/mesence_bridge.cpp src/nes/system/nessystem_mesence.cpp
 
@@ -170,7 +168,7 @@ endif
 CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
-	-DNES_MESENCE=$(NES_MESENCE) -DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
+	-DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) -DSNPPU_BG_LINE_CACHE_LINES=$(SNES_BG_CACHE_LINES) \
@@ -182,7 +180,7 @@ CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) $(CHARSET_FLAGS) \
 CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive $(CHARSET_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
-	-DNES_MESENCE=$(NES_MESENCE) -DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
+	-DSNES_TARGET_PROFILE=$(SNES_TARGET_PROFILE) -DAUDIO_RFAUDS2=$(AUDIO_RFAUDS2) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
 	-DSNPPU_BG_CHR_CACHE=$(SNES_BG_CHR_CACHE) \
 	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) -DSNPPU_BG_LINE_CACHE_LINES=$(SNES_BG_CACHE_LINES) \
@@ -323,11 +321,6 @@ INCS := \
 	-I$(CURDIR)/src/snes/ppu \
 	-I$(CURDIR)/src/snes/rom \
 	-I$(CURDIR)/src/snes/state \
-	-I$(CURDIR)/src/nes/apu \
-	-I$(CURDIR)/src/nes/core \
-	-I$(CURDIR)/src/nes/cpu \
-	-I$(CURDIR)/src/nes/mapper \
-	-I$(CURDIR)/src/nes/state \
 	-I$(CURDIR)/src/nes/system \
 	-I$(CURDIR)/src/third_party/miniz \
 	-I$(CURDIR)/src/third_party/upng \

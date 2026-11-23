@@ -3,7 +3,7 @@
  * Phase 2 of the NES integration: enough to read the file through the
  * iaddis CDataIO abstraction, validate the iNES header, and report
  * basic metadata to the rest of the mainloop (so the ROM appears in
- * the browser and the load path doesn't reject it). The InfoNES core
+ * the browser and the load path doesn't reject it). The NES core
  * itself is NOT yet driven from this data - that wiring lives in
  * NesSystem::SetRom() in Phase 3.
  *
@@ -90,7 +90,7 @@ Emu::Rom::LoadErrorE NesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 nB
     }
 
     /* Allocate (or accept a caller buffer). We over-allocate a small
-       trailer so InfoNES can read one mapper bank past the end
+       trailer as a guard region for legacy-compatible ROM parsing
        without a special bounds check. */
     Uint8 *pBuf;
     if (pBuffer && nBufferBytes >= uTotal + 8)
@@ -206,7 +206,7 @@ void NesDisk::Unload()
 
 Emu::Rom::LoadErrorE NesDisk::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 nBufferBytes)
 {
-    /* Phase 2: FDS disks not yet routed to InfoNES. We still parse the
+    /* Phase 2: FDS disk switching is not yet routed to MesenCE. We still parse the
        size + accept the file so the browser path doesn't error. */
     Unload();
 
