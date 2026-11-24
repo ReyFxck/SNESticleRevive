@@ -16,6 +16,10 @@ class SNSA1;
 
 #define SNESDMAC_CHANNEL_NUM 8
 
+#ifndef SNESDMAC_HDMA_ACTIVE_LIST
+#define SNESDMAC_HDMA_ACTIVE_LIST 1
+#endif
+
 /* MDMA starts only after SnesSystem has synchronized the queued PPU writes.
    Bytes sent to B-bus PPU ports must then be committed immediately and in
    transfer order; routing some ports back through the scanline queue can make
@@ -78,6 +82,10 @@ private:
 	Uint8		                m_HDMAEnable;		// hdma channel enable
 	Uint8		                m_HDMAEnded;		// channels stopped for this frame
 	Uint8		                m_HDMADoTransfer;	// repeat/first-line transfer latch
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	Uint8                        m_HDMAActiveCount;
+	Uint8                        m_HDMAActiveList[SNESDMAC_CHANNEL_NUM];
+#endif
 	Uint8                        m_MDMAStartedMask;
 	Bool                         m_bDMATimingActive;
 	Uint32                       m_uDMAClockCounter;
@@ -95,6 +103,9 @@ private:
 	void                        ConsumeMasterClocks(Int32 nClocks);
 	void                        BeginDMATiming();
 	void                        EndDMATiming();
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	void                        RebuildHDMAActiveList();
+#endif
 	Uint32                      GetPausedCpuSpeed() const;
 	Bool                        IsABusForbidden(Uint32 uAddr) const;
 	Bool                        IsWorkRAMAddress(Uint32 uAddr) const;

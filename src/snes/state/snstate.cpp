@@ -233,6 +233,9 @@ void SnesDMAC::RestoreState(struct SNStateDMACT *pState)
 	m_HDMADoTransfer = pState->m_HDMADoTransfer;
 	m_MDMAEnable = pState->m_MDMAEnable;
 	memcpy(m_Channels, pState->m_Channels, sizeof(m_Channels));
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	RebuildHDMAActiveList();
+#endif
 	/* Legacy states do not serialize sub-cycle DMA ownership. Resume from a
 	   clean boundary and let an enabled MDMA command reacquire the bus. */
 	m_MDMAStartedMask = 0;

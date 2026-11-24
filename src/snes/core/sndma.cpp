@@ -63,6 +63,10 @@ SnesDMAC::SnesDMAC()
 	m_HDMAEnable = 0;
 	m_HDMAEnded = 0;
 	m_HDMADoTransfer = 0;
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	m_HDMAActiveCount = 0;
+	memset(m_HDMAActiveList, 0, sizeof(m_HDMAActiveList));
+#endif
 	m_MDMAStartedMask = 0;
 	m_bDMATimingActive = FALSE;
 	m_uDMAClockCounter = 0;
@@ -524,6 +528,19 @@ void SnesDMAC::SetMDMAEnable(Uint8 uData)
 	m_MDMAEnable = uData;
 }
 
+#if SNESDMAC_HDMA_ACTIVE_LIST
+void SnesDMAC::RebuildHDMAActiveList()
+{
+	Uint8 n = 0;
+	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
+	{
+		if (m_HDMAEnable & (1u << uChan))
+			m_HDMAActiveList[n++] = (Uint8)uChan;
+	}
+	m_HDMAActiveCount = n;
+}
+#endif
+
 void SnesDMAC::SetHDMAEnable(Uint8 uData)
 {
 	// confirm:
@@ -532,6 +549,9 @@ void SnesDMAC::SetHDMAEnable(Uint8 uData)
 	   its zero terminator stays stopped until the next frame, even if $420C
 	   is written again (Mesen/Snes9x keep a separate ended-channel mask). */
 	m_HDMAEnable = uData;
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	RebuildHDMAActiveList();
+#endif
 }
 
 void SnesDMAC::ProcessMDMAChRead(Uint32 uChan)
@@ -943,6 +963,15 @@ void SnesDMAC::BeginHDMA()
 	   every enabled channel before the first scanline transfer. */
 	ConsumeMasterClocks(8);
 
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	for (Uint32 uActiveIndex = 0; uActiveIndex < m_HDMAActiveCount; uActiveIndex++)
+	{
+		Uint32 uChan = m_HDMAActiveList[uActiveIndex];
+		Uint8 uMask = (Uint8)(1 << uChan);
+		SnesDMAChT *pChan;
+		Bool bStopped;
+		Uint8 uLow;
+#else
 	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{
 		Uint8 uMask = (Uint8)(1 << uChan);
@@ -952,6 +981,7 @@ void SnesDMAC::BeginHDMA()
 
 		if (!(uEnabled & uMask))
 			continue;
+#endif
 
 		pChan = &m_Channels[uChan];
 		pChan->a2ax = pChan->a1tx;
@@ -1114,10 +1144,18 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 	   channel's counter/table phase.  Interleaving those phases changes both
 	   B-bus side effects and the point at which IRQ/NMI can be observed. */
 	ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	for (Uint32 uActiveIndex = 0; uActiveIndex < m_HDMAActiveCount; uActiveIndex++)
+	{
+		Uint32 uChan = m_HDMAActiveList[uActiveIndex];
+		Uint8 uMask = (Uint8)(1 << uChan);
+		if ((uActive & uMask) && (m_HDMADoTransfer & uMask))
+#else
 	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{
 		Uint8 uMask = (Uint8)(1 << uChan);
 		if ((uActive & uMask) && (m_HDMADoTransfer & uMask))
+#endif
 		{
 #if SNDBG_LOG
 			g_DbgHDMATransferChannels++;
@@ -1131,6 +1169,17 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 	Uint32 _tHDMATable = ProfCtrGetCycle();
 #endif
 
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	for (Uint32 uActiveIndex = 0; uActiveIndex < m_HDMAActiveCount; uActiveIndex++)
+	{
+		Uint32 uChan = m_HDMAActiveList[uActiveIndex];
+		Uint8 uMask = (Uint8)(1 << uChan);
+		SnesDMAChT *pChan;
+		Uint8 uNewCounter;
+
+		if (!(uActive & uMask))
+			continue;
+#else
 	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{
 		Uint8 uMask = (Uint8)(1 << uChan);
@@ -1139,6 +1188,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 
 		if (!(uActive & uMask))
 			continue;
+#endif
 
 #if SNDBG_LOG
 		g_DbgHDMAActiveChannels++;
@@ -1209,6 +1259,10 @@ void SnesDMAC::Reset()
 	m_HDMAEnable = 0;
 	m_HDMAEnded = 0;
 	m_HDMADoTransfer = 0;
+#if SNESDMAC_HDMA_ACTIVE_LIST
+	m_HDMAActiveCount = 0;
+	memset(m_HDMAActiveList, 0, sizeof(m_HDMAActiveList));
+#endif
 	m_MDMAStartedMask = 0;
 	m_bDMATimingActive = FALSE;
 	m_uDMAClockCounter = 0;

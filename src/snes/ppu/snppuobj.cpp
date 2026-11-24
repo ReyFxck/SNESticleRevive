@@ -175,6 +175,17 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 #if SNDBG_DEEP
 			g_DbgObjDrawnPixels += _ObjCountBits8(uVisible);
 #endif
+#if SNPPU_OBJ_DENSE_COPY
+			/* Fully visible OBJ rows are common in gameplay. Once priority/window
+			   masks have accepted all eight pixels, copy the decoded row in one
+			   fixed-size operation instead of executing eight conditional stores.
+			   Constant-size memcpy keeps unaligned X positions safe on R5900. */
+			if (uVisible == 0xFFu)
+			{
+				__builtin_memcpy(pDest8, pObj->uData, 8);
+				continue;
+			}
+#endif
 			if (uVisible & 0x01) pDest8[0] = pObj->uData[0];
 			if (uVisible & 0x02) pDest8[1] = pObj->uData[1];
 			if (uVisible & 0x04) pDest8[2] = pObj->uData[2];
