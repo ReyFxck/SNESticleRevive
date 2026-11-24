@@ -49,6 +49,9 @@
 #ifndef SNPPU_BG_CACHE_MODE5
 #define SNPPU_BG_CACHE_MODE5 (TRUE)
 #endif
+#ifndef SNPPU_BG_CACHE_MOSAIC
+#define SNPPU_BG_CACHE_MOSAIC (TRUE)
+#endif
 
 static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque);
 
@@ -65,7 +68,7 @@ struct SnesPPUBGLineCacheEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
 	Uint32 uReady;
-	Uint8 uKeyPad[36];
+	Uint8 uKeyPad[32];
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uSub[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
@@ -85,7 +88,7 @@ struct SnesPPUBGLineCacheNormalEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
 	Uint32 uReady;
-	Uint8 uKeyPad[36];
+	Uint8 uKeyPad[32];
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
 	Uint8 uMainPriority[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
@@ -2325,7 +2328,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 				if (((uBGMode == 1 && SNPPU_BG_CACHE_MODE1) ||
 				     (uBGMode == 5 && SNPPU_BG_CACHE_MODE5)) &&
 				    !(uBGFlags[iBG] & SNPPU_BGFLAGS_OFFSET) &&
-				    BGInfo[iBG].uMosaic == 0 &&
+				    (BGInfo[iBG].uMosaic == 0 || SNPPU_BG_CACHE_MOSAIC) &&
 				    iLine >= 0)
 				{
 #if SNDBG_LOG

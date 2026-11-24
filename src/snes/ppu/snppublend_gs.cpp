@@ -178,6 +178,48 @@ typedef char SNPPUAttribPaletteSizeCheck[
 	(sizeof(_SNPPUBlend_AttribMainPal) == 16 * 16 * sizeof(Uint32) &&
 	 sizeof(_SNPPUBlend_AttribSubPal) == 16 * 16 * sizeof(Uint32)) ? 1 : -1];
 
+#ifndef SNPPU_COLORMATH_ATTR_CACHE
+#define SNPPU_COLORMATH_ATTR_CACHE (TRUE)
+#endif
+
+#if SNPPU_COLORMATH_ATTR_CACHE
+struct SNPPUColorAttrCacheEntryT
+{
+	Uint32 uReady;
+	SNMaskT Mask[3];
+	Uint8 uAttrib8[256];
+};
+
+/* _PlanarTo3 expands three 256-bit masks through lookup tables every line.
+   Window HDMA commonly repeats the exact same resolved masks on the same
+   scanline next frame, so retain the pure conversion result. Exact mask
+   comparison makes this independent of how the masks were produced. */
+static SNPPUColorAttrCacheEntryT
+	_SNPPU_ColorAttrCache[SNPPU_MAXLINE] _ALIGN(64);
+
+static _INLINE Bool _SNPPUColorAttrMasksEqual(
+	const SNMaskT *pA, const SNMaskT *pB)
+{
+	Uint64 uDiff = 0;
+	for (Int32 i = 0; i < 3; ++i)
+	{
+		uDiff |= pA[i].uMask64[0] ^ pB[i].uMask64[0];
+		uDiff |= pA[i].uMask64[1] ^ pB[i].uMask64[1];
+		uDiff |= pA[i].uMask64[2] ^ pB[i].uMask64[2];
+		uDiff |= pA[i].uMask64[3] ^ pB[i].uMask64[3];
+	}
+	return uDiff == 0;
+}
+
+static _INLINE void _SNPPUColorAttrMasksCopy(
+	SNMaskT *pDest, const SNMaskT *pSrc)
+{
+	SNMaskCopy(&pDest[0], &pSrc[0]);
+	SNMaskCopy(&pDest[1], &pSrc[1]);
+	SNMaskCopy(&pDest[2], &pSrc[2]);
+}
+#endif
+
 static void _PlanarTo3(Uint8 *pDest, const SNMaskT *pSrc0,
 	const SNMaskT *pSrc1, const SNMaskT *pSrc2)
 {
@@ -1099,7 +1141,54 @@ void SNPPUBlendGS::Exec(SNPPUBlendInfoT *pInfo, Int32 iLine,
     if (pColorMask)
     {
         PROF_ENTER("SNPPUBlendPlanarTo3");
+#if SNPPU_COLORMATH_ATTR_CACHE
+		if (iLine >= 0 && iLine < SNPPU_MAXLINE)
+		{
+			SNPPUColorAttrCacheEntryT *pAttrCache =
+				&_SNPPU_ColorAttrCache[iLine];
+			const Bool bSameMasks = _SNPPUColorAttrMasksEqual(
+				pAttrCache->Mask, pColorMask);
+			if (pAttrCache->uReady && bSameMasks)
+			{
+				memcpy(pInfo->uAttrib8, pAttrCache->uAttrib8,
+				       sizeof(pAttrCache->uAttrib8));
+#if SNDBG_LOG
+				g_DbgColorAttrCacheHits++;
+#endif
+			}
+			else
+			{
+				_PlanarTo3(pInfo->uAttrib8, &pColorMask[0],
+				           &pColorMask[1], &pColorMask[2]);
+				if (bSameMasks)
+				{
+					/* Admit only after the exact key repeats. Animated lines
+					   therefore avoid a useless 256-byte cache write. */
+					memcpy(pAttrCache->uAttrib8, pInfo->uAttrib8,
+					       sizeof(pAttrCache->uAttrib8));
+					pAttrCache->uReady = TRUE;
+				}
+				else
+				{
+					_SNPPUColorAttrMasksCopy(pAttrCache->Mask, pColorMask);
+					pAttrCache->uReady = FALSE;
+				}
+#if SNDBG_LOG
+				g_DbgColorAttrCacheMisses++;
+#endif
+			}
+		}
+		else
+		{
+			_PlanarTo3(pInfo->uAttrib8, &pColorMask[0],
+			           &pColorMask[1], &pColorMask[2]);
+#if SNDBG_LOG
+			g_DbgColorAttrCacheBypasses++;
+#endif
+		}
+#else
         _PlanarTo3(pInfo->uAttrib8, &pColorMask[0],&pColorMask[1],&pColorMask[2]);
+#endif
         PROF_LEAVE("SNPPUBlendPlanarTo3");
     }
 

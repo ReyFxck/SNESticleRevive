@@ -244,7 +244,7 @@ private:
     ISNPPUBlend    *m_pBlend;
 
 	void DecodeBGInfo(SnesBGInfoT *pBGInfo);
-	void DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow);
+	void DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow, Int32 iLine);
 
     void UpdateOBJVisibility(Uint8 *pObjY, Uint8 *pObjSize, Int32 iObj, Int32 nObjs);
     Int32 CheckOBJ(SnesRenderObjT *pObjs, Int32 iObj, Int32 nObjs, Uint8 *pObjList, Int32 MaxObjLine, Int32 iLine);

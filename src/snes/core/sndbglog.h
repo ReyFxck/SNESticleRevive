@@ -40,6 +40,12 @@
 #ifndef SNPPU_BG_CACHE_MODE5
 #define SNPPU_BG_CACHE_MODE5 1
 #endif
+#ifndef SNPPU_WINDOW_MASK_CACHE
+#define SNPPU_WINDOW_MASK_CACHE 1
+#endif
+#ifndef SNPPU_COLORMATH_ATTR_CACHE
+#define SNPPU_COLORMATH_ATTR_CACHE 1
+#endif
 
 #if SNDBG_DEEP && !SNDBG_LOG
 #undef SNDBG_LOG
@@ -222,6 +228,12 @@ extern Uint32 g_DbgPPUMosaicLines;
 extern Uint32 g_DbgPPUOffsetLines;
 extern Uint32 g_DbgPPUWindowLines;
 extern Uint32 g_DbgPPUColorMathLines;
+extern Uint32 g_DbgWindowMaskCacheHits;
+extern Uint32 g_DbgWindowMaskCacheMisses;
+extern Uint32 g_DbgWindowMaskCacheBypasses;
+extern Uint32 g_DbgColorAttrCacheHits;
+extern Uint32 g_DbgColorAttrCacheMisses;
+extern Uint32 g_DbgColorAttrCacheBypasses;
 extern Uint32 g_DbgPPUDirectColorLines;
 extern Uint32 g_DbgPPUInterlaceLines;
 extern Uint32 g_DbgPPUObjInterlaceLines;

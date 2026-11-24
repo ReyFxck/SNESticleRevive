@@ -35,6 +35,39 @@ static Uint8 _SNPPUBg_Tile16Pos[4][4] =
 	{17, 16}, // flipxy
 };
 
+#ifndef SNPPU_WINDOW_MASK_CACHE
+#define SNPPU_WINDOW_MASK_CACHE (TRUE)
+#endif
+
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_WINDOW_MASK_CACHE
+struct SnesPPUWindowMaskCacheEntryT
+{
+	Uint64 uKey0;
+	Uint32 uKey1;
+	Uint32 uReady;
+	SNMaskT BGWindow[SNPPU_BGWINDOW_NUM];
+};
+
+/* HDMA window effects normally replay the same register sequence on the same
+   scanline every frame. Cache the fully resolved six layer/color masks by
+   scanline. A hit is exact: all four WH coordinates and all five selector /
+   logic registers must match, so this cannot hide a mid-frame window change. */
+static SnesPPUWindowMaskCacheEntryT
+	_SnesPPU_WindowMaskCache[SNPPU_MAXLINE] _ALIGN(64);
+
+static _INLINE Uint64 _SnesPPUWindowKey0(const SnesPPURegsT *pRegs)
+{
+	return ((Uint64)pRegs->wh0) |
+	       ((Uint64)pRegs->wh1 << 8) |
+	       ((Uint64)pRegs->wh2 << 16) |
+	       ((Uint64)pRegs->wh3 << 24) |
+	       ((Uint64)pRegs->w12sel << 32) |
+	       ((Uint64)pRegs->w34sel << 40) |
+	       ((Uint64)pRegs->wobjsel << 48) |
+	       ((Uint64)pRegs->wbglog << 56);
+}
+#endif
+
 // BG Fetch
 
 /* Move one tile row down in the abstract ss-yyyyy-xxxxx tilemap address.
@@ -1088,11 +1121,44 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 	}
 }
 
-void SnesPPURender::DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow)
+void SnesPPURender::DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow, Int32 iLine)
 {
     const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
 
 	PROF_ENTER("DecodeWindows");
+
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_WINDOW_MASK_CACHE
+	if (iLine >= 0 && iLine < SNPPU_MAXLINE)
+	{
+		SnesPPUWindowMaskCacheEntryT *pCache =
+			&_SnesPPU_WindowMaskCache[iLine];
+		const Uint64 uKey0 = _SnesPPUWindowKey0(pRegs);
+		const Uint32 uKey1 = (Uint32)pRegs->wobjlog;
+
+		if (pCache->uReady && pCache->uKey0 == uKey0 &&
+		    pCache->uKey1 == uKey1)
+		{
+			/* WindowMask[] is only scratch input to _SetBGMask(); all later
+			   rendering consumes BGWindow[], so a hit needs to restore only
+			   the six resolved masks (192 bytes). */
+			memcpy(pBGWindow, pCache->BGWindow, sizeof(pCache->BGWindow));
+#if SNDBG_LOG
+			g_DbgWindowMaskCacheHits++;
+#endif
+			PROF_LEAVE("DecodeWindows");
+			return;
+		}
+#if SNDBG_LOG
+		g_DbgWindowMaskCacheMisses++;
+#endif
+	}
+#if SNDBG_LOG
+	else
+	{
+		g_DbgWindowMaskCacheBypasses++;
+	}
+#endif
+#endif
 
 	// create windows & inverted windows
 	// confirmed:
@@ -1112,6 +1178,18 @@ void SnesPPURender::DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow)
 	_SetBGMask(&pBGWindow[SNPPU_BGWINDOW_BG4],   pWindow, (pRegs->w34sel >> 4) & 0xF, (pRegs->wbglog >> 6) & 3);
 	_SetBGMask(&pBGWindow[SNPPU_BGWINDOW_OBJ],   pWindow, (pRegs->wobjsel>> 0) & 0xF, (pRegs->wobjlog>> 0) & 3);
 	_SetBGMask(&pBGWindow[SNPPU_BGWINDOW_COLOR], pWindow, (pRegs->wobjsel>> 4) & 0xF, (pRegs->wobjlog>> 2) & 3);
+
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_WINDOW_MASK_CACHE
+	if (iLine >= 0 && iLine < SNPPU_MAXLINE)
+	{
+		SnesPPUWindowMaskCacheEntryT *pCache =
+			&_SnesPPU_WindowMaskCache[iLine];
+		pCache->uKey0 = _SnesPPUWindowKey0(pRegs);
+		pCache->uKey1 = (Uint32)pRegs->wobjlog;
+		memcpy(pCache->BGWindow, pBGWindow, sizeof(pCache->BGWindow));
+		pCache->uReady = TRUE;
+	}
+#endif
 
 	PROF_LEAVE("DecodeWindows");
 }

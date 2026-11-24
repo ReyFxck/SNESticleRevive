@@ -189,6 +189,12 @@ Uint32 g_DbgPPUMosaicLines = 0;
 Uint32 g_DbgPPUOffsetLines = 0;
 Uint32 g_DbgPPUWindowLines = 0;
 Uint32 g_DbgPPUColorMathLines = 0;
+Uint32 g_DbgWindowMaskCacheHits = 0;
+Uint32 g_DbgWindowMaskCacheMisses = 0;
+Uint32 g_DbgWindowMaskCacheBypasses = 0;
+Uint32 g_DbgColorAttrCacheHits = 0;
+Uint32 g_DbgColorAttrCacheMisses = 0;
+Uint32 g_DbgColorAttrCacheBypasses = 0;
 Uint32 g_DbgPPUDirectColorLines = 0;
 Uint32 g_DbgPPUInterlaceLines = 0;
 Uint32 g_DbgPPUObjInterlaceLines = 0;
@@ -359,6 +365,12 @@ static void SnesDbgResetWindow(void)
 	g_DbgPPUOffsetLines = 0;
 	g_DbgPPUWindowLines = 0;
 	g_DbgPPUColorMathLines = 0;
+	g_DbgWindowMaskCacheHits = 0;
+	g_DbgWindowMaskCacheMisses = 0;
+	g_DbgWindowMaskCacheBypasses = 0;
+	g_DbgColorAttrCacheHits = 0;
+	g_DbgColorAttrCacheMisses = 0;
+	g_DbgColorAttrCacheBypasses = 0;
 	g_DbgPPUDirectColorLines = 0;
 	g_DbgPPUInterlaceLines = 0;
 	g_DbgPPUObjInterlaceLines = 0;
@@ -2677,6 +2689,15 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgPPUOverscanLines,
 				(unsigned)g_DbgPPUHiresLines,
 				(unsigned)g_DbgPPUExtBGLines);
+			DLog("[snes-window-cache] enabled=%u hit/miss/bypass=%u/%u/%u color-attr enabled=%u hit/miss/bypass=%u/%u/%u",
+				(unsigned)SNPPU_WINDOW_MASK_CACHE,
+				(unsigned)g_DbgWindowMaskCacheHits,
+				(unsigned)g_DbgWindowMaskCacheMisses,
+				(unsigned)g_DbgWindowMaskCacheBypasses,
+				(unsigned)SNPPU_COLORMATH_ATTR_CACHE,
+				(unsigned)g_DbgColorAttrCacheHits,
+				(unsigned)g_DbgColorAttrCacheMisses,
+				(unsigned)g_DbgColorAttrCacheBypasses);
 			DLog("[snes-bg-rows] total/blank/repeat=%u/%u/%u",
 				(unsigned)g_DbgBGChrRows,
 				(unsigned)g_DbgBGChrBlankRows,

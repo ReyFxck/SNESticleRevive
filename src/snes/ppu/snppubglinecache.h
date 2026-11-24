@@ -40,6 +40,12 @@ struct SnesPPUBGLineCacheKeyT
 	Uint8  uBitDepth;
 	Uint8  uPalBase;
 	Uint8  uPriority;
+	/* Mosaic is part of the rendered line, unlike ordinary fine-X.  Cache
+	   mosaic rows only for the exact amount and horizontal phase that
+	   produced them. Non-mosaic rows keep fine-X excluded so the existing
+	   cheap mask-shift reuse remains unchanged. */
+	Uint8  uMosaic;
+	Uint8  uMosaicFineX;
 };
 
 /* Fine X changes which 256-pixel window is selected from the decoded
@@ -84,6 +90,9 @@ _INLINE void SnesPPUBGLineCacheSetKey(SnesPPUBGLineCacheKeyT *pKey,
 	pKey->uBitDepth = pInfo->uBitDepth;
 	pKey->uPalBase = pInfo->uPalBase;
 	pKey->uPriority = pInfo->Priority;
+	pKey->uMosaic = pInfo->uMosaic;
+	pKey->uMosaicFineX = pInfo->uMosaic ?
+		(Uint8)((uVramState >> 16) & 7u) : 0u;
 }
 
 _INLINE Bool SnesPPUBGLineCacheKeyMatches(
@@ -101,7 +110,10 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 	       pKey->uChrSize == pInfo->uChrSize &&
 	       pKey->uBitDepth == pInfo->uBitDepth &&
 	       pKey->uPalBase == pInfo->uPalBase &&
-	       pKey->uPriority == pInfo->Priority;
+	       pKey->uPriority == pInfo->Priority &&
+	       pKey->uMosaic == pInfo->uMosaic &&
+	       pKey->uMosaicFineX == (pInfo->uMosaic ?
+			(Uint8)((uVramState >> 16) & 7u) : 0u);
 }
 
 /* Reuse an overlapping 33-cell window only when every other fetch input is
@@ -111,6 +123,14 @@ _INLINE Int32 SnesPPUBGLineCacheScrollStep(
 	const SnesPPUBGLineCacheKeyT *pKey, Uint32 uGeneration,
 	Uint32 uVramState, Uint32 uBG, Uint32 uMode, const SnesBGInfoT *pInfo)
 {
+	/* Cached mosaic pixels are screen-phase dependent.  Exact-key hits are
+	   safe (and catch the vertically repeated mosaic lines), but moving an
+	   already-mosaicked 8-pixel cell window can change the phase whenever
+	   the mosaic period does not divide that move. Decode the exposed row
+	   normally instead of attempting overlap reuse. */
+	if (pInfo->uMosaic)
+		return 0;
+
 	const Bool bHalfX = uMode == 1u && pInfo->uChrSize;
 	const Uint32 uXMask = 0x041Fu | (bHalfX ? 0x1000u : 0u);
 	Uint32 uSameXState = (uVramState & ~uXMask) | (pKey->uVramState & uXMask);

@@ -555,7 +555,7 @@ static Bool bPrint = TRUE;
 
 	    if (m_UpdateFlags & SNESPPURENDER_UPDATE_WINDOW)
         {
-		DecodeWindows(pRenderInfo->WindowMask, pRenderInfo->BGWindow);
+		DecodeWindows(pRenderInfo->WindowMask, pRenderInfo->BGWindow, iLine);
 		m_UpdateFlags &= ~SNESPPURENDER_UPDATE_WINDOW;
         }
 
