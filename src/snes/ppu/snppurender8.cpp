@@ -52,6 +52,9 @@
 #ifndef SNPPU_BG_CACHE_MOSAIC
 #define SNPPU_BG_CACHE_MOSAIC (TRUE)
 #endif
+#ifndef SNPPU_OBJ_SKIP_EMPTY
+#define SNPPU_OBJ_SKIP_EMPTY (TRUE)
+#endif
 
 static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque);
 
@@ -1848,9 +1851,10 @@ static Bool _SnesPPUOBJOverlapsWindow(Int32 x, Int32 width, const SNMaskT *pWind
 	return FALSE;
 }
 
-static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList, SnesRenderObj8T *pObjLine, Int32 MaxObj8Line, Int32 iLine, Uint32 uBaseAddr, Uint32 uNameSelect, Uint16 *pVram, Bool bObjInterlace, Bool bOddField, const SNMaskT *pObjWindow)
+static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList, SnesRenderObj8T *pObjLine, Int32 MaxObj8Line, Int32 iLine, Uint32 uBaseAddr, Uint32 uNameSelect, Uint16 *pVram, Bool bObjInterlace, Bool bOddField, const SNMaskT *pObjWindow, Int32 *pFetchedTiles)
 {
 	Int32 nObjLine = 0;
+	Int32 nFetchedTiles = 0;
 #if SNDBG_LOG && SNPPU_OBJ_CACHE
 	Uint32 uCacheHits = 0;
 	Uint32 uCacheMisses = 0;
@@ -2042,21 +2046,32 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 					uPlane2, uPlane3, &uTile0, &uTile1, &uOpaque);
 			}
 #endif
-			uTile0 |= uPalette;
-			uTile1 |= uPalette;
+			/* Transparent OBJ tiles still consume one of the hardware's 34
+			   fetch slots, but they can never affect priority, windows or the
+			   output pixels. Keep a separate hardware fetch count and compact
+			   only visible tiles into ObjLine so the later compositor does not
+			   walk/write entries that are guaranteed to be no-ops. */
+			nFetchedTiles++;
+#if SNPPU_OBJ_SKIP_EMPTY
+			if (uOpaque)
+#endif
+			{
+				uTile0 |= uPalette;
+				uTile1 |= uPalette;
 
-			// store tile data
-			((Uint32 *)pObjLine->uData)[0] = uTile0;
-			((Uint32 *)pObjLine->uData)[1] = uTile1;
-			pObjLine->uData[SNPPU_BGPLANE_OPAQUE] = (Uint8)uOpaque;
+				// store tile data
+				((Uint32 *)pObjLine->uData)[0] = uTile0;
+				((Uint32 *)pObjLine->uData)[1] = uTile1;
+				pObjLine->uData[SNPPU_BGPLANE_OPAQUE] = (Uint8)uOpaque;
 
-			// store objline
-			pObjLine->uPri  = pObj->uPri;
-			pObjLine->uPal  = pObj->uPal;
-			pObjLine->iPosX = ObjX;
-			pObjLine++;
-			nObjLine++;
-			if (nObjLine >= MaxObj8Line) goto FetchOBJDone;
+				// store objline
+				pObjLine->uPri  = pObj->uPri;
+				pObjLine->uPal  = pObj->uPal;
+				pObjLine->iPosX = ObjX;
+				pObjLine++;
+				nObjLine++;
+			}
+			if (nFetchedTiles >= MaxObj8Line) goto FetchOBJDone;
 
 			/* OBJ fetch always advances left-to-right. H-flip mirrors the
 			   source column, not the fetch position; this matters when the
@@ -2073,6 +2088,8 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 	}
 
 FetchOBJDone:
+	if (pFetchedTiles)
+		*pFetchedTiles = nFetchedTiles;
 #if SNDBG_LOG && SNPPU_OBJ_CACHE
 	g_DbgObjCacheHits += uCacheHits;
 	g_DbgObjCacheMisses += uCacheMisses;
@@ -2096,6 +2113,7 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	SnesBGInfoT	BGInfo[4];
 	SnesRenderObj8T ObjLine[SNPPU_MAXOBJCHR];
 	Int32 nObjLine;
+	Int32 nObjFetchedTiles = 0;
 	const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
 	const Uint8 uBGMode = pRegs->bgmode & 7;
 	const Bool bOddField = m_pPPU->GetField();
@@ -2196,7 +2214,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			ObjLine, SNPPU_MAXOBJCHR, iLine, (pRegs->obsel & 7) << 13,
 			_SnesPPUOBJNameSelect(pRegs->obsel), m_pPPU->GetVramPtr(0),
 			m_pPPU->IsObjInterlace(), bOddField,
-			(tmw & SNESPPU_MASK_OBJ) ? &pBGWindow[4] : NULL);
+			(tmw & SNESPPU_MASK_OBJ) ? &pBGWindow[4] : NULL,
+			&nObjFetchedTiles);
 		SNTARGET_END(OBJ, _targetOBJFetch);
 	}
 	else
@@ -2218,13 +2237,13 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 
 		if (_objEnabled) g_DbgObjEnabledLines++;
 		g_DbgObjOamRefs += m_nObjLine[iLine];
-		g_DbgObjTiles += nObjLine;
+		g_DbgObjTiles += nObjFetchedTiles;
 		#if SNDBG_DEEP
 		g_DbgObjOpaqueTiles += _opaque;
-		if (_objEnabled && nObjLine > 0 && _opaque == 0) g_DbgObjEmptyLines++;
+		if (_objEnabled && nObjFetchedTiles > 0 && _opaque == 0) g_DbgObjEmptyLines++;
 		#endif
 		if (m_nObjLine[iLine] >= SNPPU_MAXOBJ) g_DbgObjRangeLimitLines++;
-		if (nObjLine >= SNPPU_MAXOBJCHR) g_DbgObjLimitLines++;
+		if (nObjFetchedTiles >= SNPPU_MAXOBJCHR) g_DbgObjLimitLines++;
 		g_DbgObjOBSEL = pRegs->obsel;
 		g_DbgObjTM = pRegs->tm;
 		g_DbgObjTS = pRegs->ts;
