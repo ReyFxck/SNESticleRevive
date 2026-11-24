@@ -175,6 +175,10 @@ Uint32 g_DbgBGLineCacheHits = 0;
 Uint32 g_DbgBGLineCacheMisses = 0;
 Uint32 g_DbgBGLineCacheScrolls = 0;
 Uint32 g_DbgBGLineCacheBypasses = 0;
+Uint32 g_DbgBGLineMaskFastBlank = 0;
+Uint32 g_DbgBGLineMaskFastPriZero = 0;
+Uint32 g_DbgBGLineMaskFastPriSame = 0;
+Uint32 g_DbgBGLineMaskFastMixed = 0;
 Uint32 g_DbgHiresLineCacheHits = 0;
 Uint32 g_DbgHiresLineCacheMisses = 0;
 Uint32 g_DbgHiresLineCacheBypasses = 0;
@@ -352,6 +356,10 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGLineCacheMisses = 0;
 	g_DbgBGLineCacheScrolls = 0;
 	g_DbgBGLineCacheBypasses = 0;
+	g_DbgBGLineMaskFastBlank = 0;
+	g_DbgBGLineMaskFastPriZero = 0;
+	g_DbgBGLineMaskFastPriSame = 0;
+	g_DbgBGLineMaskFastMixed = 0;
 	g_DbgHiresLineCacheHits = 0;
 	g_DbgHiresLineCacheMisses = 0;
 	g_DbgHiresLineCacheBypasses = 0;
@@ -2717,6 +2725,12 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGLineCacheMisses,
 				(unsigned)g_DbgBGLineCacheBypasses,
 				(unsigned)g_DbgBGLineCacheScrolls);
+			DLog("[snes-bg-line-maskfast] enabled=%u blank/pri0/prisame/mixed=%u/%u/%u/%u",
+				(unsigned)SNPPU_BG_CACHE_MASKCLASS,
+				(unsigned)g_DbgBGLineMaskFastBlank,
+				(unsigned)g_DbgBGLineMaskFastPriZero,
+				(unsigned)g_DbgBGLineMaskFastPriSame,
+				(unsigned)g_DbgBGLineMaskFastMixed);
 			DLog("[snes-hires-line-cache] hit/miss/bypass=%u/%u/%u",
 				(unsigned)g_DbgHiresLineCacheHits,
 				(unsigned)g_DbgHiresLineCacheMisses,

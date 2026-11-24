@@ -40,6 +40,9 @@
 #ifndef SNPPU_BG_CACHE_MODE5
 #define SNPPU_BG_CACHE_MODE5 1
 #endif
+#ifndef SNPPU_BG_CACHE_MASKCLASS
+#define SNPPU_BG_CACHE_MASKCLASS 1
+#endif
 #ifndef SNPPU_WINDOW_MASK_CACHE
 #define SNPPU_WINDOW_MASK_CACHE 1
 #endif
@@ -212,6 +215,10 @@ extern Uint32 g_DbgBGLineCacheHits;
 extern Uint32 g_DbgBGLineCacheMisses;
 extern Uint32 g_DbgBGLineCacheScrolls;
 extern Uint32 g_DbgBGLineCacheBypasses;
+extern Uint32 g_DbgBGLineMaskFastBlank;
+extern Uint32 g_DbgBGLineMaskFastPriZero;
+extern Uint32 g_DbgBGLineMaskFastPriSame;
+extern Uint32 g_DbgBGLineMaskFastMixed;
 extern Uint32 g_DbgHiresLineCacheHits;
 extern Uint32 g_DbgHiresLineCacheMisses;
 extern Uint32 g_DbgHiresLineCacheBypasses;

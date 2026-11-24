@@ -52,6 +52,9 @@
 #ifndef SNPPU_BG_CACHE_MOSAIC
 #define SNPPU_BG_CACHE_MOSAIC (TRUE)
 #endif
+#ifndef SNPPU_BG_CACHE_MASKCLASS
+#define SNPPU_BG_CACHE_MASKCLASS (TRUE)
+#endif
 #ifndef SNPPU_OBJ_SKIP_EMPTY
 #define SNPPU_OBJ_SKIP_EMPTY (TRUE)
 #endif
@@ -71,7 +74,10 @@ struct SnesPPUBGLineCacheEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
 	Uint32 uReady;
-	Uint8 uKeyPad[32];
+	/* Reuse bytes that were alignment padding: no cache-size increase. */
+	Uint8 uMainMaskClass;
+	Uint8 uSubMaskClass;
+	Uint8 uKeyPad[30];
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uSub[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
@@ -91,7 +97,8 @@ struct SnesPPUBGLineCacheNormalEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
 	Uint32 uReady;
-	Uint8 uKeyPad[32];
+	Uint8 uMainMaskClass;
+	Uint8 uKeyPad[31];
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
 	Uint8 uMainPriority[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
@@ -119,6 +126,34 @@ static SnesPPUVramStampT _SnesPPU_BGLineVram;
    decoded row used to pay a function call even though this exact 5-qword
    operation is one of the hottest paths in Mode 1.  Keep the semantics
    byte-for-byte identical while allowing the EE compiler to inline it. */
+enum
+{
+    SNPPU_BG_MASKCLASS_OPAQUE_ANY = 1u,
+    SNPPU_BG_MASKCLASS_PRIORITY_ANY = 2u,
+    SNPPU_BG_MASKCLASS_PRIORITY_SAME = 4u
+};
+
+/* Classify the stored 40-byte masks once on a cache miss. Most Mode 1 hits
+   are either fully transparent or use one priority class for the whole row.
+   Those cases can avoid a 264-byte pixel copy and/or the second fine-X mask
+   shift on every later hit. The final seven bytes are zero-padded by store. */
+static inline __attribute__((always_inline)) Uint8 _SnesPPUClassifyBGLineMasks(
+    const Uint8 *pOpaque, const Uint8 *pPriority)
+{
+    const Uint64 *pO = (const Uint64 *)pOpaque;
+    const Uint64 *pP = (const Uint64 *)pPriority;
+    Uint64 uOpaque = pO[0] | pO[1] | pO[2] | pO[3] | pO[4];
+    Uint64 uPriority = pP[0] | pP[1] | pP[2] | pP[3] | pP[4];
+    Uint64 uDiff = (pO[0] ^ pP[0]) | (pO[1] ^ pP[1]) |
+                   (pO[2] ^ pP[2]) | (pO[3] ^ pP[3]) |
+                   (pO[4] ^ pP[4]);
+    Uint8 uClass = 0;
+    if (uOpaque) uClass |= SNPPU_BG_MASKCLASS_OPAQUE_ANY;
+    if (uPriority) uClass |= SNPPU_BG_MASKCLASS_PRIORITY_ANY;
+    if (uOpaque && !uDiff) uClass |= SNPPU_BG_MASKCLASS_PRIORITY_SAME;
+    return uClass;
+}
+
 static inline __attribute__((always_inline)) void _SnesPPUMaskSHL(SNMaskT *pDestMask,
     const Uint8 *pSrcMask, Uint32 nBits)
 {
@@ -145,29 +180,85 @@ static inline __attribute__((always_inline)) void _SnesPPUMaskSHL(SNMaskT *pDest
     pDestMask->uMask64[3] = (uSrc3 >> nBits) | (uSrc4 << nInvBits);
 }
 
+static inline __attribute__((always_inline)) void _SnesPPURestoreCachedMasks(
+    SNMaskT *pOpaqueDest, SNMaskT *pPriorityDest,
+    const Uint8 *pOpaqueSrc, const Uint8 *pPrioritySrc,
+    Uint32 uFineX, Uint8 uMaskClass)
+{
+#if SNPPU_BG_CACHE_MASKCLASS
+    if (!(uMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ANY))
+    {
+#if SNDBG_LOG
+        g_DbgBGLineMaskFastBlank++;
+#endif
+        SNMaskClear(pOpaqueDest);
+        SNMaskClear(pPriorityDest);
+        return;
+    }
+#endif
+
+    _SnesPPUMaskSHL(pOpaqueDest, pOpaqueSrc, uFineX);
+
+#if SNPPU_BG_CACHE_MASKCLASS
+    if (!(uMaskClass & SNPPU_BG_MASKCLASS_PRIORITY_ANY))
+    {
+#if SNDBG_LOG
+        g_DbgBGLineMaskFastPriZero++;
+#endif
+        SNMaskClear(pPriorityDest);
+        return;
+    }
+    if (uMaskClass & SNPPU_BG_MASKCLASS_PRIORITY_SAME)
+    {
+#if SNDBG_LOG
+        g_DbgBGLineMaskFastPriSame++;
+#endif
+        SNMaskCopy(pPriorityDest, pOpaqueDest);
+        return;
+    }
+#if SNDBG_LOG
+    g_DbgBGLineMaskFastMixed++;
+#endif
+#endif
+
+    _SnesPPUMaskSHL(pPriorityDest, pPrioritySrc, uFineX);
+}
+
 static _INLINE Bool _SnesPPURestoreBGLine(
 	SnesPPUBGLineCacheEntryT *pEntry, SnesRender8pInfoT *pRenderInfo,
 	Uint32 iBG, Bool bHiresPair, Uint32 uFineX, Bool bCopyPixels)
 {
 	Uint32 iSubPlane = iBG + 2u;
 
-	/* Fine-X-only reloads leave the same CHR bytes resident in BGPlanes. */
+	/* Fine-X-only reloads leave the same CHR bytes resident in BGPlanes.
+	   A fully transparent cached row never consumes its pixel bytes later, so
+	   skip that 264-byte copy as well as both shifts. */
+#if SNPPU_BG_CACHE_MASKCLASS
+	if (bCopyPixels && (pEntry->uMainMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ANY))
+#else
 	if (bCopyPixels)
+#endif
 		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
 			SNPPU_BG_LINE_PIXELS);
-	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
-		pEntry->uMainOpaque, uFineX);
-	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
-		pEntry->uMainPriority, uFineX);
+	_SnesPPURestoreCachedMasks(
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+		pEntry->uMainOpaque, pEntry->uMainPriority, uFineX,
+		pEntry->uMainMaskClass);
 	if (bHiresPair)
 	{
+#if SNPPU_BG_CACHE_MASKCLASS
+		if (bCopyPixels && (pEntry->uSubMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ANY))
+#else
 		if (bCopyPixels)
+#endif
 			memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
 				SNPPU_BG_LINE_PIXELS);
-		_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
-			pEntry->uSubOpaque, uFineX);
-		_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
-			pEntry->uSubPriority, uFineX);
+		_SnesPPURestoreCachedMasks(
+			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
+			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
+			pEntry->uSubOpaque, pEntry->uSubPriority, uFineX,
+			pEntry->uSubMaskClass);
 	}
 	return TRUE;
 }
@@ -188,6 +279,15 @@ static _INLINE void _SnesPPUStoreBGLine(
 	memcpy(pEntry->uMainPriority, pMainPriority, 33u);
 	memset(pEntry->uMainPriority + 33u, 0,
 		SNPPU_BG_LINE_MASK_BYTES - 33u);
+#if SNPPU_BG_CACHE_MASKCLASS
+	pEntry->uMainMaskClass = _SnesPPUClassifyBGLineMasks(
+		pEntry->uMainOpaque, pEntry->uMainPriority);
+	pEntry->uSubMaskClass = 0;
+#else
+	pEntry->uMainMaskClass = SNPPU_BG_MASKCLASS_OPAQUE_ANY |
+		SNPPU_BG_MASKCLASS_PRIORITY_ANY;
+	pEntry->uSubMaskClass = 0;
+#endif
 	if (bHiresPair)
 	{
 		memcpy(pEntry->uSub, (Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
@@ -198,6 +298,13 @@ static _INLINE void _SnesPPUStoreBGLine(
 		memcpy(pEntry->uSubPriority, pSubPriority, 33u);
 		memset(pEntry->uSubPriority + 33u, 0,
 			SNPPU_BG_LINE_MASK_BYTES - 33u);
+#if SNPPU_BG_CACHE_MASKCLASS
+		pEntry->uSubMaskClass = _SnesPPUClassifyBGLineMasks(
+			pEntry->uSubOpaque, pEntry->uSubPriority);
+#else
+		pEntry->uSubMaskClass = SNPPU_BG_MASKCLASS_OPAQUE_ANY |
+			SNPPU_BG_MASKCLASS_PRIORITY_ANY;
+#endif
 	}
 
 	pEntry->uReady = TRUE;
@@ -208,13 +315,18 @@ static _INLINE void _SnesPPURestoreBGLineNormal(
 	SnesPPUBGLineCacheNormalEntryT *pEntry,
 	SnesRender8pInfoT *pRenderInfo, Uint32 iBG, Uint32 uFineX, Bool bCopyPixels)
 {
+#if SNPPU_BG_CACHE_MASKCLASS
+	if (bCopyPixels && (pEntry->uMainMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ANY))
+#else
 	if (bCopyPixels)
+#endif
 		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
 			SNPPU_BG_LINE_PIXELS);
-	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
-		pEntry->uMainOpaque, uFineX);
-	_SnesPPUMaskSHL(&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
-		pEntry->uMainPriority, uFineX);
+	_SnesPPURestoreCachedMasks(
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
+		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
+		pEntry->uMainOpaque, pEntry->uMainPriority, uFineX,
+		pEntry->uMainMaskClass);
 }
 
 static _INLINE void _SnesPPUStoreBGLineNormal(
@@ -230,6 +342,13 @@ static _INLINE void _SnesPPUStoreBGLineNormal(
 	memcpy(pEntry->uMainPriority, pMainPriority, 33u);
 	memset(pEntry->uMainPriority + 33u, 0,
 		SNPPU_BG_LINE_MASK_BYTES - 33u);
+#if SNPPU_BG_CACHE_MASKCLASS
+	pEntry->uMainMaskClass = _SnesPPUClassifyBGLineMasks(
+		pEntry->uMainOpaque, pEntry->uMainPriority);
+#else
+	pEntry->uMainMaskClass = SNPPU_BG_MASKCLASS_OPAQUE_ANY |
+		SNPPU_BG_MASKCLASS_PRIORITY_ANY;
+#endif
 	pEntry->uReady = TRUE;
 }
 #endif
