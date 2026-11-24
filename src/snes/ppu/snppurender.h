@@ -208,6 +208,7 @@ struct SnesRender8pInfoT
 	SNMaskT Sub[SNPPU_BGPLANE_NUM] _ALIGN(16);
 
 	SNMaskT BGPlanes[4][SNPPU_BGPLANE_NUM]; // this is the fetched raw BG data from each bglayer
+	Uint8 BGMaskClass[4]; // exact class of the resident BGPlanes mask, 0 = unknown
 
 //    Uint8   CacheLines[8][SNPPU_BGPLANE_SIZE] _ALIGN(16);
 	SnesRenderTileT Tiles[4][34];

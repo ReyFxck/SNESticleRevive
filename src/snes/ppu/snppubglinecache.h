@@ -26,7 +26,18 @@
 #ifndef SNPPU_BG_LINE_CACHE_WAYS
 #define SNPPU_BG_LINE_CACHE_WAYS 2u
 #endif
+#ifndef SNPPU_BG_CACHE_PACKED_KEY
+#define SNPPU_BG_CACHE_PACKED_KEY 1
+#endif
 
+#if SNPPU_BG_CACHE_PACKED_KEY
+struct SnesPPUBGLineCacheKeyT
+{
+	Uint64 uGenerationState;
+	Uint64 uAddrPair;
+	Uint64 uMeta;
+};
+#else
 struct SnesPPUBGLineCacheKeyT
 {
 	Uint32 uGeneration;
@@ -47,6 +58,33 @@ struct SnesPPUBGLineCacheKeyT
 	Uint8  uMosaic;
 	Uint8  uMosaicFineX;
 };
+#endif
+
+#if SNPPU_BG_CACHE_PACKED_KEY
+_INLINE Uint32 SnesPPUBGLineCachePackMeta(Uint32 uBG, Uint32 uMode,
+	const SnesBGInfoT *pInfo, Uint32 uVramState)
+{
+	return ((uBG & 3u) << 0) |
+	       ((uMode & 7u) << 2) |
+	       (((Uint32)pInfo->uScrSize & 3u) << 5) |
+	       (((Uint32)pInfo->uChrSize & 1u) << 7) |
+	       (((Uint32)pInfo->uBitDepth & 15u) << 8) |
+	       (((Uint32)pInfo->uPalBase) << 12) |
+	       (((Uint32)pInfo->Priority & 7u) << 20) |
+	       (((Uint32)pInfo->uMosaic & 15u) << 23) |
+	       ((pInfo->uMosaic ? ((uVramState >> 16) & 7u) : 0u) << 27);
+}
+
+_INLINE Uint32 SnesPPUBGLineCacheKeyState(const SnesPPUBGLineCacheKeyT *pKey)
+{
+	return (Uint32)(pKey->uGenerationState >> 32);
+}
+#else
+_INLINE Uint32 SnesPPUBGLineCacheKeyState(const SnesPPUBGLineCacheKeyT *pKey)
+{
+	return pKey->uVramState;
+}
+#endif
 
 /* Fine X changes which 256-pixel window is selected from the decoded
    33-tile row, but not the row itself. Keep every other FetchBG state bit:
@@ -79,6 +117,12 @@ _INLINE void SnesPPUBGLineCacheSetKey(SnesPPUBGLineCacheKeyT *pKey,
 	Uint32 uGeneration, Uint32 uVramState, Uint32 uBG,
 	Uint32 uMode, const SnesBGInfoT *pInfo)
 {
+#if SNPPU_BG_CACHE_PACKED_KEY
+	const Uint32 uState = SnesPPUBGLineCacheState(uVramState);
+	pKey->uGenerationState = (Uint64)uGeneration | ((Uint64)uState << 32);
+	pKey->uAddrPair = (Uint64)pInfo->uScrAddr | ((Uint64)pInfo->uChrAddr << 32);
+	pKey->uMeta = (Uint64)SnesPPUBGLineCachePackMeta(uBG, uMode, pInfo, uVramState);
+#else
 	pKey->uGeneration = uGeneration;
 	pKey->uVramState = SnesPPUBGLineCacheState(uVramState);
 	pKey->uScrAddr = pInfo->uScrAddr;
@@ -93,6 +137,7 @@ _INLINE void SnesPPUBGLineCacheSetKey(SnesPPUBGLineCacheKeyT *pKey,
 	pKey->uMosaic = pInfo->uMosaic;
 	pKey->uMosaicFineX = pInfo->uMosaic ?
 		(Uint8)((uVramState >> 16) & 7u) : 0u;
+#endif
 }
 
 _INLINE Bool SnesPPUBGLineCacheKeyMatches(
@@ -100,6 +145,18 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 	Uint32 uGeneration, Uint32 uVramState, Uint32 uBG,
 	Uint32 uMode, const SnesBGInfoT *pInfo)
 {
+#if SNPPU_BG_CACHE_PACKED_KEY
+	const Uint32 uState = SnesPPUBGLineCacheState(uVramState);
+	const Uint64 uGenerationState =
+		(Uint64)uGeneration | ((Uint64)uState << 32);
+	const Uint64 uAddrPair =
+		(Uint64)pInfo->uScrAddr | ((Uint64)pInfo->uChrAddr << 32);
+	const Uint64 uMeta =
+		(Uint64)SnesPPUBGLineCachePackMeta(uBG, uMode, pInfo, uVramState);
+	return pKey->uGenerationState == uGenerationState &&
+	       pKey->uAddrPair == uAddrPair &&
+	       pKey->uMeta == uMeta;
+#else
 	return pKey->uGeneration == uGeneration &&
 	       pKey->uVramState == SnesPPUBGLineCacheState(uVramState) &&
 	       pKey->uScrAddr == pInfo->uScrAddr &&
@@ -114,6 +171,7 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 	       pKey->uMosaic == pInfo->uMosaic &&
 	       pKey->uMosaicFineX == (pInfo->uMosaic ?
 			(Uint8)((uVramState >> 16) & 7u) : 0u);
+#endif
 }
 
 /* Reuse an overlapping 33-cell window only when every other fetch input is
@@ -133,14 +191,14 @@ _INLINE Int32 SnesPPUBGLineCacheScrollStep(
 
 	const Bool bHalfX = uMode == 1u && pInfo->uChrSize;
 	const Uint32 uXMask = 0x041Fu | (bHalfX ? 0x1000u : 0u);
-	Uint32 uSameXState = (uVramState & ~uXMask) | (pKey->uVramState & uXMask);
+	Uint32 uSameXState = (uVramState & ~uXMask) | (SnesPPUBGLineCacheKeyState(pKey) & uXMask);
 	if (!SnesPPUBGLineCacheKeyMatches(pKey, uGeneration,
 		uSameXState, uBG, uMode, pInfo)) return 0;
-	Uint32 uOldX = (pKey->uVramState & 31u) | ((pKey->uVramState >> 5) & 32u);
+	Uint32 uOldX = (SnesPPUBGLineCacheKeyState(pKey) & 31u) | ((SnesPPUBGLineCacheKeyState(pKey) >> 5) & 32u);
 	Uint32 uNewX = (uVramState & 31u) | ((uVramState >> 5) & 32u);
 	if (bHalfX)
 	{
-		uOldX = (uOldX << 1) | ((pKey->uVramState >> 12) & 1u);
+		uOldX = (uOldX << 1) | ((SnesPPUBGLineCacheKeyState(pKey) >> 12) & 1u);
 		uNewX = (uNewX << 1) | ((uVramState >> 12) & 1u);
 	}
 	Uint32 uMask = bHalfX ? 127u : 63u;

@@ -793,6 +793,9 @@ void SnesPPURender::BeginRender(CRenderSurface *pTarget)
     m_pRenderInfo = &_RenderInfo;
 	#endif
 
+	for (Int32 iBG = 0; iBG < 4; ++iBG)
+		m_pRenderInfo->BGMaskClass[iBG] = 0;
+
 	m_pTarget = pTarget;
 	m_iLastRenderedLine = -1;
 	if (pTarget)

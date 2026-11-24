@@ -43,6 +43,9 @@
 #ifndef SNPPU_BG_CHR_CACHE
 #define SNPPU_BG_CHR_CACHE (TRUE)
 #endif
+#ifndef SNPPU_BG_CHR_REPEAT_FINAL
+#define SNPPU_BG_CHR_REPEAT_FINAL (TRUE)
+#endif
 #ifndef SNPPU_BG_CACHE_MODE1
 #define SNPPU_BG_CACHE_MODE1 (TRUE)
 #endif
@@ -54,6 +57,9 @@
 #endif
 #ifndef SNPPU_BG_CACHE_MASKCLASS
 #define SNPPU_BG_CACHE_MASKCLASS (TRUE)
+#endif
+#ifndef SNPPU_BG_COMPOSE_MASKCLASS
+#define SNPPU_BG_COMPOSE_MASKCLASS (TRUE)
 #endif
 #ifndef SNPPU_OBJ_SKIP_EMPTY
 #define SNPPU_OBJ_SKIP_EMPTY (TRUE)
@@ -77,7 +83,11 @@ struct SnesPPUBGLineCacheEntryT
 	/* Reuse bytes that were alignment padding: no cache-size increase. */
 	Uint8 uMainMaskClass;
 	Uint8 uSubMaskClass;
+	#if SNPPU_BG_CACHE_PACKED_KEY
+	Uint8 uKeyPad[34];
+#else
 	Uint8 uKeyPad[30];
+#endif
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uSub[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
@@ -98,7 +108,11 @@ struct SnesPPUBGLineCacheNormalEntryT
 	SnesPPUBGLineCacheKeyT Key;
 	Uint32 uReady;
 	Uint8 uMainMaskClass;
+	#if SNPPU_BG_CACHE_PACKED_KEY
+	Uint8 uKeyPad[35];
+#else
 	Uint8 uKeyPad[31];
+#endif
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
 	Uint8 uMainPriority[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
@@ -130,7 +144,8 @@ enum
 {
     SNPPU_BG_MASKCLASS_OPAQUE_ANY = 1u,
     SNPPU_BG_MASKCLASS_PRIORITY_ANY = 2u,
-    SNPPU_BG_MASKCLASS_PRIORITY_SAME = 4u
+    SNPPU_BG_MASKCLASS_PRIORITY_SAME = 4u,
+    SNPPU_BG_MASKCLASS_VALID = 8u
 };
 
 /* Classify the stored 40-byte masks once on a cache miss. Most Mode 1 hits
@@ -147,7 +162,7 @@ static inline __attribute__((always_inline)) Uint8 _SnesPPUClassifyBGLineMasks(
     Uint64 uDiff = (pO[0] ^ pP[0]) | (pO[1] ^ pP[1]) |
                    (pO[2] ^ pP[2]) | (pO[3] ^ pP[3]) |
                    (pO[4] ^ pP[4]);
-    Uint8 uClass = 0;
+    Uint8 uClass = SNPPU_BG_MASKCLASS_VALID;
     if (uOpaque) uClass |= SNPPU_BG_MASKCLASS_OPAQUE_ANY;
     if (uPriority) uClass |= SNPPU_BG_MASKCLASS_PRIORITY_ANY;
     if (uOpaque && !uDiff) uClass |= SNPPU_BG_MASKCLASS_PRIORITY_SAME;
@@ -245,6 +260,7 @@ static _INLINE Bool _SnesPPURestoreBGLine(
 		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 		pEntry->uMainOpaque, pEntry->uMainPriority, uFineX,
 		pEntry->uMainMaskClass);
+	pRenderInfo->BGMaskClass[iBG] = pEntry->uMainMaskClass;
 	if (bHiresPair)
 	{
 #if SNPPU_BG_CACHE_MASKCLASS
@@ -259,6 +275,7 @@ static _INLINE Bool _SnesPPURestoreBGLine(
 			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
 			pEntry->uSubOpaque, pEntry->uSubPriority, uFineX,
 			pEntry->uSubMaskClass);
+		pRenderInfo->BGMaskClass[iSubPlane] = pEntry->uSubMaskClass;
 	}
 	return TRUE;
 }
@@ -307,6 +324,8 @@ static _INLINE void _SnesPPUStoreBGLine(
 #endif
 	}
 
+	pRenderInfo->BGMaskClass[iBG] = pEntry->uMainMaskClass;
+	if (bHiresPair) pRenderInfo->BGMaskClass[iSubPlane] = pEntry->uSubMaskClass;
 	pEntry->uReady = TRUE;
 }
 
@@ -327,6 +346,7 @@ static _INLINE void _SnesPPURestoreBGLineNormal(
 		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
 		pEntry->uMainOpaque, pEntry->uMainPriority, uFineX,
 		pEntry->uMainMaskClass);
+	pRenderInfo->BGMaskClass[iBG] = pEntry->uMainMaskClass;
 }
 
 static _INLINE void _SnesPPUStoreBGLineNormal(
@@ -349,6 +369,7 @@ static _INLINE void _SnesPPUStoreBGLineNormal(
 	pEntry->uMainMaskClass = SNPPU_BG_MASKCLASS_OPAQUE_ANY |
 		SNPPU_BG_MASKCLASS_PRIORITY_ANY;
 #endif
+	pRenderInfo->BGMaskClass[iBG] = pEntry->uMainMaskClass;
 	pEntry->uReady = TRUE;
 }
 #endif
@@ -936,6 +957,11 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
 	Uint64 uPreviousRowData = 0;
 	Uint32 uPreviousRowMask = 0;
+#if SNPPU_BG_CHR_REPEAT_FINAL
+	Uint32 uPreviousPal = 0xFFFFFFFFu;
+	Uint64 uPreviousFinalData = 0;
+	Uint8 uPreviousPriorityMask = 0;
+#endif
 
 	PROF_ENTER("_FetchCHR2_64");
 	while (nTiles > 0)
@@ -967,6 +993,16 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 			#if SNDBG_LOG
 			g_DbgBGChrRepeatRows++;
 			#endif
+#if SNPPU_BG_CHR_REPEAT_FINAL
+			if ((Uint32)pTiles->uPal == uPreviousPal)
+			{
+				pMask[0] = (Uint8)uMask;
+				pMask[SNPPU_BGPLANE_SIZE] = uPreviousPriorityMask;
+				if (uMask) ((Uint64 *)pDest)[0] = uPreviousFinalData;
+				pMask++; pDest += 8; pTiles++; nTiles--;
+				continue;
+			}
+#endif
 		}
 		else
 		{
@@ -996,6 +1032,11 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		{
 			pMask[SNPPU_BGPLANE_SIZE] = 0;
 		}
+#if SNPPU_BG_CHR_REPEAT_FINAL
+		uPreviousPal = (Uint32)pTiles->uPal;
+		uPreviousFinalData = uMask ? ((Uint64 *)pDest)[0] : 0;
+		uPreviousPriorityMask = pMask[SNPPU_BGPLANE_SIZE];
+#endif
 		pMask++;
 
 		pDest+=8;
@@ -1012,6 +1053,11 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
 	Uint64 uPreviousRowData = 0;
 	Uint32 uPreviousRowMask = 0;
+#if SNPPU_BG_CHR_REPEAT_FINAL
+	Uint32 uPreviousPal = 0xFFFFFFFFu;
+	Uint64 uPreviousFinalData = 0;
+	Uint8 uPreviousPriorityMask = 0;
+#endif
 
 	PROF_ENTER("_FetchCHR4_64");
 
@@ -1039,6 +1085,16 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 			#if SNDBG_LOG
 			g_DbgBGChrRepeatRows++;
 			#endif
+#if SNPPU_BG_CHR_REPEAT_FINAL
+			if ((Uint32)pTiles->uPal == uPreviousPal)
+			{
+				pMask[0] = (Uint8)uMask;
+				pMask[SNPPU_BGPLANE_SIZE] = uPreviousPriorityMask;
+				if (uMask) ((Uint64 *)pDest)[0] = uPreviousFinalData;
+				pMask++; pDest += 8; pTiles++; nTiles--;
+				continue;
+			}
+#endif
 		}
 		else
 		{
@@ -1066,6 +1122,11 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		{
 			pMask[SNPPU_BGPLANE_SIZE] = 0;
 		}
+#if SNPPU_BG_CHR_REPEAT_FINAL
+		uPreviousPal = (Uint32)pTiles->uPal;
+		uPreviousFinalData = uMask ? ((Uint64 *)pDest)[0] : 0;
+		uPreviousPriorityMask = pMask[SNPPU_BGPLANE_SIZE];
+#endif
 		pMask++;
 
 		pDest+=8;
@@ -1788,13 +1849,29 @@ static void _RenderBGData_O(Uint8 *pLine8, Uint8 *pSrc8, SNMaskT *pBGMask, Uint3
 
 #endif
 
-static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT *pWindow, Uint32 uBitDepth, SNMaskT *pAddSubMask, Uint8 bAddSubMask, SNMaskT *pBGPri, SNMaskT *pExtraMask, Uint32 uPriority, Bool &bRendered, Uint32 uScrollX)
+static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT *pWindow, Uint32 uBitDepth, SNMaskT *pAddSubMask, Uint8 bAddSubMask, SNMaskT *pBGPri, SNMaskT *pExtraMask, Uint32 uPriority, Bool &bRendered, Uint32 uScrollX, Uint8 uMaskClass)
 {
 	if (uBitDepth!=0)
 	{
 		SNMaskT BGMask;		// bits of BG to render
 		SNMaskT BGPri;      // bits of BG with high priority
+		SNMaskT *pCallerBGPri = pBGPri;
 
+#if SNPPU_BG_COMPOSE_MASKCLASS
+		if ((uMaskClass & SNPPU_BG_MASKCLASS_VALID) &&
+		    !(uMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ANY))
+		{
+			/* Priorities 4/7 intentionally reset the encoded layer state even
+			   when this BG contributes no pixels. Preserve that side effect. */
+			if (uPriority == 4u || uPriority == 7u)
+			{
+				SNMaskClear(&pLine[SNPPU_BGPLANE_LAYER0]);
+				SNMaskClear(&pLine[SNPPU_BGPLANE_LAYER1]);
+			}
+			if (pCallerBGPri) SNMaskClear(pCallerBGPri);
+			return;
+		}
+#endif
 		if (!pBGPri) pBGPri = &BGPri;
 
 		// BGMask = mask & ~window
@@ -1813,10 +1890,33 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 			SNMaskANDN(&BGMask, &BGMask, pExtraMask);
 		}
 
+#if SNPPU_BG_COMPOSE_MASKCLASS
+		if (SNMaskIsEmpty(&BGMask))
+		{
+			if (uPriority == 4u || uPriority == 7u)
+			{
+				SNMaskClear(&pLine[SNPPU_BGPLANE_LAYER0]);
+				SNMaskClear(&pLine[SNPPU_BGPLANE_LAYER1]);
+			}
+			if (pCallerBGPri) SNMaskClear(pCallerBGPri);
+			return;
+		}
+#endif
+
 		// BGPri  = mask  & ~window & bghipriority
 		// these are the high priority pixels that need to be rendered
 		// they overwrite the lo and hi priority pixels that have already been rendered
-		SNMaskAND(pBGPri, &BGMask, &pBGPlane[SNPPU_BGPLANE_PRI]);
+#if SNPPU_BG_COMPOSE_MASKCLASS
+		if ((uMaskClass & SNPPU_BG_MASKCLASS_VALID) &&
+		    !(uMaskClass & SNPPU_BG_MASKCLASS_PRIORITY_ANY))
+			SNMaskClear(pBGPri);
+		else if ((uMaskClass & (SNPPU_BG_MASKCLASS_VALID |
+			SNPPU_BG_MASKCLASS_PRIORITY_SAME)) ==
+			(SNPPU_BG_MASKCLASS_VALID | SNPPU_BG_MASKCLASS_PRIORITY_SAME))
+			SNMaskCopy(pBGPri, &BGMask);
+		else
+#endif
+			SNMaskAND(pBGPri, &BGMask, &pBGPlane[SNPPU_BGPLANE_PRI]);
 
 		switch (uPriority)
 		{
@@ -1886,6 +1986,11 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 	// bgpri = 0 sadv
 			break;
 		}
+
+#if SNPPU_BG_COMPOSE_MASKCLASS
+		if (SNMaskIsEmpty(&BGMask))
+			return;
+#endif
 
 		if (pAddSubMask)
 		{
@@ -2446,9 +2551,11 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			   when the world row and its CHR bytes did not change. */
 			if (uBGFlags[iBG] & (SNPPU_BGFLAGS_FETCHCHR | SNPPU_BGFLAGS_FETCHPAL))
 			{
+				pRenderInfo->BGMaskClass[iBG] = 0;
 				const Bool bHiresPair =
 					(uBGMode == 5 && iBG < 2 &&
 					 BGInfo[iBG].uBitDepth != 0);
+				if (bHiresPair) pRenderInfo->BGMaskClass[iBG + 2] = 0;
 				Uint8 TempMask[2][SNPPU_BGPLANE_SIZE] _ALIGN(8);
 				Uint8 SubMask[2][SNPPU_BGPLANE_SIZE] _ALIGN(8);
 				Int32 nFetchTiles = 33;
@@ -2779,7 +2886,9 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNDBG_LOG
 		Uint32 _tM7 = ProfCtrGetCycle();
 #endif
-		if (uFetchLayers & (SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2))
+		pRenderInfo->BGMaskClass[0] = 0;
+	pRenderInfo->BGMaskClass[1] = 0;
+	if (uFetchLayers & (SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2))
 			_FetchMode7((Uint8 *)pRenderInfo->BGPlanes[0], m_pPPU, iLine,
 				&pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_PRI],
 				&pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_OPAQUE]);
@@ -2828,13 +2937,13 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 
 	// render bg layers to main screen
 	if (tm & SNESPPU_MASK_BG4)
-		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[3], (tmw&SNESPPU_MASK_BG4) ? &pBGWindow[3] : NULL, BGInfo[3].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG4, NULL, NULL, BGInfo[3].Priority, bRendered, BGInfo[3].uScrollX );
+		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[3], (tmw&SNESPPU_MASK_BG4) ? &pBGWindow[3] : NULL, BGInfo[3].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG4, NULL, NULL, BGInfo[3].Priority, bRendered, BGInfo[3].uScrollX, pRenderInfo->BGMaskClass[3] );
 	if (tm & SNESPPU_MASK_BG3)
-		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[2], (tmw&SNESPPU_MASK_BG3) ? &pBGWindow[2] : NULL, BGInfo[2].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG3, &BG3Pri, NULL, BGInfo[2].Priority, bRendered, BGInfo[2].uScrollX);
+		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[2], (tmw&SNESPPU_MASK_BG3) ? &pBGWindow[2] : NULL, BGInfo[2].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG3, &BG3Pri, NULL, BGInfo[2].Priority, bRendered, BGInfo[2].uScrollX, pRenderInfo->BGMaskClass[2]);
 	if (tm & SNESPPU_MASK_BG2)
-		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[1], (tmw&SNESPPU_MASK_BG2) ? &pBGWindow[1] : NULL, BGInfo[1].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG2, NULL, bBG3Pri ? &BG3Pri : NULL, BGInfo[1].Priority, bRendered, BGInfo[1].uScrollX);
+		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[1], (tmw&SNESPPU_MASK_BG2) ? &pBGWindow[1] : NULL, BGInfo[1].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG2, NULL, bBG3Pri ? &BG3Pri : NULL, BGInfo[1].Priority, bRendered, BGInfo[1].uScrollX, pRenderInfo->BGMaskClass[1]);
 	if (tm & SNESPPU_MASK_BG1)
-		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[0], (tmw&SNESPPU_MASK_BG1) ? &pBGWindow[0] : NULL, BGInfo[0].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG1, NULL, bBG3Pri ? &BG3Pri : NULL, BGInfo[0].Priority, bRendered, BGInfo[0].uScrollX);
+		_RenderBG8(pMain8, pMain, pRenderInfo->BGPlanes[0], (tmw&SNESPPU_MASK_BG1) ? &pBGWindow[0] : NULL, BGInfo[0].uBitDepth,  pMainAddSubMask, cgadsub & SNESPPU_MASK_BG1, NULL, bBG3Pri ? &BG3Pri : NULL, BGInfo[0].Priority, bRendered, BGInfo[0].uScrollX, pRenderInfo->BGMaskClass[0]);
 	if (!bRendered)
 		_ClearLinePlanar((SNMaskT *)pMain8, 8);
 	SNTARGET_END(BGDraw, _targetBGMain);
@@ -2915,21 +3024,21 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 
 	// render bg layers to sub screen
 	if (ts & SNESPPU_MASK_BG4)
-		_RenderBG8(pSub8, pSub, pRenderInfo->BGPlanes[3], (tsw&SNESPPU_MASK_BG4) ? &pBGWindow[3] : NULL, BGInfo[3].uBitDepth, pSubAddSubMask, 1, NULL, NULL, BGInfo[3].Priority, bRendered, BGInfo[3].uScrollX);
+		_RenderBG8(pSub8, pSub, pRenderInfo->BGPlanes[3], (tsw&SNESPPU_MASK_BG4) ? &pBGWindow[3] : NULL, BGInfo[3].uBitDepth, pSubAddSubMask, 1, NULL, NULL, BGInfo[3].Priority, bRendered, BGInfo[3].uScrollX, pRenderInfo->BGMaskClass[3]);
 	if (ts & SNESPPU_MASK_BG3)
-		_RenderBG8(pSub8, pSub, pRenderInfo->BGPlanes[2], (tsw&SNESPPU_MASK_BG3) ? &pBGWindow[2] : NULL, BGInfo[2].uBitDepth, pSubAddSubMask, 1, &BG3Pri, NULL, BGInfo[2].Priority, bRendered, BGInfo[2].uScrollX);
+		_RenderBG8(pSub8, pSub, pRenderInfo->BGPlanes[2], (tsw&SNESPPU_MASK_BG3) ? &pBGWindow[2] : NULL, BGInfo[2].uBitDepth, pSubAddSubMask, 1, &BG3Pri, NULL, BGInfo[2].Priority, bRendered, BGInfo[2].uScrollX, pRenderInfo->BGMaskClass[2]);
 	if (ts & SNESPPU_MASK_BG2)
 		_RenderBG8(pSub8, pSub,
 			(uBGMode == 5 || uBGMode == 6) ? pRenderInfo->BGPlanes[3] : pRenderInfo->BGPlanes[1],
 			(tsw&SNESPPU_MASK_BG2) ? &pBGWindow[1] : NULL, BGInfo[1].uBitDepth,
 			pSubAddSubMask, 1, NULL, bBG3Pri ? &BG3Pri : NULL,
-			BGInfo[1].Priority, bRendered, BGInfo[1].uScrollX);
+			BGInfo[1].Priority, bRendered, BGInfo[1].uScrollX, pRenderInfo->BGMaskClass[(uBGMode == 5 || uBGMode == 6) ? 3 : 1]);
 	if (ts & SNESPPU_MASK_BG1)
 		_RenderBG8(pSub8, pSub,
 			(uBGMode == 5 || uBGMode == 6) ? pRenderInfo->BGPlanes[2] : pRenderInfo->BGPlanes[0],
 			(tsw&SNESPPU_MASK_BG1) ? &pBGWindow[0] : NULL, BGInfo[0].uBitDepth,
 			pSubAddSubMask, 1, NULL, bBG3Pri ? &BG3Pri : NULL,
-			BGInfo[0].Priority, bRendered, BGInfo[0].uScrollX);
+			BGInfo[0].Priority, bRendered, BGInfo[0].uScrollX, pRenderInfo->BGMaskClass[(uBGMode == 5 || uBGMode == 6) ? 2 : 0]);
 	if (!bRendered)
 		_ClearLinePlanar((SNMaskT *)pSub8, 8);
 	SNTARGET_END(BGDraw, _targetBGSub);

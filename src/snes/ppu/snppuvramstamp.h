@@ -9,6 +9,14 @@
 #ifndef SNPPU_BG_CACHE_ROWMEMO
 #define SNPPU_BG_CACHE_ROWMEMO 1
 #endif
+#ifndef SNPPU_BG_CACHE_ROWMEMO_MULTI
+#define SNPPU_BG_CACHE_ROWMEMO_MULTI 1
+#endif
+#if SNPPU_BG_CACHE_ROWMEMO_MULTI
+#define SNPPU_BG_ROWMEMO_SLOTS 32u
+#else
+#define SNPPU_BG_ROWMEMO_SLOTS 1u
+#endif
 
 struct SnesPPUVramStampT
 {
@@ -34,7 +42,7 @@ struct SnesPPUVramStampT
 	Uint32 uChunks32[1024]; // 32 words; fast conservative BG-line validation
 	RegionT Regions[4];
 #if SNPPU_BG_CACHE_ROWMEMO
-	LineMemoT LineMemo[4];
+	LineMemoT LineMemo[4][SNPPU_BG_ROWMEMO_SLOTS];
 #endif
 
 	SnesPPUVramStampT()
@@ -139,16 +147,26 @@ struct SnesPPUVramStampT
 	{
 #if SNPPU_BG_CACHE_ROWMEMO
 		const Uint32 uMemoState = uVramState & ~((7u << 16) | (7u << 24));
-		LineMemoT *pMemo = &LineMemo[iBG & 3u];
+		/* Keep a tiny direct-mapped set of exact row dependencies per BG.
+		   The old single entry was excellent inside one 8-line tile row but
+		   guaranteed a cold dependency walk at every row transition, again on
+		   every frame. 32 slots cover the visible Mode-1 tile rows while exact
+		   epoch/state/config comparisons keep collisions conservative misses. */
+		Uint32 uMemoIndex = 0;
+#if SNPPU_BG_CACHE_ROWMEMO_MULTI
+		uMemoIndex = (uMemoState ^ (uMemoState >> 5) ^
+			(uMemoState >> 16) ^ uConfigKey) & (SNPPU_BG_ROWMEMO_SLOTS - 1u);
+#endif
+		LineMemoT *pMemo = &LineMemo[iBG & 3u][uMemoIndex];
 		if (pMemo->uEpoch == uEpoch &&
 		    pMemo->uState == uMemoState &&
 		    pMemo->uConfig == uConfigKey)
 			return pMemo->uStamp;
 		return GetBGLineGenerationSlow(iBG, uVramState, uConfigKey, uMode,
-			pInfo, pTiles, nTiles, uMemoState);
+			pInfo, pTiles, nTiles, uMemoState, uMemoIndex);
 #else
 		return GetBGLineGenerationSlow(iBG, uVramState, uConfigKey, uMode,
-			pInfo, pTiles, nTiles, 0u);
+			pInfo, pTiles, nTiles, 0u, 0u);
 #endif
 	}
 
@@ -157,7 +175,7 @@ struct SnesPPUVramStampT
 	   row-memo hit on EE. */
 	__attribute__((noinline)) Uint32 GetBGLineGenerationSlow(Uint32 iBG, Uint32 uVramState,
 		Uint32 uConfigKey, Uint32 uMode, const SnesBGInfoT *pInfo,
-		const SnesRenderTileT *pTiles, Uint32 nTiles, Uint32 uMemoState)
+		const SnesRenderTileT *pTiles, Uint32 nTiles, Uint32 uMemoState, Uint32 uMemoIndex)
 	{
 		static const Uint16 ScrSizeOffset[4][4] =
 		{
@@ -216,7 +234,7 @@ struct SnesPPUVramStampT
 		}
 
 #if SNPPU_BG_CACHE_ROWMEMO
-		LineMemoT *pMemo = &LineMemo[iBG & 3u];
+		LineMemoT *pMemo = &LineMemo[iBG & 3u][uMemoIndex];
 		pMemo->uEpoch = uEpoch;
 		pMemo->uState = uMemoState;
 		pMemo->uConfig = uConfigKey;
@@ -225,6 +243,7 @@ struct SnesPPUVramStampT
 		(void)iBG;
 		(void)uConfigKey;
 		(void)uMemoState;
+		(void)uMemoIndex;
 #endif
 		return uStamp;
 	}
