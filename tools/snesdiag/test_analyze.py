@@ -38,6 +38,8 @@ class AnalyzeTest(unittest.TestCase):
             "[snes-diag] schema=snesdiag-v1 level=1 window=30",
             "[snes-perf] cpu=30% sa1=65% ppu=10%",
             "[snes-sa1-hot] advance/noadvance/samples=640/3/10 sample-cycles bus/step/irq=100/500/50",
+            "[snes-cpu-poll] iterations vblank/iram=1200/300",
+            "[snes-cpu-poll] iterations vblank/iram=800/100",
             "[snes-sa1-bus] conflict-ticks=1 dropped-events=7",
             "[snes-sa1-bus] conflict-ticks=2 dropped-events=7",
         ])
@@ -45,6 +47,8 @@ class AnalyzeTest(unittest.TestCase):
         self.assertEqual(report["stats"]["sa1_samples"], 10)
         self.assertEqual(report["stats"]["sa1_step_cycles"], 500)
         self.assertEqual(report["stats"]["sa1_dropped_peak"], 7)
+        self.assertEqual(report["stats"]["scpu_poll_vblank"], 2000)
+        self.assertEqual(report["stats"]["scpu_poll_iram"], 400)
         self.assertTrue(any(x["code"] == "sa1-bus-overflow" for x in report["findings"]))
 
     def test_missing_window_is_reported(self):

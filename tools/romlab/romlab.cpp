@@ -49,6 +49,9 @@ extern "C" void DLog(const char *format, ...)
 #endif
 }
 
+extern Bool g_RomLabSCPUPollFastPath;
+extern Uint64 g_RomLabSCPUPollSkipped;
+
 namespace {
 
 static const char *kVersion = "1";
@@ -1355,8 +1358,57 @@ static bool CheckEmptyMathRendering()
     return true;
 }
 
+static bool CheckSCPUPollDifferential()
+{
+    // Compare against the real portable interpreter, not a synthetic cycle formula.
+    for (int shared=0;shared<2;++shared)
+    {
+        std::unique_ptr<SnesStateT> states[2];
+        Uint32 machine[2]; Uint8 openBus[2];
+        for (int fast=0;fast<2;++fast)
+        {
+            std::vector<uint8_t> image=BuildSelfTestRom();
+            auto *header=(SNRomInfoT *)&image[0x7FC0];
+            header->RomMakeup=0x23; header->RomType=0x35; header->SRAMSize=3;
+            image[0]=0xA5; image[1]=0; image[2]=0xF0; image[3]=0xFC;
+            CMemFileIO file; file.Open(image.data(),(Uint32)image.size());
+            SnesRom rom;
+            if (rom.LoadRom(&file)!=Emu::Rom::LOADERROR_NONE || rom.m_eMapping!=SNROM_MAPPING_SA1) return false;
+            SnesSystem system; system.SetSnesRom(&rom); system.Reset();
+            SNCpuT *cpu=system.GetCpu();
+            const Uint8 vblank[]={0x2C,0x12,0x42,0xF0,0xFB,0x2C,0x12,0x42,0xD0,0xFB,0xE6,0x10,0x80,0xF2};
+            const Uint8 iram[]={0xAF,0x02,0x30,0x00,0xF0,0xFA,0x80,0xF8};
+            if (shared) {
+                SNCPUWrite8(cpu,0x002203,0); SNCPUWrite8(cpu,0x002204,0x80);
+                SNCPUWrite8(cpu,0x002200,0);
+                for (unsigned i=0;i<sizeof(iram);++i) SNCPUWrite8(cpu,0x7E1000+i,iram[i]);
+            } else for (unsigned i=0;i<sizeof(vblank);++i) SNCPUWrite8(cpu,0x7E1000+i,vblank[i]);
+            cpu->Regs.rPC=0x7E1000; cpu->Regs.rE=0; cpu->Regs.rP=SNCPU_FLAG_M|SNCPU_FLAG_X|SNCPU_FLAG_I;
+            cpu->Regs.rA.w=0x80; cpu->Regs.rDB=0; cpu->Regs.rDP=0;
+            cpu->uSignal=0;
+            Emu::SysInputT input={};
+            for (size_t i=1;i<EMUSYS_DEVICE_NUM;++i) input.uPad[i]=EMUSYS_DEVICE_DISCONNECTED;
+            g_RomLabSCPUPollFastPath=(Bool)fast; g_RomLabSCPUPollSkipped=0;
+            for (int f=0;f<3;++f) system.ExecuteFrame(&input,NULL,NULL,Emu::System::MODE_ACCURATEDETERMINISTIC);
+            if (fast && !g_RomLabSCPUPollSkipped) { fprintf(stderr,"poll fixture did not skip (%d)\n",shared); return false; }
+            if (fast) printf("S-CPU polling fixture %s: %llu iterations skipped\n",shared?"I-RAM":"VBlank",(unsigned long long)g_RomLabSCPUPollSkipped);
+            states[fast].reset(new SnesStateT); system.SaveState(states[fast].get());
+            machine[fast]=cpu->uCpuCycleCount; openBus[fast]=cpu->uOpenBus;
+        }
+        // These counters describe slice partitioning, not emulated hardware.
+        for (auto &state:states) { state->SA1.State.LastSliceCycles=0; state->SA1.State.ExecutionSlices=0; }
+        g_RomLabSCPUPollFastPath=FALSE;
+        if (memcmp(states[0].get(),states[1].get(),sizeof(SnesStateT)) || machine[0]!=machine[1] || openBus[0]!=openBus[1]) {
+            fprintf(stderr,"poll differential mismatch (%d), machine %u/%u, openbus %02x/%02x\n",shared,machine[0],machine[1],openBus[0],openBus[1]);
+            return false;
+        }
+    }
+    puts("S-CPU polling differential: PASS"); return true;
+}
+
 static int SelfTestCommand()
 {
+    if (!CheckSCPUPollDifferential()) return 1;
     if (!CheckEmptyMathRendering()) return 1;
     if (!CheckBGFineXRendering()) return 1;
     if (!CheckBGScrollRendering())

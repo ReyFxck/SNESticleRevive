@@ -30,6 +30,9 @@ Bool g_SnesTargetProfileEnabled = FALSE;
 #endif
 
 #if SNESTICLE_ROMLAB
+// Trace runs keep every instruction; the ROM Lab differential test opts in.
+Bool g_RomLabSCPUPollFastPath = FALSE;
+Uint64 g_RomLabSCPUPollSkipped = 0;
 extern "C" void SnesRomLabTraceUnhandledAccess(SNCpuT *pCpu,
     Uint32 uAddr, Uint8 uValue, Uint8 uFlags);
 #define ROMLAB_UNHANDLED(_cpu, _addr, _value, _flags) \
@@ -55,6 +58,7 @@ static Uint64 g_TmgWinSumSA1  = 0;
 // Sample 1/64 of advancing SA-1 syncs; avoid 3 extra Count reads per slice.
 static Uint32 g_SA1SyncCalls = 0, g_SA1SyncNoAdvance = 0, g_SA1SyncSamples = 0;
 static Uint64 g_SA1SampleBus = 0, g_SA1SampleStep = 0, g_SA1SampleIRQ = 0;
+static Uint32 g_SCPUPollVBlank = 0, g_SCPUPollIRAM = 0;
 static Uint64 g_TmgWinSumGSU  = 0;
 static Uint64 g_TmgWinSumMDMA = 0;
 static Uint64 g_TmgWinSumHDMA = 0;
@@ -278,6 +282,7 @@ static void SnesDbgResetWindow(void)
 	g_TmgWinSumSA1 = 0;
 	g_SA1SyncCalls = g_SA1SyncNoAdvance = g_SA1SyncSamples = 0;
 	g_SA1SampleBus = g_SA1SampleStep = g_SA1SampleIRQ = 0;
+	g_SCPUPollVBlank = g_SCPUPollIRAM = 0;
 	g_TmgWinSumGSU = 0;
 	g_TmgWinSumMDMA = 0;
 	g_TmgWinSumHDMA = 0;
@@ -506,11 +511,13 @@ void SnesSystem::SyncSA1To(Int32 nClock)
 	const Bool bSample = ((g_SA1SyncCalls++ & 63u) == 0);
 	Uint32 uSA1Start = ProfCtrGetCycle();
 #endif
-	SNCPUSA1BusFinalize((Uint32)nClock);
 #if SNDBG_LOG
-	Uint32 uBusEnd = bSample ? ProfCtrGetCycle() : 0;
+	Uint32 uBusCycles = 0;
+	m_SA1.StepMasterCycles(nClock - m_nSA1LineClock, nClock,
+	                      bSample ? &uBusCycles : NULL);
+#else
+	m_SA1.StepMasterCycles(nClock - m_nSA1LineClock, nClock);
 #endif
-	m_SA1.StepMasterCycles(nClock - m_nSA1LineClock);
 #if SNDBG_LOG
 	Uint32 uStepEnd = ProfCtrGetCycle();
 	g_TmgCycSA1 += uStepEnd - uSA1Start;
@@ -522,16 +529,24 @@ void SnesSystem::SyncSA1To(Int32 nClock)
 	{
 		Uint32 uIRQEnd = ProfCtrGetCycle();
 		g_SA1SyncSamples++;
-		g_SA1SampleBus += uBusEnd - uSA1Start;
-		g_SA1SampleStep += uStepEnd - uBusEnd;
+		g_SA1SampleBus += uBusCycles;
+		g_SA1SampleStep += (uStepEnd - uSA1Start) - uBusCycles;
 		g_SA1SampleIRQ += uIRQEnd - uStepEnd;
 	}
 #endif
 }
 
-void SnesSystem::SyncSA1()
+inline void SnesSystem::SyncSA1()
 {
-	SyncSA1To(SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_LINE));
+	const Int32 nClock = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+	if (nClock <= m_nSA1LineClock)
+	{
+#if SNDBG_LOG
+		g_SA1SyncNoAdvance++;
+#endif
+		return;
+	}
+	SyncSA1To(nClock);
 }
 
 void SnesSystem::RefreshSCPUIRQ()
@@ -1651,6 +1666,102 @@ void SnesSystem::RescheduleLineIRQ(Bool bAllowImmediate)
 	SNCPUAbort(&m_Cpu);
 }
 
+// Skip only complete, side-effect-free iterations of two known polling
+// instruction shapes in private WRAM. Measure one real iteration in the
+// selected backend, and leave the last iteration to normal execution.
+Bool SnesSystem::TryFastForwardSCPUPoll()
+{
+#if SNES_DEBUG
+	return FALSE;
+#endif
+#if SNESTICLE_ROMLAB
+	if (!g_RomLabSCPUPollFastPath) return FALSE;
+#endif
+	if (!m_bSA1 || m_Cpu.Cycles < 160 || m_Cpu.uSignal ||
+	    m_Cpu.uIrqPending || m_Cpu.uNmiDmaDelay || m_Cpu.Regs.rE ||
+	    !(m_Cpu.Regs.rP & SNCPU_FLAG_M) || m_bLineIRQReschedule)
+		return FALSE;
+	const Int32 clock = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_LINE);
+	if (clock < 0 || clock + m_Cpu.Cycles > SNES_CYCLESPERLINE)
+		return FALSE;
+	Uint32 pc = m_Cpu.Regs.rPC & 0xFFFFFFu;
+	if ((pc & 0xFE0000u) != 0x7E0000u ||
+	    (pc & SNCPU_BANK_MASK) > SNCPU_BANK_SIZE - 6u)
+		return FALSE;
+	const SNCpuBankT &bank = m_Cpu.Bank[pc >> SNCPU_BANK_SHIFT];
+	if (!bank.pMem || !bank.bRAM) return FALSE;
+	const Uint8 *code = bank.pMem + pc;
+	Bool branchPhase = FALSE;
+	if ((code[0] == 0xF0 || code[0] == 0xD0) &&
+	    (code[1] == 0xFB || code[1] == 0xFA))
+	{
+		const Uint32 back = code[1] == 0xFB ? 3u : 4u;
+		if ((pc & SNCPU_BANK_MASK) < back) return FALSE;
+		pc -= back;
+		code -= back;
+		branchPhase = TRUE;
+	}
+	Uint32 loadBytes;
+	Bool shared = FALSE;
+	if (code[0] == 0x2C && code[1] == 0x12 && code[2] == 0x42 &&
+	    !(m_Cpu.Regs.rDB & 0x400000u) && (Uint8)m_Cpu.Regs.rA.w == 0x80 &&
+	    m_IO.IsAutoJoypadSettled())
+		loadBytes = 3; // BIT $4212, VBlank bit only.
+	else if (code[0] == 0xAF && !(code[3] & 0x40) &&
+	         (code[2] & 0xF8) == 0x30 && m_SA1.CanDeferHostPoll())
+	{
+		loadBytes = 4; // LDA long, physical shared I-RAM.
+		shared = TRUE;
+	}
+	else if (code[0] == 0xAD && !(m_Cpu.Regs.rDB & 0x400000u) &&
+	         (code[2] & 0xF8) == 0x30 && m_SA1.CanDeferHostPoll())
+	{
+		loadBytes = 3; // LDA absolute, physical shared I-RAM.
+		shared = TRUE;
+	}
+	else return FALSE;
+	if ((code[loadBytes] != 0xF0 && code[loadBytes] != 0xD0) ||
+	    (Int8)code[loadBytes+1] != -(Int32)(loadBytes+2))
+		return FALSE;
+
+	if (branchPhase)
+	{
+		if (m_Cpu.Regs.rPC != pc + loadBytes) return FALSE;
+		SNCPUExecuteOne(&m_Cpu);
+		if (m_Cpu.Cycles < 160 || m_Cpu.uSignal || m_bLineIRQReschedule ||
+		    m_Cpu.Regs.rPC != pc) return TRUE;
+	}
+	const Int32 before = m_Cpu.Cycles;
+	const Uint32 machineBefore = m_Cpu.uCpuCycleCount;
+	SNCPUExecuteOne(&m_Cpu);
+	if (m_Cpu.Cycles <= 0 || m_Cpu.uSignal || m_bLineIRQReschedule ||
+	    m_Cpu.Regs.rPC != pc + loadBytes)
+		return TRUE;
+	SNCPUExecuteOne(&m_Cpu);
+	const Int32 cost = before - m_Cpu.Cycles;
+	const Uint32 machineCost = m_Cpu.uCpuCycleCount - machineBefore;
+	if (cost <= 0 || !machineCost || m_Cpu.Cycles <= cost || m_Cpu.uSignal ||
+	    m_bLineIRQReschedule || m_Cpu.Regs.rPC != pc ||
+	    (shared && !m_SA1.CanDeferHostPoll()))
+		return TRUE;
+
+	// Leave one full real iteration and any partial tail to the interpreter.
+	const Int32 repeat = (m_Cpu.Cycles - 1) / cost - 1;
+	if (repeat > 0)
+	{
+		SNCPUConsumeCycles(&m_Cpu, repeat * cost);
+		m_Cpu.uCpuCycleCount += (Uint32)repeat * machineCost;
+#if SNESTICLE_ROMLAB
+		g_RomLabSCPUPollSkipped += (Uint32)repeat;
+#endif
+#if SNDBG_LOG
+		if (shared) g_SCPUPollIRAM += (Uint32)repeat;
+		else g_SCPUPollVBlank += (Uint32)repeat;
+#endif
+	}
+	return TRUE;
+}
+
 void SnesSystem::ExecuteCPU(Int32 nCycles)
 {
     // increment cycle counter
@@ -1814,7 +1925,11 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
         assert(m_DMAC.GetMDMAEnable() == 0);
 
-        // run CPU!
+        if (m_bSA1 && TryFastForwardSCPUPoll())
+        {
+            if (m_bLineIRQActive && m_bLineIRQReschedule) break;
+            continue;
+        }
         SNCPUExecute(&m_Cpu);
 		if (m_bLineIRQActive && m_bLineIRQReschedule)
 			break;
@@ -2902,6 +3017,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)g_SA1SyncCalls, (unsigned)g_SA1SyncNoAdvance,
 					(unsigned)g_SA1SyncSamples, (unsigned long long)g_SA1SampleBus,
 					(unsigned long long)g_SA1SampleStep, (unsigned long long)g_SA1SampleIRQ);
+				DLog("[snes-cpu-poll] iterations vblank/iram=%u/%u",
+				     (unsigned)g_SCPUPollVBlank, (unsigned)g_SCPUPollIRAM);
 				DLog("[snes-sa1-bus] conflict-ticks=%u dropped-events=%u",(unsigned)SNCPUSA1BusGetConflictTicks(),(unsigned)SNCPUSA1BusGetDroppedEvents());
 				DLog("[snes-sa1-idle] fast-forward-ticks=%llu sleep-slices=%llu active=%u",
 					(unsigned long long)m_SA1.GetIdleFastForwardTicks(),

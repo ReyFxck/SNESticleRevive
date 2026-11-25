@@ -27,6 +27,16 @@ def read(path):
             x=val(line,'io-rw'); row['reads'],row['writes']=map(int,x.split('/'))
             row['slices_total']=int(val(line,'slices'))
             row['slices']=row['slices_total']-(prev['slices_total'] if prev else 0)
+        elif row is not None and '[snes-sa1-hot]' in line:
+            m=re.search(r'advance/noadvance/samples=(\d+)/(\d+)/(\d+) sample-cycles bus/step/irq=(\d+)/(\d+)/(\d+)',line)
+            if m:
+                for k,v in zip(('advance','noadvance','samples','bus','step','irq'),m.groups()): row[k]=int(v)
+        elif row is not None and '[snes-cpu-poll]' in line:
+            m=re.search(r'iterations vblank/iram=(\d+)/(\d+)',line)
+            if m: row['poll_vblank'],row['poll_iram']=map(int,m.groups())
+        elif row is not None and '[ps2-frame]' in line:
+            m=re.search(r'avg loop/prep/submit/flip=(\d+)/(\d+)/(\d+)/(\d+) work min/avg/max=(\d+)/(\d+)/(\d+)',line)
+            if m: row['loop'],row['prep'],row['submit'],row['flip'],_,row['work'],_=map(int,m.groups())
         elif row is not None and '[snes-sa1-bus]' in line:
             row['dropped']=int(val(line,'dropped-events'))
         elif row is not None and '[snes-sa1-idle]' in line:
@@ -50,6 +60,16 @@ def summarize(label, rows):
         slices=sum(r['slices'] for r in v); sleep=sum(r['sleep'] for r in v)
         print(f'  slices/frame: {slices/sum(int(r["window"]) for r in v):.1f}; idle: {100*sleep/max(1,slices):.2f}% das slices')
     if any('dropped' in r for r in rows): print('  eventos descartados (máximo acumulado):',max(r.get('dropped',0) for r in rows))
+    hot=[r for r in rows if 'samples' in r]
+    if hot:
+        samples=sum(r['samples'] for r in hot)
+        if samples: print('  ciclos amostrados/sincronização bus/step/irq:', '/'.join(f'{sum(r[k] for r in hot)/samples:.1f}' for k in ('bus','step','irq')))
+        print('  sync avanço/sem avanço:',sum(r['advance'] for r in hot),sum(r['noadvance'] for r in hot))
+    poll=[r for r in rows if 'poll_vblank' in r]
+    if poll: print('  polling iterações VBlank/I-RAM:',sum(r['poll_vblank'] for r in poll),sum(r['poll_iram'] for r in poll))
+    # Frontend windows may cover a different number of source frames when frameskip is active.
+    front=[r for r in rows if 'loop' in r]
+    if front: print(f'  média frontend (janelas): work={statistics.mean(r["work"] for r in front):.0f} loop={statistics.mean(r["loop"] for r in front):.0f} ciclos; não é FPS medido na tela')
     print(f'  frames acima do limite: {sum(r["slow"] for r in rows)}/{n}')
     return cyc
 

@@ -204,6 +204,126 @@ static void TestSharedBusContention(void)
 	SNCPUDelete(&host);
 }
 
+static Uint8 ReferenceHostBus(Uint32 addr)
+{
+    const Uint8 bank = (Uint8)(addr >> 16);
+    const Uint16 low = (Uint16)addr;
+    if (bank < 0x40 || (bank >= 0x80 && bank < 0xC0)) {
+        if (low >= 0x8000) return 1;
+        if (low >= 0x6000) return 2;
+        if (low >= 0x3000 && low < 0x3800) return 3;
+    }
+    if (bank >= 0xC0) return 1;
+    if (bank >= 0x40 && bank < 0x50) return 2;
+    return 0;
+}
+
+static void TestPackedBusDifferential()
+{
+    SNCpuT host, sa1;
+    SNCPUNew(&host); SNCPUNew(&sa1);
+    SNCPUSA1BusSetHost(&host);
+    for (Uint32 addr=0; addr<0x1000000u; ++addr) {
+        Uint8 type=g_SNCPU_SA1HostBusPage[addr>>SNCPU_BANK_SHIFT];
+        if (type==SNCPU_SA1_BUS_MIX_HIGH)
+            type=(addr&0xF800u)==0x3000u?3:0;
+        if (type!=ReferenceHostBus(addr)) {
+            CHECK(false,"packed host page classifier differs from reference"); break;
+        }
+    }
+    Uint32 rng=0x12345678u;
+    const Uint32 addresses[]={0x003000,0x0037FF,0x003800,0x006000,0xC01234,0x400000,0x500000,0x7E4321,0x804212,0xBF8000,0x803005,0x004000};
+    for (unsigned line=0; line<500; ++line) {
+        Uint8 expected[4][SNCPU_SA1_BUS_UNIT_MAX]={};
+        Uint8 bits[4][SNCPU_SA1_BUS_TICK_MAX]={};
+        Uint32 count=0, clock=0;
+        SNCPUSA1BusBeginLine(); host.Cycles=0; sa1.Cycles=0;
+        for (unsigned i=0; i<170; ++i) {
+            rng=rng*1664525u+1013904223u;
+            const Uint32 addr=addresses[(rng>>16)%12];
+            const Uint32 n=1+(rng%3), speed=(rng&8)?6:8;
+            clock+=1+((rng>>8)%7);
+            host.Counter[SNCPU_COUNTER_LINE]=(Int32)clock;
+            SNCPUSA1BusRecord(&host,addr,speed,n);
+            const Uint8 type=ReferenceHostBus(addr);
+            if (type) {
+                ++count;
+                const Uint32 begin=clock>=speed*n?clock-speed*n:0;
+                const Uint32 first=begin>>1,last=(clock-1)>>1;
+                const Uint8 penalty=(type==2||(type==3&&speed==6))?12:6;
+                for (Uint32 t=first;t<=last;++t) {
+                    bits[type][t]=(bits[type][t]>penalty)?bits[type][t]:penalty;
+                    Uint8 &v=expected[type][t*6]; if (v<penalty) v=penalty;
+                    if (type==2&&t) expected[type][(t-1)*6]=12;
+                }
+            }
+            if (i%13==0 || i==169) {
+                SNCPUSA1BusFinalize(clock);
+                CHECK(!memcmp(expected,g_SNCPU_SA1BusPenaltyUnits,sizeof(expected)),"packed bus penalty table differs from reference");
+                const Uint32 t=(rng>>20)%400;
+                sa1.Counter[SNCPU_COUNTER_LINE]=(Int32)(t*6);
+                CHECK(SNCPUSA1BusPenalty(&sa1,0xC00000,6)==bits[1][t],"ROM bitset equivalence");
+                CHECK(SNCPUSA1BusPenalty(&sa1,0x400000,6)==bits[2][t],"BW-RAM bitset equivalence");
+                CHECK(SNCPUSA1BusPenalty(&sa1,0x003000,6)==bits[3][t],"I-RAM bitset equivalence");
+            }
+        }
+        CHECK(g_SNCPU_SA1BusEventCount==count,"queue must only retain shared devices");
+    }
+    CHECK(SNCPUSA1BusGetDroppedEvents()==0,"filtered queue must not drop test events");
+    SNCPUSA1BusSetHost(NULL); SNCPUDelete(&host); SNCPUDelete(&sa1);
+    puts("Packed bus differential: 16777216 addresses, 85000 events PASS");
+}
+
+static void RunDeferredBusFixture(bool lazy, SA1SaveState &saved, Uint32 &conflicts)
+{
+    std::vector<Uint8> rom(0x200000,0xEA), bwram(0x8000,0);
+    const Uint8 code[]={0xA5,0x00,0xF0,0xFC,0x64,0x00,0x80,0xF8};
+    memcpy(rom.data(),code,sizeof(code));
+    SNSA1 sa1;
+    sa1.SetMemory(rom.data(),(Uint32)rom.size(),bwram.data(),(Uint32)bwram.size());
+    sa1.WriteRegister(0x2204,0x80); sa1.WriteRegister(0x2200,0);
+    sa1.WriteRegister(0x2229,0xFF); sa1.WriteRegister(0x222A,0xFF);
+    sa1.GetCpu()->Regs.rP |= SNCPU_FLAG_M | SNCPU_FLAG_Z;
+    SNCpuT host; SNCPUNew(&host); SNCPUSA1BusSetHost(&host);
+    for (unsigned line=0;line<100;++line) {
+        SNCPUSA1BusBeginLine(); SNCPUResetCounter(sa1.GetCpu(),SNCPU_COUNTER_LINE);
+        Uint32 prev=0;
+        for (Uint32 clock=28;clock<=1344;clock+=28) {
+            host.Counter[SNCPU_COUNTER_LINE]=(Int32)clock;
+            SNCPUSA1BusRecord(&host,0xC08000,6,2);
+            SNCPUSA1BusRecord(&host,0x003000,6,1);
+            SNCPUSA1BusRecord(&host,0x400000,8,1);
+            if (!lazy) SNCPUSA1BusFinalize(clock);
+            sa1.StepMasterCycles((Int32)(clock-prev),lazy?(Int32)clock:-1);
+            prev=clock;
+            if (line%9==0 && clock==560) sa1.WriteIRAM(0,1);
+            if (line%13==0 && clock==840) {
+                sa1.WriteRegister(0x2230,0x80);
+                sa1.WriteRegister(0x2232,0); sa1.WriteRegister(0x2233,0x80);
+                sa1.WriteRegister(0x2234,0xC0);
+                sa1.WriteRegister(0x2238,8); sa1.WriteRegister(0x2239,0);
+                sa1.WriteRegister(0x2235,0); sa1.WriteRegister(0x2236,4);
+            }
+        }
+        if (!lazy) SNCPUSA1BusFinalize(SNES_CYCLESPERLINE);
+        sa1.StepMasterCycles((Int32)(SNES_CYCLESPERLINE-prev),lazy?SNES_CYCLESPERLINE:-1);
+    }
+    CHECK(sa1.GetIdleSleepSlices()>0,"deferred fixture must exercise persistent sleep");
+    CHECK(sa1.GetState()->DMATransferredBytes>0,"deferred fixture must exercise DMA");
+    sa1.SaveState(&saved); conflicts=SNCPUSA1BusGetConflictTicks();
+    SNCPUSA1BusSetHost(NULL); SNCPUDelete(&host);
+}
+
+static void TestDeferredBusDifferential()
+{
+    SA1SaveState eager, lazy; Uint32 c1,c2;
+    RunDeferredBusFixture(false,eager,c1);
+    RunDeferredBusFixture(true,lazy,c2);
+    CHECK(!memcmp(&eager,&lazy,sizeof(eager)),"deferred bus architectural state must equal eager bus");
+    CHECK(c1==c2,"deferred bus conflict ticks must equal eager bus");
+    puts("Deferred bus differential: 4900 slices per path, I-RAM wake and DMA PASS");
+}
+
 static void TestIRAMAndBWRAM(void)
 {
 	Uint8 bwram[0x8000];
@@ -1324,6 +1444,8 @@ int main(void)
 	TestResetReleaseAndScheduler();
 	TestSA1ControlFlowTiming();
 	TestSharedBusContention();
+	TestPackedBusDifferential();
+	TestDeferredBusDifferential();
 	TestIRAMAndBWRAM();
 	TestBWRAMMirroring();
 	TestSA1BusDecode();

@@ -248,6 +248,8 @@ void MainLoopSafeFrameskipAfterFlip()
 	if (!_bSafeFrameskipEnabled)
 		return;
 
+	const int hz = GSK_GetRefreshHz();
+	if (hz > 0) _SafeFrameskip.SetHostPeriod(PROFCTR_COUNT_HZ / (Uint32)hz);
 	Bool bSnesGameplay = (!_bMenu && _pSystem == _pSnes &&
 	                      !_MainLoop_BlackScreen) ? TRUE : FALSE;
 	_SafeFrameskip.AfterFlip(ProfCtrGetCycle(), bSnesGameplay);

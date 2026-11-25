@@ -118,6 +118,7 @@ public:
 	void	ProcessAutoJoypad(Uint32 uMasterClock);
 	void	PrepareAutoJoypadEnableChange(Uint32 uMasterClock, Bool bEnable);
 	Bool	IsAutoJoypadActive() const { return m_bAutoReadActive; }
+	Bool	IsAutoJoypadSettled() const { return m_bAutoReadDisabled && !m_bAutoReadActive; }
 	Bool	GetSuperScopePosition(Uint16 *pX, Uint16 *pY) const;
 	Bool	GetJustifierPosition(Uint16 *pX, Uint16 *pY) const;
 	Bool	GetLightGunPosition(Uint16 *pX, Uint16 *pY) const;

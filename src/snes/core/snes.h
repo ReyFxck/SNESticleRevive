@@ -196,6 +196,7 @@ private:
 	void	ExecuteLine();
 	void	ExecuteTimedSlice(Int32 nCycles, Int32 &nIRQCycles, Int32 &nLineClock);
     void    ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles);
+    Bool    TryFastForwardSCPUPoll();
     void    ExecuteCPU(Int32 nExecCycles);
 };
 

@@ -58,6 +58,19 @@ int main()
 	scheduler.CancelRecovery();
 	Check("cancel leaves renderer enabled", scheduler.TakeCatchupFrames(), 0);
 
+	// Enabling recovery during a slow scene must not calibrate at half rate.
+	scheduler.SetHostPeriod(1000);
+	scheduler.AfterFlip(1000, TRUE);
+	scheduler.AfterFlip(3000, TRUE);
+	Check("known host period catches slow startup", scheduler.TakeCatchupFrames(), 1);
+	scheduler.SetHostPeriod(1000);
+	scheduler.AfterFlip(5000, TRUE);
+	Check("same mode preserves history", scheduler.TakeCatchupFrames(), 1);
+	scheduler.SetHostPeriod(1200);
+	Check("mode change resets period", scheduler.GetPeriod(), 1200);
+	scheduler.AfterFlip(6200, TRUE);
+	Check("mode change clears stale debt", scheduler.TakeCatchupFrames(), 0);
+
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
 }

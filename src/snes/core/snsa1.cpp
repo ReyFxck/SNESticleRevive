@@ -10,6 +10,9 @@
 #include "snsa1.h"
 #include "sntiming.h"
 #include "sndbglog.h"
+#if SNDBG_LOG
+#include "prof.h"
+#endif
 
 #ifndef SNESTICLE_ROMLAB
 #define SNESTICLE_ROMLAB 0
@@ -45,6 +48,7 @@ SNSA1::SNSA1()
 	m_uRomBytes = 0;
 	m_pBWRAM = NULL;
 	m_uBWRAMBytes = 0;
+	m_uBWRAMMask = 0xFFFFFFFFu;
 	m_uIdleFastForwardTicks = 0;
 	m_uIdleSleepSlices = 0;
 	m_bIdlePollSleeping = FALSE;
@@ -68,6 +72,8 @@ void SNSA1::SetMemory(const Uint8 *pRom, Uint32 uRomBytes,
 	m_uRomBytes = uRomBytes;
 	m_pBWRAM = pBWRAM;
 	m_uBWRAMBytes = uBWRAMBytes;
+	m_uBWRAMMask = uBWRAMBytes && !(uBWRAMBytes & (uBWRAMBytes - 1u)) ?
+	                 uBWRAMBytes - 1u : 0xFFFFFFFFu;
 	MapCpuMemory();
 	UpdateFastMemorySidecars();
 }
@@ -540,11 +546,6 @@ void SNSA1::WriteSA1Register(Uint16 uAddr, Uint8 uData)
 		ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, uData, 3);
 }
 
-Uint8 SNSA1::ReadIRAM(Uint16 uAddr) const
-{
-	return m_IRAM[uAddr & (SNSA1_IRAM_SIZE - 1)];
-}
-
 Bool SNSA1::CanWriteIRAM(Uint16 uAddr, Bool bSA1Side) const
 {
 	Uint8 uWriteEnable = m_State.Registers[bSA1Side ? 0x02A : 0x029];
@@ -567,13 +568,8 @@ void SNSA1::WriteIRAMSA1(Uint16 uAddr, Uint8 uData)
 
 Uint32 SNSA1::MirrorBWRAM(Uint32 uOffset) const
 {
-	if (!m_uBWRAMBytes)
-		return 0;
-	// Physical mirroring for ordinary power-of-two cartridges avoids EE DIVU.
-	Uint32 uMask = m_uBWRAMBytes - 1;
-	if (!(m_uBWRAMBytes & uMask))
-		return uOffset & uMask;
-	return uOffset % m_uBWRAMBytes;
+	if (m_uBWRAMMask != 0xFFFFFFFFu) return uOffset & m_uBWRAMMask;
+	return m_uBWRAMBytes ? uOffset % m_uBWRAMBytes : 0;
 }
 
 Bool SNSA1::CanWriteBWRAM(Uint32 uOffset, Bool bSA1Side) const
@@ -1613,6 +1609,15 @@ void SNSA1::ClearIdlePollSleep()
 	m_uIdlePollLoopPC = 0;
 }
 
+Bool SNSA1::CanDeferHostPoll() const
+{
+	return m_State.Running && m_bIdlePollSleeping &&
+	       !(m_State.Registers[0x010] & 3) && !m_State.DMARunning &&
+	       !m_State.ArithmeticPending && !m_State.NMIPending &&
+	       !m_State.TimerMatch && !m_Cpu.uSignal && !SCPUIRQPending() &&
+	       m_IRAM[m_uIdlePollIRAM] == m_uIdlePollValue;
+}
+
 Bool SNSA1::FastForwardSleepingIdle(Uint32 uSA1Cycles)
 {
 	Int32 nIdleUnits;
@@ -1763,7 +1768,23 @@ Bool SNSA1::TryFastForwardIdleLoop()
 	return TRUE;
 }
 
-void SNSA1::RunScheduled(Uint32 uSA1Cycles)
+// A sleeping CPU never queries contention. Keep the recorder intact and
+// materialize its history before the first actual DMA or interpreter access.
+static inline void FinalizeScheduledBus(Int32 nBusClock, Uint32 *pBusCycles)
+{
+	if (nBusClock < 0) return;
+#if SNDBG_LOG
+	const Uint32 start = pBusCycles ? ProfCtrGetCycle() : 0;
+#endif
+	SNCPUSA1BusFinalize((Uint32)nBusClock);
+#if SNDBG_LOG
+	if (pBusCycles) *pBusCycles += ProfCtrGetCycle() - start;
+#else
+	(void)pBusCycles;
+#endif
+}
+
+void SNSA1::RunScheduled(Uint32 uSA1Cycles, Int32 nBusClock, Uint32 *pBusCycles)
 {
 	Int32 nExecUnits;
 	Int32 nGuard;
@@ -1783,6 +1804,8 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 	if (m_State.DMARunning)
 	{
 		ClearIdlePollSleep();
+		FinalizeScheduledBus(nBusClock, pBusCycles);
+		nBusClock = -1;
 		uCpuCycles = RunDMA(uCpuCycles);
 	}
 
@@ -1808,6 +1831,7 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 		return;
 	}
 
+	FinalizeScheduledBus(nBusClock, pBusCycles);
 	nExecUnits = (Int32)(uCpuCycles * SNCPU_CYCLE_FAST);
 	SNCPUAddCycles(&m_Cpu, nExecUnits);
 
@@ -1879,7 +1903,7 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 	m_State.ExecutedCycles += uSA1Cycles;
 }
 
-void SNSA1::StepMasterCycles(Int32 nMasterCycles)
+void SNSA1::StepMasterCycles(Int32 nMasterCycles, Int32 nBusClock, Uint32 *pBusCycles)
 {
 	Uint32 uTotal, uTicks;
 
@@ -1912,5 +1936,5 @@ void SNSA1::StepMasterCycles(Int32 nMasterCycles)
 	m_State.LastSliceCycles = uTicks;
 	m_State.ScheduledCycles += uTicks;
 
-	RunScheduled(uTicks);
+	RunScheduled(uTicks, nBusClock, pBusCycles);
 }

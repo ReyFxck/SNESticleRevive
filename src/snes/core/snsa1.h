@@ -98,7 +98,7 @@ public:
 	Uint8 ReadSA1Register(Uint16 uAddr);
 	void  WriteSA1Register(Uint16 uAddr, Uint8 uData);
 
-	Uint8 ReadIRAM(Uint16 uAddr) const;
+	Uint8 ReadIRAM(Uint16 uAddr) const { return m_IRAM[uAddr & (SNSA1_IRAM_SIZE - 1)]; }
 	// Public write path is the S-CPU side ($3000-$37FF).
 	void  WriteIRAM(Uint16 uAddr, Uint8 uData);
 
@@ -123,7 +123,7 @@ public:
 	Uint16 GetSCPUIRQVector() const;
 
 	// Add master-clock time and execute the independent SA-1 65C816 slice.
-	void StepMasterCycles(Int32 nMasterCycles);
+	void StepMasterCycles(Int32 nMasterCycles, Int32 nBusClock = -1, Uint32 *pBusCycles = NULL);
 
 	Bool   IsRunning() const { return m_State.Running; }
 	Bool   IsDMARunning() const { return m_State.DMARunning; }
@@ -132,6 +132,8 @@ public:
 	Uint64 GetIdleFastForwardTicks() const { return m_uIdleFastForwardTicks; }
 	Uint64 GetIdleSleepSlices() const { return m_uIdleSleepSlices; }
 	Bool   IsIdlePollSleeping() const { return m_bIdlePollSleeping; }
+	// No autonomous event can wake the currently latched polling loop.
+	Bool CanDeferHostPoll() const;
 	const SA1State *GetState() const { return &m_State; }
 	SNCpuT *GetCpu() { return &m_Cpu; }
 	const SNCpuT *GetCpu() const { return &m_Cpu; }
@@ -147,7 +149,7 @@ private:
 	void ReleaseCPUReset();
 	void MapCpuMemory();
 	void MapRomGroup(Uint32 uWhich, Uint8 uMap);
-	void RunScheduled(Uint32 uSA1Cycles);
+	void RunScheduled(Uint32 uSA1Cycles, Int32 nBusClock, Uint32 *pBusCycles);
 	Bool ExecuteCpuC();
 	Bool ExecuteCpuFast();
 	Bool TryFastForwardIdleLoop();
@@ -191,6 +193,7 @@ private:
 	Uint32       m_uRomBytes;
 	Uint8       *m_pBWRAM;
 	Uint32       m_uBWRAMBytes;
+	Uint32       m_uBWRAMMask; // derived, not serialized
 	Uint64       m_uIdleFastForwardTicks;
 	Uint64       m_uIdleSleepSlices;
 	Bool         m_bIdlePollSleeping;

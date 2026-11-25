@@ -104,6 +104,12 @@ def analyze_lines(lines: Iterable[str]) -> Dict[str, object]:
             if calls and times:
                 for name, value in zip(("sa1_advance", "sa1_noadvance", "sa1_samples", "sa1_bus_cycles", "sa1_step_cycles", "sa1_irq_cycles"), calls + times):
                     stats[name] += value
+        elif tag == "[snes-cpu-poll]":
+            values = _tuple(payload, "iterations vblank/iram", 2)
+            if values:
+                stats["scpu_poll_windows"] += 1
+                stats["scpu_poll_vblank"] += values[0]
+                stats["scpu_poll_iram"] += values[1]
         elif tag == "[snes-sa1-bus]":
             # Counter is cumulative per session, so never sum each report.
             stats["sa1_dropped_peak"] = max(stats["sa1_dropped_peak"], _uint(payload, "dropped-events") or 0)
@@ -212,6 +218,8 @@ def render_text(report: Dict[str, object]) -> str:
     if stats.get("sa1_samples"):
         count = stats["sa1_samples"]
         lines.append(f"SA-1 sync advance/noadvance={stats['sa1_advance']}/{stats['sa1_noadvance']} samples={count}; mean sampled cycles bus/step/irq=" + "/".join(f"{stats[k]/count:.1f}" for k in ("sa1_bus_cycles", "sa1_step_cycles", "sa1_irq_cycles")))
+    if stats.get("scpu_poll_windows"):
+        lines.append(f"S-CPU polling iterations skipped vblank/iram={stats['scpu_poll_vblank']}/{stats['scpu_poll_iram']}")
     reasons = report["capture_reasons"]
     if reasons:
         lines.append("capture reasons=" + ", ".join(f"{name}:{count}" for name, count in sorted(reasons.items())))

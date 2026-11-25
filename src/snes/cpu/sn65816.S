@@ -141,51 +141,54 @@
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)
 //#define SNCPU_SUBCYCLES(_nCycles)
 
-/* SA-1 S-CPU bus recorder. The plain and SA-1-side variants compile it out;
-   only the host core of an SA-1 cartridge needs to produce these events.
-   bits 0-15=end master clock, bit16=fast access, bits17-18=byte count. */
+/* Shared-bus event: end clock [15:0], fast [16], bytes [18:17], device [20:19]. */
 #if defined(SNCPU_ASM_VARIANT_PLAIN) || defined(SNCPU_ASM_VARIANT_SA1)
 #define SNCPU_SA1_TRACK(_addr,_cycles,_bytes)
 #else
 #define SNCPU_SA1_TRACK(_addr,_cycles,_bytes) \
-		lw		t0,SP_SA1Track				;\
-		beq		t0,zr,99f				;\
-		srl		t0,_addr,17				;\
-		andi		t0,t0,0x7F				;\
-		addiu		t1,zr,0x3F				;\
-		beq		t0,t1,99f				;\
-		sltiu		t1,_cycles,SNCPU_CYCLE_SLOW		;\
-		lw		t2,SNCPU_Counter2			;\
-		subu		t2,t2,R_Cycles				;\
-		andi		t2,t2,0xFFFF				;\
-		sll		t1,t1,16				;\
-		or		t2,t2,t1				;\
-		addiu		t1,zr,_bytes				;\
-		sll		t1,t1,17				;\
-		or		t2,t2,t1				;\
-		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
-		lw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
-		sltiu		t0,t1,256		;\
-		bne		t0,zr,98f				;\
-		nop						;\
-		lui		t0,%hi(g_SNCPU_SA1BusDroppedEvents)	;\
-		lw		t1,%lo(g_SNCPU_SA1BusDroppedEvents)(t0)	;\
-		addiu		t1,t1,1				;\
-		b		99f					;\
-		sw		t1,%lo(g_SNCPU_SA1BusDroppedEvents)(t0)	;\
-98:		sll		t1,t1,2					;\
-		lui		t0,%hi(g_SNCPU_SA1BusEventAddr)		;\
-		addiu		t0,t0,%lo(g_SNCPU_SA1BusEventAddr)	;\
-		addu		t0,t0,t1				;\
-		sw		_addr,0(t0)				;\
-		lui		t0,%hi(g_SNCPU_SA1BusEventInfo)		;\
-		addiu		t0,t0,%lo(g_SNCPU_SA1BusEventInfo)	;\
-		addu		t0,t0,t1				;\
-		sw		t2,0(t0)					;\
-		srl		t1,t1,2					;\
-		addiu		t1,t1,1					;\
-		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
-		sw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
+		lw t0,SP_SA1Track ;\
+		beq t0,zr,99f ;\
+		srl t0,_addr,SNCPU_BANK_SHIFT ;\
+		andi t0,t0,0x7FF ;\
+		lui t1,%hi(g_SNCPU_SA1HostBusPage) ;\
+		addiu t1,t1,%lo(g_SNCPU_SA1HostBusPage) ;\
+		addu t0,t0,t1 ;\
+		lbu t0,0(t0) ;\
+		beq t0,zr,99f ;\
+		addiu t1,zr,SNCPU_SA1_BUS_MIX_HIGH ;\
+		bne t0,t1,97f ;\
+		andi t1,_addr,0xF800 ;\
+		addiu t0,zr,0x3000 ;\
+		bne t1,t0,99f ;\
+		addiu t0,zr,SNCPU_SA1_BUS_IRAM ;\
+97:     sltiu t1,_cycles,SNCPU_CYCLE_SLOW ;\
+		ori t1,t1,(_bytes<<1) ;\
+		sll t1,t1,16 ;\
+		sll t0,t0,19 ;\
+		or t1,t1,t0 ;\
+		lw t2,SNCPU_Counter2 ;\
+		subu t2,t2,R_Cycles ;\
+		andi t2,t2,0xFFFF ;\
+		or t2,t2,t1 ;\
+		lui t0,%hi(g_SNCPU_SA1BusEventCount) ;\
+		lw t1,%lo(g_SNCPU_SA1BusEventCount)(t0) ;\
+		sltiu t0,t1,256 ;\
+		bne t0,zr,98f ;\
+		nop ;\
+		lui t0,%hi(g_SNCPU_SA1BusDroppedEvents) ;\
+		lw t1,%lo(g_SNCPU_SA1BusDroppedEvents)(t0) ;\
+		addiu t1,t1,1 ;\
+		b 99f ;\
+		sw t1,%lo(g_SNCPU_SA1BusDroppedEvents)(t0) ;\
+98:     sll t1,t1,2 ;\
+		lui t0,%hi(g_SNCPU_SA1BusEventInfo) ;\
+		addiu t0,t0,%lo(g_SNCPU_SA1BusEventInfo) ;\
+		addu t0,t0,t1 ;\
+		sw t2,0(t0) ;\
+		srl t1,t1,2 ;\
+		addiu t1,t1,1 ;\
+		lui t0,%hi(g_SNCPU_SA1BusEventCount) ;\
+		sw t1,%lo(g_SNCPU_SA1BusEventCount)(t0) ;\
 99:
 #endif
 
@@ -208,8 +211,8 @@
 		nop						;
 #endif
 
-/* SA-1 arbitration: pre-expanded penalty bytes keep the R5900 hot path
-   independent from C callbacks. */
+/* Pre-expanded penalty bytes avoid C callbacks. Mixed-page tests must
+   preserve t2, which can be the caller's access-cycle argument. */
 #define SNCPU_SA1_PENALTY(_addr,_cycles) \
 		SNCPU_SA1_EXEC_GUARD(90f)			\
 		srl		t0,_addr,SNCPU_BANK_SHIFT		;\
@@ -224,16 +227,16 @@
 		addiu		t1,zr,SNCPU_SA1_BUS_MIX_LOW		;\
 		bne		t0,t1,92f				;\
 		andi		t1,_addr,SNCPU_BANK_MASK		;\
-		sltiu		t2,t1,0x0800				;\
-		beq		t2,zr,90f				;\
+		sltiu		t0,t1,0x0800				;\
+		beq		t0,zr,90f				;\
 		addiu		t0,zr,SNCPU_SA1_BUS_IRAM		;\
 		b		94f					;\
 		nop						;\
-92:		sltiu		t2,t1,0x1000				;\
-		bne		t2,zr,90f				;\
+92:		sltiu		t0,t1,0x1000				;\
+		bne		t0,zr,90f				;\
 		nop						;\
-		sltiu		t2,t1,0x1800				;\
-		beq		t2,zr,90f				;\
+		sltiu		t0,t1,0x1800				;\
+		beq		t0,zr,90f				;\
 		addiu		t0,zr,SNCPU_SA1_BUS_IRAM		;\
 94:		lw		t1,SNCPU_Counter2			;\
 		subu		t1,t1,R_Cycles				;\

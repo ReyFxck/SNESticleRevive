@@ -31,9 +31,21 @@ public:
 		m_uPendingCatchup = 0;
 		m_uLastFlip = 0;
 		m_uPeriod = 0;
+		m_uHostPeriod = 0;
 		m_uSampleCount = 0;
 		m_uSamplePos = 0;
 		m_uSamples[0] = m_uSamples[1] = m_uSamples[2] = 0;
+	}
+
+	// Seed from the configured video mode; a slow first gameplay frame
+	// must not teach the scheduler that two VBlanks are one period.
+	void SetHostPeriod(Uint32 period)
+	{
+		if (!period || period == m_uHostPeriod) return;
+		Reset();
+		m_uHostPeriod = m_uPeriod = period;
+		m_uSamples[0] = m_uSamples[1] = m_uSamples[2] = period;
+		m_uSampleCount = 3;
 	}
 
 	void CancelRecovery()
@@ -148,6 +160,7 @@ private:
 	Uint32 m_uPendingCatchup;
 	Uint32 m_uLastFlip;
 	Uint32 m_uPeriod;
+	Uint32 m_uHostPeriod;
 	Uint32 m_uSamples[3];
 	Uint32 m_uSampleCount;
 	Uint32 m_uSamplePos;

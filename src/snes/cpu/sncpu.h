@@ -133,7 +133,7 @@ void SNCPUMirror24BitBus(SNCpuT *pCpu);
 
 extern volatile Uint32 g_SNCPU_SA1BusTrackEnabled;
 extern volatile Uint32 g_SNCPU_SA1BusEventCount;
-extern Uint32 g_SNCPU_SA1BusEventAddr[SNCPU_SA1_BUS_EVENT_MAX];
+extern Uint8 g_SNCPU_SA1HostBusPage[0x1000000u / SNCPU_BANK_SIZE];
 extern Uint32 g_SNCPU_SA1BusEventInfo[SNCPU_SA1_BUS_EVENT_MAX];
 extern SNCpuT *g_SNCPU_SA1BusHostCpu;
 extern SNCpuT *g_SNCPU_SA1ExecCpu;

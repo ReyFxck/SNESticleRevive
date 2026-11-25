@@ -14,7 +14,7 @@
 
 volatile Uint32 g_SNCPU_SA1BusTrackEnabled = 0;
 volatile Uint32 g_SNCPU_SA1BusEventCount = 0;
-Uint32 g_SNCPU_SA1BusEventAddr[SNCPU_SA1_BUS_EVENT_MAX];
+Uint8 g_SNCPU_SA1HostBusPage[0x1000000u / SNCPU_BANK_SIZE];
 Uint32 g_SNCPU_SA1BusEventInfo[SNCPU_SA1_BUS_EVENT_MAX];
 SNCpuT *g_SNCPU_SA1BusHostCpu = NULL;
 SNCpuT *g_SNCPU_SA1ExecCpu = NULL;
@@ -51,40 +51,57 @@ static Uint8 SNCPUSA1BusType(Uint32 uAddr, Bool bSA1Side)
 	return SNCPU_SA1_BUS_NONE;
 }
 
+// Mark a contiguous range with at most one read/modify/write per bitset word.
+static inline void SNCPUSA1BusMarkBits(Uint32 *pBits, Uint32 uFirst, Uint32 uLast)
+{
+	Uint32 a=uFirst>>5, b=uLast>>5;
+	Uint32 lo=0xFFFFFFFFu<<(uFirst&31);
+	Uint32 hi=0xFFFFFFFFu>>(31-(uLast&31));
+	if (a==b) { pBits[a]|=lo&hi; return; }
+	pBits[a]|=lo;
+	while (++a<b) pBits[a]=0xFFFFFFFFu;
+	pBits[b]|=hi;
+}
+
 static void SNCPUSA1BusMark(Uint8 uType, Uint32 uFirst, Uint32 uLast, Bool bFast)
 {
-	Uint32 uTick, uEnd;
+	Uint32 uEnd, uUnit;
 	Uint8 *pPenalty;
-	Uint32 *pBits;
 	Bool bBW, bFastIRAM;
 	Uint8 uPenalty;
 	if (!uType || uType>SNCPU_SA1_BUS_IRAM || uFirst>=SNCPU_SA1_BUS_TICK_MAX || uFirst>uLast) return;
 	if (uLast>=SNCPU_SA1_BUS_TICK_MAX) uLast=SNCPU_SA1_BUS_TICK_MAX-1;
 	pPenalty=g_SNCPU_SA1BusPenaltyUnits[uType];
-	pBits=g_SNCPU_SA1BusBits[uType];
 	bBW=(uType==SNCPU_SA1_BUS_BWRAM);
 	bFastIRAM=(uType==SNCPU_SA1_BUS_IRAM && bFast);
 	uPenalty=(Uint8)(SNCPU_CYCLE_FAST*((bBW || bFastIRAM)?2:1));
 	uEnd=uLast*SNCPU_CYCLE_FAST+1;
 	if (uEnd>g_SNCPU_SA1BusDirtyEnd[uType]) g_SNCPU_SA1BusDirtyEnd[uType]=uEnd;
-	/* For BW-RAM the previous tick is penalized as well. Inside this
-	   contiguous interval it is already marked by the prior iteration;
-	   only the first preceding tick needs a separate write. */
-	if (bBW && uFirst>0) {
-		Uint32 uPrev=(uFirst-1)*SNCPU_CYCLE_FAST;
-		if (uPenalty>pPenalty[uPrev]) pPenalty[uPrev]=uPenalty;
-	}
-	for (uTick=uFirst; uTick<=uLast; uTick++) {
-		Uint32 uMask=1u<<(uTick&31);
-		Uint32 uUnit=uTick*SNCPU_CYCLE_FAST;
-		pBits[uTick>>5]|=uMask;
-		if (bFastIRAM) g_SNCPU_SA1BusFastIRAM[uTick>>5]|=uMask;
-		if (uPenalty>pPenalty[uUnit]) pPenalty[uUnit]=uPenalty;
+	SNCPUSA1BusMarkBits(g_SNCPU_SA1BusBits[uType],uFirst,uLast);
+	if (bFastIRAM) SNCPUSA1BusMarkBits(g_SNCPU_SA1BusFastIRAM,uFirst,uLast);
+	if (bBW && uFirst>0) --uFirst;
+	// Only slow I-RAM can overlap an existing higher penalty.
+	if (uType==SNCPU_SA1_BUS_IRAM && !bFast) {
+		for (uUnit=uFirst*SNCPU_CYCLE_FAST; uUnit<uEnd; uUnit+=SNCPU_CYCLE_FAST)
+			if (pPenalty[uUnit]<uPenalty) pPenalty[uUnit]=uPenalty;
+	} else {
+		for (uUnit=uFirst*SNCPU_CYCLE_FAST; uUnit<uEnd; uUnit+=SNCPU_CYCLE_FAST)
+			pPenalty[uUnit]=uPenalty;
 	}
 }
 
 void SNCPUSA1BusSetHost(SNCpuT *pCpu)
 {
+	// The only mixed S-CPU page is $2000-$3FFF (I-RAM at $3000-$37FF).
+	if (pCpu) {
+		Uint32 i;
+		for (i=0; i<sizeof(g_SNCPU_SA1HostBusPage); ++i) {
+			Uint32 addr=i<<SNCPU_BANK_SHIFT;
+			g_SNCPU_SA1HostBusPage[i]=SNCPUSA1BusType(addr,FALSE);
+			if (SNCPUSA1BusType(addr+0x1000,FALSE)==SNCPU_SA1_BUS_IRAM)
+				g_SNCPU_SA1HostBusPage[i]=SNCPU_SA1_BUS_MIX_HIGH;
+		}
+	}
 	g_SNCPU_SA1BusHostCpu=pCpu;
 	g_SNCPU_SA1BusTrackEnabled=pCpu?1u:0u;
 	g_SNCPU_SA1BusConflictTicks=0;
@@ -163,16 +180,17 @@ void SNCPUSA1BusBeginLine(void)
 }
 void SNCPUSA1BusRecord(SNCpuT *pCpu, Uint32 uAddr, Uint32 uCyclesPerByte, Uint32 nBytes)
 {
-	Uint32 uIndex,uEnd,uInfo;
+	Uint32 uIndex,uEnd,uInfo,uType;
 	if (!g_SNCPU_SA1BusTrackEnabled || pCpu!=g_SNCPU_SA1BusHostCpu || !nBytes) return;
-	/* $7E-$7F are private S-CPU WRAM. Finalize would discard these events
-	   anyway; do not fill the shared-bus queue with them. */
-	if ((uAddr & 0xFE0000u) == 0x7E0000u) return;
+	uAddr &= 0xFFFFFFu;
+	uType=g_SNCPU_SA1HostBusPage[uAddr>>SNCPU_BANK_SHIFT];
+	if (uType==SNCPU_SA1_BUS_MIX_HIGH)
+		uType=((uAddr&0xF800u)==0x3000u)?SNCPU_SA1_BUS_IRAM:SNCPU_SA1_BUS_NONE;
+	if (!uType) return;
 	uIndex=g_SNCPU_SA1BusEventCount;
 	if (uIndex>=SNCPU_SA1_BUS_EVENT_MAX) { g_SNCPU_SA1BusDroppedEvents++; return; }
 	uEnd=(Uint32)SNCPUGetCounter(pCpu,SNCPU_COUNTER_LINE)&0xFFFFu;
-	uInfo=uEnd | ((uCyclesPerByte<SNCPU_CYCLE_SLOW)?(1u<<16):0) | ((nBytes&3u)<<17);
-	g_SNCPU_SA1BusEventAddr[uIndex]=uAddr&0xFFFFFFu;
+	uInfo=uEnd | ((uCyclesPerByte<SNCPU_CYCLE_SLOW)?(1u<<16):0) | ((nBytes&3u)<<17) | (uType<<19);
 	g_SNCPU_SA1BusEventInfo[uIndex]=uInfo;
 	g_SNCPU_SA1BusEventCount=uIndex+1;
 }
@@ -180,16 +198,18 @@ void SNCPUSA1BusFinalize(Uint32 uMasterClock)
 {
 	Uint32 uCount=g_SNCPU_SA1BusEventCount;
 	while (g_SNCPU_SA1BusFinalized<uCount) {
-		Uint32 i=g_SNCPU_SA1BusFinalized, uAddr=g_SNCPU_SA1BusEventAddr[i], uInfo=g_SNCPU_SA1BusEventInfo[i];
+		Uint32 i=g_SNCPU_SA1BusFinalized, uInfo=g_SNCPU_SA1BusEventInfo[i];
 		Uint32 uEnd=uInfo&0xFFFFu, nBytes=(uInfo>>17)&3u;
 		Bool bFast=(uInfo&(1u<<16))?TRUE:FALSE;
 		Uint32 uSpeed=bFast?SNCPU_CYCLE_FAST:SNCPU_CYCLE_SLOW, uDuration, uStart;
 		Uint8 uType;
-		if (!nBytes) nBytes=1;
 		if (uEnd>uMasterClock) break;
-		uDuration=uSpeed*nBytes; uStart=(uEnd>=uDuration)?uEnd-uDuration:0;
-		uType=SNCPUSA1BusType(uAddr,FALSE);
-		if (uType && uEnd>uStart) SNCPUSA1BusMark(uType,uStart>>1,(uEnd-1)>>1,bFast);
+		uType=(Uint8)((uInfo>>19)&3u);
+		if (uType && uEnd) {
+			if (!nBytes) nBytes=1;
+			uDuration=uSpeed*nBytes; uStart=(uEnd>=uDuration)?uEnd-uDuration:0;
+			SNCPUSA1BusMark(uType,uStart>>1,(uEnd-1)>>1,bFast);
+		}
 		g_SNCPU_SA1BusFinalized++;
 	}
 }
