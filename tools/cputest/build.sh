@@ -11,7 +11,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 OUT="$ROOT/tools/cputest"
 CC=${CC:-cc}
 CXX=${CXX:-c++}
-CFLAGS="-O2 -DSNCPU_TEST=1 -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -I$ROOT/src/common/base -I$ROOT/src/snes/core -I$ROOT/src/snes/cpu"
+CFLAGS="-O2 -fwrapv -DSNCPU_TEST=1 -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -I$ROOT/src/common/base -I$ROOT/src/snes/core -I$ROOT/src/snes/cpu"
 
 $CC $CFLAGS -ffunction-sections -fdata-sections -c "$ROOT/src/snes/cpu/sncpu.c" -o "$OUT/sncpu.o"
 $CC $CFLAGS -ffunction-sections -fdata-sections -c "$ROOT/src/snes/cpu/sncpu_c.c" -o "$OUT/sncpu_c.o"

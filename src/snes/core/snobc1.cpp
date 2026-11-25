@@ -57,7 +57,6 @@ void SNOBC1::Write(Uint32 uAddr, Uint8 uData)
 
     case 0x7FF5:
         m_BasePtr = (uData & 1) ? 0x1800 : 0x1C00;
-        m_Ram[0x1FF5] = uData;
         break;
 
     case 0x7FF6:
@@ -65,8 +64,8 @@ void SNOBC1::Write(Uint32 uAddr, Uint8 uData)
         m_Shift   = (uData & 3) << 1;
         break;
 
-    default:
-        m_Ram[uAddr & 0x1FFF] = uData;
-        break;
     }
+    // The port writes also update the underlying SRAM byte. In particular,
+    // $7FF6 must not retain stale data after selecting a different object.
+    m_Ram[uAddr & 0x1FFF] = uData;
 }

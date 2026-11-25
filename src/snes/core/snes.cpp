@@ -112,6 +112,9 @@ Uint32 g_TmgCycHDMAData = 0;
 Uint32 g_TmgCycHDMATable = 0;
 
 Uint32 g_DbgOAMWrites = 0;
+Uint32 g_DbgOAMBlockFast = 0;
+Uint32 g_DbgOAMBlockBytes = 0;
+Uint32 g_DbgOAMBlockIdentical = 0;
 Uint32 g_DbgVRAMWrites = 0;
 Uint32 g_DbgVRAMIdenticalBytes = 0;
 Uint32 g_DbgVRAMIdenticalBlocks = 0;
@@ -121,6 +124,7 @@ Uint32 g_DbgCGRAMUnchanged = 0;
 Uint32 g_DbgVideoRenderedFrames = 0;
 Uint32 g_DbgVideoSkippedFrames = 0;
 Uint32 g_DbgHostRefreshHz = 60;
+Uint32 g_DbgFrameReportCycles = 0;
 Uint32 g_DbgSessionId = 0;
 Uint32 g_DbgObjEnabledLines = 0;
 Uint32 g_DbgObjOamRefs = 0;
@@ -176,7 +180,6 @@ Uint32 g_DbgBGChrCacheMisses = 0;
 Uint32 g_DbgBGChrCacheBypasses = 0;
 Uint32 g_DbgBGChrCacheInvalidations = 0;
 Uint32 g_DbgBGLineCacheHits = 0;
-Uint32 g_DbgBGLineEpochHits = 0;
 Uint32 g_DbgBGLineCacheMisses = 0;
 Uint32 g_DbgBGLineCacheScrolls = 0;
 Uint32 g_DbgBGLineCacheBypasses = 0;
@@ -302,6 +305,7 @@ static void SnesDbgResetWindow(void)
 	g_TmgIrqLineMin = 9999;
 	g_TmgIrqLineMax = -1;
 	g_DbgOAMWrites = 0;
+	g_DbgOAMBlockFast = g_DbgOAMBlockBytes = g_DbgOAMBlockIdentical = 0;
 	g_DbgVRAMWrites = 0;
 	g_DbgVRAMIdenticalBytes = 0;
 	g_DbgVRAMIdenticalBlocks = 0;
@@ -360,7 +364,6 @@ static void SnesDbgResetWindow(void)
 	g_DbgBGChrCacheBypasses = 0;
 	g_DbgBGChrCacheInvalidations = 0;
 	g_DbgBGLineCacheHits = 0;
-	g_DbgBGLineEpochHits = 0;
 	g_DbgBGLineCacheMisses = 0;
 	g_DbgBGLineCacheScrolls = 0;
 	g_DbgBGLineCacheBypasses = 0;
@@ -2767,7 +2770,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgBGChrCacheMisses,
 				(unsigned)g_DbgBGChrCacheBypasses,
 				(unsigned)g_DbgBGChrCacheInvalidations);
-			DLog("[snes-bg-line-epoch] hits=%u", (unsigned)g_DbgBGLineEpochHits);
+			DLog("[snes-bg-line-epoch] hits=0 enabled=0");
 			DLog("[snes-bg-line-cache] hit/miss/bypass=%u/%u/%u scroll=%u",
 				(unsigned)g_DbgBGLineCacheHits,
 				(unsigned)g_DbgBGLineCacheMisses,
@@ -2807,6 +2810,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)(g_DbgAudioMinSamples == 0xFFFFFFFFu
 					? 0u : g_DbgAudioMinSamples),
 				(unsigned)g_DbgAudioMaxSamples);
+			DLog("[snes-oam-block] fast=%u bytes=%u identical=%u",
+                (unsigned)g_DbgOAMBlockFast, (unsigned)g_DbgOAMBlockBytes,
+                (unsigned)g_DbgOAMBlockIdentical);
 			DLog("[snes-vram-write] skipped-identical-bytes=%u identical-dma-blocks=%u",
 				(unsigned)g_DbgVRAMIdenticalBytes, (unsigned)g_DbgVRAMIdenticalBlocks);
 			DLog("[snes-cgram] bytes/commits/unchanged=%u/%u/%u",
@@ -2997,6 +3003,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 		}
 		g_DbgCaptureActive = FALSE;
 		g_DbgCaptureReasons = 0;
+		// Cycles after the core timing cutoff, including capture/report work.
+		g_DbgFrameReportCycles += ProfCtrGetCycle() - g_TmgFrameStart - cyc;
 	}
 #endif
 

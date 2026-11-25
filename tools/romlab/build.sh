@@ -83,7 +83,7 @@ INCLUDES=(
     -I"$ROOT/src/snes/state"
 )
 
-CFLAGS=(-O2 -g -ffunction-sections -fdata-sections -fno-strict-aliasing)
+CFLAGS=(-O2 -g -ffunction-sections -fdata-sections -fno-strict-aliasing -fwrapv)
 CXXFLAGS=(-O2 -g -std=gnu++17 -ffunction-sections -fdata-sections -fno-strict-aliasing -fwrapv)
 LDFLAGS=(-Wl,--gc-sections)
 WARNINGS=(-Wall -Wextra -Wformat=2 -Wno-unused-parameter

@@ -122,12 +122,10 @@ void SnesDMAC::EndDMATiming()
 
 Bool SnesDMAC::IsABusForbidden(Uint32 uAddr)
 {
-	Uint32 uBank = (uAddr >> 16) & 0xFF;
-	Uint32 uLow = uAddr & 0xFFFF;
-	Bool bSystemBank =
-		(uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF)) ? TRUE : FALSE;
-	if (!bSystemBank)
+	// System banks are precisely those with bank bit 6 clear.
+	if (uAddr & 0x400000u)
 		return FALSE;
+	Uint32 uLow = uAddr & 0xFFFF;
 	if (uLow >= 0x2100 && uLow <= 0x21FF)
 		return TRUE;
 	if ((uLow >= 0x4000 && uLow <= 0x41FF) ||
@@ -143,18 +141,17 @@ Bool SnesDMAC::IsWorkRAMAddress(Uint32 uAddr) const
 	Uint32 uLow = uAddr & 0xFFFF;
 	if (uBank == 0x7E || uBank == 0x7F)
 		return TRUE;
-	return ((uBank <= 0x3F || (uBank >= 0x80 && uBank <= 0xBF)) &&
-	        uLow < 0x2000) ? TRUE : FALSE;
+	return (!(uAddr & 0x400000u) && uLow < 0x2000) ? TRUE : FALSE;
 }
 
-Uint8 SnesDMAC::ReadABus(Uint32 uAddr)
+inline __attribute__((always_inline)) Uint8 SnesDMAC::ReadABus(Uint32 uAddr)
 {
 	if (IsABusForbidden(uAddr))
 		return m_pCPU->uOpenBus;
 	return SnesHDMARead8(m_pCPU, uAddr);
 }
 
-void SnesDMAC::WriteABus(Uint32 uAddr, Uint8 uData)
+inline __attribute__((always_inline)) void SnesDMAC::WriteABus(Uint32 uAddr, Uint8 uData)
 {
 	/* DMA writes always drive the data bus, even when a CPU/DMA-controller
 	   register rejects the A-bus access. */

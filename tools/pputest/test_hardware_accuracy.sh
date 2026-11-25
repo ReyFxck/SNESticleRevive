@@ -16,3 +16,9 @@ ${CXX:-g++} "${flags[@]}" -fwrapv -fno-strict-aliasing tools/pputest/apu_memory_
 "$work/apumem"
 ${CXX:-g++} "${flags[@]}" -I src/common/system -I src/app tools/pputest/io_register_test.cpp src/snes/core/snio.cpp src/snes/core/sndma.cpp -o "$work/io"
 "$work/io"
+
+${CXX:-g++} "${flags[@]}" -I src/platform/ps2/system tools/pputest/late_diag_test.cpp -o "$work/late"
+"$work/late"
+
+${CXX:-g++} "${flags[@]}" tools/pputest/obc1_test.cpp src/snes/core/snobc1.cpp -o "$work/obc1"
+"$work/obc1"

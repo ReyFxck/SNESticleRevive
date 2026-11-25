@@ -164,6 +164,9 @@ extern Uint32 g_TmgCycHDMATable;  // contador/tabela dos canais HDMA
 
 // Totais da janela atual (120 frames), alimentados pela PPU/render.
 extern Uint32 g_DbgOAMWrites;
+extern Uint32 g_DbgOAMBlockFast;
+extern Uint32 g_DbgOAMBlockBytes;
+extern Uint32 g_DbgOAMBlockIdentical;
 extern Uint32 g_DbgVRAMWrites;
 extern Uint32 g_DbgVRAMIdenticalBytes;
 extern Uint32 g_DbgVRAMIdenticalBlocks;
@@ -173,6 +176,7 @@ extern Uint32 g_DbgCGRAMUnchanged;
 extern Uint32 g_DbgVideoRenderedFrames;
 extern Uint32 g_DbgVideoSkippedFrames;
 extern Uint32 g_DbgHostRefreshHz;
+extern Uint32 g_DbgFrameReportCycles;
 extern Uint32 g_DbgSessionId;
 extern Uint32 g_DbgObjEnabledLines;
 extern Uint32 g_DbgObjOamRefs;
@@ -232,7 +236,6 @@ extern Uint32 g_DbgBGChrCacheMisses;
 extern Uint32 g_DbgBGChrCacheBypasses;
 extern Uint32 g_DbgBGChrCacheInvalidations;
 extern Uint32 g_DbgBGLineCacheHits;
-extern Uint32 g_DbgBGLineEpochHits;
 extern Uint32 g_DbgBGLineCacheMisses;
 extern Uint32 g_DbgBGLineCacheScrolls;
 extern Uint32 g_DbgBGLineCacheBypasses;

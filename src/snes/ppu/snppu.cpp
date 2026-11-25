@@ -562,6 +562,37 @@ void SnesPPU::WriteOAMBlock(const Uint8 *pData, Int32 nBytes)
 		g_DbgPPURegWrites[0x04] += (Uint32)nBytes;
 #endif
 
+	/* MDMA normally supplies aligned 256-byte chunks. For complete byte
+	   pairs wholly inside physical OAM, the latch commits both bytes and
+	   the first 32 high-table bytes map contiguously. Keep the byte loop
+	   for odd starts/counts, mirrored high OAM, wrapping or overlapping
+	   sources. The final even byte is still latched, including high OAM. */
+	if (nBytes >= 8 && !(uAddress & 1u) && !(nBytes & 1) &&
+	    uAddress < sizeof(m_OAM) && (Uint32)nBytes <= sizeof(m_OAM) - uAddress)
+	{
+		const uintptr_t src = (uintptr_t)pData;
+		const uintptr_t dst = (uintptr_t)(pOamData + uAddress);
+		const Uint32 size = (Uint32)nBytes;
+		if ((src < dst ? dst - src : src - dst) >= size)
+		{
+			m_OAMLatch = pData[size - 2u];
+#if SNDBG_LOG
+            ++g_DbgOAMBlockFast;
+            g_DbgOAMBlockBytes += size;
+#endif
+			if (memcmp(pOamData + uAddress, pData, size) != 0)
+			{
+				memcpy(pOamData + uAddress, pData, size);
+				bChanged = TRUE;
+			}
+#if SNDBG_LOG
+            else ++g_DbgOAMBlockIdentical;
+#endif
+			uAddress += size;
+			nBytes = 0;
+		}
+	}
+
 	/* OAM is normally refreshed by one 544-byte DMA every frame. Preserve
 	   the low-table latch and high-table mirroring exactly, but publish the
 	   final address/priority and renderer invalidation only once. */
@@ -594,7 +625,7 @@ void SnesPPU::WriteOAMBlock(const Uint8 *pData, Int32 nBytes)
 
 	m_Regs.oamaddr.w = (m_Regs.oamaddr.w & 0x8000) | uAddress;
 	UpdateOAMPriority();
-	if (bChanged)
+	if (bChanged && m_pRender)
 		m_pRender->UpdateOAM();
 }
 

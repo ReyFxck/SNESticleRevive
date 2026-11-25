@@ -118,7 +118,7 @@ static void TestMasks()
     }
     std::puts("Masks: 65536 fused cases + 4096 stores PASS");
 }
-static void TestMosaicAndEpoch()
+static void TestMosaicAndKey()
 {
     unsigned cases=0;
     for(unsigned mosaic=0;mosaic<16;++mosaic)
@@ -145,11 +145,11 @@ static void TestMosaicAndEpoch()
     for(unsigned m=0;m<16;++m) {
         info.uMosaic=m;
         SnesPPUBGLineCacheSetKey(&key,99,0x10000,0,1,&info);
-        Check(SnesPPUBGLineCacheEpochMatches(&key,7,7,0x10000,0,1,&info),"same epoch/key");
-        Check(!SnesPPUBGLineCacheEpochMatches(&key,7,8,0x10000,0,1,&info),"changed epoch");
-        Check(!SnesPPUBGLineCacheEpochMatches(&key,7,7,0x10001,0,1,&info),"changed tile");
-        Check(bool(SnesPPUBGLineCacheEpochMatches(&key,7,7,0x20000,0,1,&info))==(m==0),"mosaic phase key");
+        Check(SnesPPUBGLineCacheKeyMatches(&key,99,0x10000,0,1,&info),"same dependency/key");
+        Check(!SnesPPUBGLineCacheKeyMatches(&key,100,0x10000,0,1,&info),"changed dependency generation");
+        Check(!SnesPPUBGLineCacheKeyMatches(&key,99,0x10001,0,1,&info),"changed tile");
+        Check(bool(SnesPPUBGLineCacheKeyMatches(&key,99,0x20000,0,1,&info))==(m==0),"mosaic phase key");
     }
-    std::printf("Mosaic masks: %u cases; epoch key: 64 checks PASS\n",cases);
+    std::printf("Mosaic masks: %u cases; cache key: 64 checks PASS\n",cases);
 }
-int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndEpoch(); }
+int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); }

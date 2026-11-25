@@ -483,10 +483,64 @@ static void CheckBlockedVRAMAndWindows()
     Check("PPU reset clears vblank flag",ppu.InVBlank(),FALSE);
 }
 
+/* Exercise both direct OAM chunks and every kind of byte-loop fallback.
+   Compare final memory/address/priority and expose the write latch by a
+   subsequent active-display odd-byte write on the renderer's OAM bus. */
+static void CheckOAMBulkEquivalence()
+{
+    SnesPPU ppu, ref;
+    TestRender render, refRender;
+    ppu.SetPPURender(&render); render.SetPPU(&ppu);
+    ref.SetPPURender(&refRender); refRender.SetPPU(&ref);
+    Uint32 random = 0x713ae19u;
+    Uint8 data[1088];
+    unsigned cases = 0;
+    for (unsigned start = 0; start < 1024; ++start)
+    for (unsigned variant = 0; variant < 4; ++variant)
+    {
+        ppu.Reset(); ref.Reset();
+        const unsigned rotate = variant & 1u ? 0x80u : 0u;
+        const unsigned count = variant == 0 ? 256u : variant == 1 ? 32u :
+            variant == 2 ? 544u : 1u + (start * 37u) % 1088u;
+        for (unsigned i = 0; i < sizeof(data); ++i)
+        {
+            random ^= random << 13; random ^= random >> 17; random ^= random << 5;
+            data[i] = (Uint8)random;
+        }
+        // Include already-equal data as well as changed data.
+        if (variant == 1) memset(data, 0, sizeof(data));
+        ppu.Write8(0x2102, (Uint8)(start >> 1));
+        ref.Write8(0x2102, (Uint8)(start >> 1));
+        ppu.Write8(0x2103, (Uint8)(rotate | (start >> 9)));
+        ref.Write8(0x2103, (Uint8)(rotate | (start >> 9)));
+        if (start & 1u) { ppu.ReadOAMDATA(); ref.ReadOAMDATA(); }
+        for (unsigned i = 0; i < count; ++i) ref.WriteOAMDATA(data[i]);
+        // Test the real MDMA segmentation as well as a single call.
+        if (variant == 2)
+        {
+            ppu.WriteOAMBlock(data, 256);
+            ppu.WriteOAMBlock(data + 256, 256);
+            ppu.WriteOAMBlock(data + 512, 32);
+        }
+        else ppu.WriteOAMBlock(data, (Int32)count);
+        Check("bulk OAM memory", memcmp(ppu.GetOAM(), ref.GetOAM(), sizeof(SnesOAMT)), 0);
+        Check("bulk OAM address", ppu.GetRegs()->oamaddr.w, ref.GetRegs()->oamaddr.w);
+        Check("bulk OAM priority", ppu.GetRegs()->oampri.w, ref.GetRegs()->oampri.w);
+        ppu.Write8(0x2100, 0x0F); ref.Write8(0x2100, 0x0F);
+        render.uInternalOAMAddress = refRender.uInternalOAMAddress = 1;
+        ppu.WriteTimed(0x2104, 0x5A, 1, 1024);
+        ref.WriteTimed(0x2104, 0x5A, 1, 1024);
+        Check("bulk OAM latch", memcmp(ppu.GetOAM(), ref.GetOAM(), sizeof(SnesOAMT)), 0);
+        ++cases;
+    }
+    std::printf("OAM bulk equivalence: %u cases %s\n", cases, g_Failures ? "FAIL" : "PASS");
+}
+
 int main(int argc, char **argv)
 {
 	if (argc == 2 && !std::strcmp(argv[1], "--vram-hotpath"))
 	{
+        CheckOAMBulkEquivalence();
 		CheckVRAMBlockEquivalence();
 		CheckUnchangedVRAMWrites();
 		CheckVRAMWidePrefix();
@@ -497,6 +551,7 @@ int main(int argc, char **argv)
 	TestRender render;
 	Uint8 *pOAM;
 
+	CheckOAMBulkEquivalence();
 	CheckVRAMBlockEquivalence();
 	CheckUnchangedVRAMWrites();
 	CheckVRAMWidePrefix();

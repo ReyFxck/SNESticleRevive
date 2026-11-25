@@ -20,6 +20,7 @@
 #include "mainloop_region_cadence.h"
 #include "mainloop_target_profile.h"
 #include "mainloop_telemetry.h"
+#include "mainloop_late_diag.h"
 #include "gskit_backend.h"
 
 #include "types.h"
@@ -37,6 +38,7 @@
 
 extern "C" {
 #include "gpprim.h"
+#include "hw.h"
 #include "gs.h"
 };
 
@@ -189,6 +191,10 @@ Bool MainLoopProcess()
 #if SNDBG_LOG || SNES_TARGET_PROFILE
     Uint32 uLoopStart = (SNDBG_LOG || SnesTargetProfileIsEnabled()) ? ProfCtrGetCycle() : 0;
     Bool bSnesAtStart = _pSnes && _pSystem == _pSnes && !_bMenu;
+#endif
+#if SNDBG_LOG
+    const Uint32 uStartVR = (Uint32)TestVRstart();
+    g_DbgFrameReportCycles = 0;
 #endif
 #if SNES_TARGET_PROFILE
     if (SnesTargetProfileIsEnabled())
@@ -519,6 +525,8 @@ Bool MainLoopProcess()
     struct CadenceWindowT
     {
         Uint32 Session, HostHz, PrevStart, PrevLoop, HavePrev;
+        Uint32 PrevWork, PrevReport, PrevVR;
+        MainLoopLateDiagT Late;
         Uint32 Count, Max, Over105, Over150;
         Uint64 Total, Tail;
     };
@@ -568,11 +576,14 @@ Bool MainLoopProcess()
         vr.PrevAfter = _MainLoop_DiagVRAfter;
         vr.HavePrev = 1;
         Uint32 uLoop = ProfCtrGetCycle() - uLoopStart;
+        Uint32 uWork = uLoop - _MainLoop_DiagFlipCount;
         if (cadence.HavePrev && cadence.HostHz)
         {
             const Uint32 interval = uLoopStart - cadence.PrevStart;
             const Uint32 budget = PROFCTR_COUNT_HZ / cadence.HostHz;
             cadence.Total += interval;
+            cadence.Late.Add(interval, budget, cadence.PrevWork,
+                cadence.PrevReport, uStartVR - cadence.PrevVR);
             if (interval > cadence.PrevLoop)
                 cadence.Tail += interval - cadence.PrevLoop;
             if (interval > cadence.Max) cadence.Max = interval;
@@ -586,14 +597,24 @@ Bool MainLoopProcess()
                     (unsigned)(cadence.Total / cadence.Count), (unsigned)cadence.Max,
                     (unsigned)(cadence.Tail / cadence.Count),
                     (unsigned)cadence.Over105, (unsigned)cadence.Over150);
+                DLog("[ps2-late-work] session=%u intervals=%u late=%u work-over/under=%u/%u report-cross=%u irq-multiple/invalid=%u/%u report-avg/max=%u/%u",
+                    (unsigned)cadence.Session, (unsigned)cadence.Count,
+                    (unsigned)cadence.Late.Late, (unsigned)cadence.Late.WorkOver,
+                    (unsigned)cadence.Late.WorkUnder, (unsigned)cadence.Late.ReportCross,
+                    (unsigned)cadence.Late.IRQMultiple, (unsigned)cadence.Late.IRQInvalid,
+                    (unsigned)(cadence.Late.ReportTotal / cadence.Count),
+                    (unsigned)cadence.Late.ReportMax);
+                memset(&cadence.Late, 0, sizeof(cadence.Late));
                 cadence.Count = cadence.Max = cadence.Over105 = cadence.Over150 = 0;
                 cadence.Total = cadence.Tail = 0;
             }
         }
         cadence.PrevStart = uLoopStart;
         cadence.PrevLoop = uLoop;
+        cadence.PrevWork = uWork;
+        cadence.PrevReport = g_DbgFrameReportCycles;
+        cadence.PrevVR = uStartVR;
         cadence.HavePrev = 1;
-        Uint32 uWork = uLoop - _MainLoop_DiagFlipCount;
         if (!window.nFrames || uWork < window.uMinWork) window.uMinWork = uWork;
         if (uWork > window.uMaxWork) window.uMaxWork = uWork;
         window.uLoop += uLoop;

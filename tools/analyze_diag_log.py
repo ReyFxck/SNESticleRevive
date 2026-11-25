@@ -82,6 +82,21 @@ def analyze(path):
             "zero":sum(x[4] for x in vr),"multiple":sum(x[5] for x in vr),
             "invalid":sum(x[6] for x in vr),
             "counter_observed":any(x[2] or x[3] for x in vr)}
+    late = [tuple(map(int,x)) for x in re.findall(
+        r"\[ps2-late-work\] session=(\d+) intervals=(\d+) late=(\d+) work-over/under=(\d+)/(\d+) report-cross=(\d+) irq-multiple/invalid=(\d+)/(\d+) report-avg/max=(\d+)/(\d+)",text)]
+    if late:
+        count = sum(x[1] for x in late)
+        result["paired_late_work"] = {"intervals":count,"late":sum(x[2] for x in late),
+            "work_over":sum(x[3] for x in late),"work_under":sum(x[4] for x in late),
+            "report_cross":sum(x[5] for x in late),"irq_multiple":sum(x[6] for x in late),
+            "irq_invalid":sum(x[7] for x in late),
+            "report_avg_ms":round(sum(x[8]*x[1] for x in late)*1000/(count*hz),3),
+            "report_max_ms":round(max(x[9] for x in late)*1000/hz,3)}
+    oam_fast = [tuple(map(int,x)) for x in re.findall(
+        r"\[snes-oam-block\] fast=(\d+) bytes=(\d+) identical=(\d+)",text)]
+    if oam_fast:
+        result["oam_bulk"] = {"fast_blocks":sum(x[0] for x in oam_fast),
+            "bytes":sum(x[1] for x in oam_fast),"identical_blocks":sum(x[2] for x in oam_fast)}
     return result
 
 if __name__ == "__main__":

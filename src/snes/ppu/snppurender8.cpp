@@ -81,14 +81,13 @@ struct SnesPPUBGLineCacheEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
 	Uint32 uReady;
-	Uint32 uValidatedEpoch;
 	/* Reuse bytes that were alignment padding: no cache-size increase. */
 	Uint8 uMainMaskClass;
 	Uint8 uSubMaskClass;
 	#if SNPPU_BG_CACHE_PACKED_KEY
-	Uint8 uKeyPad[30];
+	Uint8 uKeyPad[34];
 #else
-	Uint8 uKeyPad[26];
+	Uint8 uKeyPad[30];
 #endif
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uSubAlignPad[8];
@@ -112,12 +111,11 @@ struct SnesPPUBGLineCacheNormalEntryT
 {
 	SnesPPUBGLineCacheKeyT Key;
 	Uint32 uReady;
-	Uint32 uValidatedEpoch;
 	Uint8 uMainMaskClass;
 	#if SNPPU_BG_CACHE_PACKED_KEY
-	Uint8 uKeyPad[31];
+	Uint8 uKeyPad[35];
 #else
-	Uint8 uKeyPad[27];
+	Uint8 uKeyPad[31];
 #endif
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
@@ -179,13 +177,6 @@ static inline __attribute__((always_inline)) Uint8 _SnesPPUClassifyBGLineMasks(
 static inline __attribute__((always_inline)) void _SnesPPUMaskSHL(SNMaskT *pDestMask,
     const Uint8 *pSrcMask, Uint32 nBits)
 {
-#if CODE_PLATFORM == CODE_PS2 && SNMASKOP_INLINE && SNMASKOP_ASSEMBLY
-    if (nBits == 0 && ((uintptr_t)pSrcMask & 15u) == 0)
-    {
-        SNMaskCopy(pDestMask, (const SNMaskT *)pSrcMask);
-        return;
-    }
-#endif
     const Uint64 *pSrc = (const Uint64 *)pSrcMask;
     Uint64 uSrc0 = pSrc[0];
     Uint64 uSrc1 = pSrc[1];
@@ -257,7 +248,14 @@ static inline __attribute__((always_inline)) void _SnesPPURestoreCachedMasksRaw(
 /* Cached pixels already contain horizontal mosaic; stored opacity/priority
    masks are the raw 33-cell carriers. Reapply the same post-shift mosaic as
    the miss path (otherwise transparency and priority disagree with pixels). */
-static inline void _SnesPPURestoreCachedMasks(
+static __attribute__((noinline)) void _SnesPPUApplyCachedMosaic(
+    SNMaskT *pOpaqueDest, SNMaskT *pPriorityDest, Uint32 uMosaic)
+{
+    _MosaicBGPlanar(pOpaqueDest->uMask8, 256, uMosaic + 1);
+    _MosaicBGPlanar(pPriorityDest->uMask8, 256, uMosaic + 1);
+}
+
+static inline __attribute__((always_inline)) void _SnesPPURestoreCachedMasks(
     SNMaskT *pOpaqueDest, SNMaskT *pPriorityDest,
     const Uint8 *pOpaqueSrc, const Uint8 *pPrioritySrc,
     Uint32 uFineX, Uint8 uMaskClass, Uint32 uMosaic)
@@ -265,10 +263,7 @@ static inline void _SnesPPURestoreCachedMasks(
     _SnesPPURestoreCachedMasksRaw(pOpaqueDest, pPriorityDest,
         pOpaqueSrc, pPrioritySrc, uFineX, uMaskClass);
     if (uMosaic)
-    {
-        _MosaicBGPlanar(pOpaqueDest->uMask8, 256, uMosaic + 1);
-        _MosaicBGPlanar(pPriorityDest->uMask8, 256, uMosaic + 1);
-    }
+        _SnesPPUApplyCachedMosaic(pOpaqueDest, pPriorityDest, uMosaic);
 }
 
 static _INLINE Bool _SnesPPURestoreBGLine(
@@ -2654,49 +2649,28 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNDBG_LOG
 					Uint32 _tLineValidate = ProfCtrGetCycle();
 #endif
-                    const Uint32 uEpoch = _SnesPPU_BGLineVram.uEpoch;
-                    const Uint32 uState = pRenderInfo->uBGVramAddr[iBG];
-                    const Uint32 uLineCacheIndex = SnesPPUBGLineCacheIndex(
-                        uState, BGInfo[iBG].uChrSize);
-                    SnesPPUBGLineCacheEntryT *pPrimary =
-                        &_SnesPPU_BGLineCache[iBG][uLineCacheIndex];
-                    const Bool bPrimaryEpoch = pPrimary->uReady &&
-                        SnesPPUBGLineCacheEpochMatches(&pPrimary->Key,
-                            pPrimary->uValidatedEpoch, uEpoch, uState, iBG,
-                            uBGMode, &BGInfo[iBG]);
-#if SNPPU_BG_LINE_CACHE_WAYS > 1
-                    SnesPPUBGLineCacheNormalEntryT *pSecondary =
-                        &_SnesPPU_BGLineCacheNormal[iBG][uLineCacheIndex];
-                    const Bool bSecondaryEpoch = !bPrimaryEpoch && !bHiresPair &&
-                        pSecondary->uReady && SnesPPUBGLineCacheEpochMatches(
-                            &pSecondary->Key, pSecondary->uValidatedEpoch,
-                            uEpoch, uState, iBG, uBGMode, &BGInfo[iBG]);
-#else
-                    const Bool bSecondaryEpoch = FALSE;
-#endif
-                    Uint32 uBGGeneration;
-                    if (bPrimaryEpoch)
-                        uBGGeneration = SnesPPUBGLineCacheKeyGeneration(&pPrimary->Key);
-#if SNPPU_BG_LINE_CACHE_WAYS > 1
-                    else if (bSecondaryEpoch)
-                        uBGGeneration = SnesPPUBGLineCacheKeyGeneration(&pSecondary->Key);
-#endif
-                    else
-                        uBGGeneration = _SnesPPU_BGLineVram.GetBGLineGeneration(
-                            (Uint32)iBG, uState, uBGDepConfig[iBG], uBGMode,
-                            &BGInfo[iBG], pRenderInfo->Tiles[iBG], 33u);
+					Uint32 uBGGeneration = _SnesPPU_BGLineVram.GetBGLineGeneration(
+						(Uint32)iBG, pRenderInfo->uBGVramAddr[iBG],
+						uBGDepConfig[iBG], uBGMode, &BGInfo[iBG],
+						pRenderInfo->Tiles[iBG], 33u);
 #if SNDBG_LOG
-                    g_TmgCycBGLineValidate += ProfCtrGetCycle() - _tLineValidate;
-                    if (bPrimaryEpoch || bSecondaryEpoch) g_DbgBGLineEpochHits++;
+					g_TmgCycBGLineValidate += ProfCtrGetCycle() - _tLineValidate;
 #endif
-                    if (bPrimaryEpoch || (!bSecondaryEpoch && pPrimary->uReady &&
-                        SnesPPUBGLineCacheKeyMatches(&pPrimary->Key,
-                            uBGGeneration, uState, iBG, uBGMode, &BGInfo[iBG])))
+					Uint32 uLineCacheIndex = SnesPPUBGLineCacheIndex(
+						pRenderInfo->uBGVramAddr[iBG],
+						BGInfo[iBG].uChrSize);
+					SnesPPUBGLineCacheEntryT *pPrimary =
+						&_SnesPPU_BGLineCache[iBG][uLineCacheIndex];
+
+					if (pPrimary->uReady &&
+					    SnesPPUBGLineCacheKeyMatches(&pPrimary->Key,
+						uBGGeneration,
+						pRenderInfo->uBGVramAddr[iBG], iBG,
+						uBGMode, &BGInfo[iBG]))
 					{
 #if SNDBG_LOG
 						Uint32 _tLineRestore = ProfCtrGetCycle();
 #endif
-						pPrimary->uValidatedEpoch = uEpoch;
 						_SnesPPURestoreBGLine(pPrimary, pRenderInfo,
 							iBG, bHiresPair, BGInfo[iBG].uScrollX & 7u,
 							(uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR) != 0, BGInfo[iBG].uMosaic);
@@ -2718,16 +2692,17 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					/* The compact second way is valid only for normal-resolution
 					   lines. Split-screen games often alternate two horizontal tile
 					   windows at the same wrapped Y coordinate. */
-					if (bSecondaryEpoch || (!bHiresPair && pSecondary->uReady &&
+					SnesPPUBGLineCacheNormalEntryT *pSecondary =
+						&_SnesPPU_BGLineCacheNormal[iBG][uLineCacheIndex];
+					if (!bHiresPair && pSecondary->uReady &&
 					    SnesPPUBGLineCacheKeyMatches(&pSecondary->Key,
 						uBGGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iBG,
-						uBGMode, &BGInfo[iBG])))
+						uBGMode, &BGInfo[iBG]))
 					{
 #if SNDBG_LOG
 						Uint32 _tLineRestore = ProfCtrGetCycle();
 #endif
-						pSecondary->uValidatedEpoch = uEpoch;
 						_SnesPPURestoreBGLineNormal(pSecondary, pRenderInfo,
 							iBG, BGInfo[iBG].uScrollX & 7u,
 							(uBGFlags[iBG] & SNPPU_BGFLAGS_FETCHCHR) != 0, BGInfo[iBG].uMosaic);
@@ -2838,7 +2813,6 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					{
 						pNormalLineCache = pSecondary;
 						pNormalLineCache->uReady = FALSE;
-						pNormalLineCache->uValidatedEpoch = uEpoch;
 						SnesPPUBGLineCacheSetKey(&pNormalLineCache->Key,
 							uBGGeneration,
 							pRenderInfo->uBGVramAddr[iBG], iBG,
@@ -2850,7 +2824,6 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 					{
 						pLineCache = pPrimary;
 						pLineCache->uReady = FALSE;
-						pLineCache->uValidatedEpoch = uEpoch;
 						SnesPPUBGLineCacheSetKey(&pLineCache->Key,
 						uBGGeneration,
 						pRenderInfo->uBGVramAddr[iBG], iBG,
