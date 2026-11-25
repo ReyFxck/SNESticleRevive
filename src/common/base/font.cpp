@@ -175,6 +175,37 @@ static const Char *_FontNextCode(const Char *pStr, Uint32 *pCp)
     return pStr + 1;
 }
 
+/* The viewport is constant during a string draw. Read it once instead of
+   calling the GS backend repeatedly for every glyph. Keep the original
+   rounding and fixed-point conversion, including native 240p. */
+struct FontDrawContextT
+{
+    float sx, sy, ox, oy;
+    Int32 scale;
+    Bool compact;
+};
+
+static inline FontDrawContextT _FontGetDrawContext()
+{
+    FontDrawContextT ctx;
+    ctx.sx = GPPrimGetScaleX();
+    ctx.sy = GPPrimGetScaleY();
+    ctx.ox = GPPrimGetOffsetX();
+    ctx.oy = GPPrimGetOffsetY();
+    ctx.scale = (Int32)(ctx.sy + 0.999f);
+    ctx.compact = s_FontCompact;
+    if (ctx.compact && ctx.scale > 1) ctx.scale = (ctx.scale + 1) / 2;
+    if (ctx.scale < 1) ctx.scale = 1;
+    if (ctx.sx <= 0.0f) ctx.sx = 1.0f;
+    if (ctx.sy <= 0.0f) ctx.sy = 1.0f;
+    return ctx;
+}
+
+static inline Int32 _FontDrawAdvance(Int32 physW, const FontDrawContextT &ctx)
+{
+    return (Int32)(((float)physW) / ctx.sx + 0.5f);
+}
+
 struct FontStateT
 {
     Uint32 uColor;
@@ -187,22 +218,19 @@ static FontT _Font_Default;
 static FontT _Font_Fixed;
 static FontT *_Font_pFonts[4];
 
-static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, Uint32 uColor, int c)
+static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, Uint32 uColor, const FontDrawContextT &ctx)
 {
 	Uint32 u0,v0,u1,v1;
     Uint32 x0,y0,x1,y1;
     Int32 width, height;
-    float sx, sy, px0, py0, px1, py1;
+    float px0, py0, px1, py1;
 
     width  = pFontChar->u1 - pFontChar->u0;
     height = pFontChar->v1 - pFontChar->v0;
 
-    sx = GPPrimGetScaleX(); if (sx <= 0.0f) sx = 1.0f;
-    sy = GPPrimGetScaleY(); if (sy <= 0.0f) sy = 1.0f;
-
-    px0 = fX * sx + GPPrimGetOffsetX();
-    py0 = fY * sy + GPPrimGetOffsetY();
-    if (s_FontCompact && FONT_DRAW_SCALE == 1 && (sx != 1.0f || sy != 1.0f))
+    px0 = fX * ctx.sx + ctx.ox;
+    py0 = fY * ctx.sy + ctx.oy;
+    if (ctx.compact && ctx.scale == 1 && (ctx.sx != 1.0f || ctx.sy != 1.0f))
     {
         px0 = (float)((Int32)(px0 + 0.5f));
         py0 = (float)((Int32)(py0 + 0.5f));
@@ -214,7 +242,7 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
      * This preserves every column of a 1:1 glyph without drawing a second
      * sprite over its right edge. UV and XY use 10.4/12.4 fixed point.
      */
-    if (FONT_DRAW_SCALE == 1 && sx == 1.0f && sy == 1.0f)
+    if (ctx.scale == 1 && ctx.sx == 1.0f && ctx.sy == 1.0f)
     {
         u0 = (pFontChar->u0 << 4) + 8;  /* first texel centre */
         v0 = (pFontChar->v0 << 4) + 8;
@@ -232,8 +260,8 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
         u1 = (pFontChar->u1 << 4);
         v1 = (pFontChar->v1 << 4);
 
-        px1 = px0 + (float)(width  * FONT_DRAW_SCALE);
-        py1 = py0 + (float)(height * FONT_DRAW_SCALE);
+        px1 = px0 + (float)(width  * ctx.scale);
+        py1 = py0 + (float)(height * ctx.scale);
     }
 
     x0 = ((Uint32)FIXED4(px0)) & 0xFFFF;
@@ -244,7 +272,7 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
 	GPPrimTexRectAbs(x0, y0, u0, v0, x1, y1, u1, v1, 10, uColor, 1);
 
     /* advance in LOGICAL units: physical glyph width + 2px gap */
-    return _FontAdvLogical(width * FONT_DRAW_SCALE + 2);
+    return _FontDrawAdvance(width * ctx.scale + 2, ctx);
 
 }
 
@@ -263,22 +291,19 @@ static void _FontBindCjk(void)
    logical position.  At 480i the glyph maps 1:1 texel->pixel (crisp
    HZK16 dot matrix); at 240p it is minified 2:1 with LINEAR sampling.
    Returns the logical advance (full-width slot, no gap). */
-static Int32 _FontDrawCharCJK(Int32 iGlyph, float fX, float fY, Uint32 uColor)
+static Int32 _FontDrawCharCJK(Int32 iGlyph, float fX, float fY, Uint32 uColor, const FontDrawContextT &ctx)
 {
     Uint32 u0, v0, u1, v1;
     Uint32 x0, y0, x1, y1;
-    float sx, sy, px0, py0, px1, py1;
+    float px0, py0, px1, py1;
     Int32 tu, tv;
     Int32 disp;                 /* on-screen glyph size, physical pixels */
 
     tu = (iGlyph % CJK_CELLS_ROW) * CJK_GLYPH_SIZE;
     tv = (iGlyph / CJK_CELLS_ROW) * CJK_GLYPH_SIZE;
 
-    sx = GPPrimGetScaleX(); if (sx <= 0.0f) sx = 1.0f;
-    sy = GPPrimGetScaleY(); if (sy <= 0.0f) sy = 1.0f;
-
-    px0 = fX * sx + GPPrimGetOffsetX();
-    py0 = fY * sy + GPPrimGetOffsetY();
+    px0 = fX * ctx.sx + ctx.ox;
+    py0 = fY * ctx.sy + ctx.oy;
 
     /* Snap the origin to whole device pixels.  At 480i sx/sy are 2.5, so
        the raw origin is fractional and the GS (which interpolates ST from
@@ -293,7 +318,7 @@ static Int32 _FontDrawCharCJK(Int32 iGlyph, float fX, float fY, Uint32 uColor)
 
     /* 480i(2x): 16x16 texels -> 16x16 px = native 1:1.
        240p(1x): 16x16 texels -> 8x8 px (2:1, LINEAR-averaged). */
-    disp = CJK_GLYPH_SIZE * FONT_DRAW_SCALE / 2;
+    disp = CJK_GLYPH_SIZE * ctx.scale / 2;
 
     if (disp == CJK_GLYPH_SIZE)
     {
@@ -333,7 +358,7 @@ static Int32 _FontDrawCharCJK(Int32 iGlyph, float fX, float fY, Uint32 uColor)
 
     GPPrimTexRectAbs(x0, y0, u0, v0, x1, y1, u1, v1, 10, uColor, 1);
 
-    return _FontAdvLogical(disp);
+    return _FontDrawAdvance(disp, ctx);
 }
 
 Int32 FontGetStrWidth(const Char *pStr)
@@ -380,6 +405,9 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
 {
     TextureT *pTexture = &pFont->Texture;
     if (!pTexture) return;
+    const FontDrawContextT ctx = _FontGetDrawContext();
+    const Int32 fixedAdvance = _FontDrawAdvance((Int32)pFont->uFixedWidth * ctx.scale, ctx);
+    const Int32 spaceAdvance = _FontDrawAdvance(pFont->uCharX * ctx.scale, ctx);
 
     /* Bind ASCII atlas for the leading run; rebind on every CJK->ASCII
        transition so mixed text (e.g. "中文.sfc") renders correctly. */
@@ -410,14 +438,14 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
                 FontCharT *pFontChar = &pFont->CharMap[cp];
                 Int32 iWidth;
 
-                iWidth = _FontDrawChar(pFontChar, vx, vy, vz, uColor, (int)cp);
+                iWidth = _FontDrawChar(pFontChar, vx, vy, vz, uColor, ctx);
 
-                if (pFont->uFixedWidth) iWidth = _FontAdvLogical((Int32)pFont->uFixedWidth * FONT_DRAW_SCALE);
+                if (pFont->uFixedWidth) iWidth = fixedAdvance;
 			    vx += iWidth;
             }
             else
             {
-		        vx += _FontAdvLogical(pFont->uCharX * FONT_DRAW_SCALE);
+		        vx += spaceAdvance;
             }
         }
         else if (_Font_CjkReady)
@@ -430,11 +458,11 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
 
                 _FontBindCjk();
                 bCjkBound = 1;
-                iWidth = _FontDrawCharCJK(iGlyph, vx, vy, uColor);
+                iWidth = _FontDrawCharCJK(iGlyph, vx, vy, uColor, ctx);
 
                 /* CJK full-width slot advance */
                 if (pFont->uFixedWidth)
-                    iWidth = _FontAdvLogical((Int32)pFont->uFixedWidth * 2 * FONT_DRAW_SCALE);
+                    iWidth = _FontDrawAdvance((Int32)pFont->uFixedWidth * 2 * ctx.scale, ctx);
                 vx += iWidth;
             }
         }
@@ -442,7 +470,7 @@ static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const
         {
             /* CJK data unavailable: still reserve a full-width slot so
                layout stays consistent. */
-            vx += _FontAdvLogical(CJK_GLYPH_SIZE * FONT_DRAW_SCALE / 2);
+            vx += _FontDrawAdvance(CJK_GLYPH_SIZE * ctx.scale / 2, ctx);
         }
 	}
 }
