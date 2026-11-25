@@ -49,6 +49,10 @@ jobs:
         if: matrix.name == 'release'
         run: python3 tools/test_hostfs_saf.py
 
+      - name: Verify PPU hot-path equivalence
+        if: matrix.name == 'release'
+        run: bash tools/pputest/test_hotpath.sh
+
       - name: Cache PS2DEV
         uses: actions/cache@v4
         with:

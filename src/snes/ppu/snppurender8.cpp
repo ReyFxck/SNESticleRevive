@@ -292,12 +292,8 @@ static _INLINE void _SnesPPUStoreBGLine(
 	Uint32 iSubPlane = iBG + 2u;
 
 	SnesPPUBGLineCacheCopyPixels(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG]);
-	memcpy(pEntry->uMainOpaque, pMainOpaque, 33u);
-	memset(pEntry->uMainOpaque + 33u, 0,
-		SNPPU_BG_LINE_MASK_BYTES - 33u);
-	memcpy(pEntry->uMainPriority, pMainPriority, 33u);
-	memset(pEntry->uMainPriority + 33u, 0,
-		SNPPU_BG_LINE_MASK_BYTES - 33u);
+	SnesPPUBGLineCacheStoreMask(pEntry->uMainOpaque, pMainOpaque);
+	SnesPPUBGLineCacheStoreMask(pEntry->uMainPriority, pMainPriority);
 #if SNPPU_BG_CACHE_MASKCLASS
 	pEntry->uMainMaskClass = _SnesPPUClassifyBGLineMasks(
 		pEntry->uMainOpaque, pEntry->uMainPriority);
@@ -310,12 +306,8 @@ static _INLINE void _SnesPPUStoreBGLine(
 	if (bHiresPair)
 	{
 		SnesPPUBGLineCacheCopyPixels(pEntry->uSub, (Uint8 *)pRenderInfo->BGPlanes[iSubPlane]);
-		memcpy(pEntry->uSubOpaque, pSubOpaque, 33u);
-		memset(pEntry->uSubOpaque + 33u, 0,
-			SNPPU_BG_LINE_MASK_BYTES - 33u);
-		memcpy(pEntry->uSubPriority, pSubPriority, 33u);
-		memset(pEntry->uSubPriority + 33u, 0,
-			SNPPU_BG_LINE_MASK_BYTES - 33u);
+		SnesPPUBGLineCacheStoreMask(pEntry->uSubOpaque, pSubOpaque);
+		SnesPPUBGLineCacheStoreMask(pEntry->uSubPriority, pSubPriority);
 #if SNPPU_BG_CACHE_MASKCLASS
 		pEntry->uSubMaskClass = _SnesPPUClassifyBGLineMasks(
 			pEntry->uSubOpaque, pEntry->uSubPriority);
@@ -355,12 +347,8 @@ static _INLINE void _SnesPPUStoreBGLineNormal(
 	const Uint8 *pMainOpaque, const Uint8 *pMainPriority)
 {
 	SnesPPUBGLineCacheCopyPixels(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG]);
-	memcpy(pEntry->uMainOpaque, pMainOpaque, 33u);
-	memset(pEntry->uMainOpaque + 33u, 0,
-		SNPPU_BG_LINE_MASK_BYTES - 33u);
-	memcpy(pEntry->uMainPriority, pMainPriority, 33u);
-	memset(pEntry->uMainPriority + 33u, 0,
-		SNPPU_BG_LINE_MASK_BYTES - 33u);
+	SnesPPUBGLineCacheStoreMask(pEntry->uMainOpaque, pMainOpaque);
+	SnesPPUBGLineCacheStoreMask(pEntry->uMainPriority, pMainPriority);
 #if SNPPU_BG_CACHE_MASKCLASS
 	pEntry->uMainMaskClass = _SnesPPUClassifyBGLineMasks(
 		pEntry->uMainOpaque, pEntry->uMainPriority);
@@ -952,7 +940,6 @@ static _INLINE void _FetchPhysicalCHR4Row(
 
 static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles, Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask, Uint64 *pPalLookup)
 {
-	const SNPPUBg8FlipT *pFlip;
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
 	Uint64 uPreviousRowData = 0;
 	Uint32 uPreviousRowMask = 0;
@@ -965,20 +952,17 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 	PROF_ENTER("_FetchCHR2_64");
 	while (nTiles > 0)
 	{
-		Uint32 uTileAddr, uRowAddr, uRowKey;
+		Uint32 uRowAddr, uRowKey;
+		const Uint32 uFlip = pTiles->uFlip;
+		const Uint32 uPal = pTiles->uPal;
 		Uint64 uTile0;
 		Uint32 uMask;
 
-		pFlip = &_FlipTable8[pTiles->uFlip];
-
-		// calculate tile address
-		uTileAddr = (uBaseAddr + pTiles->uTile * 8) & 0x7FFF;
-
-		// get pointer to tile data (y flipped)
-		uRowAddr = uTileAddr +
-			((uScrollY + pTiles->uOffsetY) ^ pFlip->uFlipXOR);
-		uRowKey = (uRowAddr & 0x7FFFu) |
-			((pTiles->uFlip & 1u) << 15);
+		/* Vertical flip is bit 1; 0/7 replaces the flip-table load.
+		   Keep the physical row key (including horizontal flip) exact. */
+		uRowAddr = (uBaseAddr + (Uint32)pTiles->uTile * 8u +
+			((uScrollY + pTiles->uOffsetY) ^ ((0u - (uFlip >> 1)) & 7u))) & 0x7FFFu;
+		uRowKey = uRowAddr | ((uFlip & 1u) << 15);
 
 		/* Adjacent tilemap entries very often reference the exact same
 		   physical CHR row. VRAM cannot change while this scanline is being
@@ -993,7 +977,7 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 			g_DbgBGChrRepeatRows++;
 			#endif
 #if SNPPU_BG_CHR_REPEAT_FINAL
-			if ((Uint32)pTiles->uPal == uPreviousPal)
+			if (uPal == uPreviousPal)
 			{
 				pMask[0] = (Uint8)uMask;
 				pMask[SNPPU_BGPLANE_SIZE] = uPreviousPriorityMask;
@@ -1006,7 +990,7 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		else
 		{
 			_FetchPhysicalCHR2Row(pVram, uRowAddr,
-				(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
+				(uFlip & 1u) != 0, &uTile0, &uMask);
 			uPreviousRowKey = uRowKey;
 			uPreviousRowData = uTile0;
 			uPreviousRowMask = uMask;
@@ -1022,9 +1006,9 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 			/* Color zero is transparent for this BG row. Only materialize the
 			   eight palette-index bytes when at least one pixel can survive the
 			   mask; render/composition never reads masked-out bytes. */
-			uTile0 |= pPalLookup[pTiles->uPal];
+			uTile0 |= pPalLookup[uPal];
 			pMask[SNPPU_BGPLANE_SIZE] =
-				(pTiles->uPal & 8) ? (Uint8)uMask : 0;
+				(uPal & 8) ? (Uint8)uMask : 0;
 			((Uint64 *)pDest)[0] = uTile0;
 		}
 		else
@@ -1032,9 +1016,9 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 			pMask[SNPPU_BGPLANE_SIZE] = 0;
 		}
 #if SNPPU_BG_CHR_REPEAT_FINAL
-		uPreviousPal = (Uint32)pTiles->uPal;
-		uPreviousFinalData = uMask ? ((Uint64 *)pDest)[0] : 0;
-		uPreviousPriorityMask = pMask[SNPPU_BGPLANE_SIZE];
+		uPreviousPal = uPal;
+		uPreviousFinalData = uMask ? uTile0 : 0;
+		uPreviousPriorityMask = (uPal & 8u) ? (Uint8)uMask : 0;
 #endif
 		pMask++;
 
@@ -1048,7 +1032,6 @@ static void _FetchCHR2_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 
 static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRenderTileT *pTiles, Int32 nTiles, Uint32 uScrollY, Uint8 *pDest, Uint8 *pMask)
 {
-	const SNPPUBg8FlipT *pFlip;
 	Uint32 uPreviousRowKey = 0xFFFFFFFFu;
 	Uint64 uPreviousRowData = 0;
 	Uint32 uPreviousRowMask = 0;
@@ -1062,20 +1045,17 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 
 	while (nTiles > 0)
 	{
-		Uint32 uTileAddr, uRowAddr, uRowKey;
+		Uint32 uRowAddr, uRowKey;
+		const Uint32 uFlip = pTiles->uFlip;
+		const Uint32 uPal = pTiles->uPal;
 		Uint64 uTile0;
 		Uint32 uMask;
 
-		pFlip = &_FlipTable8[pTiles->uFlip];
-
-		// calculate tile address
-		uTileAddr = (uBaseAddr + pTiles->uTile * 16) & 0x7FFF;
-
-		// get pointer to tile data (y flipped)
-		uRowAddr = uTileAddr +
-			((uScrollY + pTiles->uOffsetY) ^ pFlip->uFlipXOR);
-		uRowKey = (uRowAddr & 0x7FFFu) |
-			((pTiles->uFlip & 1u) << 15);
+		/* Vertical flip is bit 1; 0/7 replaces the flip-table load.
+		   Keep the physical row key (including horizontal flip) exact. */
+		uRowAddr = (uBaseAddr + (Uint32)pTiles->uTile * 16u +
+			((uScrollY + pTiles->uOffsetY) ^ ((0u - (uFlip >> 1)) & 7u))) & 0x7FFFu;
+		uRowKey = uRowAddr | ((uFlip & 1u) << 15);
 
 		if (uRowKey == uPreviousRowKey)
 		{
@@ -1085,7 +1065,7 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 			g_DbgBGChrRepeatRows++;
 			#endif
 #if SNPPU_BG_CHR_REPEAT_FINAL
-			if ((Uint32)pTiles->uPal == uPreviousPal)
+			if (uPal == uPreviousPal)
 			{
 				pMask[0] = (Uint8)uMask;
 				pMask[SNPPU_BGPLANE_SIZE] = uPreviousPriorityMask;
@@ -1098,7 +1078,7 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		else
 		{
 			_FetchPhysicalCHR4Row(pVram, uRowAddr,
-				(pTiles->uFlip & 1u) != 0, &uTile0, &uMask);
+				(uFlip & 1u) != 0, &uTile0, &uMask);
 			uPreviousRowKey = uRowKey;
 			uPreviousRowData = uTile0;
 			uPreviousRowMask = uMask;
@@ -1112,9 +1092,9 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 		if (uMask)
 		{
 			// Palette bytes are irrelevant for a fully transparent CHR row.
-			uTile0 |= _SnesPPU_Tile4PalLookup64[pTiles->uPal];
+			uTile0 |= _SnesPPU_Tile4PalLookup64[uPal];
 			pMask[SNPPU_BGPLANE_SIZE] =
-				(pTiles->uPal & 8) ? (Uint8)uMask : 0;
+				(uPal & 8) ? (Uint8)uMask : 0;
 			((Uint64 *)pDest)[0] = uTile0;
 		}
 		else
@@ -1122,9 +1102,9 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 			pMask[SNPPU_BGPLANE_SIZE] = 0;
 		}
 #if SNPPU_BG_CHR_REPEAT_FINAL
-		uPreviousPal = (Uint32)pTiles->uPal;
-		uPreviousFinalData = uMask ? ((Uint64 *)pDest)[0] : 0;
-		uPreviousPriorityMask = pMask[SNPPU_BGPLANE_SIZE];
+		uPreviousPal = uPal;
+		uPreviousFinalData = uMask ? uTile0 : 0;
+		uPreviousPriorityMask = (uPal & 8u) ? (Uint8)uMask : 0;
 #endif
 		pMask++;
 
@@ -1583,8 +1563,74 @@ static void _FetchCHR_64(Uint8 *pLine, SnesPPU *pPPU, SnesBGInfoT *pBGInfo,
 
 #if CODE_PLATFORM == CODE_PS2
 
+/* At fine-X zero the source is already qword aligned: no second load,
+   SA register setup or QFSRV is needed.  The old shifted path remains
+   untouched for fine scrolling.  Both variants consume exactly 32 tiles. */
+template <bool Overwrite>
+static void _RenderBGDataAligned(Uint8 *pLine8, const Uint8 *pSrc8,
+    const SNMaskT *pBGMask, Int32 nTiles)
+{
+    const Uint16 *pMaskData = (const Uint16 *)pBGMask->uMask8;
+    const SnesChrLookup64T *pLookup64 =
+        (const SnesChrLookup64T *)&SNPPU_BG_PLANE_LOOKUP[1];
+    while (nTiles > 0)
+    {
+        const Uint32 uMask = *pMaskData++;
+        if (uMask == 0xFFFFu)
+        {
+            __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)"
+                : : "r"(pLine8), "r"(pSrc8) : "$8", "memory");
+        }
+        else if (uMask)
+        {
+            const Uint64 uMask0 = (*pLookup64)[uMask & 0xFFu];
+            const Uint64 uMask1 = (*pLookup64)[uMask >> 8];
+            if (Overwrite)
+            {
+                __asm__ __volatile__(
+                    "lq $8, 0(%2)\n\t"
+                    "pcpyld $10, %1, %0\n\t"
+                    "pceqb $10, $10, $0\n\t"
+                    "por $8, $8, $10\n\t"
+                    "pxor $8, $8, $10\n\t"
+                    "sq $8, 0(%3)"
+                    : : "r"(uMask0), "r"(uMask1), "r"(pSrc8), "r"(pLine8)
+                    : "$8", "$10", "memory");
+            }
+            else
+            {
+                __asm__ __volatile__(
+                    "lq $8, 0(%2)\n\t"
+                    "lq $11, 0(%3)\n\t"
+                    "pcpyld $10, %1, %0\n\t"
+                    "pceqb $10, $10, $0\n\t"
+                    "pand $11, $11, $10\n\t"
+                    "por $8, $8, $10\n\t"
+                    "pxor $8, $8, $10\n\t"
+                    "por $8, $8, $11\n\t"
+                    "sq $8, 0(%3)"
+                    : : "r"(uMask0), "r"(uMask1), "r"(pSrc8), "r"(pLine8)
+                    : "$8", "$10", "$11", "memory");
+            }
+        }
+        else if (Overwrite)
+        {
+            __asm__ __volatile__("sq $0, 0(%0)" : : "r"(pLine8) : "memory");
+        }
+        pSrc8 += 16;
+        pLine8 += 16;
+        nTiles -= 2;
+    }
+}
+
 static void _RenderBGData_O(Uint8 *pLine8, Uint8 *pSrc8, SNMaskT *pBGMask, Uint32 uScrollX, Int32 nTiles)
 {
+	if (!(uScrollX & 7u) && !(((uintptr_t)pSrc8 | (uintptr_t)pLine8) & 15u))
+	{
+		_RenderBGDataAligned<true>(pLine8, pSrc8, pBGMask, nTiles);
+		return;
+	}
+
 	Uint16 *pMaskData;
 	SnesChrLookup64T *pLookup64 =
 		(SnesChrLookup64T *)&SNPPU_BG_PLANE_LOOKUP[1];
@@ -1664,6 +1710,12 @@ static void _RenderBGData_O(Uint8 *pLine8, Uint8 *pSrc8, SNMaskT *pBGMask, Uint3
 
 static void _RenderBGData(Uint8 *pLine8, Uint8 *pSrc8, SNMaskT *pBGMask, Uint32 uScrollX, Int32 nTiles)
 {
+	if (!(uScrollX & 7u) && !(((uintptr_t)pSrc8 | (uintptr_t)pLine8) & 15u))
+	{
+		_RenderBGDataAligned<false>(pLine8, pSrc8, pBGMask, nTiles);
+		return;
+	}
+
 	Uint16 *pMaskData;
 	SnesChrLookup64T *pLookup64 =
 		(SnesChrLookup64T *)&SNPPU_BG_PLANE_LOOKUP[1];
@@ -1926,8 +1978,7 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 			break;
 		case 1:
 			// lo = 00 (masked behind bg3hi unless bg2hi)
-			SNMaskANDN(&BGMask, &BGMask, &pLine[SNPPU_BGPLANE_LAYER0]);
-			SNMaskOR(&BGMask, &BGMask, pBGPri);
+			SNMaskAndNotOr(&BGMask, &BGMask, &pLine[SNPPU_BGPLANE_LAYER0], pBGPri);
 
 			// lo = 00
 			// hi = 01
@@ -1935,10 +1986,8 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 			break;
 		case 2:
 			// lo = 10
-			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER0], &BGMask, false);
+			SNMaskAndNotOr(&pLine[SNPPU_BGPLANE_LAYER0], &pLine[SNPPU_BGPLANE_LAYER0], &BGMask, pBGPri);
 			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER1], &BGMask, true);
-			// hi = 11
-			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER0], pBGPri, true);
 			break;
 		case 3:
 			{
@@ -1946,15 +1995,13 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 				// temp = bg2hi
 				SNMaskAND(&temp, &pLine[SNPPU_BGPLANE_LAYER0], &pLine[SNPPU_BGPLANE_LAYER1]);
 				// lo = 00 (masked behind bg2hi unless bg1hi)
-				SNMaskANDN(&BGMask, &BGMask, &temp);
-				SNMaskOR(&BGMask, &BGMask, pBGPri);
+				SNMaskAndNotOr(&BGMask, &BGMask, &temp, pBGPri);
 			}
 
 			// lo = 10
 			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER1], &BGMask, true);
 			// hi = 11
-			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER0], &BGMask, false);
-			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER0], pBGPri, true);
+			SNMaskAndNotOr(&pLine[SNPPU_BGPLANE_LAYER0], &pLine[SNPPU_BGPLANE_LAYER0], &BGMask, pBGPri);
 			break;
 
 		case 4:
@@ -1966,14 +2013,12 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 
 		case 5:
 			// lo = 01
-			SNMaskANDN(&BGMask, &BGMask, &pLine[SNPPU_BGPLANE_LAYER1]);
-			SNMaskOR(&BGMask, &BGMask, pBGPri);
+			SNMaskAndNotOr(&BGMask, &BGMask, &pLine[SNPPU_BGPLANE_LAYER1], pBGPri);
 
 			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER0], &BGMask, true);
 
 			// hi = 11
-			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER1], &BGMask, false);
-			SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER1], pBGPri, true);
+			SNMaskAndNotOr(&pLine[SNPPU_BGPLANE_LAYER1], &pLine[SNPPU_BGPLANE_LAYER1], &BGMask, pBGPri);
 			break;
 
 		case 7:

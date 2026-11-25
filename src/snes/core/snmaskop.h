@@ -358,4 +358,34 @@ static inline void SNMaskBool(SNMaskT *pDest,  const SNMaskT *pSrc, bool bVal)
 
 #endif
 
+/* Fused (A & ~B) | C: avoids a temporary 32-byte write/read pair in
+   background priority composition. All loads precede stores, so aliases
+   (including dest == A/B/C) are safe. Use only established EE MMI ops. */
+static inline void SNMaskAndNotOr(SNMaskT *pDest, const SNMaskT *pA,
+    const SNMaskT *pB, const SNMaskT *pC)
+{
+#if SNMASKOP_INLINE && SNMASKOP_ASSEMBLY
+    __asm__ __volatile__(
+        "lq $8, 0x00(%1)\n\t"
+        "lq $9, 0x10(%1)\n\t"
+        "lq $10, 0x00(%2)\n\t"
+        "lq $11, 0x10(%2)\n\t"
+        "lq $12, 0x00(%3)\n\t"
+        "lq $13, 0x10(%3)\n\t"
+        "por $8, $8, $10\n\t"
+        "por $9, $9, $11\n\t"
+        "pxor $8, $8, $10\n\t"
+        "pxor $9, $9, $11\n\t"
+        "por $8, $8, $12\n\t"
+        "por $9, $9, $13\n\t"
+        "sq $8, 0x00(%0)\n\t"
+        "sq $9, 0x10(%0)\n\t"
+        : : "r"(pDest), "r"(pA), "r"(pB), "r"(pC)
+        : "$8", "$9", "$10", "$11", "$12", "$13", "memory");
+#else
+    for (Uint32 i = 0; i < 4; ++i)
+        pDest->uMask64[i] = (pA->uMask64[i] & ~pB->uMask64[i]) | pC->uMask64[i];
+#endif
+}
+
 #endif

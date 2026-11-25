@@ -195,11 +195,14 @@ void SnesPPU::WriteVMDATALTimed(Uint8 uData, Bool bAllow)
 	{
 		WriteVMDATAL_Deferred(uData);
 	}
-	else
+	else if (pVram[uVramAddr].b.l != uData)
 	{
 		pVram[uVramAddr].b.l = uData;
 		if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
 	}
+#if SNDBG_LOG
+	else ++g_DbgVRAMIdenticalBytes;
+#endif
 	m_Regs.vmaddr.w += m_Regs.vminc[0];
 }
 
@@ -227,11 +230,14 @@ void SnesPPU::WriteVMDATAHTimed(Uint8 uData, Bool bAllow)
 	{
 		WriteVMDATAH_Deferred(uData);
 	}
-	else
+	else if (pVram[uVramAddr].b.h != uData)
 	{
 		pVram[uVramAddr].b.h = uData;
 		if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
 	}
+#if SNDBG_LOG
+	else ++g_DbgVRAMIdenticalBytes;
+#endif
 	m_Regs.vmaddr.w += m_Regs.vminc[1];
 }
 
@@ -266,7 +272,8 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 		uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w, (m_Regs.vmain >> 2) & 3);
 		uFirstVramAddr = uVramAddr;
 		// write to vram
-		pVram[uVramAddr].b.l = uDataL;
+		const Bool bLowChanged = pVram[uVramAddr].b.l != uDataL;
+		if (bLowChanged) pVram[uVramAddr].b.l = uDataL;
 
 		if (m_Regs.vminc[0])
 		{
@@ -277,14 +284,21 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 		}
 
 		// write to vram
-		pVram[uVramAddr].b.h = uDataH;
+		const Bool bHighChanged = pVram[uVramAddr].b.h != uDataH;
+		if (bHighChanged) pVram[uVramAddr].b.h = uDataH;
+#if SNDBG_LOG
+		g_DbgVRAMIdenticalBytes += (!bLowChanged) + (!bHighChanged);
+#endif
 
 		// increment vram addr
 		m_Regs.vmaddr.w += m_Regs.vminc[1];
 
-		m_pRender->UpdateVRAM(uFirstVramAddr);
-		if (uVramAddr != uFirstVramAddr)
-			m_pRender->UpdateVRAM(uVramAddr);
+		if (m_pRender)
+		{
+			if (bLowChanged) m_pRender->UpdateVRAM(uFirstVramAddr);
+			if (bHighChanged && (!bLowChanged || uVramAddr != uFirstVramAddr))
+				m_pRender->UpdateVRAM(uVramAddr);
+		}
 	}
 }
 
@@ -319,6 +333,7 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 		Int32 nWords = nBytes >> 1;
 		Int32 nWordsLeft = nWords;
 		Uint32 uFirstPhysical = m_Regs.vmaddr.w & 0x7FFF;
+		Int32 iFirstChanged = nWords;
 
 		while (nWordsLeft > 0)
 		{
@@ -329,7 +344,26 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 			if (nChunk > nWordsLeft)
 				nChunk = nWordsLeft;
 
-			for (iWord = 0; iWord < nChunk; iWord++)
+			/* Games often resend identical character data each VBlank. Scan
+			   only the unchanged prefix. Once a difference is found, retain
+			   the existing fast copy loop for the rest of this burst. This
+			   never skips VMADDR advancement or the diagnostic write counts. */
+			iWord = 0;
+			if (iFirstChanged == nWords)
+			{
+				while (iWord < nChunk)
+				{
+					const Uint16 uWord = (Uint16)pData[0] | ((Uint16)pData[1] << 8);
+					if (m_VRAM[uPhysical + iWord] != uWord)
+					{
+						iFirstChanged = nWords - nWordsLeft + iWord;
+						break;
+					}
+					++iWord;
+					pData += 2;
+				}
+			}
+			for (; iWord < nChunk; iWord++)
 			{
 				m_VRAM[uPhysical + iWord] =
 					(Uint16)pData[0] | ((Uint16)pData[1] << 8);
@@ -342,12 +376,16 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 
 #if SNDBG_LOG
 		g_DbgVRAMWrites += nWords * 2;
+		g_DbgVRAMIdenticalBytes += (Uint32)iFirstChanged * 2u;
+		if (iFirstChanged == nWords) ++g_DbgVRAMIdenticalBlocks;
 #endif
 #if SNDBG_DEEP
 		g_DbgPPURegWrites[0x18] += (Uint32)nWords;
 		g_DbgPPURegWrites[0x19] += (Uint32)nWords;
 #endif
-		m_pRender->UpdateVRAMRange(uFirstPhysical, (Uint32)nWords);
+		if (m_pRender && iFirstChanged < nWords)
+			m_pRender->UpdateVRAMRange((uFirstPhysical + (Uint32)iFirstChanged) & 0x7FFFu,
+				(Uint32)(nWords - iFirstChanged));
 
 		nBytes -= nWords * 2;
 	}

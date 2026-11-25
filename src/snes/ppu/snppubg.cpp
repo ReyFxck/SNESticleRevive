@@ -132,49 +132,27 @@ static Uint32 _FetchOffset(Uint16 uAddr, Uint16 *pOffset, Int32 nTiles, SnesPPUS
 
 static void _FetchBG8x8(Uint32 uAddr, SnesRenderTileT *pTile, Int32 nTiles, SnesPPUScreenT **ppScreen)
 {
-	//  each screen is 32x32
-	// vram address is: ssyyyyyxxxxx
-	//   ss = screen # 00,01,10,11
-	//   yyyyy is tile vert row
-	//   xxxxx is tile horiz column
-
-	Uint16 *pScrData;
-
-    PROF_ENTER("_FetchBG8x8");
-
-	// get pointer to screen data
-	pScrData  =  (Uint16 *)ppScreen[(uAddr >> 10) & 3];
-
+	PROF_ENTER("_FetchBG8x8");
 	while (nTiles > 0)
 	{
-		Uint16 uScrData;
-
-		// fetch screen data
-		uScrData = pScrData[uAddr & 0x03FF];
-		uAddr++;
-
-		// have we wrapped horizontally?
-		if (!(uAddr&0x1F))
+		const Uint16 *pScrData = (const Uint16 *)ppScreen[(uAddr >> 10) & 3] + (uAddr & 0x03FFu);
+		Int32 nRun = 32 - (uAddr & 31u);
+		if (nRun > nTiles) nRun = nTiles;
+		for (Int32 i = 0; i < nRun; ++i)
 		{
-			// wrap address
-			uAddr-=(1<< 5);	// move back up
-			uAddr^=(1<<10); // switch screens
-
-			// get pointer to screen data
-			pScrData  =  (Uint16 *)ppScreen[(uAddr >> 10) & 3];
+			const Uint16 uScrData = pScrData[i];
+			pTile->uFlip = (uScrData >> 14) & 3;
+			pTile->uPal = (uScrData >> 10) & 0xF;
+			pTile->uTile = uScrData & 0x3FF;
+			pTile->uOffsetY = 0;
+			++pTile;
 		}
-
-		// screen data is of format: YX?cccNNNNNNNNNN
-		pTile->uFlip = (uScrData >> 14) & 3;
-		pTile->uPal  = (uScrData >> 10) & 0xF;
-		pTile->uTile = (uScrData >>  0) & 0x3FF;
-		pTile->uOffsetY = 0;
-		pTile++;
-
-		nTiles--;
+		nTiles -= nRun;
+		/* Only a full run can continue into the adjacent horizontal screen. */
+		if (nTiles > 0)
+			uAddr = ((uAddr + (Uint32)nRun) - 32u) ^ 0x400u;
 	}
-
-    PROF_LEAVE("_FetchBG8x8");
+	PROF_LEAVE("_FetchBG8x8");
 }
 
 static void _FetchBG16x16(Uint32 uAddr, SnesRenderTileT *pTile, Int32 nTiles, SnesPPUScreenT **ppScreen, Uint32 uFlipXOR)

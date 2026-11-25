@@ -211,6 +211,16 @@ _INLINE Int32 SnesPPUBGLineCacheScrollStep(
 		? -(Int32)uReverseDelta : 0;
 }
 
+/* Raw masks contain 33 meaningful bytes and are at least 8-byte aligned.
+   Copy the first 32 and explicitly zero-pad the final 8-byte word. Never
+   read the seven bytes beyond the last logical tile. */
+_INLINE void SnesPPUBGLineCacheStoreMask(Uint8 *pDest, const Uint8 *pSource)
+{
+    memcpy(pDest, pSource, 32u);
+    const Uint8 uTail[8] = {pSource[32], 0, 0, 0, 0, 0, 0, 0};
+    memcpy(pDest + 32u, uTail, sizeof(uTail));
+}
+
 /* Copy exactly 33 decoded cells. Both cache rows and BGPlanes are
    16-byte aligned in the renderer. The EE path avoids the generic memcpy
    prologue/byte loop and never writes into the following mask. */

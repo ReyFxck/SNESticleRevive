@@ -127,6 +127,9 @@ static void CheckVRAMBlockEquivalence()
 		candidateRender.SetPPU(&candidate);
 		reference.Reset();
 		candidate.Reset();
+		// The block path is only valid during accessible VRAM periods.
+		reference.Write8(0x2100, 0x80);
+		candidate.Write8(0x2100, 0x80);
 
 		reference.Write8(0x2115, vmainValues[i]);
 		candidate.Write8(0x2115, vmainValues[i]);
@@ -159,6 +162,47 @@ static void CheckVRAMBlockEquivalence()
 			return;
 		}
 	}
+}
+
+static void CheckUnchangedVRAMWrites()
+{
+    SnesPPU ppu; TestRender render;
+    ppu.SetPPURender(&render); render.SetPPU(&ppu);
+    ppu.Reset();
+    ppu.Write8(0x2100,0x80); // forced blank: DMA may access VRAM
+    const Uint8 bytes[] = {0x11,0x22,0x33,0x44,0x55,0x66,0x77};
+    const Uint8 changed[] = {0x11,0x22,0x33,0x44,0x99,0x66,0x77};
+    ppu.Write8(0x2115,0x80);
+    ppu.Write8(0x2116,0xFE); ppu.Write8(0x2117,0x7F);
+    ppu.WriteVMDATABlock(bytes,sizeof(bytes));
+    ppu.Write8(0x2116,0xFE); ppu.Write8(0x2117,0x7F);
+    render.ClearStats();
+    Uint16 latch=ppu.GetRegs()->vmreadlatch.w;
+    ppu.WriteVMDATABlock(bytes,sizeof(bytes));
+    Check("unchanged DMA avoids range invalidation",render.uRangeCalls,0);
+    Check("unchanged odd tail avoids invalidation",render.uSingleCalls,0);
+    Check("unchanged DMA advances VMADDR",ppu.GetRegs()->vmaddr.w,0x8001);
+    Check("unchanged DMA preserves latch",ppu.GetRegs()->vmreadlatch.w,latch);
+    ppu.Write8(0x2116,0xFE); ppu.Write8(0x2117,0x7F);
+    render.ClearStats();
+    ppu.WriteVMDATABlock(changed,sizeof(changed));
+    Check("changed word after wrap invalidation count",render.uRangeCalls,1);
+    Check("changed word after wrap starts at zero",render.uFirstAddress,0);
+    Check("unchanged prefix not invalidated",render.nLastWords,1);
+    Check("changed word written",ppu.GetVramPtr(0)[0],0x6699);
+    ppu.Write8(0x2116,0); ppu.Write8(0x2117,0);
+    render.ClearStats();
+    ppu.WriteVMDATALH(0x99,0x66);
+    Check("unchanged pair avoids invalidation",render.uSingleCalls,0);
+    ppu.Write8(0x2116,0); ppu.Write8(0x2117,0);
+    ppu.WriteVMDATALH(0x99,0xAB);
+    Check("high-only change invalidates once",render.uSingleCalls,1);
+    Check("high-only change written",ppu.GetVramPtr(0)[0],0xAB99);
+    ppu.Write8(0x2116,0); ppu.Write8(0x2117,0);
+    render.ClearStats();
+    ppu.WriteVMDATAL(0x99); ppu.WriteVMDATAH(0xAB);
+    Check("unchanged individual ports",render.uSingleCalls,0);
+    Check("unchanged individual port advances address",ppu.GetRegs()->vmaddr.w,1);
 }
 
 static void CheckScrollAndMode7Latches()
@@ -355,13 +399,21 @@ static void CheckReadRegisterSemantics()
 	Check("CGRAM read high PPU2 bit", ppu.Read8(0x213B), 0x92);
 }
 
-int main()
+int main(int argc, char **argv)
 {
+	if (argc == 2 && !std::strcmp(argv[1], "--vram-hotpath"))
+	{
+		CheckVRAMBlockEquivalence();
+		CheckUnchangedVRAMWrites();
+		std::puts(g_Failures ? "FAIL VRAM hotpath" : "VRAM hotpath PASS");
+		return g_Failures ? 1 : 0;
+	}
 	SnesPPU ppu;
 	TestRender render;
 	Uint8 *pOAM;
 
 	CheckVRAMBlockEquivalence();
+	CheckUnchangedVRAMWrites();
 	CheckScrollAndMode7Latches();
 	CheckActiveDisplayMemoryPorts();
 	CheckMode4VRAMAddressDataDMA();

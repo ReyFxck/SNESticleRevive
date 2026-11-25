@@ -165,6 +165,8 @@ extern Uint32 g_TmgCycHDMATable;  // contador/tabela dos canais HDMA
 // Totais da janela atual (120 frames), alimentados pela PPU/render.
 extern Uint32 g_DbgOAMWrites;
 extern Uint32 g_DbgVRAMWrites;
+extern Uint32 g_DbgVRAMIdenticalBytes;
+extern Uint32 g_DbgVRAMIdenticalBlocks;
 extern Uint32 g_DbgCGRAMWrites;
 extern Uint32 g_DbgCGRAMCommits;
 extern Uint32 g_DbgCGRAMUnchanged;

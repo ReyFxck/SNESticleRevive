@@ -113,6 +113,8 @@ Uint32 g_TmgCycHDMATable = 0;
 
 Uint32 g_DbgOAMWrites = 0;
 Uint32 g_DbgVRAMWrites = 0;
+Uint32 g_DbgVRAMIdenticalBytes = 0;
+Uint32 g_DbgVRAMIdenticalBlocks = 0;
 Uint32 g_DbgCGRAMWrites = 0;
 Uint32 g_DbgCGRAMCommits = 0;
 Uint32 g_DbgCGRAMUnchanged = 0;
@@ -300,6 +302,8 @@ static void SnesDbgResetWindow(void)
 	g_TmgIrqLineMax = -1;
 	g_DbgOAMWrites = 0;
 	g_DbgVRAMWrites = 0;
+	g_DbgVRAMIdenticalBytes = 0;
+	g_DbgVRAMIdenticalBlocks = 0;
 	g_DbgCGRAMWrites = 0;
 	g_DbgCGRAMCommits = 0;
 	g_DbgCGRAMUnchanged = 0;
@@ -2799,6 +2803,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)(g_DbgAudioMinSamples == 0xFFFFFFFFu
 					? 0u : g_DbgAudioMinSamples),
 				(unsigned)g_DbgAudioMaxSamples);
+			DLog("[snes-vram-write] skipped-identical-bytes=%u identical-dma-blocks=%u",
+				(unsigned)g_DbgVRAMIdenticalBytes, (unsigned)g_DbgVRAMIdenticalBlocks);
 			DLog("[snes-cgram] bytes/commits/unchanged=%u/%u/%u",
 				(unsigned)g_DbgCGRAMWrites,
 				(unsigned)g_DbgCGRAMCommits,
