@@ -205,6 +205,41 @@ static void CheckUnchangedVRAMWrites()
     Check("unchanged individual port advances address",ppu.GetRegs()->vmaddr.w,1);
 }
 
+/* Exercise every first-changed word in a typical DMA, with alignment and
+   physical wrap. Match both the memory and the invalidation boundaries. */
+static void CheckVRAMWidePrefix()
+{
+    static SnesPPU ppu;
+    TestRender render;
+    ppu.SetPPURender(&render); render.SetPPU(&ppu);
+    Uint8 storage[72] _ALIGN(16);
+    const Uint16 starts[] = {0x0040, 0x0041, 0x7FF8, 0x7FFF};
+    unsigned cases = 0;
+    for (unsigned off=0; off<4; ++off)
+    for (unsigned st=0; st<sizeof(starts)/sizeof(starts[0]); ++st)
+    for (unsigned changed=0; changed<=32; ++changed)
+    {
+        Uint8 *data=storage+off;
+        for (unsigned i=0;i<64;++i) data[i]=(Uint8)(i*79u+13u);
+        ppu.Reset(); ppu.Write8(0x2100,0x80); ppu.Write8(0x2115,0x80);
+        ppu.Write8(0x2116,(Uint8)starts[st]); ppu.Write8(0x2117,starts[st]>>8);
+        ppu.WriteVMDATABlock(data,64);
+        if (changed<32) data[changed*2+1]^=0x80;
+        ppu.Write8(0x2116,(Uint8)starts[st]); ppu.Write8(0x2117,starts[st]>>8);
+        render.ClearStats(); ppu.WriteVMDATABlock(data,64);
+        Check("wide prefix range calls",render.uRangeCalls,changed<32?1:0);
+        if(changed<32) {
+            Check("wide prefix first changed",render.uFirstAddress,(starts[st]+changed)&0x7FFF);
+            Check("wide prefix suffix length",render.nLastWords,32-changed);
+        }
+        Check("wide prefix vmaddr",ppu.GetRegs()->vmaddr.w,(Uint16)(starts[st]+32));
+        for(unsigned i=0;i<32;++i)
+            Check("wide prefix word",*ppu.GetVramPtr(starts[st]+i),(Uint16)(data[2*i]|(data[2*i+1]<<8)));
+        ++cases;
+    }
+    std::printf("VRAM wide prefix: %u cases\n",cases);
+}
+
 static void CheckScrollAndMode7Latches()
 {
 	SnesPPU ppu;
@@ -405,6 +440,7 @@ int main(int argc, char **argv)
 	{
 		CheckVRAMBlockEquivalence();
 		CheckUnchangedVRAMWrites();
+		CheckVRAMWidePrefix();
 		std::puts(g_Failures ? "FAIL VRAM hotpath" : "VRAM hotpath PASS");
 		return g_Failures ? 1 : 0;
 	}
@@ -414,6 +450,7 @@ int main(int argc, char **argv)
 
 	CheckVRAMBlockEquivalence();
 	CheckUnchangedVRAMWrites();
+	CheckVRAMWidePrefix();
 	CheckScrollAndMode7Latches();
 	CheckActiveDisplayMemoryPorts();
 	CheckMode4VRAMAddressDataDMA();

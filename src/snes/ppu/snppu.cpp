@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "types.h"
 #include "console.h"
 #include "snppu.h"
@@ -351,6 +352,27 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 			iWord = 0;
 			if (iFirstChanged == nWords)
 			{
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+				/* The common repeated 32/64-byte character DMA is aligned.
+				   Compare 16 bytes per iteration; a mismatch falls back to
+				   the exact word scan so invalidation starts at the same
+				   address. No loads cross the physical VRAM wrap or tail. */
+				typedef Uint32 AliasWord __attribute__((may_alias));
+				if (nChunk >= 8 &&
+				    (((uintptr_t)pData | (uintptr_t)(m_VRAM + uPhysical)) & 3u) == 0)
+				{
+					const AliasWord *src = (const AliasWord *)pData;
+					const AliasWord *dst = (const AliasWord *)(m_VRAM + uPhysical);
+					while (iWord + 8 <= nChunk)
+					{
+						const Uint32 diff = (src[0] ^ dst[0]) | (src[1] ^ dst[1]) |
+							(src[2] ^ dst[2]) | (src[3] ^ dst[3]);
+						if (diff) break;
+						src += 4; dst += 4; iWord += 8;
+					}
+					pData += iWord * 2;
+				}
+#endif
 				while (iWord < nChunk)
 				{
 					const Uint16 uWord = (Uint16)pData[0] | ((Uint16)pData[1] << 8);

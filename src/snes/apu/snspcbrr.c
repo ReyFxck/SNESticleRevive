@@ -10,104 +10,73 @@
 #include "snspcbrr.h"
 #include "prof.h"
 
-#define SNSPCBRR_CLAMP FALSE
-
-/*
-ldl		t0    // load 16 nibbles
-ldr		t0		   // T0 = OPMN KLIJ GHEF CDAB
-pextlb  t1,t0,r0   // t1 = OP00 MN00 KL00 IJ00 GH00 EF00 CD00 AB00
-psllh   t2,t1,4    // t2 = P000 N000 L000 J000 H000 F000 D000 B000
-psrah   t1,t1,12   // t1 = OOOO MMMM KKKK IIII GGGG EEEE CCCC AAAA
-psrah   t2,t2,12   // t2 = PPPP NNNN LLLL JJJJ HHHH FFFF DDDD BBBB
-pcpyld  t3,t2,t2   // t3 = HHHH FFFF DDDD BBBB HHHH FFFF DDDD BBBB
-pcpyud  t4,t1,t1   // t4 = OOOO MMMM KKKK IIII OOOO MMMM KKKK IIII
-pinth   t0,t3,t0   // t0 = HHHH GGGG FFFF EEEE DDDD CCCC BBBB AAAA
-pinth   t2,t4,t2   // t2 = PPPP OOOO NNNN MMMM LLLL KKKK JJJJ IIII
-*/
-
-static Int32 _SNSpcDsp_FilterParm[4][2]=
+/* Preserve the existing Revive BRR arithmetic, including the invalid-range
+   mapping and 16-bit wrap after doubling. Decode and filter in one pass.
+   Copy the eight source bytes first: the old decoder also consumed all input
+   before writing the output (including overlapping buffers). */
+static __inline Int32 _BRRNibble(Uint32 n, Uint32 range)
 {
-	{0x100 *  0 / 16, 0x100 *   0 / 16},
-	{0x100 * 15 / 16, 0x100 *   0 / 16},
-	{0x100 * 61 / 32, 0x100 * -15 / 16},
-	{0x100 * 115/ 64, 0x100 * -13 / 16}
-};
-
-// BRR decode
-#include "console.h"
-
-#if 4
-static void _SNSpcBRRFilter3(Int16 *pOut, Int16 *pIn, Int32 nSamples, Int32 eFilterType, Int32 iPrev0, Int32 iPrev1)
-{
-	Int32 iFilter0, iFilter1;
-	Int32 iMin = -0x8000;
-	Int32 iMax = 0x7FFF;
-
-	iFilter0 = _SNSpcDsp_FilterParm[eFilterType][0];
-	iFilter1 = _SNSpcDsp_FilterParm[eFilterType][1];
-
-	while (nSamples > 0)
-	{
-		Int32 iSample;
-
-		iSample  = *pIn;
-		iSample>>=1;
-
-		iSample += ((iPrev0 * iFilter0)>>9) + ((iPrev1 * iFilter1) >> 9);
-
-		// clamp sample to 16-bit range
-		if (iSample >  iMax) iSample = iMax;
-		if (iSample <  iMin) iSample = iMin;
-		iSample<<=1;
-
-		// write sample
-		*pOut = iSample;
-
-		// rotate sample queue
-		iPrev1 = iPrev0;
-		iPrev0 = *pOut;
-
-		pOut++;
-		pIn++;
-		nSamples--;
-	}
+	return (Int32)(((n ^ 8u) - 8u) << range) >> 1;
 }
 
-#endif
+static __inline Int16 _BRRFilterSample(Int32 sample, Int32 prev0, Int32 prev1,
+	Int32 coeff0, Int32 coeff1)
+{
+	sample += ((prev0 * coeff0) >> 9) + ((prev1 * coeff1) >> 9);
+	if (sample > 32767) sample = 32767;
+	if (sample < -32768) sample = -32768;
+	return (Int16)(sample * 2);
+}
 
 Uint8 SNSpcBRRDecode(Uint8 *pBRRBlock, Int16 *pOut, Int32 iPrev0, Int32 iPrev1)
 {
-	Uint8 uHeader;
-	Uint32 uRange;
-	Int16 Decode[16];
-	Int16 *pDecode;
-	Int32 iByte;
+	const Uint8 header = pBRRBlock[0];
+	Uint32 range = header >> 4;
+	Uint8 data[8];
+	Int32 i, coeff0, coeff1;
+	if (range > 12) range -= 4;
+	for (i = 0; i < 8; ++i) data[i] = pBRRBlock[i + 1];
 
-	uHeader = *pBRRBlock++;
-	uRange = uHeader >> 4;
-
-	// adjust range if invalid
-	if (uRange > 12)
+	switch ((header >> 2) & 3)
 	{
-		uRange-=4;
+	case 0:
+		/* No predictor or saturation needed: scaled nibbles fit in 16 bits. */
+		for (i = 0; i < 8; ++i)
+		{
+			pOut[2*i] = (Int16)(_BRRNibble(data[i] >> 4, range) * 2);
+			pOut[2*i+1] = (Int16)(_BRRNibble(data[i] & 15, range) * 2);
+		}
+		return header & 3;
+	case 1: coeff0 = 240; coeff1 = 0; break;
+	case 2: coeff0 = 488; coeff1 = -240; break;
+	default: coeff0 = 460; coeff1 = -208; break;
 	}
 
-	// decode 16 samples to temp buffer
-	pDecode = Decode;
-	for (iByte=0; iByte< 8; iByte++)
+	/* The first-order filter has no second history tap. Specialize it once
+	   per block, avoiding the second multiply and history rotation. */
+	if (coeff1 == 0)
 	{
-		Int32 iData = *pBRRBlock++;
-		pDecode[0] = ((iData << 24) >> 28) << uRange; // upper nibble
-		pDecode[1] = ((iData << 28) >> 28) << uRange; // lower nibble
-		pDecode+=2;
+		for (i = 0; i < 8; ++i)
+		{
+			iPrev0 = _BRRFilterSample(_BRRNibble(data[i] >> 4, range), iPrev0, 0, 240, 0);
+			pOut[2*i] = (Int16)iPrev0;
+			iPrev0 = _BRRFilterSample(_BRRNibble(data[i] & 15, range), iPrev0, 0, 240, 0);
+			pOut[2*i+1] = (Int16)iPrev0;
+		}
 	}
-
-	// apply filter
-
-	_SNSpcBRRFilter3(pOut, Decode, 16, (uHeader >> 2) & 3, iPrev0, iPrev1);
-
-	// return end and loop bits
-	return uHeader & 3;
+	else
+	{
+		for (i = 0; i < 8; ++i)
+		{
+			Int16 first = _BRRFilterSample(_BRRNibble(data[i] >> 4, range), iPrev0, iPrev1, coeff0, coeff1);
+			Int16 second = _BRRFilterSample(_BRRNibble(data[i] & 15, range), first, iPrev0, coeff0, coeff1);
+			pOut[2*i] = first;
+			pOut[2*i+1] = second;
+			iPrev1 = first;
+			iPrev0 = second;
+		}
+	}
+	return header & 3;
 }
 
 void SNSpcBRRClear(Int16 *pOut, Int16 iPrev)

@@ -41,13 +41,13 @@ extern void SnesRomLabUnimplementedSpcOpcode(Uint32 uPC, Uint8 uOpcode);
 #define SNSPC_FETCH8(_Reg)  _Reg=_SNSPCFetch8(pCpu, rPC);  rPC++;
 #define SNSPC_FETCH16(_Reg) _Reg=_SNSPCFetch16(pCpu, rPC); rPC+=2;
 
-#define SNSPC_WRITE8(_Addr, _Data)  pCpu->Cycles = nCycles; _SNSPCWrite8(pCpu, _Addr, _Data);
-#define SNSPC_WRITE16(_Addr, _Data) pCpu->Cycles = nCycles; _SNSPCWrite16(pCpu, _Addr, _Data);
-#define SNSPC_WRITE16_DP(_Addr, _Data) pCpu->Cycles = nCycles; _SNSPCWrite16DP(pCpu, _Addr, _Data);
+#define SNSPC_WRITE8(_Addr, _Data)  _SNSPCWrite8(pCpu, _Addr, _Data, nCycles);
+#define SNSPC_WRITE16(_Addr, _Data) _SNSPCWrite16(pCpu, _Addr, _Data, nCycles);
+#define SNSPC_WRITE16_DP(_Addr, _Data) _SNSPCWrite16DP(pCpu, _Addr, _Data, nCycles);
 
-#define SNSPC_READ8(_Addr, _x)  pCpu->Cycles = nCycles; _x = _SNSPCRead8(pCpu, _Addr);
-#define SNSPC_READ16(_Addr, _x) pCpu->Cycles = nCycles; _x = _SNSPCRead16(pCpu, _Addr);
-#define SNSPC_READ16_DP(_Addr, _x) pCpu->Cycles = nCycles; _x = _SNSPCRead16DP(pCpu, _Addr);
+#define SNSPC_READ8(_Addr, _x)  _x = _SNSPCRead8(pCpu, _Addr, nCycles);
+#define SNSPC_READ16(_Addr, _x) _x = _SNSPCRead16(pCpu, _Addr, nCycles);
+#define SNSPC_READ16_DP(_Addr, _x) _x = _SNSPCRead16DP(pCpu, _Addr, nCycles);
 
 #define SNSPC_PUSH8(_Data)	_SNSPCPush8(pCpu, _Data);
 #define SNSPC_PUSH16(_Data)	_SNSPCPush16(pCpu, _Data);
@@ -248,81 +248,120 @@ static __inline Uint16 _SNSPCFetch16(SNSpcT *pCpu, Uint32 uAddr)
 	return pCpu->Mem[uPC] | (pCpu->Mem[(uPC + 1) & 0xFFFFu] << 8);
 }
 
+/* The interpreter owns nCycles until it returns. Only the I/O callbacks
+   observe the published clock during execution. Keep the eager path for
+   trace/debug builds and differential host tests. Word operations publish
+   once before BOTH bytes (including callbacks that change the saved clock). */
+#ifndef SNSPC_DEFER_RAM_CYCLES
+#define SNSPC_DEFER_RAM_CYCLES (!SNESTICLE_ROMLAB && !SNSPC_STATEDEBUG)
+#endif
+static __inline Bool _SNSPCIsIO(Uint32 uAddr)
+{
+	return uAddr - 0xF0u < 16u;
+}
+
+static __inline void _SNSPCPublishCycles(SNSpcT *pCpu, Int32 nCycles,
+	Uint32 uAddr, Uint32 uNext)
+{
+#if SNSPC_DEFER_RAM_CYCLES
+	if (!_SNSPCIsIO(uAddr) && !_SNSPCIsIO(uNext)) return;
+#else
+	(void)uAddr; (void)uNext;
+#endif
+	pCpu->Cycles = nCycles;
+}
+
 static __inline Uint8 __SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 {
-	if (uAddr >= 0xF0 && uAddr < 0x100)
+	if (_SNSPCIsIO(uAddr)) return pCpu->pReadTrapFunc(pCpu, uAddr);
+	return pCpu->Mem[uAddr];
+}
+
+static __inline Uint8 _SNSPCRead8(SNSpcT *pCpu, Uint32 Addr, Int32 nCycles)
+{
+	/* Absolute indexed addresses may cross $ffff. RAM and I/O wrap. */
+	Addr &= 0xFFFFu;
+#if !SNSPC_DEFER_RAM_CYCLES
+	pCpu->Cycles = nCycles;
+#endif
+	if (_SNSPCIsIO(Addr))
 	{
-		return pCpu->pReadTrapFunc(pCpu, uAddr);
-	} else
-	{
-		return pCpu->Mem[uAddr];
+#if SNSPC_DEFER_RAM_CYCLES
+		pCpu->Cycles = nCycles;
+#endif
+		return pCpu->pReadTrapFunc(pCpu, Addr);
 	}
+	return pCpu->Mem[Addr];
 }
 
-static Uint8 _SNSPCRead8(SNSpcT *pCpu, Uint32 Addr)
+static Uint16 _SNSPCRead16(SNSpcT *pCpu, Uint32 Addr, Int32 nCycles)
 {
+	Uint32 uNext = (Addr + 1) & 0xFFFF;
 	Uint32 uData;
-	uData =  __SNSPCRead8(pCpu, Addr);
-	return  uData;
-}
-
-static Uint16 _SNSPCRead16(SNSpcT *pCpu, Uint32 Addr)
-{
-	Uint32 uData;
-	uData =  __SNSPCRead8(pCpu, Addr);
-	uData|= (__SNSPCRead8(pCpu, (Addr + 1) & 0xFFFF)<<8);
-	return  uData;
-}
-
-/* SPC700 direct-page 16-bit accesses wrap inside page 0/1. */
-static Uint16 _SNSPCRead16DP(SNSpcT *pCpu, Uint32 Addr)
-{
-	Uint32 uNext = (Addr & 0xFF00) | ((Addr + 1) & 0xFF);
-	Uint32 uData = __SNSPCRead8(pCpu, Addr & 0xFFFF);
+	Addr &= 0xFFFFu;
+	_SNSPCPublishCycles(pCpu, nCycles, Addr, uNext);
+	uData = __SNSPCRead8(pCpu, Addr);
 	uData |= (__SNSPCRead8(pCpu, uNext) << 8);
 	return (Uint16)uData;
 }
 
-static __inline void  __SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
-{
-	// don't write to rom area
-	if (uAddr < SNSPC_ROM_ADDR)
-	{
-		pCpu->Mem[uAddr] = uData;
-	}
-	else
-	if (!pCpu->bRomEnable)
-	{
-		// rom is disabled
-		pCpu->Mem[uAddr] = uData;
-//		pCpu->pWriteTrapFunc(pCpu, uAddr, uData);
-	} else
-	{
-		// rom is enabled
-		pCpu->ShadowMem[uAddr & (SNSPC_ROM_SIZE -1)] = uData;
-	}
-
-	if (uAddr >= 0xF0 && uAddr < 0x100)
-	{
-		pCpu->pWriteTrapFunc(pCpu, uAddr, uData);
-	}
-}
-
-static void  _SNSPCWrite8(SNSpcT *pCpu, Uint32 Addr, Uint8 Data)
-{
-	__SNSPCWrite8(pCpu, Addr + 0, Data >> 0);
-}
-
-static void  _SNSPCWrite16(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
-{
-	__SNSPCWrite8(pCpu, Addr & 0xFFFF, Data >> 0);
-	__SNSPCWrite8(pCpu, (Addr + 1) & 0xFFFF, Data >> 8);
-}
-
-static void _SNSPCWrite16DP(SNSpcT *pCpu, Uint32 Addr, Uint16 Data)
+/* SPC700 direct-page 16-bit accesses wrap inside page 0/1. */
+static Uint16 _SNSPCRead16DP(SNSpcT *pCpu, Uint32 Addr, Int32 nCycles)
 {
 	Uint32 uNext = (Addr & 0xFF00) | ((Addr + 1) & 0xFF);
-	__SNSPCWrite8(pCpu, Addr & 0xFFFF, Data >> 0);
+	Uint32 uData;
+	Addr &= 0xFFFF;
+	_SNSPCPublishCycles(pCpu, nCycles, Addr, uNext);
+	uData = __SNSPCRead8(pCpu, Addr);
+	uData |= (__SNSPCRead8(pCpu, uNext) << 8);
+	return (Uint16)uData;
+}
+
+static __inline void __SNSPCWriteMemory(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
+{
+	if (uAddr < SNSPC_ROM_ADDR || !pCpu->bRomEnable)
+		pCpu->Mem[uAddr] = uData;
+	else
+		pCpu->ShadowMem[uAddr & (SNSPC_ROM_SIZE - 1)] = uData;
+}
+
+static __inline void __SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
+{
+	__SNSPCWriteMemory(pCpu, uAddr, uData);
+	if (_SNSPCIsIO(uAddr)) pCpu->pWriteTrapFunc(pCpu, uAddr, uData);
+}
+
+static __inline void _SNSPCWrite8(SNSpcT *pCpu, Uint32 Addr, Uint8 Data, Int32 nCycles)
+{
+	Addr &= 0xFFFFu;
+#if !SNSPC_DEFER_RAM_CYCLES
+	pCpu->Cycles = nCycles;
+#endif
+	__SNSPCWriteMemory(pCpu, Addr, Data);
+	if (_SNSPCIsIO(Addr))
+	{
+#if SNSPC_DEFER_RAM_CYCLES
+		pCpu->Cycles = nCycles;
+#endif
+		pCpu->pWriteTrapFunc(pCpu, Addr, Data);
+	}
+}
+
+static __inline void _SNSPCWrite16(SNSpcT *pCpu, Uint32 Addr, Uint16 Data, Int32 nCycles)
+{
+	Uint32 uNext = (Addr + 1) & 0xFFFF;
+	Addr &= 0xFFFF;
+	_SNSPCPublishCycles(pCpu, nCycles, Addr, uNext);
+	__SNSPCWrite8(pCpu, Addr, Data);
+	__SNSPCWrite8(pCpu, uNext, Data >> 8);
+}
+
+static void _SNSPCWrite16DP(SNSpcT *pCpu, Uint32 Addr, Uint16 Data, Int32 nCycles)
+{
+	Uint32 uNext = (Addr & 0xFF00) | ((Addr + 1) & 0xFF);
+	Addr &= 0xFFFF;
+	_SNSPCPublishCycles(pCpu, nCycles, Addr, uNext);
+	__SNSPCWrite8(pCpu, Addr, Data);
 	__SNSPCWrite8(pCpu, uNext, Data >> 8);
 }
 

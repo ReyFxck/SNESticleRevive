@@ -49,13 +49,13 @@ def hook(cpu,address,size,data):
 uc.hook_add(UC_HOOK_CODE,hook)
 banks=b''.join(struct.pack('<IIIBBBB',BASE,0,0,8,255,0,0) for _ in range(SIZE//8192))
 rng=random.Random(713);zero=bytes(SIZE)
-def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False):
+def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False,operand=0x34):
  global trace
  state=bytearray(60);a=0x1234;x=0x17;y=0x21;s=0x1ff
  struct.pack_into('<HHHHBBHII',state,0,a,x,y,s,p,mode,dp,pc,0x020000)
  struct.pack_into('<iIIII',state,20,cycles,100,100,100,100);state[49]=1;state[52]=0x75;struct.pack_into('<I',state,56,1000)
  uc.mem_write(BASE,zero);ctypes.memset(mem,0,SIZE)
- updates={pc:bytes([op,0x34,0x12,0x03,0xea,0xea]),0xffe0:bytes(range(32)),0x0100:bytes([0x34,0x12,0x07])*85}
+ updates={pc:bytes([op,operand,0x12,0x03,0xea,0xea]),0xffe0:bytes(range(32)),0x0100:bytes([0x34,0x12,0x07])*85}
  for addr,v in updates.items():uc.mem_write(BASE+addr,v);ctypes.memmove(ctypes.addressof(mem.contents)+addr,v,len(v))
  mapped=bytearray(banks)
  if traps:
@@ -87,6 +87,12 @@ if __name__=='__main__':
     for cycles in [0,-1,1,40]:
      result=check(op,pc=pc,cycles=cycles,core=core);n+=1
      if result:fails.append(result);print(json.dumps({'core':core,**result}),flush=True)
+ # Taken branches: forward/backward, same-page and page-cross cases.
+ for e,flags in [(1,0x34),(0,0x34),(1,0xf7),(0,0xf7)]:
+  for op in [0x10,0x30,0x50,0x70,0x80,0x90,0xb0,0xd0,0xf0]:
+   for pc,operand in [(0x018020,0x10),(0x0180f0,0x34),(0x0180e0,0xc0),(0x018010,0xc0)]:
+    result=check(op,e,flags,pc=pc,operand=operand);n+=1
+    if result:fails.append(result);print(json.dumps({'core':'plain-branch',**result}),flush=True)
  for core in ['SNCPUExecute_ASM_Plain','SNCPUExecute_ASM']:
   for e,flags in [(1,0x34),(0,0x34),(0,0x04)]:
    for op in range(256):

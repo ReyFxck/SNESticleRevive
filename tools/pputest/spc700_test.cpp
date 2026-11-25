@@ -94,6 +94,17 @@ int main()
 	cpu.Mem[0x0000] = 0x80; Run(cpu, 4);
 	Check("branch wraps PC", cpu.Regs.rPC, 0xFF81);
 
+	/* Absolute indexed addressing wraps to 16 bits, for reads and writes. */
+	Init(cpu); PutOp(cpu, 0xF5); cpu.Mem[0x0201]=0xFF; cpu.Mem[0x0202]=0xFF;
+	cpu.Regs.rX=2; cpu.Mem[1]=0xA5; Run(cpu,5);
+	Check("absolute indexed read wraps",cpu.Regs.rA,0xA5);
+	Init(cpu); PutOp(cpu, 0xD5); cpu.Mem[0x0201]=0xFF; cpu.Mem[0x0202]=0xFF;
+	cpu.Regs.rX=2; cpu.Regs.rA=0x5A; cpu.bRomEnable=TRUE; Run(cpu,6);
+	Check("absolute indexed write wraps",cpu.Mem[1],0x5A);
+	Init(cpu); PutOp(cpu, 0xF5); cpu.Mem[0x0201]=0xFF; cpu.Mem[0x0202]=0xFF;
+	cpu.Regs.rX=0xF1; cpu.Mem[0xF0]=0x9B; Run(cpu,5);
+	Check("absolute indexed wrap to I/O",cpu.Regs.rA,0x9B);
+
 	Init(cpu); PutOp(cpu, 0xEF); Run(cpu, 3); Check("SLEEP holds PC", cpu.Regs.rPC, 0x0200);
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);

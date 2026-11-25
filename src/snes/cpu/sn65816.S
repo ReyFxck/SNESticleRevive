@@ -602,6 +602,25 @@
 /* Taken 8-bit branches cost another cycle on an emulation-mode page cross.
    Compare logical PCs, not host pointers, because the mapped bank base is not
    guaranteed to be 256-byte aligned. */
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+/* Native-mode branches never incur the emulation page penalty. Do the
+   logical-PC comparison only when E is set; the common bank transition
+   remains identical. _rel is R_t0 ($21), not a scratch t0/t1/t2. */
+#define SNCPU_BREL8_PC16(_rel) \
+		lbu t1,SNCPU_rE ;\
+		beq t1,zr,96f ;\
+		lwu t2,SP_PCBank ;\
+		subu t2,R_PC,t2 ;\
+		addu t0,t2,_rel ;\
+		xor t0,t0,t2 ;\
+		andi t0,t0,0xFF00 ;\
+		beq t0,zr,96f ;\
+		nop ;\
+		addiu R_CpuCycle,R_CpuCycle,1 ;\
+		addiu R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST ;\
+96: \
+		SNCPU_BREL_PC16(_rel)
+#else
 #define SNCPU_BREL8_PC16(_rel)				\
 		lwu		t2,SP_PCBank						;\
 		subu	t2,R_PC,t2						;\
@@ -617,6 +636,8 @@
 		addu	t0,t0,t1						;\
 		sll		t0,t0,1						;\
 		subu	R_Cycles,R_Cycles,t0
+
+#endif
 
 #define SNCPU_FETCH8(_dest)  		   \
 		jal		_SNCPU_Fetch8		;  \
