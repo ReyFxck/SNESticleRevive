@@ -103,6 +103,9 @@ extern "C" {
    alguns niveis garante que essas faixas tambem sejam encontradas, sem
    permitir recursao ilimitada em dispositivos arbitrarios. */
 #define BGM_SCAN_MAX_DEPTH 4
+/* HostFS can return the root listing for a nonexistent directory. Never
+   recurse there; limit each enumeration even if dread never reaches EOF. */
+#define BGM_HOST_SCAN_MAX_ENTRIES 256
 
 /* Limite de particoes APA/PFS lembradas durante a descoberta do HDD. A
    playlist continua limitada por BGM_INDEX_MAX; esta tabela existe apenas
@@ -241,6 +244,7 @@ static Bool _HasExt(const char *name, const char *ext)
    definicao (igual mainloop_init.cpp); usada para achar a pasta "bgm" AO
    LADO do ELF. */
 char *MainGetBootDir();
+char *MainGetBootPath();
 extern "C" int MainBuildHostIOPath(const char *guest, char *out, int outBytes);
 
 #if defined(SNDBG_LOG) && SNDBG_LOG
@@ -261,11 +265,19 @@ static int _HostOpen(const char *path, Bool directory)
 {
     int fd = directory ? fileXioDopen(path) : fileXioOpen(path, FIO_O_RDONLY, 0);
     if (fd >= 0) return fd;
+    /* SAF file opens work on some NetherSX2 builds, but dopen on the
+       encoded URI may return the ELF root for *any* path (even files).
+       Never use the URI fallback for directory handles. */
+    if (directory)
+    {
+        BGM_HOST_LOG("[bgm-host] dopen path=%s result=%d (no URI retry)", path, fd);
+        return fd;
+    }
     char uri[1024];
     if (MainBuildHostIOPath(path, uri, sizeof(uri)))
     {
         int first = fd;
-        fd = directory ? fileXioDopen(uri) : fileXioOpen(uri, FIO_O_RDONLY, 0);
+        fd = fileXioOpen(uri, FIO_O_RDONLY, 0);
         BGM_HOST_LOG("[bgm-host] %s path=%s relative=%d uri=%d",
                      directory ? "dopen" : "open", path, first, fd);
         (void)first;
@@ -571,30 +583,44 @@ static int _ScanDirAs(const char *scanDir, const char *indexDir, int depth)
     return 1;
 }
 
-/* Direct fileXio enumeration avoids newlib opendir's path normalization.
-   Probe subdirectories rather than trusting HostFS mode bits, which can
-   identify every entry as the same type on NetherSX2. */
+/* A directory returned by HostFS is not proof that it exists. In
+   particular, NetherSX2 SAF may list the ELF root instead of BGM. Keep
+   host scans flat and bounded; playlists support explicit nested files.
+   Other devices still use the normal recursive scanner. */
 static int _ScanHostDir(const char *path, int depth)
 {
+    (void)depth;
     int fd = _HostOpen(path, TRUE);
     if (fd < 0) return 0;
     iox_dirent_t entry;
     int result = 0;
     int before = s_indexCount;
-    while (s_indexCount < BGM_INDEX_MAX && (result = fileXioDread(fd, &entry)) > 0)
+    int scanned = 0;
+    while (scanned < BGM_HOST_SCAN_MAX_ENTRIES && s_indexCount < BGM_INDEX_MAX &&
+           (result = fileXioDread(fd, &entry)) > 0)
     {
+        ++scanned;
         entry.name[sizeof(entry.name) - 1] = 0;
         const char *leaf = _HostLeaf(entry.name);
+        if (!leaf) continue;
+        // If the driver reports a qualified entry, verify its immediate
+        // parent against the requested directory, not just the leaf.
+        const char *folder = _HostLeaf(path + 5);
+        if (leaf != entry.name && folder)
+        {
+            const char *parent = leaf - 1;
+            while (parent > entry.name && parent[-1] != '/' && parent[-1] != '\\') --parent;
+            size_t n = (size_t)((leaf - 1) - parent);
+            if (n != strlen(folder) || memcmp(parent, folder, n)) continue;
+        }
         char child[256];
         if (!_HostJoin(child, sizeof(child), path, leaf)) continue;
         if (_HasExt(leaf, ".mod")) _IndexAdd(child, 1);
         else if (_HasExt(leaf, ".xm")) _IndexAdd(child, 2);
-        else if (depth < BGM_SCAN_MAX_DEPTH)
-            _ScanHostDir(child, depth + 1);
     }
     fileXioDclose(fd);
-    BGM_HOST_LOG("[bgm-host] scan path=%s added=%d dread=%d", path,
-                 s_indexCount - before, result);
+    BGM_HOST_LOG("[bgm-host] flat scan path=%s entries=%d added=%d dread=%d", path,
+                 scanned, s_indexCount - before, result);
     (void)before;
     return 1;
 }
@@ -646,7 +672,7 @@ static void _ScanHostManifest()
     if (size <= 0 || n != size || memchr(text, 0, (size_t)n)) return;
     text[n] = 0;
     int before = s_indexCount;
-    for (char *line = text; line && *line; )
+    for (char *line = text; line && s_indexCount < BGM_INDEX_MAX; )
     {
         char *next = strchr(line, '\n');
         if (next) *next++ = 0;
@@ -685,6 +711,16 @@ static void _ScanHostBootBgm(void)
         }
         return;
     }
+    // On Android SAF, prefer a manifest over directory probes. A manifest
+    // contains exact file paths, so it does not rely on a working dopen.
+    const char *boot = MainGetBootPath();
+    const Bool saf = boot && !strncmp(boot, "host:content://", 15);
+    if (saf)
+    {
+        BGM_HOST_LOG("[bgm-host] SAF safe scan (flat only, no URI dopen)");
+        _ScanHostManifest();
+        if (s_indexCount > before) return;
+    }
     Bool lower = FALSE, upper = FALSE;
     char found[8][4];
     int foundCount = 0;
@@ -692,7 +728,8 @@ static void _ScanHostBootBgm(void)
     if (fd >= 0)
     {
         iox_dirent_t entry;
-        while (s_indexCount < BGM_INDEX_MAX && fileXioDread(fd, &entry) > 0)
+        for (int scanned = 0; scanned < BGM_HOST_SCAN_MAX_ENTRIES &&
+             s_indexCount < BGM_INDEX_MAX && fileXioDread(fd, &entry) > 0; ++scanned)
         {
             entry.name[sizeof(entry.name) - 1] = 0;
             const char *leaf = _HostLeaf(entry.name);
@@ -718,11 +755,12 @@ static void _ScanHostBootBgm(void)
         if (!upper) _ScanHostDir("host:BGM", 0);
         if (!lower && s_indexCount == before) _ScanHostDir("host:bgm", 0);
     }
-    if (s_indexCount == before) _ScanHostManifest();
+    if (!saf && s_indexCount == before) _ScanHostManifest();
     if (s_indexCount == before && (fd = fileXioDopen("host:")) >= 0)
     {
         iox_dirent_t entry;
-        while (s_indexCount < BGM_INDEX_MAX && fileXioDread(fd, &entry) > 0)
+        for (int scanned = 0; scanned < BGM_HOST_SCAN_MAX_ENTRIES &&
+             s_indexCount < BGM_INDEX_MAX && fileXioDread(fd, &entry) > 0; ++scanned)
         {
             entry.name[sizeof(entry.name)-1] = 0;
             const char *leaf = _HostLeaf(entry.name);
