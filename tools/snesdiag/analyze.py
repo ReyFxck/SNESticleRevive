@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 TAG_RE = re.compile(r"(\[(?:snes-[a-z0-9-]+|gsu-watchdog|rom-map)\])\s*(.*)", re.I)
-PERCENT_KEYS = ("cpu", "ppu", "gsu", "apu", "mix", "mdma", "hdma")
+PERCENT_KEYS = ("cpu", "ppu", "sa1", "gsu", "apu", "mix", "mdma", "hdma")
 CAPTURE_BITS = {
     0x01: "manual",
     0x02: "slow-frame",
@@ -100,6 +100,15 @@ def analyze_lines(lines: Iterable[str]) -> Dict[str, object]:
                     perf_sum[key] += value
                     perf_count[key] += 1
                     perf_max[key] = max(perf_max[key], value)
+        elif tag == "[snes-sa1-hot]":
+            calls = _tuple(payload, "advance/noadvance/samples", 3)
+            times = _tuple(payload, "sample-cycles bus/step/irq", 3)
+            if calls and times:
+                for name, value in zip(("sa1_advance", "sa1_noadvance", "sa1_samples", "sa1_bus_cycles", "sa1_step_cycles", "sa1_irq_cycles"), calls + times):
+                    stats[name] += value
+        elif tag == "[snes-sa1-bus]":
+            # Counter is cumulative per session, so never sum each report.
+            stats["sa1_dropped_peak"] = max(stats["sa1_dropped_peak"], _uint(payload, "dropped-events") or 0)
         elif tag == "[snes-raster]":
             values = _tuple(payload, "ppu queued/applied/full", 3)
             if values:
@@ -147,7 +156,7 @@ def analyze_lines(lines: Iterable[str]) -> Dict[str, object]:
         value = max(stats["sdd1_source_fail"], stats["sdd1_error_records"])
         findings.append(_finding("ERROR", "sdd1-source", "S-DD1 DMA used an unmapped source.", value))
     if stats["gsu_watchdogs"]:
-        findings.append(_finding("ERROR", "gsu-watchdog", "The SuperFX watchdog stopped a runaway job.", stats["gsu_watchdogs"]))
+        findings.append(_finding("WARN", "gsu-watchdog", "The SuperFX long-running job watchdog reported a threshold crossing (diagnostic, not a forced STOP).", stats["gsu_watchdogs"]))
     if stats["gs_mismatch"]:
         findings.append(_finding("ERROR", "gs-copy", "CPU-to-GS staging validation mismatched.", stats["gs_mismatch"]))
     warning_specs = (
@@ -157,6 +166,7 @@ def analyze_lines(lines: Iterable[str]) -> Dict[str, object]:
         ("video_skipped", "frameskip", "Host catch-up rendered hidden emulated frames."),
         ("obj_events", "obj", "OBJ output collapsed or decoded unexpectedly empty."),
         ("slow_frames", "slow-frame", "Frames exceeded 105% of the active host refresh budget."),
+        ("sa1_dropped_peak", "sa1-bus-overflow", "SA-1 shared-bus events were discarded; contention fidelity may be reduced."),
     )
     for stat_name, code, message in warning_specs:
         if stats[stat_name]:
@@ -201,6 +211,9 @@ def render_text(report: Dict[str, object]) -> str:
                 f"{item['name']} avg {item['average_percent']:.1f}% max {item['max_percent']}%" for item in hotspots[:4]
             )
         )
+    if stats.get("sa1_samples"):
+        count = stats["sa1_samples"]
+        lines.append(f"SA-1 sync advance/noadvance={stats['sa1_advance']}/{stats['sa1_noadvance']} samples={count}; mean sampled cycles bus/step/irq=" + "/".join(f"{stats[k]/count:.1f}" for k in ("sa1_bus_cycles", "sa1_step_cycles", "sa1_irq_cycles")))
     reasons = report["capture_reasons"]
     if reasons:
         lines.append("capture reasons=" + ", ".join(f"{name}:{count}" for name, count in sorted(reasons.items())))

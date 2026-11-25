@@ -31,8 +31,11 @@ Uint8 g_SNCPU_SA1BusPenaltyUnits[4][SNCPU_SA1_BUS_UNIT_MAX];
 static Uint32 g_SNCPU_SA1BusFinalized = 0;
 static Uint32 g_SNCPU_SA1BusBits[4][SNCPU_SA1_BUS_TICK_MAX / 32];
 static Uint32 g_SNCPU_SA1BusFastIRAM[SNCPU_SA1_BUS_TICK_MAX / 32];
+/* Exclusive high-water mark of bytes written in each penalty row. */
+static Uint32 g_SNCPU_SA1BusDirtyEnd[4];
 Uint32 g_SNCPU_SA1BusConflictTicks = 0;
-static Uint32 g_SNCPU_SA1BusDroppedEvents = 0;
+/* Also incremented by the S-CPU R5900 event recorder. */
+Uint32 g_SNCPU_SA1BusDroppedEvents = 0;
 
 static Uint8 SNCPUSA1BusType(Uint32 uAddr, Bool bSA1Side)
 {
@@ -52,25 +55,33 @@ static Uint8 SNCPUSA1BusType(Uint32 uAddr, Bool bSA1Side)
 
 static void SNCPUSA1BusMark(Uint8 uType, Uint32 uFirst, Uint32 uLast, Bool bFast)
 {
-	Uint32 uTick;
-	if (!uType || uFirst>=SNCPU_SA1_BUS_TICK_MAX) return;
+	Uint32 uTick, uEnd;
+	Uint8 *pPenalty;
+	Uint32 *pBits;
+	Bool bBW, bFastIRAM;
+	Uint8 uPenalty;
+	if (!uType || uType>SNCPU_SA1_BUS_IRAM || uFirst>=SNCPU_SA1_BUS_TICK_MAX || uFirst>uLast) return;
 	if (uLast>=SNCPU_SA1_BUS_TICK_MAX) uLast=SNCPU_SA1_BUS_TICK_MAX-1;
+	pPenalty=g_SNCPU_SA1BusPenaltyUnits[uType];
+	pBits=g_SNCPU_SA1BusBits[uType];
+	bBW=(uType==SNCPU_SA1_BUS_BWRAM);
+	bFastIRAM=(uType==SNCPU_SA1_BUS_IRAM && bFast);
+	uPenalty=(Uint8)(SNCPU_CYCLE_FAST*((bBW || bFastIRAM)?2:1));
+	uEnd=uLast*SNCPU_CYCLE_FAST+1;
+	if (uEnd>g_SNCPU_SA1BusDirtyEnd[uType]) g_SNCPU_SA1BusDirtyEnd[uType]=uEnd;
+	/* For BW-RAM the previous tick is penalized as well. Inside this
+	   contiguous interval it is already marked by the prior iteration;
+	   only the first preceding tick needs a separate write. */
+	if (bBW && uFirst>0) {
+		Uint32 uPrev=(uFirst-1)*SNCPU_CYCLE_FAST;
+		if (uPenalty>pPenalty[uPrev]) pPenalty[uPrev]=uPenalty;
+	}
 	for (uTick=uFirst; uTick<=uLast; uTick++) {
 		Uint32 uMask=1u<<(uTick&31);
 		Uint32 uUnit=uTick*SNCPU_CYCLE_FAST;
-		Uint8 uPenalty=(uType==SNCPU_SA1_BUS_BWRAM ||
-		                  (uType==SNCPU_SA1_BUS_IRAM && bFast))
-			? (Uint8)(SNCPU_CYCLE_FAST*2) : (Uint8)SNCPU_CYCLE_FAST;
-		g_SNCPU_SA1BusBits[uType][uTick>>5]|=uMask;
-		if (uType==SNCPU_SA1_BUS_IRAM && bFast)
-			g_SNCPU_SA1BusFastIRAM[uTick>>5]|=uMask;
-		if (uPenalty>g_SNCPU_SA1BusPenaltyUnits[uType][uUnit])
-			g_SNCPU_SA1BusPenaltyUnits[uType][uUnit]=uPenalty;
-		if (uType==SNCPU_SA1_BUS_BWRAM && uTick>0) {
-			Uint32 uPrev=(uTick-1)*SNCPU_CYCLE_FAST;
-			if (uPenalty>g_SNCPU_SA1BusPenaltyUnits[uType][uPrev])
-				g_SNCPU_SA1BusPenaltyUnits[uType][uPrev]=uPenalty;
-		}
+		pBits[uTick>>5]|=uMask;
+		if (bFastIRAM) g_SNCPU_SA1BusFastIRAM[uTick>>5]|=uMask;
+		if (uPenalty>pPenalty[uUnit]) pPenalty[uUnit]=uPenalty;
 	}
 }
 
@@ -138,15 +149,27 @@ void SNCPUSA1BusTagCpu(SNCpuT *pCpu)
 
 void SNCPUSA1BusBeginLine(void)
 {
+	Uint32 uType;
 	g_SNCPU_SA1BusEventCount=0; g_SNCPU_SA1BusFinalized=0;
 	memset(g_SNCPU_SA1BusBits,0,sizeof(g_SNCPU_SA1BusBits));
 	memset(g_SNCPU_SA1BusFastIRAM,0,sizeof(g_SNCPU_SA1BusFastIRAM));
-	memset(g_SNCPU_SA1BusPenaltyUnits,0,sizeof(g_SNCPU_SA1BusPenaltyUnits));
+	/* The only writer is SNCPUSA1BusMark. The ASM side only reads these
+	   rows. Clear every previously touched byte, including a BW-RAM
+	   preceding tick, rather than all 24 KiB on every scanline. */
+	for (uType=SNCPU_SA1_BUS_ROM; uType<=SNCPU_SA1_BUS_IRAM; uType++) {
+		if (g_SNCPU_SA1BusDirtyEnd[uType]) {
+			memset(g_SNCPU_SA1BusPenaltyUnits[uType],0,g_SNCPU_SA1BusDirtyEnd[uType]);
+			g_SNCPU_SA1BusDirtyEnd[uType]=0;
+		}
+	}
 }
 void SNCPUSA1BusRecord(SNCpuT *pCpu, Uint32 uAddr, Uint32 uCyclesPerByte, Uint32 nBytes)
 {
 	Uint32 uIndex,uEnd,uInfo;
 	if (!g_SNCPU_SA1BusTrackEnabled || pCpu!=g_SNCPU_SA1BusHostCpu || !nBytes) return;
+	/* $7E-$7F are private S-CPU WRAM. Finalize would discard these events
+	   anyway; do not fill the shared-bus queue with them. */
+	if ((uAddr & 0xFE0000u) == 0x7E0000u) return;
 	uIndex=g_SNCPU_SA1BusEventCount;
 	if (uIndex>=SNCPU_SA1_BUS_EVENT_MAX) { g_SNCPU_SA1BusDroppedEvents++; return; }
 	uEnd=(Uint32)SNCPUGetCounter(pCpu,SNCPU_COUNTER_LINE)&0xFFFFu;
@@ -1014,6 +1037,10 @@ void SNCPUAbort(SNCpuT *pCpu)
 {
 	if (pCpu->bRunning)
 	{
+		/* A second IRQ/abort in the same trap must not replace the saved
+		   cycle budget with the zero sentinel from the first abort. */
+		if (!pCpu->Cycles && pCpu->nAbortCycles)
+			return;
 		// cpu is executing, so force it to terminate by setting
 		// the cycle count to zero. Termination will
 		// cause the abort handler to be called, then execution will resume

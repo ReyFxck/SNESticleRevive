@@ -165,6 +165,10 @@
 #define SNCPU_SA1_TRACK(_addr,_cycles,_bytes) \
 		lw		t0,SP_SA1Track				;\
 		beq		t0,zr,99f				;\
+		srl		t0,_addr,17				;\
+		andi		t0,t0,0x7F				;\
+		addiu		t1,zr,0x3F				;\
+		beq		t0,t1,99f				;\
 		sltiu		t1,_cycles,SNCPU_CYCLE_SLOW		;\
 		lw		t2,SNCPU_Counter2			;\
 		subu		t2,t2,R_Cycles				;\
@@ -177,9 +181,14 @@
 		lui		t0,%hi(g_SNCPU_SA1BusEventCount)	;\
 		lw		t1,%lo(g_SNCPU_SA1BusEventCount)(t0)	;\
 		sltiu		t0,t1,256		;\
-		beq		t0,zr,99f				;\
+		bne		t0,zr,98f				;\
 		nop						;\
-		sll		t1,t1,2					;\
+		lui		t0,%hi(g_SNCPU_SA1BusDroppedEvents)	;\
+		lw		t1,%lo(g_SNCPU_SA1BusDroppedEvents)(t0)	;\
+		addiu		t1,t1,1				;\
+		b		99f					;\
+		sw		t1,%lo(g_SNCPU_SA1BusDroppedEvents)(t0)	;\
+98:		sll		t1,t1,2					;\
 		lui		t0,%hi(g_SNCPU_SA1BusEventAddr)		;\
 		addiu		t0,t0,%lo(g_SNCPU_SA1BusEventAddr)	;\
 		addu		t0,t0,t1				;\

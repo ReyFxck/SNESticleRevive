@@ -71,7 +71,7 @@ struct SA1SaveState
 	Uint8 CpuSignal;
 	Uint8 CpuNmiDmaDelay;
 	Uint8 CpuIrqPending;
-	Uint8 Reserved;
+	Uint8 CpuOpenBus; // formerly reserved; preserves save-state layout
 	Uint8 IRAM[SNSA1_IRAM_SIZE];
 };
 
@@ -93,7 +93,7 @@ public:
 	void  WriteRegister(Uint16 uAddr, Uint8 uData);
 
 	// Hardware-visible register ports differ between the S-CPU and SA-1 CPU.
-	Uint8 ReadSCPURegister(Uint16 uAddr);
+	Uint8 ReadSCPURegister(Uint16 uAddr, Uint8 uOpenBus = 0xFF);
 	void  WriteSCPURegister(Uint16 uAddr, Uint8 uData);
 	Uint8 ReadSA1Register(Uint16 uAddr);
 	void  WriteSA1Register(Uint16 uAddr, Uint8 uData);

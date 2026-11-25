@@ -54,6 +54,9 @@ static Uint64 g_TmgWinSumObj  = 0;   // soma de ciclos de sprites na janela
 static Uint64 g_TmgWinSumPPU  = 0;
 static Uint64 g_TmgWinSumCPU  = 0;
 static Uint64 g_TmgWinSumSA1  = 0;
+// Sample 1/64 of advancing SA-1 syncs; avoid 3 extra Count reads per slice.
+static Uint32 g_SA1SyncCalls = 0, g_SA1SyncNoAdvance = 0, g_SA1SyncSamples = 0;
+static Uint64 g_SA1SampleBus = 0, g_SA1SampleStep = 0, g_SA1SampleIRQ = 0;
 static Uint64 g_TmgWinSumGSU  = 0;
 static Uint64 g_TmgWinSumMDMA = 0;
 static Uint64 g_TmgWinSumHDMA = 0;
@@ -275,6 +278,8 @@ static void SnesDbgResetWindow(void)
 	g_TmgWinSumPPU = 0;
 	g_TmgWinSumCPU = 0;
 	g_TmgWinSumSA1 = 0;
+	g_SA1SyncCalls = g_SA1SyncNoAdvance = g_SA1SyncSamples = 0;
+	g_SA1SampleBus = g_SA1SampleStep = g_SA1SampleIRQ = 0;
 	g_TmgWinSumGSU = 0;
 	g_TmgWinSumMDMA = 0;
 	g_TmgWinSumHDMA = 0;
@@ -545,18 +550,38 @@ void SnesSystem::SyncSA1To(Int32 nClock)
 	if (nClock > SNES_CYCLESPERLINE)
 		nClock = SNES_CYCLESPERLINE;
 	if (nClock <= m_nSA1LineClock)
+	{
+#if SNDBG_LOG
+		g_SA1SyncNoAdvance++;
+#endif
 		return;
+	}
 
 #if SNDBG_LOG
+	const Bool bSample = ((g_SA1SyncCalls++ & 63u) == 0);
 	Uint32 uSA1Start = ProfCtrGetCycle();
 #endif
 	SNCPUSA1BusFinalize((Uint32)nClock);
+#if SNDBG_LOG
+	Uint32 uBusEnd = bSample ? ProfCtrGetCycle() : 0;
+#endif
 	m_SA1.StepMasterCycles(nClock - m_nSA1LineClock);
 #if SNDBG_LOG
-	g_TmgCycSA1 += ProfCtrGetCycle() - uSA1Start;
+	Uint32 uStepEnd = ProfCtrGetCycle();
+	g_TmgCycSA1 += uStepEnd - uSA1Start;
 #endif
 	m_nSA1LineClock = nClock;
 	RefreshSCPUIRQ();
+#if SNDBG_LOG
+	if (bSample)
+	{
+		Uint32 uIRQEnd = ProfCtrGetCycle();
+		g_SA1SyncSamples++;
+		g_SA1SampleBus += uBusEnd - uSA1Start;
+		g_SA1SampleStep += uStepEnd - uBusEnd;
+		g_SA1SampleIRQ += uIRQEnd - uStepEnd;
+	}
+#endif
 }
 
 void SnesSystem::SyncSA1()
@@ -571,6 +596,11 @@ void SnesSystem::RefreshSCPUIRQ()
 		bPending = TRUE;
 	if (m_bSA1 && m_SA1.SCPUIRQPending())
 		bPending = TRUE;
+	/* The deasserted path of SNCPUSignalIRQ only clears these two fields.
+	   Preserve both operations if needed, and never skip an asserted IRQ:
+	   it can abort a running S-CPU interpreter to service the interrupt. */
+	if (!bPending && !(m_Cpu.uSignal & SNCPU_SIGNAL_IRQ) && !m_Cpu.uIrqPending)
+		return;
 	SNCPUSignalIRQ(&m_Cpu, bPending ? 1 : 0);
 }
 
@@ -636,7 +666,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 #if SNDBG_LOG
 			g_DbgChipReads[SNDBG_CHIP_SA1]++;
 #endif
-			return pSnes->m_SA1.ReadSCPURegister((Uint16)uAddr);
+			return pSnes->m_SA1.ReadSCPURegister((Uint16)uAddr, pCpu->uOpenBus);
 		}
 		if (uAddr >= 0x3000 && uAddr <= 0x3FFF)
 		{
@@ -2937,6 +2967,10 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)pSA1->ExecutionSlices, (unsigned)pSA1->DMARunning,
 					(unsigned)pSA1->DMARemaining, (unsigned)pSA1->DMATransferredBytes,
 					(unsigned)pSA1->DMAStallTicks);
+				DLog("[snes-sa1-hot] advance/noadvance/samples=%u/%u/%u sample-cycles bus/step/irq=%llu/%llu/%llu",
+					(unsigned)g_SA1SyncCalls, (unsigned)g_SA1SyncNoAdvance,
+					(unsigned)g_SA1SyncSamples, (unsigned long long)g_SA1SampleBus,
+					(unsigned long long)g_SA1SampleStep, (unsigned long long)g_SA1SampleIRQ);
 				DLog("[snes-sa1-bus] conflict-ticks=%u dropped-events=%u",(unsigned)SNCPUSA1BusGetConflictTicks(),(unsigned)SNCPUSA1BusGetDroppedEvents());
 				DLog("[snes-sa1-idle] fast-forward-ticks=%llu sleep-slices=%llu active=%u",
 					(unsigned long long)m_SA1.GetIdleFastForwardTicks(),

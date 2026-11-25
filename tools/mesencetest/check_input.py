@@ -1,7 +1,7 @@
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
-s=(root/'src/nes/system/nessystem_mesence.cpp').read_text()
+s=(root/'src/nes/frontend/nessystem.cpp').read_text()
 a=s.index('static Uint8 MapPad(');b=s.index('\nstatic void AudioSink(',a)
 code="""#include <cassert>
 #include <cstdio>

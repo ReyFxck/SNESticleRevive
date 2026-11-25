@@ -309,6 +309,16 @@ static bool CheckInterruptSemantics(SNCpuT *cpu, Uint8 *memory)
 	SNCPUSignalIRQ(cpu, 0);
 	ok &= cpu->uIrqPending == 0;
 
+	/* Multiple IRQ assertions from one trap must preserve the first abort budget. */
+	cpu->bRunning = TRUE;
+	cpu->Cycles = 123;
+	cpu->nAbortCycles = 0;
+	SNCPUSignalIRQ(cpu, 1);
+	SNCPUSignalIRQ(cpu, 1);
+	ok &= cpu->Cycles == 0 && cpu->nAbortCycles == 123;
+	cpu->bRunning = FALSE;
+	cpu->nAbortCycles = 0;
+
 	memory[SNCPU_VECTORE_NMI] = memory[SNCPU_VECTORE_NMI + 1] = 0;
 	memory[SNCPU_VECTOR_IRQ] = memory[SNCPU_VECTOR_IRQ + 1] = 0;
 	memory[0x01FD] = memory[0x01FE] = memory[0x01FF] = memory[0x0200] = 0;

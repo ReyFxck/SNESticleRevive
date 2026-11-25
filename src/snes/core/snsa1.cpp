@@ -104,6 +104,7 @@ void SNSA1::SaveState(SA1SaveState *pState) const
 	pState->CpuSignal = m_Cpu.uSignal;
 	pState->CpuNmiDmaDelay = m_Cpu.uNmiDmaDelay;
 	pState->CpuIrqPending = m_Cpu.uIrqPending;
+	pState->CpuOpenBus = m_Cpu.uOpenBus;
 	memcpy(pState->IRAM, m_IRAM, sizeof(pState->IRAM));
 }
 
@@ -123,6 +124,7 @@ void SNSA1::RestoreState(const SA1SaveState *pState)
 	m_Cpu.uSignal = pState->CpuSignal;
 	m_Cpu.uNmiDmaDelay = pState->CpuNmiDmaDelay;
 	m_Cpu.uIrqPending = pState->CpuIrqPending;
+	m_Cpu.uOpenBus = pState->CpuOpenBus;
 	m_Cpu.pUserData = this;
 
 	// The idle latch is a derived optimization, not architectural state.
@@ -144,6 +146,7 @@ void SNSA1::ResetCPUContext()
 	m_Cpu.uSignal = 0;
 	m_Cpu.uNmiDmaDelay = 0;
 	m_Cpu.uIrqPending = 0;
+	m_Cpu.uOpenBus = 0;
 	m_Cpu.Regs.rP = SNCPU_FLAG_M | SNCPU_FLAG_X | SNCPU_FLAG_I;
 	m_Cpu.Regs.rE = 1;
 	m_Cpu.Regs.rS.w = 0x01FF;
@@ -302,13 +305,13 @@ Uint8 SNSA1::ReadRegister(Uint16 uAddr)
 	return m_State.Registers[uAddr - SNSA1_REGISTER_BASE];
 }
 
-Uint8 SNSA1::ReadSCPURegister(Uint16 uAddr)
+Uint8 SNSA1::ReadSCPURegister(Uint16 uAddr, Uint8 uOpenBus)
 {
-	// The host CPU can read SFR. $230E is not implemented on real SA-1
-	// hardware and falls through to the core's open-bus approximation.
+	// Only SFR drives the S-CPU data bus. $230E and all inaccessible
+	// SA-1 registers leave it undriven (SnesLab hardware tests).
 	if (uAddr == 0x2300)
 		return ReadRegister(uAddr);
-	return 0xFF;
+	return uOpenBus;
 }
 
 Uint8 SNSA1::ReadSA1Register(Uint16 uAddr)
@@ -316,8 +319,8 @@ Uint8 SNSA1::ReadSA1Register(Uint16 uAddr)
 	// CFR/counters/math/VBR are visible to the SA-1 CPU itself.
 	if (uAddr >= 0x2301 && uAddr <= 0x230D)
 		return ReadRegister(uAddr);
-	ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, 0xFF, 2);
-	return 0xFF;
+	ROMLAB_SA1_UNHANDLED(&m_Cpu, uAddr, m_Cpu.uOpenBus, 2);
+	return m_Cpu.uOpenBus;
 }
 
 void SNSA1::UpdateIRQLine()
@@ -498,9 +501,14 @@ void SNSA1::WriteRegister(Uint16 uAddr, Uint8 uData)
 		break;
 	}
 
-	/* Register writes can change CIWP/BWPA/write enable while the R5900
-	   interpreter is still active, so refresh the direct-memory sidecar now. */
-	UpdateFastMemorySidecars();
+	/* Only these registers affect the direct-memory sidecar. CCNT may
+	   release reset and clear CIWP. Keep the update synchronous for writes
+	   made by the running R5900 interpreter. Arithmetic and DMA registers
+	   do not change this configuration. */
+	if (uAddr == 0x2200 ||
+	    (uOld != uData && ((uAddr >= 0x2225 && uAddr <= 0x2228) ||
+	                      uAddr == 0x222A)))
+		UpdateFastMemorySidecars();
 }
 
 void SNSA1::WriteSCPURegister(Uint16 uAddr, Uint8 uData)
@@ -1185,6 +1193,59 @@ void SNSA1::UpdateTimer(Uint32 uMasterCycles)
 	if (!uAdvance)
 		return;
 
+	/* Short scheduler slices dominate shared-memory games. With normalized
+	   counters, a slice crosses at most one scanline. Compare the current
+	   and next line directly, avoiding variable division/modulo even when
+	   H/V IRQ comparison is enabled. Fall back for unusual restored states
+	   or long advances. No hardware event is removed. */
+	{
+		const Uint32 uLines = bLinear ? 0x200u :
+		    (m_State.TimerScanlines ? m_State.TimerScanlines : 262u);
+		const Uint32 uClocks = bLinear ? 0x800u : (Uint32)SNES_CYCLESPERLINE;
+		if (uLines >= 256u && m_State.VCounter < uLines &&
+		    m_State.HCounter < uClocks && uAdvance <= uClocks)
+		{
+			const Uint32 uOldH = m_State.HCounter;
+			const Uint32 uOldV = m_State.VCounter;
+			Uint32 uH = uOldH + uAdvance;
+			Uint32 uV = uOldV;
+			const Bool bCross = uH >= uClocks;
+			if (bCross)
+			{
+				uH -= uClocks;
+				if (++uV == uLines) uV = 0;
+			}
+			if (bH || bV)
+			{
+				Uint32 uTargetH = bH ? 4u * (m_State.Registers[0x012] |
+				    ((Uint32)(m_State.Registers[0x013] & 1) << 8)) : 0u;
+				if (uTargetH >= uClocks) uTargetH -= uClocks;
+				const Bool bCurrent = uTargetH > uOldH &&
+				    uTargetH - uOldH <= uAdvance;
+				const Bool bNext = bCross && uTargetH <= uH;
+				if (!bV)
+					bTriggered = bCurrent || bNext;
+				else
+				{
+					Uint32 uTargetV = m_State.Registers[0x014] |
+					    ((Uint32)(m_State.Registers[0x015] & 1) << 8);
+					if (uTargetV >= uLines) uTargetV -= uLines;
+					bTriggered = (bCurrent && uTargetV == uOldV) ||
+					             (bNext && uTargetV == uV);
+				}
+			}
+			m_State.HCounter = uH;
+			m_State.VCounter = (Uint16)uV;
+			if (bTriggered)
+			{
+				m_State.Registers[0x101] |= 0x40;
+				UpdateIRQLine();
+			}
+			m_State.TimerMatch = bTriggered;
+			return;
+		}
+	}
+
 	uHCompare = (Uint16)(m_State.Registers[0x012] |
 	                    ((Uint16)(m_State.Registers[0x013] & 1) << 8));
 	uVCompare = (Uint16)(m_State.Registers[0x014] |
@@ -1264,6 +1325,9 @@ void SNSA1::MapRomGroup(Uint32 uWhich, Uint8 uMap)
 	if (!m_pRom || !m_uRomBytes || uWhich >= 4)
 		return;
 
+	/* A host-side MMC write can change the ROM bytes of a sleeping
+	   polling loop even when its watched I-RAM byte did not change. */
+	ClearIdlePollSleep();
 	uFullSegment = (Uint32)(uMap & 7) * 0x100000u;
 	uLoSegment = (Uint32)((uMap & 0x80) ? (uMap & 7) : uWhich) * 0x100000u;
 	uLoBank = _SA1LoBankBase[uWhich];
@@ -1603,6 +1667,12 @@ Bool SNSA1::TryFastForwardIdleLoop()
 	Bool bBranchTaken;
 	Uint32 uSkippedUnits;
 
+	/* Retire a completed arithmetic operation at the current architectural
+	   clock before testing idle eligibility. Otherwise an unread result
+	   keeps ArithmeticPending set indefinitely and blocks polling sleep. */
+	if (m_State.ArithmeticPending)
+		ProcessArithmetic();
+
 	/* This optimization is deliberately narrow: a two-instruction LDA dp /
 	   BEQ-or-BNE polling loop in mapped program ROM, reading only SA-1 I-RAM.
 	   S-CPU accesses to shared I-RAM synchronize SA-1 first, so while one
@@ -1719,6 +1789,14 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles)
 
 	if (!uCpuCycles || (m_Cpu.uSignal & SNCPU_SIGNAL_STP))
 	{
+		// STP stops instruction execution, not the external SA-1 timebase.
+		// DMA already credited the consumed ticks; account only for the rest.
+		if (uCpuCycles)
+		{
+			Int32 nUnits = (Int32)(uCpuCycles * SNCPU_CYCLE_FAST);
+			for (Int32 i = 0; i < SNCPU_COUNTER_NUM; i++)
+				m_Cpu.Counter[i] += nUnits;
+		}
 		m_State.ExecutionSlices++;
 		m_State.ExecutedCycles += uSA1Cycles;
 		return;

@@ -35,6 +35,20 @@ class AnalyzeTest(unittest.TestCase):
         self.assertEqual(report["hotspots"][0]["name"], "ppu")
         self.assertTrue(any(item["severity"] == "ERROR" for item in report["findings"]))
 
+    def test_sa1_hotpath_and_dropped(self):
+        report = analyze_lines([
+            "[snes-diag] schema=snesdiag-v1 level=1 window=30",
+            "[snes-perf] cpu=30% sa1=65% ppu=10%",
+            "[snes-sa1-hot] advance/noadvance/samples=640/3/10 sample-cycles bus/step/irq=100/500/50",
+            "[snes-sa1-bus] conflict-ticks=1 dropped-events=7",
+            "[snes-sa1-bus] conflict-ticks=2 dropped-events=7",
+        ])
+        self.assertEqual(report["hotspots"][0]["name"], "sa1")
+        self.assertEqual(report["stats"]["sa1_samples"], 10)
+        self.assertEqual(report["stats"]["sa1_step_cycles"], 500)
+        self.assertEqual(report["stats"]["sa1_dropped_peak"], 7)
+        self.assertTrue(any(x["code"] == "sa1-bus-overflow" for x in report["findings"]))
+
     def test_missing_window_is_reported(self):
         report = analyze_lines(["ordinary emulator log\n"])
         self.assertEqual(report["findings"][0]["code"], "no-window")

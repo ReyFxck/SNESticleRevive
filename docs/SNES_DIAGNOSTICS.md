@@ -13,7 +13,7 @@ make SNES_DIAGNOSTICS=2   # report plus sampled/event deep capture
 
 `SNES_DIAGNOSTICS=0` is the release default. The preprocessor removes the
 counters and capture code from that build. Level 2 captures frame 1, one
-automatic sample per 120-frame report window, and event-triggered frames.
+automatic sample per 30-frame report window, and event-triggered frames.
 It is intentionally more intrusive and should be used for diagnostics.
 
 All records go through `DLog()`, so Android emulator builds place them in their
@@ -44,7 +44,7 @@ copy mismatches and coprocessor failures. `--strict` is available for CI.
 
 ## Rolling report
 
-The report covers 120 emulated frames and separates configuration from actual
+The report covers 30 emulated frames and separates configuration from actual
 work. This interval deliberately keeps the complete TXT stream below the SIO
 throughput ceiling instead of making the logger itself steal frame time:
 
@@ -69,6 +69,7 @@ throughput ceiling instead of making the logger itself steal frame time:
 | `[snes-sdd1]` | Bounded S-DD1 DMA/decompression, remap and unmapped-source totals; per-DMA text is deep-capture only. |
 | `[snes-core-state]` | Final S-CPU 65816 and SPC700 execution state for the window, useful for comparing freezes. |
 | `[snes-sa1]` | SA-1 register traffic, PC/opcode/registers, run/signal state, scheduled/executed ticks, DMA progress/stall ticks, IRQ flags, timer counters, BW-RAM maps and MMC banks. |
+| `[snes-sa1-hot]` | Per-window advancing and non-advancing sync counts; one in 64 advancing calls sampled for bus finalization, scheduler step and IRQ refresh cycles (sums, not full-window costs). |
 | `[snes-gsu]` | SuperFX job state; per-instruction details require level 2. |
 
 `capacity` is the speed of the measured emulation work on the EE, not the
@@ -83,9 +84,9 @@ refresh rate, so a PAL ROM on an NTSC console is not given a false 20 ms budget.
 
 ## Deep capture
 
-Level 2 captures frame 1 and one automatic sample every 120 frames. An anomaly
+Level 2 captures frame 1 and one automatic sample every 30 frames. An anomaly
 also requests the next eligible frame; non-manual requests are retained through
-a 60-frame cooldown, while a manual request captures immediately. This keeps
+a 15-frame cooldown, while a manual request captures immediately. This keeps
 serial logging and the portable instruction probes from causing the performance
 problem being measured.
 

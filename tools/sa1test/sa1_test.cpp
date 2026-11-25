@@ -132,6 +132,12 @@ static void TestSharedBusContention(void)
 
 	// Slow S-CPU ROM access overlapping SA-1 PRG-ROM costs one SA-1 tick.
 	SNCPUSA1BusBeginLine();
+	// Private WRAM is not connected to the cartridge's shared SA-1 bus.
+	for (Uint32 i = 0; i < SNCPU_SA1_BUS_EVENT_MAX + 1; ++i)
+		SNCPUSA1BusRecord(&host, 0x7E0000u + i, SNCPU_CYCLE_SLOW, 1);
+	SNCPUSA1BusRecord(&host, 0x7FFFFFu, SNCPU_CYCLE_SLOW, 1);
+	CHECK(g_SNCPU_SA1BusEventCount == 0 && SNCPUSA1BusGetDroppedEvents() == 0,
+	      "private WRAM accesses must not occupy the SA-1 bus queue");
 	host.Counter[SNCPU_COUNTER_LINE] = 8;
 	host.Cycles = 0;
 	SNCPUSA1BusRecord(&host, 0xC00000, SNCPU_CYCLE_SLOW, 1);
@@ -177,6 +183,21 @@ static void TestSharedBusContention(void)
 	sa1cpu.Cycles = 0;
 	CHECK(SNCPUSA1BusPenalty(&sa1cpu, 0x003000, SNCPU_CYCLE_FAST) == 0,
 	      "non-overlapping SA-1 access must not stall");
+
+	// The EE sidecar extends a BW-RAM event one tick backwards, but
+	// clears the entire previously touched range at the next line.
+	SNCPUSA1BusBeginLine();
+	host.Counter[SNCPU_COUNTER_LINE] = 108;
+	SNCPUSA1BusRecord(&host, 0x400000, SNCPU_CYCLE_SLOW, 1);
+	SNCPUSA1BusFinalize(108);
+	CHECK(g_SNCPU_SA1BusPenaltyUnits[SNCPU_SA1_BUS_BWRAM][49*SNCPU_CYCLE_FAST] == SNCPU_CYCLE_FAST*2,
+	      "BW-RAM preceding tick must be marked");
+	CHECK(g_SNCPU_SA1BusPenaltyUnits[SNCPU_SA1_BUS_BWRAM][53*SNCPU_CYCLE_FAST] == SNCPU_CYCLE_FAST*2,
+	      "BW-RAM final tick must be marked");
+	SNCPUSA1BusBeginLine();
+	CHECK(g_SNCPU_SA1BusPenaltyUnits[SNCPU_SA1_BUS_BWRAM][49*SNCPU_CYCLE_FAST] == 0 &&
+	      g_SNCPU_SA1BusPenaltyUnits[SNCPU_SA1_BUS_BWRAM][53*SNCPU_CYCLE_FAST] == 0,
+	      "new scanline must clear all dirty BW-RAM penalty bytes");
 
 	SNCPUSA1BusSetHost(NULL);
 	SNCPUDelete(&sa1cpu);
@@ -396,12 +417,16 @@ static void TestRegisterPortIsolation(void)
 {
 	SNSA1 sa1;
 
-	CHECK(sa1.ReadSCPURegister(0x230E) == 0xFF,
-	      "S-CPU $230E must use the open-bus approximation");
-	CHECK(sa1.ReadSCPURegister(0x2301) == 0xFF,
-	      "S-CPU must not read SA-1-only CFR/math status");
-	CHECK(sa1.ReadSA1Register(0x230E) == 0xFF,
-	      "SA-1 CPU must not see the S-CPU-only version port");
+	for (unsigned v = 0; v < 256; ++v)
+	{
+		CHECK(sa1.ReadSCPURegister(0x230E, (Uint8)v) == v, "S-CPU version port is open bus");
+		CHECK(sa1.ReadSCPURegister(0x2301, (Uint8)v) == v, "S-CPU cannot read CFR");
+		CHECK(sa1.ReadSCPURegister(0x2250, (Uint8)v) == v, "S-CPU write-only port is open bus");
+		sa1.GetCpu()->uOpenBus = (Uint8)v;
+		CHECK(SNCPURead8(sa1.GetCpu(), 0x00230E) == v, "SA-1 version port is open bus");
+		CHECK(SNCPURead8(sa1.GetCpu(), 0x002300) == v, "SA-1 cannot read SFR");
+		CHECK(SNCPURead8(sa1.GetCpu(), 0x002250) == v, "SA-1 write-only port is open bus");
+	}
 
 	// The S-CPU cannot program the SA-1 arithmetic unit directly.
 	sa1.WriteSCPURegister(0x2250, 0x03);
@@ -895,6 +920,7 @@ static void TestSaveStateRoundTrip(void)
 	sa1.GetCpu()->Regs.rX.w = 0x1234;
 
 	SA1SaveState snap;
+	sa1.GetCpu()->uOpenBus = 0xA7;
 	sa1.SaveState(&snap);
 
 	// Destroy live state and mapping before restore.
@@ -903,7 +929,9 @@ static void TestSaveStateRoundTrip(void)
 	sa1.GetCpu()->Regs.rA.w = 0;
 	sa1.GetCpu()->Regs.rX.w = 0;
 
+	sa1.GetCpu()->uOpenBus = 0x14;
 	sa1.RestoreState(&snap);
+	CHECK(sa1.GetCpu()->uOpenBus == 0xA7, "SA-1 save state must preserve the data bus");
 	CHECK(sa1.ReadIRAM(0x0123) == 0xA5, "save state must restore SA-1 I-RAM");
 	CHECK(sa1.GetCpu()->Regs.rA.w == 0xBEEF &&
 	      sa1.GetCpu()->Regs.rX.w == 0x1234,
@@ -1030,6 +1058,37 @@ static void TestIdlePollingFastForward(void)
 	      "changed watched I-RAM byte must wake persistent idle sleep");
 	CHECK((sa1.GetCpu()->Regs.rPC & 0xFFFF) != 0x8000,
 	      "changed polling value must allow SA-1 to leave the idle loop");
+
+	// An unread, completed multiplication must not permanently block idle.
+	SNSA1 math;
+	math.SetMemory(&rom[0], (Uint32)rom.size(), bwram, sizeof(bwram));
+	math.WriteRegister(0x2203, 0x00);
+	math.WriteRegister(0x2204, 0x80);
+	math.WriteRegister(0x2200, 0x00);
+	math.WriteRegister(0x2250, 0);
+	math.WriteRegister(0x2251, 3);
+	math.WriteRegister(0x2252, 0);
+	math.WriteRegister(0x2253, 7);
+	math.WriteRegister(0x2254, 0);
+	math.GetCpu()->Regs.rA.w = 0;
+	math.GetCpu()->Regs.rP |= SNCPU_FLAG_Z | SNCPU_FLAG_M;
+	math.GetCpu()->Regs.rP &= (Uint8)~SNCPU_FLAG_N;
+	math.StepMasterCycles(200);
+	math.StepMasterCycles(200);
+	CHECK(!math.GetState()->ArithmeticPending && math.IsIdlePollSleeping(),
+	      "completed unread math must allow stable polling sleep");
+	CHECK(math.ReadRegister(0x2306) == 21,
+	      "math retirement must preserve the multiplication result");
+
+	// Remap the executing ROM to a different physical megabyte.
+	// The watched I-RAM byte is unchanged, but the code is now STP.
+	rom[0x100000] = 0xDB;
+	rom[0x100002] = 0xDB;
+	math.WriteRegister(0x2220, 0x81);
+	CHECK(!math.IsIdlePollSleeping(), "MMC remap must invalidate idle latch");
+	math.StepMasterCycles(200);
+	CHECK((math.GetCpu()->uSignal & SNCPU_SIGNAL_STP) != 0,
+	      "remapped idle code must execute new ROM contents");
 }
 
 static void TestInstructionExecution(void)
@@ -1127,6 +1186,29 @@ static void TestSA1BusMirrorsAndTimerLatch(void)
 	sa1.StepMasterCycles(SNES_CYCLESPERLINE * 262);
 	CHECK(sa1.GetState()->VCounter == 262,
 	      "PAL SA-1 timer must not wrap at NTSC 262-line boundary");
+
+	// Exercise short-slice timer path with an odd fragment, line/frame
+	// wrap and the linear timer. Compare with one large general-path step.
+	for (int mode = 0; mode < 3; ++mode) {
+		SNSA1 split, batch;
+		const Uint32 line = mode == 2 ? 0x800u : SNES_CYCLESPERLINE;
+		const Uint32 lines = mode == 2 ? 512u : (mode == 1 ? 312u : 262u);
+		split.SetVideoRegion(mode == 1); batch.SetVideoRegion(mode == 1);
+		split.WriteRegister(0x2210, mode == 2 ? 0x80 : 0);
+		batch.WriteRegister(0x2210, mode == 2 ? 0x80 : 0);
+		const Uint32 clocks = line*lines + 37;
+		for (Uint32 elapsed = 0; elapsed < clocks;) {
+			Uint32 n = clocks-elapsed;
+			if (n>137) n=137;
+			split.StepMasterCycles(n); elapsed+=n;
+		}
+		batch.StepMasterCycles(clocks);
+		CHECK(split.GetState()->HCounter == batch.GetState()->HCounter &&
+		      split.GetState()->VCounter == batch.GetState()->VCounter &&
+		      split.GetState()->TimerRemainder == batch.GetState()->TimerRemainder &&
+		      !split.GetState()->TimerMatch,
+		      "short timer slices must match a batched advance");
+	}
 }
 
 static int g_PoisonExecutorCalls = 0;
@@ -1166,11 +1248,85 @@ static void TestIndependentCBackend(void)
 	      "SA-1 portable C backend must execute independently");
 }
 
+// Independent modulo-based oracle for the existing timer model, including
+// odd fragments, compare-enabled modes, mode switches and long advances.
+static void TestTimerSchedulerDifferential(void)
+{
+    SNSA1 sa1;
+    Uint32 rng = 0xC5816A1u;
+    const auto next = [&]() -> Uint32 { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; };
+    Uint32 cases = 0;
+    for (unsigned i = 0; i < 80000; ++i)
+    {
+        if (i % 13 == 0) sa1.SetVideoRegion((next() & 1) != 0);
+        if (i % 19 == 0) sa1.WriteRegister(0x2211, 0);
+        const Uint8 mode = (Uint8)(next() & 0x83);
+        const Uint32 hc = next() & 511u, vc = next() & 511u;
+        sa1.WriteRegister(0x2210, mode);
+        sa1.WriteRegister(0x2212, (Uint8)hc);
+        sa1.WriteRegister(0x2213, (Uint8)(hc >> 8));
+        sa1.WriteRegister(0x2214, (Uint8)vc);
+        sa1.WriteRegister(0x2215, (Uint8)(vc >> 8));
+        sa1.WriteRegister(0x220B, 0x40);
+        const SA1State old = *sa1.GetState();
+        const Uint32 delta = (i % 97 == 0) ? (next() % 1000000u + 1u) : (next() % 2049u + 1u);
+        const Uint32 clocks = mode & 0x80 ? 2048u : (Uint32)SNES_CYCLESPERLINE;
+        const Uint32 lines = mode & 0x80 ? 512u : old.TimerScanlines;
+        const Uint32 period = clocks * lines;
+        const Uint32 advance = (delta + old.TimerRemainder) & ~1u;
+        const Uint32 start = (old.VCounter * clocks + old.HCounter) % period;
+        Uint32 h = old.HCounter, v = old.VCounter;
+        Bool match = old.TimerMatch;
+        if (advance)
+        {
+            match = FALSE;
+            if ((mode & 3) == 1)
+            {
+                Uint32 d = (hc * 4u % clocks + clocks - old.HCounter % clocks) % clocks;
+                match = (d ? d : clocks) <= advance;
+            }
+            else if (mode & 2)
+            {
+                Uint32 target = (vc * clocks + ((mode & 1) ? hc * 4u % clocks : 0u)) % period;
+                Uint32 d = (target + period - start) % period;
+                match = (d ? d : period) <= advance;
+            }
+            Uint32 end = (start + advance) % period;
+            h = end % clocks; v = end / clocks;
+        }
+        sa1.StepMasterCycles((Int32)delta);
+        const SA1State *actual = sa1.GetState();
+        if (actual->HCounter != h || actual->VCounter != v || actual->TimerMatch != match ||
+            actual->TimerRemainder != ((delta + old.TimerRemainder) & 1u) ||
+            ((actual->Registers[0x101] & 0x40) != 0) != (match != 0))
+        {
+            CHECK(false, "timer differential mismatch");
+            return;
+        }
+        ++cases;
+    }
+    printf("SA-1 timer scheduler differential: %u cases PASS\n", cases);
+}
+
+static void TestStoppedClock(void)
+{
+	SNSA1 sa1;
+	sa1.WriteRegister(0x2200, 0);
+	sa1.GetCpu()->uSignal |= SNCPU_SIGNAL_STP;
+	Int32 before = SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME);
+	sa1.StepMasterCycles(40);
+	CHECK(SNCPUGetCounter(sa1.GetCpu(), SNCPU_COUNTER_FRAME) - before == 20 * SNCPU_CYCLE_FAST,
+	      "STP must not freeze the free-running SA-1 clock");
+	CHECK(sa1.GetCpu()->uSignal & SNCPU_SIGNAL_STP, "STP remains asserted");
+}
+
 int main(void)
 {
 	SNCPUSetExecuteFunc(SNCPUExecute_C);
 
 	TestResetDefaults();
+	TestStoppedClock();
+	TestTimerSchedulerDifferential();
 	TestResetReleaseAndScheduler();
 	TestSA1ControlFlowTiming();
 	TestSharedBusContention();
