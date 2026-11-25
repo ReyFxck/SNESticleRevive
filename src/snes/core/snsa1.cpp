@@ -561,6 +561,10 @@ Uint32 SNSA1::MirrorBWRAM(Uint32 uOffset) const
 {
 	if (!m_uBWRAMBytes)
 		return 0;
+	// Physical mirroring for ordinary power-of-two cartridges avoids EE DIVU.
+	Uint32 uMask = m_uBWRAMBytes - 1;
+	if (!(m_uBWRAMBytes & uMask))
+		return uOffset & uMask;
 	return uOffset % m_uBWRAMBytes;
 }
 
@@ -1038,10 +1042,14 @@ void SNSA1::ExecuteArithmetic()
 
 	if (uMode & 0x02)
 	{
-		Uint64 uRaw = m_State.ArithmeticResult +
-		              (Uint64)((Int64)nA * (Int64)nB);
-		m_State.ArithmeticOverflow = (uRaw >> 40) ? TRUE : FALSE;
-		m_State.ArithmeticResult = uRaw & uMask40;
+        // The accumulator is signed 40-bit, not an unsigned carry flag.
+        // Sign-extend the stored 40 bits before adding a signed product.
+        const Int64 limit = (Int64)1 << 39;
+        const Uint64 bits = m_State.ArithmeticResult & uMask40;
+        const Int64 previous = (Int64)bits - ((bits & (Uint64)limit) ? limit * 2 : 0);
+        const Int64 sum = previous + (Int64)nA * nB;
+        m_State.ArithmeticOverflow = (sum < -limit || sum >= limit) ? TRUE : FALSE;
+        m_State.ArithmeticResult = (Uint64)sum & uMask40;
 		m_State.ArithmeticOp2 = 0;
 		m_State.Registers[0x053] = 0;
 		m_State.Registers[0x054] = 0;
@@ -1063,6 +1071,13 @@ void SNSA1::ExecuteArithmetic()
 			uRemainder = (Uint16)nRem;
 			uQuotient = (Uint16)((nDividend - nRem) / (Int32)uDivisor);
 		}
+        else if (nDividend != 0)
+        {
+            // Observed on real SA-1: nonzero dividend / zero. See SnesLab
+            // SA-1 Hardware Behavior, division validation table.
+            uQuotient = nDividend < 0 ? 1 : 0xFFFF;
+            uRemainder = (Uint16)(nDividend < 0 ? -nDividend : nDividend);
+        }
 		m_State.ArithmeticResult = (Uint64)uQuotient |
 		                           ((Uint64)uRemainder << 16);
 		m_State.ArithmeticOverflow = FALSE;

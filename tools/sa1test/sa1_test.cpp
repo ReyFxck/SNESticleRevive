@@ -215,6 +215,26 @@ static void TestIRAMAndBWRAM(void)
 
 
 
+static void TestBWRAMMirroring(void)
+{
+    const unsigned sizes[] = {1, 3, 17, 8192, 32768, 65536, 98304, 262144};
+    for (unsigned i = 0; i < sizeof(sizes)/sizeof(sizes[0]); ++i)
+    {
+        unsigned size = sizes[i];
+        std::vector<Uint8> ram(size);
+        SNSA1 sa1;
+        sa1.SetMemory(NULL, 0, &ram[0], size);
+        sa1.WriteRegister(0x2226, 0x80);
+        for (unsigned off = 0; off < 0x40000; ++off)
+        {
+            Uint8 v = (Uint8)(off ^ (off >> 8) ^ (off >> 16));
+            sa1.WriteBWRAMDirect(0x400000 + off, v);
+            CHECK(ram[off % size] == v, "BW-RAM mirrored write");
+            CHECK(sa1.ReadBWRAMDirect(0x400000 + off) == v, "BW-RAM mirrored read");
+        }
+    }
+}
+
 static void TestSA1BusDecode(void)
 {
 	Uint8 bwram[0x8000];
@@ -662,12 +682,22 @@ static void TestArithmetic(void)
 	CHECK(sa1.ReadRegister(0x2251) == 0 && sa1.ReadRegister(0x2253) == 0,
 	      "division must destroy MA and MB after completion");
 
-	// Division by zero returns zero after the same five-clock latency.
-	sa1.WriteRegister(0x2251, 0x34); sa1.WriteRegister(0x2252, 0x12);
-	sa1.WriteRegister(0x2253, 0x00); sa1.WriteRegister(0x2254, 0x00);
-	AdvanceSA1CpuClock(sa1, 5);
-	CHECK(sa1.ReadRegister(0x2306) == 0 && sa1.ReadRegister(0x2309) == 0,
-	      "division by zero must return zero");
+	// SnesLab measured on a real cartridge: quotient -1 or +1 and
+	// unsigned magnitude of the nonzero dividend as remainder.
+	for (unsigned raw = 1; raw < 65536; ++raw)
+	{
+		const Int32 dividend = (Int16)raw;
+		const Uint16 q = dividend < 0 ? 1 : 0xFFFF;
+		const Uint16 r = dividend < 0 ? -dividend : dividend;
+		sa1.WriteRegister(0x2251, (Uint8)raw);
+		sa1.WriteRegister(0x2252, (Uint8)(raw >> 8));
+		sa1.WriteRegister(0x2253, 0);
+		sa1.WriteRegister(0x2254, 0);
+		AdvanceSA1CpuClock(sa1, 5);
+		CHECK((sa1.ReadRegister(0x2306) | (sa1.ReadRegister(0x2307) << 8)) == q &&
+		      (sa1.ReadRegister(0x2308) | (sa1.ReadRegister(0x2309) << 8)) == r &&
+		      sa1.ReadRegister(0x230A) == 0, "divide-by-zero result");
+	}
 
 	// Cumulative mode takes six clocks per multiply: 2*3 + 4*5 = 26.
 	sa1.WriteRegister(0x2250, 0x02);
@@ -687,6 +717,33 @@ static void TestArithmetic(void)
 	AdvanceSA1CpuClock(sa1, 6);
 	CHECK(sa1.ReadRegister(0x2306) == 26 && sa1.ReadRegister(0x2307) == 0,
 	      "cumulative arithmetic must retain the 40-bit sum");
+
+    // Signed accumulation: a negative product alone must not flag overflow.
+    sa1.WriteRegister(0x2250, 2);
+    sa1.WriteRegister(0x2251, 0xff); sa1.WriteRegister(0x2252, 0xff);
+    sa1.WriteRegister(0x2253, 1); sa1.WriteRegister(0x2254, 0);
+    AdvanceSA1CpuClock(sa1, 6);
+    CHECK(sa1.ReadRegister(0x2306) == 0xff && sa1.ReadRegister(0x230a) == 0xff &&
+          sa1.ReadRegister(0x230b) == 0, "negative signed 40-bit sum without overflow");
+    // 512 products of (-32768)*(-32768) reach +2^39, beyond signed 40-bit.
+    sa1.WriteRegister(0x2250, 2);
+    sa1.WriteRegister(0x2251, 0); sa1.WriteRegister(0x2252, 0x80);
+    for (unsigned k=0;k<512;++k) {
+        sa1.WriteRegister(0x2253, 0); sa1.WriteRegister(0x2254, 0x80);
+        AdvanceSA1CpuClock(sa1, 6);
+        CHECK(sa1.ReadRegister(0x230b) == (k==511 ? 0x80 : 0), "signed 40-bit positive limit");
+    }
+    CHECK(sa1.ReadRegister(0x230a)==0x80 && sa1.ReadRegister(0x2309)==0,
+          "signed 40-bit positive overflow wraps");
+    // -32768 * 16384 gives -2^29. 1024 products hit the exact negative
+    // limit (valid); the next product crosses it.
+    sa1.WriteRegister(0x2250, 2);
+    sa1.WriteRegister(0x2251, 0); sa1.WriteRegister(0x2252, 0x80);
+    for (unsigned k=0;k<1025;++k) {
+        sa1.WriteRegister(0x2253, 0); sa1.WriteRegister(0x2254, 0x40);
+        AdvanceSA1CpuClock(sa1, 6);
+        CHECK(sa1.ReadRegister(0x230b) == (k==1024 ? 0x80 : 0), "signed 40-bit negative limit");
+    }
 
 	// CCNT WAIT stops instruction execution, not the 10.74 MHz SA-1 clock.
 	// A math operation already in flight must therefore complete while WAIT
@@ -1118,6 +1175,7 @@ int main(void)
 	TestSA1ControlFlowTiming();
 	TestSharedBusContention();
 	TestIRAMAndBWRAM();
+	TestBWRAMMirroring();
 	TestSA1BusDecode();
 	TestVariableBusMappings();
 	TestWriteProtection();

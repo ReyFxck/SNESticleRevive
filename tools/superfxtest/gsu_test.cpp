@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 extern "C" void DLog(const char *, ...) {}
 
@@ -152,8 +153,57 @@ static void fuzz()
     }
 }
 
+// Test the real code-cache refill through GSU fetch and S-CPU MMIO.
+// Every physical mirror case is compared against the original byte model.
+static void testCacheRefill()
+{
+    const unsigned sizes[] = {0, 1, 7, 16, 17, 31, 32768, 33059, 65536, 98317};
+    unsigned lines = 0, bytes = 0, fails = 0;
+    for (unsigned size : sizes) {
+        std::vector<uint8_t> rom(size), ram(size);
+        for (unsigned i=0; i<size; ++i) {
+            rom[i] = uint8_t(i ^ (i>>8) ^ (i>>16));
+            ram[i] = uint8_t(~rom[i]);
+        }
+        for (unsigned bank=0; bank<128; ++bank) {
+            for (unsigned base=0; base<512; base+=16) {
+                SNGSU g;
+                g.SetMemory(size ? rom.data() : NULL,size,size ? ram.data() : NULL,size);
+                g.Reset();
+                g.WriteReg(0x3034,uint8_t(bank));
+                g.WriteReg(0x301E,uint8_t(base));
+                g.WriteReg(0x301F,uint8_t(base>>8));
+                g.Run(1); // initial NOP prefetches the selected cache line
+                ++lines;
+                for (unsigned i=0; i<16; ++i) {
+                    unsigned a=base+i;
+                    bool isRam=bank>=0x60;
+                    unsigned off=isRam ? ((bank&1)<<16)|a :
+                        bank<0x40 ? (bank<<15)|(a&0x7fff) : ((bank&0x3f)<<16)|a;
+                    uint8_t expected=size ? (isRam ? ram[off%size] : rom[off%size]) : 0xff;
+                    ++bytes;
+                    if (g.ReadReg(uint16_t(0x3100+a)) != expected) ++fails;
+                }
+            }
+        }
+    }
+    // A CBR near the end of a bank exercises the wrapped cache window.
+    memset(g_rom, 0x01, sizeof(g_rom));
+    g_rom[0x7ff0]=0x02; // CACHE at $FFF0
+    for (unsigned i=0;i<16;++i) g_rom[i]=uint8_t(0x90+i);
+    SNGSU g;
+    g.SetMemory(g_rom,sizeof(g_rom),g_ram,sizeof(g_ram));g.Reset();
+    g.WriteReg(0x301E,0xf0);g.WriteReg(0x301F,0xff);g.Run(2);
+    g.WriteReg(0x301E,0);g.WriteReg(0x301F,0);g.Run(1);
+    // logical offset 16 from $FFF0; MMIO address adds CBR low nine bits.
+    for (unsigned i=0;i<16;++i) { ++bytes; if(g.ReadReg(uint16_t(0x3120+i))!=g_rom[i]) ++fails; }
+    printf("cache refill: %u lines, %u bytes, %u failures\n",lines+1,bytes,fails);
+    g_fail += fails != 0;
+}
+
 int main()
 {
+    testCacheRefill();
     memset(g_ram, 0, sizeof(g_ram));
 
     // ===== Parte A: unidade =====

@@ -233,9 +233,29 @@ Uint8 SNGSU::CodeRead(Uint16 pc)
             m_Diag.CacheMisses++;
 #endif
             Uint16 base = (Uint16)(m_CBR + (line << 4));
-            Uint32 i;
-            for (i = 0; i < 16; i++)
-                m_Cache[(line << 4) + i] = RawCodeRead((Uint16)(base + i));
+            // CBR and cache lines are 16-byte aligned, so the logical
+            // range cannot cross the 16-bit PC or LoROM half-bank boundary.
+            // Resolve the physical mirror once; retain byte reads if an
+            // irregular image wraps inside this cache line.
+            const Bool ram = m_PBR >= 0x60 && m_PBR <= 0x7F;
+            const Uint8 *src = ram ? m_pRam : m_pRom;
+            const Uint32 size = ram ? m_uRamSize : m_uRomSize;
+            const Uint32 mask = size - 1;
+            Uint32 off = ram ? (((Uint32)(m_PBR & 1) << 16) | base)
+                             : RomOffset(m_PBR, base);
+            Uint8 *dst = m_Cache + (line << 4);
+            if (src && size >= 16)
+            {
+                off = (size & mask) ? off % size : off & mask;
+                if (off <= size - 16)
+                    memcpy(dst, src + off, 16);
+                else
+                    for (Uint32 i = 0; i < 16; i++)
+                        dst[i] = RawCodeRead((Uint16)(base + i));
+            }
+            else
+                for (Uint32 i = 0; i < 16; i++)
+                    dst[i] = RawCodeRead((Uint16)(base + i));
             m_CacheValid |= (Uint32)1 << line;
         }
 #if SNDBG_DEEP

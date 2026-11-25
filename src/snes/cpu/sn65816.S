@@ -989,8 +989,8 @@ _SNCPU_Write8SA1SystemCheck:
 		sltiu		t1,t0,0x6000
 		bne		t1,zr,_SNCPU_Write8SA1IRAMClassify
 		nop
-		sltiu		t1,t0,0x8000
-		bne		t1,zr,_SNCPU_Write8SA1BWRAMWindow
+		srl		t1,t0,15
+		beq		t1,zr,_SNCPU_Write8SA1BWRAMWindow
 		nop
 
 _SNCPU_Write8SA1IRAMClassify:
@@ -1382,8 +1382,8 @@ _SNCPU_Read8SA1SystemCheck:
 		sltiu		t1,t0,0x6000
 		bne		t1,zr,_SNCPU_Read8SA1IRAMClassify
 		nop
-		sltiu		t1,t0,0x8000
-		bne		t1,zr,_SNCPU_Read8SA1BWRAMWindow
+		srl		t1,t0,15
+		beq		t1,zr,_SNCPU_Read8SA1BWRAMWindow
 		nop
 
 _SNCPU_Read8SA1IRAMClassify:
@@ -2752,6 +2752,22 @@ _SNCPUExecute_DoneNoRewind:
 #endif
 		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
+        /* Virtual refetch is safe only for three bytes within one directly
+           mapped ROM page. RAM execution may modify the opcode/operands. */
+        bltz    R_PCCount,_SNCPU_MVN_X0_Normal
+        lwu     t0,SP_PCBank
+        subu    t0,R_PC,t0
+        andi    t1,t0,SNCPU_BANK_MASK
+        sltiu   t1,t1,3
+        bne     t1,zr,_SNCPU_MVN_X0_Normal
+        addiu   t0,t0,-3
+        srl     t0,t0,SNCPU_BANK_SHIFT
+        sll     t0,t0,4
+        addu    t0,t0,R_pCpu
+        lbu     t1,SNCPU_uSA1Bus(t0)
+        addiu   t2,zr,SNCPU_SA1_BUS_ROM
+        bne     t1,t2,_SNCPU_MVN_X0_Normal
+        nop
 		lui		t0,%hi(g_SNCPU_SA1BWRAMMap)
 		lw		t0,%lo(g_SNCPU_SA1BWRAMMap)(t0)
 		andi		t0,t0,0x80
@@ -2771,8 +2787,8 @@ _SNCPUExecute_DoneNoRewind:
 		sltiu		t0,R_X,0x6000
 		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
-		sltiu		t0,R_X,0x8000
-		beq		t0,zr,_SNCPU_MVN_X0_Normal
+		srl		t0,R_X,15
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
 
 _SNCPU_SA1_MVN00_X0_CheckY:
@@ -2789,8 +2805,8 @@ _SNCPU_SA1_MVN00_X0_CheckY:
 		sltiu		t0,R_Y,0x6000
 		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
-		sltiu		t0,R_Y,0x8000
-		beq		t0,zr,_SNCPU_MVN_X0_Normal
+		srl		t0,R_Y,15
+		bne		t0,zr,_SNCPU_MVN_X0_Normal
 		nop
 _SNCPU_SA1_MVN00_X0_SetDB:
 		move	R_DB,zr
@@ -2839,8 +2855,8 @@ _SNCPU_SA1_MVN00_X0_Transfer:
 		sltiu		t0,R_X,0x6000
 		bne		t0,zr,_SNCPUExecute_Loop
 		nop
-		sltiu		t0,R_X,0x8000
-		beq		t0,zr,_SNCPUExecute_Loop
+		srl		t0,R_X,15
+		bne		t0,zr,_SNCPUExecute_Loop
 		nop
 
 _SNCPU_SA1_MVN00_X0_NextY:
@@ -2856,8 +2872,8 @@ _SNCPU_SA1_MVN00_X0_NextY:
 		sltiu		t0,R_Y,0x6000
 		bne		t0,zr,_SNCPUExecute_Loop
 		nop
-		sltiu		t0,R_Y,0x8000
-		beq		t0,zr,_SNCPUExecute_Loop
+		srl		t0,R_Y,15
+		bne		t0,zr,_SNCPUExecute_Loop
 		nop
 
 _SNCPU_SA1_MVN00_X0_VirtualFetch:
