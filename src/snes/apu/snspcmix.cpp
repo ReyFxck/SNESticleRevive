@@ -606,7 +606,8 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 	iPhase = pChannel->iPhase;
 
 	// output at correct pitch based on sample rate
-	iPhaseInc = uPitch * SNSPCDSP_SAMPLERATE / nSampleRate;
+	const Bool bNativeRate = nSampleRate == SNSPCDSP_SAMPLERATE;
+	iPhaseInc = bNativeRate ? uPitch : uPitch * SNSPCDSP_SAMPLERATE / nSampleRate;
 	iPhaseInc <<= 4;
 
 	while (nSamples > 0)
@@ -633,7 +634,7 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 			Uint32 uModPitch =
 				SNSpcDspApplyPitchMod(uPitch, *pPitchMod++);
 			iStepPhaseInc =
-				(Int32)(uModPitch * SNSPCDSP_SAMPLERATE / nSampleRate);
+				(Int32)(bNativeRate ? uModPitch : uModPitch * SNSPCDSP_SAMPLERATE / nSampleRate);
 			iStepPhaseInc <<= 4;
 		}
 		iPhase += iStepPhaseInc;
@@ -870,7 +871,8 @@ void _MixEcho(Int16 *pOut, Int32 *pMain, SNSpcEchoSampleT *pEcho, Int32 nSamples
 
  */
 
-static Int32 _FilterEchoStereo(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight, Int32 nSamples, Int32 iEchoFeedback, Int16 *pEchoBuf, Uint32 uEchoAddr, Uint32 uEchoSize, const Int16 *pCoeff, SNSpcFIRFilterT *pFilter)
+template<bool FullFIR>
+static Int32 _FilterEchoStereoImpl(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight, Int32 nSamples, Int32 iEchoFeedback, Int16 *pEchoBuf, Uint32 uEchoAddr, Uint32 uEchoSize, const Int16 *pCoeff, SNSpcFIRFilterT *pFilter)
 {
 	Int32 iFilterPos;
 	iFilterPos = pFilter[0].iPos;
@@ -902,20 +904,23 @@ static Int32 _FilterEchoStereo(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pE
 		// calculate FIR filter
 		iEchoSampleL = pFilterLineL[0] * pCoeff[0];
 		iEchoSampleR = pFilterLineR[0] * pCoeff[0];
-		iEchoSampleL+= pFilterLineL[1] * pCoeff[1];
-		iEchoSampleR+= pFilterLineR[1] * pCoeff[1];
-		iEchoSampleL+= pFilterLineL[2] * pCoeff[2];
-		iEchoSampleR+= pFilterLineR[2] * pCoeff[2];
-		iEchoSampleL+= pFilterLineL[3] * pCoeff[3];
-		iEchoSampleR+= pFilterLineR[3] * pCoeff[3];
-		iEchoSampleL+= pFilterLineL[4] * pCoeff[4];
-		iEchoSampleR+= pFilterLineR[4] * pCoeff[4];
-		iEchoSampleL+= pFilterLineL[5] * pCoeff[5];
-		iEchoSampleR+= pFilterLineR[5] * pCoeff[5];
-		iEchoSampleL+= pFilterLineL[6] * pCoeff[6];
-		iEchoSampleR+= pFilterLineR[6] * pCoeff[6];
-		iEchoSampleL+= pFilterLineL[7] * pCoeff[7];
-		iEchoSampleR+= pFilterLineR[7] * pCoeff[7];
+		if (FullFIR)
+		{
+			iEchoSampleL+= pFilterLineL[1] * pCoeff[1];
+			iEchoSampleR+= pFilterLineR[1] * pCoeff[1];
+			iEchoSampleL+= pFilterLineL[2] * pCoeff[2];
+			iEchoSampleR+= pFilterLineR[2] * pCoeff[2];
+			iEchoSampleL+= pFilterLineL[3] * pCoeff[3];
+			iEchoSampleR+= pFilterLineR[3] * pCoeff[3];
+			iEchoSampleL+= pFilterLineL[4] * pCoeff[4];
+			iEchoSampleR+= pFilterLineR[4] * pCoeff[4];
+			iEchoSampleL+= pFilterLineL[5] * pCoeff[5];
+			iEchoSampleR+= pFilterLineR[5] * pCoeff[5];
+			iEchoSampleL+= pFilterLineL[6] * pCoeff[6];
+			iEchoSampleR+= pFilterLineR[6] * pCoeff[6];
+			iEchoSampleL+= pFilterLineL[7] * pCoeff[7];
+			iEchoSampleR+= pFilterLineR[7] * pCoeff[7];
+		}
 		iEchoSampleL >>= 7;
 		iEchoSampleR >>= 7;
 
@@ -949,6 +954,15 @@ static Int32 _FilterEchoStereo(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pE
 	pFilter[0].iPos = iFilterPos;
 	pFilter[1].iPos = iFilterPos;
 	return uEchoAddr;
+}
+
+/* Select once per block. Always advance the full FIR history even when the
+   other seven taps are zero: a later DSP register write can enable them. */
+static Int32 _FilterEchoStereo(SNSpcEchoSampleT *pEchoLeft, SNSpcEchoSampleT *pEchoRight, Int32 nSamples, Int32 iEchoFeedback, Int16 *pEchoBuf, Uint32 uEchoAddr, Uint32 uEchoSize, const Int16 *pCoeff, SNSpcFIRFilterT *pFilter)
+{
+	if (!(pCoeff[1] | pCoeff[2] | pCoeff[3] | pCoeff[4] | pCoeff[5] | pCoeff[6] | pCoeff[7]))
+		return _FilterEchoStereoImpl<false>(pEchoLeft, pEchoRight, nSamples, iEchoFeedback, pEchoBuf, uEchoAddr, uEchoSize, pCoeff, pFilter);
+	return _FilterEchoStereoImpl<true>(pEchoLeft, pEchoRight, nSamples, iEchoFeedback, pEchoBuf, uEchoAddr, uEchoSize, pCoeff, pFilter);
 }
 
 struct SNSpcDspDataT
@@ -1088,13 +1102,16 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 	{
 		Int32 iChannel;
 		Uint8 uEchoEnable;
+		Uint8 uFlags, uNoiseEnable;
 
 		// dequeue write queue up to current cycle time
 		m_pDsp->Sync(uCycle);
 
 		// get echo enable bits
 		uEchoEnable = m_pDsp->GetReg(SNSPCDSP_REG_EON);
-		if (m_pDsp->GetReg(SNSPCDSP_REG_FLG)&0x20) uEchoEnable=0;
+		uFlags = m_pDsp->GetReg(SNSPCDSP_REG_FLG);
+		uNoiseEnable = m_pDsp->GetReg(SNSPCDSP_REG_NOV);
+		if (uFlags & 0x20) uEchoEnable=0;
 
 		// dont update more than samples-per-update at a time
 		nSamples = nTotalSamples;
@@ -1107,7 +1124,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		_SNSpcDspMemset64((Uint64 *)pData->Echo[1], (sizeof(SNSpcEchoSampleT) * nSamples+7) / 8);
 
 		// output niose
-		if (m_pDsp->GetReg(SNSPCDSP_REG_NOV))
+		if (uNoiseEnable)
 		{
 			PROF_ENTER("SNSpcDspOutputNoise");
 			OutputNoise(m_iNoiseSample, nSamples, nSampleRate);
@@ -1115,7 +1132,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 		}
 
 		// check mute
-		if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x40))
+		if (!(uFlags & 0x40))
 		{
 			/* DSP writes were synchronized above and registers stay stable for
 			   this block. PMON bit 0 is ignored; only a following modulated voice
@@ -1154,7 +1171,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						const SNSpcVoiceRegsT *pRegs = m_pDsp->GetVoiceRegs(iChannel);
 
 						// is noise enabled for this channel?
-						if (m_pDsp->GetReg(SNSPCDSP_REG_NOV) & (1<<iChannel))
+						if (uNoiseEnable & (1<<iChannel))
 						{
 							// use pre-generated noise channel data instead of pcm data
 							pSampleData = m_iNoiseSample;
@@ -1181,7 +1198,11 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 
 						// mix channel into main and echo buffers
 						PROF_ENTER("SNSpcDspMixStereo");
-						if ( uEchoEnable & (1<<iChannel) )
+						if (!pRegs->vol_l && !pRegs->vol_r)
+						{
+							/* Voice state/PMON/OUTX above still ran. Both accumulators
+							   receive exactly zero, including echo. */
+						} else if ( uEchoEnable & (1<<iChannel) )
 						{
 							_MixChannelEcho(
 								pData->Main[0], pData->Main[1],
@@ -1208,7 +1229,7 @@ void SNSpcDspMixFull::Mix(CMixBuffer *pMixBuf)
 						(sizeof(Int16) * nSamples + 7) / 8);
 			}
 
-			if (!(m_pDsp->GetReg(SNSPCDSP_REG_FLG) & 0x20))
+			if (!(uFlags & 0x20))
 			{
 				// filter echo output to echo buffer
 				FilterEcho(pData->Echo[0], pData->Echo[1], nSamples, nSampleRate, FALSE);

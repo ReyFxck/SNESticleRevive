@@ -38,7 +38,7 @@ public:
 	}
 };
 
-static uint64_t Exercise(Uint32 rate)
+static uint64_t Exercise(Uint32 rate, bool extended = false)
 {
 	Capture capture;
 	capture.rate = rate;
@@ -96,6 +96,19 @@ static uint64_t Exercise(Uint32 rate)
 			capture.produced = 0;
 			if (step == 5) dsp.Write8(SNSPCDSP_REG_KOFF, 0x55);
 			if (step == 6) dsp.Write8(SNSPCDSP_REG_KON, 0xFF);
+			if (extended)
+			{
+				/* Switch from one tap to all taps, then back. A one-tap fast
+				   path must still retain the complete history. */
+				for (Uint32 tap = 1; tap < 8; tap++)
+					dsp.Write8((SNSpcDspRegE)(SNSPCDSP_REG_ECHOFIR0 + tap * 16),
+						(step & 1) ? (Uint8)(mask + 19 * tap) : 0);
+				dsp.Write8(SNSPCDSP_REG_ECHOFIR0, (Uint8)(mask + step));
+				/* Muted voices still drive pitch modulation and OUTX. */
+				dsp.Write8(SNSPCDSP_REG_VOLL, (step & 1) ? 21 : 0);
+				dsp.Write8(SNSPCDSP_REG_VOLR, (step & 1) ? (Uint8)-97 : 0);
+				dsp.Write8(SNSPCDSP_REG_EDL, (step % 3) ? 1 : 0);
+			}
 			/* PMON changes inside a multi-block call must remain block-local. */
 			dsp.EnqueueWrite(0, SNSPCDSP_REG_PMON, (Uint8)(mask ^ (step * 29)));
 			dsp.EnqueueWrite(68 * 32 * SNSPC_CYCLE, SNSPCDSP_REG_PMON,
@@ -133,6 +146,14 @@ int main()
 		std::printf("mixer_feedback_test: rate=%u hash=%016llX\n",
 			(unsigned)rates[i], (unsigned long long)result);
 		if (result != expected[i]) failures++;
+	}
+	static const uint64_t extendedExpected[] = { UINT64_C(0xEF0951F459842211), UINT64_C(0xA1F6512DEEDC7F0A), UINT64_C(0xCEB20D72D82A1D00) };
+	for (Uint32 i = 0; i < 3; i++)
+	{
+		uint64_t result = Exercise(rates[i], true);
+		std::printf("mixer_feedback_extended: rate=%u hash=%016llX\n",
+			(unsigned)rates[i], (unsigned long long)result);
+		if (result != extendedExpected[i]) failures++;
 	}
 	return failures ? 1 : 0;
 }

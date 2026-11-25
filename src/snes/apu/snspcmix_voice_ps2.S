@@ -40,7 +40,7 @@ SNSpcMixVoicePS2:
 	sra	$13, $13, 7
 
 	mult	$13, $9
-	nop
+	addiu	$8, $8, -1
 	mflo	$24
 	addu	$24, $24, $14
 	sw	$24, 0($4)
@@ -51,10 +51,8 @@ SNSpcMixVoicePS2:
 	addu	$24, $24, $15
 	sw	$24, 0($5)
 
-	addiu	$5, $5, 4
-	addiu	$8, $8, -1
 	bgtz	$8, 1b
-	nop
+	addiu	$5, $5, 4
 2:
 	jr	$31
 	nop

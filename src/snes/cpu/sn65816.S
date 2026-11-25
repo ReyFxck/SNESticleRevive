@@ -352,10 +352,22 @@
 
 #endif /* SA-1-side penalty variant */
 
-#define SNCPU_ENDOP(_nCycles)		\
+#define SNCPU_ENDOP_TIMED(_nCycles)		\
 		addiu	R_CpuCycle,R_CpuCycle,_nCycles	;\
 		j		_SNCPUExecute_Loop	;	\
 		addiu	R_Cycles,R_Cycles, -(_nCycles * SNCPU_CYCLE_FAST)	\
+
+/* Most memory opcodes already paid every cycle in their helpers.  Keep
+   the zero-tail dispatch compact; nonzero tails retain the old charge. */
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+#define SNCPU_ENDOP(_nCycles) SNCPU_ENDOP_##_nCycles
+#define SNCPU_ENDOP_0 j _SNCPUExecute_Loop ; nop
+#define SNCPU_ENDOP_1 SNCPU_ENDOP_TIMED(1)
+#define SNCPU_ENDOP_2 SNCPU_ENDOP_TIMED(2)
+#define SNCPU_ENDOP_3 SNCPU_ENDOP_TIMED(3)
+#else
+#define SNCPU_ENDOP(_nCycles) SNCPU_ENDOP_TIMED(_nCycles)
+#endif
 
 #define SNCPU_ABORTOP() \
 		j		_SNCPUExecute_Abort	;\
@@ -1769,8 +1781,10 @@ _SNCPU_Fetch8Fast:
 		bltz	R_PCCount,_SNCPU_Fetch8Update
 		addiu	R_PCCount,R_PCCount,-1
 
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
+#endif
 		addiu	R_CpuCycle,R_CpuCycle,1
 		lbu		R_Data,0(R_PC)
         addiu	R_PC,R_PC,1
@@ -1844,8 +1858,10 @@ _SNCPU_Fetch16Fast:
 		nop
 		addiu	R_CpuCycle,R_CpuCycle,2
 
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
+#endif
 
 		lwr		R_Data,0(R_PC)
 		lwl		R_Data,3(R_PC)
@@ -1856,10 +1872,8 @@ _SNCPU_Fetch16Fast:
 
 #if defined(SNCPU_ASM_VARIANT_PLAIN)
 		subu	R_Cycles,R_Cycles,R_PCCycles
-		subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
 		jr		ra
-		nop
+		subu	R_Cycles,R_Cycles,R_PCCycles
 #elif defined(SNCPU_ASM_VARIANT_SA1)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
@@ -1933,8 +1947,10 @@ _SNCPU_Fetch24Fast:
 		nop
 		addiu	R_CpuCycle,R_CpuCycle,3
 
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
+#endif
 		lwr		R_Data,0(R_PC)
 		lwl		R_Data,3(R_PC)
 		addiu	R_PC,R_PC,3
@@ -1946,10 +1962,8 @@ _SNCPU_Fetch24Fast:
 #if defined(SNCPU_ASM_VARIANT_PLAIN)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
-		subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
 		jr		ra
-		nop
+		subu	R_Cycles,R_Cycles,R_PCCycles
 #elif defined(SNCPU_ASM_VARIANT_SA1)
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
@@ -2354,8 +2368,10 @@ _SNCPUExecute_Loop:
 		bltz	R_PCCount,_SNCPU_ExecuteFetchUpdate
 		addiu	R_PCCount,R_PCCount,-1
 
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lwu		t1,SP_PCBank
 		subu	R_Addr,R_PC,t1
+#endif
 		lbu		R_Data,0(R_PC)
 
 		blez	R_Cycles, _SNCPUExecute_Done
@@ -2364,16 +2380,22 @@ _SNCPUExecute_Loop:
         // Only count the opcode when it will execute. The terminal probe
         // above rewinds PC at Done and must not advance the 5A22 math clock.
         addiu	R_CpuCycle,R_CpuCycle,1
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
         subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
 		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
+#endif
 
 		sll		t0, R_Data, 2							// R_Data = opcode * 4
         addu	t0, t0, R_pOpTable  					// t0 = OpTable + opcode * 4
         lw		t0, 0x00(t0)							// t0 -> opcode function
 
         jr		t0
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        subu	R_Cycles,R_Cycles,R_PCCycles
+#else
         nop
+#endif
 
 _SNCPU_ExecuteFetchUpdate:
 		blez	R_Cycles, _SNCPUExecute_Done

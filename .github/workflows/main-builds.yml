@@ -53,6 +53,18 @@ jobs:
         if: matrix.name == 'release'
         run: bash tools/pputest/test_hotpath.sh
 
+      - name: Verify DSP mixer feedback and PCM
+        if: matrix.name == 'release'
+        run: bash tools/pputest/test_mixer_feedback.sh
+
+      - name: Verify SA-1 and SuperFX host regressions
+        if: matrix.name == 'release'
+        run: |
+          bash tools/sa1test/build.sh
+          tools/sa1test/sa1_test
+          bash tools/superfxtest/build.sh
+          tools/superfxtest/gsu_test
+
       - name: Cache PS2DEV
         uses: actions/cache@v4
         with:
@@ -85,6 +97,7 @@ jobs:
           python3 -m pip install --quiet unicorn==2.1.4 pyelftools==0.32
           python3 tools/cputest/check_ps2_cpu.py build/SNESticle.elf
           python3 tools/cputest/check_ps2_echo.py build/SNESticle.elf
+          python3 tools/cputest/check_ps2_voice.py build/SNESticle.elf
 
       - name: Pack stripped release ELF
         if: matrix.name == 'release'
