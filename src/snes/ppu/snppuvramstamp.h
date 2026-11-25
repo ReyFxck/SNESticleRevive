@@ -275,8 +275,6 @@ struct SnesPPUVramStampT
 		return uStamp;
 	}
 
-
-
 };
 
 #endif

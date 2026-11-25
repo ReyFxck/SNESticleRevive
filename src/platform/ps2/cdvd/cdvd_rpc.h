@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the cdvd rpc interface for SNESticleRevive.
+ * Declares the cdvd rpc interface for SNESticleRevive.
  */
 
 #ifndef _CDVD_RPC_H

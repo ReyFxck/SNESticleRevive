@@ -234,8 +234,6 @@ static void TestIRAMAndBWRAM(void)
 	CHECK(bwram[0x0010] == 0x77, "direct BW-RAM mirroring");
 }
 
-
-
 static void TestBWRAMMirroring(void)
 {
     const unsigned sizes[] = {1, 3, 17, 8192, 32768, 65536, 98304, 262144};
@@ -409,9 +407,6 @@ static void TestBitmapModes(void)
 	SNCPUWrite8(sa1.GetCpu(), 0x006403, 0);
 	CHECK(bwram[0x0100] == 0x39, "2bpp bitmap must pack four pixels per byte");
 }
-
-
-
 
 static void TestRegisterPortIsolation(void)
 {
@@ -894,7 +889,6 @@ static void TestTimerIRQ(void)
 	CHECK((sa1.ReadRegister(0x2301) & 0x40) != 0, "H timer must latch timer IRQ status");
 	CHECK(sa1.ReadIRAM(0x0013) == 0x99, "timer IRQ must enter the SA-1 IRQ vector");
 }
-
 
 static void TestSaveStateRoundTrip(void)
 {

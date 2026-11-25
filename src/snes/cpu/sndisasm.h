@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the sndisasm interface for SNES CPU emulation.
+ * Declares the sndisasm interface for SNES CPU emulation.
  */
 
 #ifndef _SNDISASM_H

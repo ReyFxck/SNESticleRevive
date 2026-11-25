@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements memspace behavior for shared rendering and audio buffers.
+ * Implements memspace behavior for shared rendering and audio buffers.
  */
 
 #include <stdio.h>

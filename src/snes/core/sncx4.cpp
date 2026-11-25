@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements sncx4 behavior for the SNES emulation core.
+ * Implements sncx4 behavior for the SNES emulation core.
  */
 
 /*

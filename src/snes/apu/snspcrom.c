@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snspcrom behavior for SNES audio processing.
+ * Implements snspcrom behavior for SNES audio processing.
  */
 
 #include "types.h"

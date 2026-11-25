@@ -13,7 +13,6 @@ extern "C" {
 #include "netqueue.h"
 }
 
-
 static int errors = 0;
 static void check(bool ok, const char *name)
 {

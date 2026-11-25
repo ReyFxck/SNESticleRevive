@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the snio interface for the SNES emulation core.
+ * Declares the snio interface for the SNES emulation core.
  */
 
 #ifndef _SNIO_H

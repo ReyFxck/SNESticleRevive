@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the gskit backend interface for the PlayStation 2 Graphics Synthesizer backend.
+ * Declares the gskit backend interface for the PlayStation 2 Graphics Synthesizer backend.
  */
 
 #ifndef _GSKIT_BACKEND_H

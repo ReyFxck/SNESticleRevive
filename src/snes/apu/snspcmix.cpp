@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snspcmix behavior for SNES audio processing.
+ * Implements snspcmix behavior for SNES audio processing.
  */
 
 #include <string.h>
@@ -703,7 +701,6 @@ static void _MixChannelEcho(
 		*pEchoRight++ = (Int16)SNSpcDspClamp16(iEchoRight);
 	}
 }
-
 
 static void _SNSpcDspMemset64(Uint64 *pDest, Int32 nDwords)
 {

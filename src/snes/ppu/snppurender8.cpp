@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snppurender8 behavior for SNES picture processing.
+ * Implements snppurender8 behavior for SNES picture processing.
  */
 
 #include <stdlib.h>
@@ -1137,7 +1135,6 @@ static void _FetchCHR4_64(const Uint16 *pVram, Uint32 uBaseAddr, const SnesRende
 	PROF_LEAVE("_FetchCHR4_64");
 }
 
-
 /* Revive 1.1.1 Mode 5/6 phase decoder.
    Hardware behavior follows the public SNES PPU model used by MesenCE:
    a 256-coordinate output pixel corresponds to two physical hi-res dots.
@@ -2129,7 +2126,7 @@ static Bool _SnesPPUOBJOverlapsWindow(Int32 x, Int32 width, const SNMaskT *pWind
 	for (Int32 w = startWord; w <= endWord; w++)
 	{
 		Uint32 wordMask = pWindow->uMask32[w];
-		
+
 		/* Mask out bits outside sprite range */
 		if (w == startWord && start & 31)
 			wordMask |= (1u << (start & 31)) - 1;  // force 1 = blocked for bits before start
@@ -2140,7 +2137,7 @@ static Bool _SnesPPUOBJOverlapsWindow(Int32 x, Int32 width, const SNMaskT *pWind
 		if (wordMask != 0xFFFFFFFFu)
 			return TRUE;
 	}
-	
+
 	/* All pixels in sprite range are blocked (1) - cull it */
 	return FALSE;
 }

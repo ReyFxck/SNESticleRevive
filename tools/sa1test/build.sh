@@ -12,9 +12,7 @@ CFLAGS="-O2 -ffunction-sections -fdata-sections -DCODE_PLATFORM=1 -DCODE_DEBUG=0
 "$CXX" $CFLAGS -c sa1_test.cpp -o sa1_test.o
 "$CXX" -Wl,--gc-sections sa1_test.o snsa1.o sncpu.o sncpu_c.o -o sa1_test
 
-# Compile the full SNES state serializer too. This is intentionally compile-only:
-# it catches layout/API integration errors without pulling the whole emulator into
-# the host-side SA-1 unit-test executable.
+# Compile-only check of save-state layout and API integration.
 "$CXX" $CFLAGS \
     -I "$ROOT/src/app" \
     -I "$ROOT/src/common/debug" \

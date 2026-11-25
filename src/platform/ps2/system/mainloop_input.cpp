@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements mainloop input behavior for the PlayStation 2 application runtime.
+ * Implements mainloop input behavior for the PlayStation 2 application runtime.
  */
 
 #include "types.h"
@@ -148,7 +146,6 @@ void _MainLoopSnesInputApply(Emu::SysInputT *pInput)
 		pInput->uPad[1] = (Uint16)((pInput->uPad[1] & 0xFFF0u) | uGunButtons);
 	}
 }
-
 
 void _MainLoopInputSuppressUntilRelease()
 {

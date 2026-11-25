@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the ps2reg interface for SNESticleRevive.
+ * Declares the ps2reg interface for SNESticleRevive.
  */
 
 #define r0  $0

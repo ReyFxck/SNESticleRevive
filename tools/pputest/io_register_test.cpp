@@ -40,7 +40,6 @@ static void CheckPowerOnRegisters()
 	Check("VTIME reset", io.m_Regs.vtime.w, 0x01FF);
 }
 
-
 static void CheckTimedALU()
 {
 	SnesIO io;

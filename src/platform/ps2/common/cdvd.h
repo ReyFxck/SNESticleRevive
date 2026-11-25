@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the cdvd interface for shared PlayStation 2 platform definitions.
+ * Declares the cdvd interface for shared PlayStation 2 platform definitions.
  */
 
 #ifndef _CDVD_H

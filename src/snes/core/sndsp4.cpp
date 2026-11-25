@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements the temporary DSP-4 bus placeholder for the SNES core.
+ * Implements the temporary DSP-4 bus placeholder for the SNES core.
  */
 
 /*

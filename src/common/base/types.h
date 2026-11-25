@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the types interface for shared base utilities.
+ * Declares the types interface for shared base utilities.
  */
 
 /*H********************************************************************

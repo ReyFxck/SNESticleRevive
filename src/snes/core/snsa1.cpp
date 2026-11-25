@@ -581,8 +581,7 @@ Bool SNSA1::CanWriteBWRAM(Uint32 uOffset, Bool bSA1Side) const
 	Uint32 uProtected = 0x100u << (m_State.Registers[0x028] & 0x0F);
 	(void)bSA1Side;
 
-	// Hardware BWPA protection is active only while BOTH write-enable bits
-	// are clear. This detail is required by games such as Kirby's Dream Land 3.
+	// BWPA protection applies only when both write-enable bits are clear.
 	if ((m_State.Registers[0x026] & 0x80) ||
 	    (m_State.Registers[0x027] & 0x80))
 		return TRUE;

@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Coordinates clean system-exit actions for the PlayStation 2 runtime.
+ * Coordinates clean system-exit actions for the PlayStation 2 runtime.
  */
 
 #include <stdio.h>

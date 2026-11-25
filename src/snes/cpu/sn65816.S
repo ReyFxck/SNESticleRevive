@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements the sn65816 assembly path for SNES CPU emulation.
+ * Implements the sn65816 assembly path for SNES CPU emulation.
  */
 
 #include "sncpudefs.h"
@@ -31,9 +29,7 @@
 		.set noreorder
 		.set noat
 
-//
 // cpu structure offsets
-//
 
 #define SNCPU_rA  			0(R_pCpu)
 #define SNCPU_rX  			2(R_pCpu)
@@ -69,9 +65,7 @@
 #define SNCPU_bRAM			(SNCPU_MemIO+13)
 #define SNCPU_uSA1Bus		(SNCPU_MemIO+14)
 
-//
 // temporary storage on stack
-//
 
 #define SP_RA0   	0x50(sp)
 #define SP_RA1   	0x54(sp)
@@ -93,14 +87,10 @@
 #define SP_Data2   	0x7A(sp)
 #define SP_Data3   	0x7B(sp)
 
-//
 // register definitions
-//
 
-//
 // these registers must S0-S7
 // they are not saved during a trap function
-//
 
 // pointer to current cpu state
 #define	R_pCpu			$16
@@ -118,7 +108,6 @@
 #define R_t1			$22
 #define R_t2			$23
 
-//
 // these registers are saved/restored when a trap function is called
 // t0-t2 are reserved
 
@@ -139,10 +128,6 @@
 
 #define R_PCCycles		$30
 #define R_CpuCycle		$1
-
-//
-//
-//
 
 #define SNCPU_OP(_opcode)  	\
 		op_##_opcode:
@@ -279,8 +264,7 @@
 
 /* SA-1 control-flow timing: odd PRG-ROM branch targets and PRG-ROM
    jump/return destinations consume one additional SA-1 tick. */
-/* Fast form for the hottest SA-1 path: direct I-RAM reads such as the
-   Super Mario RPG A5 $00 polling loop.  No bus classification is needed. */
+/* Direct-access penalty paths avoid repeated bus classification. */
 #define SNCPU_SA1_ROM_PENALTY(_cycles) \
 		SNCPU_SA1_EXEC_GUARD(85f)			\
 		lw		t0,SNCPU_Counter2			;\
@@ -406,10 +390,6 @@
 	SNCPU_OP(0x1##_Opcode)	\
 	SNCPU_OP(0x3##_Opcode)	\
 	SNCPU_OP(0x4##_Opcode)
-
-//
-//
-//
 
 #define SNCPU_ADD(_dest, _src) 		addu	_dest,_dest,_src
 #define SNCPU_SUB(_dest, _src) 		subu	_dest,_dest,_src
@@ -2194,11 +2174,8 @@ _SNCPU_DPMaskDone:
 		jr		ra
 		nop
 
-//
 // adc sbc functions
-//
 //  R_t2 = R_t2 + R_t1
-//
 
 _SNCPU_ADC8:
         andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF		 // clear overflow flag
@@ -2373,10 +2350,6 @@ SNCPU_ASM_EXECUTE:
 		sw		t0,SP_SA1Track
 #endif
 
-//
-//
-//
-
 		SNCPU_LOADREGSTATE();
 
         jal		_SNCPU_DecomposeFlags		// decompose flags
@@ -2388,9 +2361,7 @@ SNCPU_ASM_EXECUTE:
         move	R_PCCycles,zr
 		lui		R_PCCount,0xC000							// invalidate PCCount
 
-//
 // interpreter loop
-//
 
 	// fetch opcode
 _SNCPUExecute_Loop:
@@ -2461,10 +2432,6 @@ _SNCPUExecute_Loop:
 
 _SNCPUExecute_Abort:
 
-//
-//
-//
-
 _SNCPUExecute_Done:
         addiu	R_PC,R_PC,-1
 
@@ -2478,9 +2445,7 @@ _SNCPUExecute_DoneNoRewind:
 
 		SNCPU_SAVEREGSTATE();
 
-//
 // cleanup stack frame
-//
 
         ld		fp,0x48(sp)
         ld		ra,0x40(sp)
@@ -3045,9 +3010,7 @@ _WAI_SkipIRQ:
 
 	SNCPU_ENDOP(3)
 
-//
 // unimplemented, unused in mario
-//
 
 	SNCPU_OP_ALL(42);
 		// WDM is a two-byte reserved instruction.  Its signature byte is

@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Exercises rom test behavior in the romtest regression suite.
+ * Exercises rom test behavior in the romtest regression suite.
  */
 
 #include <stdio.h>

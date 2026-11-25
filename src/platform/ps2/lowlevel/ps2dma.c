@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements ps2dma behavior for low-level PlayStation 2 support.
+ * Implements ps2dma behavior for low-level PlayStation 2 support.
  */
 
 #include "types.h"

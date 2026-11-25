@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements sndisasm behavior for SNES CPU emulation.
+ * Implements sndisasm behavior for SNES CPU emulation.
  */
 
 #include <stdlib.h>

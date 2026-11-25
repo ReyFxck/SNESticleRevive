@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Exercises chrcache test behavior in the pputest regression suite.
+ * Exercises chrcache test behavior in the pputest regression suite.
  */
 
 #include <cstdio>

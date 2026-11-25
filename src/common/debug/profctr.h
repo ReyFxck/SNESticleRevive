@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the profctr interface for shared debugging support.
+ * Declares the profctr interface for shared debugging support.
  */
 
 #ifndef _PROFCTR_H

@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snrom behavior for SNES cartridge loading and mapping.
+ * Implements snrom behavior for SNES cartridge loading and mapping.
  */
 
 #include <stdlib.h>
@@ -14,9 +12,7 @@
 #include "dataio.h"
 #include "sndbglog.h"
 
-/* Standard CRC32 of the normalized, headerless ROM image.  Compatibility
-   quirks are gated by exact clean dumps so they cannot leak into another
-   DSP-1 title such as Super Mario Kart. */
+/* CRC32 of headerless ROM data; compatibility quirks require an exact match. */
 static Uint32 _SNRomCRC32(const Uint8 *pData, Uint32 nBytes)
 {
 	Uint32 crc = 0xFFFFFFFFu;

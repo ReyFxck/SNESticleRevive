@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Tests the snesdiag-v1 text-log analyzer.
+# Tests the snesdiag-v1 text-log analyzer.
 
 import unittest
 

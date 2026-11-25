@@ -13,9 +13,7 @@ on:
 permissions:
   contents: read
 
-# If a new commit is pushed while an older build is still running, keep only
-# the newest run for that branch. This avoids wasting ~10 minutes on obsolete
-# artifacts while iterating on performance work.
+# Cancel obsolete builds of the same branch.
 concurrency:
   group: main-builds-${{ github.ref }}
   cancel-in-progress: true
@@ -29,8 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Production artifact: diagnostics disabled, optional runtime profiler, stripped,
-          # then packed. The artifact ZIP contains one file: SNESticle.elf.
+          # Release: diagnostics off, stripped and packed.
           - name: release
             diagnostics: 0
             artifact_name: SNESticle-release
@@ -39,8 +36,7 @@ jobs:
             diagnostics: 1
             artifact_name: SNESticle-diag1
 
-          # Deep diagnostic ELF is stripped and packed for play.
-          # Original symbol ELF is uploaded separately for addr2line.
+          # Keep a separate symbol ELF for addr2line.
           - name: diag2
             diagnostics: 2
             artifact_name: SNESticle-diag2
@@ -95,8 +91,7 @@ jobs:
           path: |
             ~/.local/ps2dev
             ~/.cache/ps2dev
-          # The toolchain is identical for all build variants; do not waste
-          # cache storage with one copy per matrix entry.
+          # Shared toolchain cache across build variants.
           key: ps2dev-ubuntu-24.04-v2
 
       - name: Ensure PS2DEV toolchain

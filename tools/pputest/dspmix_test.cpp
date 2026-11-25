@@ -74,7 +74,6 @@ int main()
 	Check("raw mix right volume",
 		SNSpcDspEnvelopeMixSample(2001, 127) * 90, 178650);
 
-
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);
 	return g_Failures ? 1 : 0;
 }

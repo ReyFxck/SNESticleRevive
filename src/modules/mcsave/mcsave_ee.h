@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the mcsave ee interface for the PlayStation 2 memory-card save client.
+ * Declares the mcsave ee interface for the PlayStation 2 memory-card save client.
  */
 
 #ifndef _MCSAVE_EE_H

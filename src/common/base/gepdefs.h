@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the gepdefs interface for shared base utilities.
+ * Declares the gepdefs interface for shared base utilities.
  */
 
 #ifndef _GEPDEFS_H

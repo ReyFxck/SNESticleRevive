@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the inputdevice interface for shared base utilities.
+ * Declares the inputdevice interface for shared base utilities.
  */
 
 #ifndef _INPUTDEVICE_H

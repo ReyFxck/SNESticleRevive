@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the miniz compat interface for shared input and output support.
+ * Declares the miniz compat interface for shared input and output support.
  */
 
 #ifndef MINIZ_COMPAT_H

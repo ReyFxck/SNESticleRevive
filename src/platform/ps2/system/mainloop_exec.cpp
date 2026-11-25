@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements mainloop exec behavior for the PlayStation 2 application runtime.
+ * Implements mainloop exec behavior for the PlayStation 2 application runtime.
  */
 
 #include <stdio.h>

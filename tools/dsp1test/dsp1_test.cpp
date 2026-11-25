@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Exercises dsp1 test behavior in the dsp1test regression suite.
+ * Exercises dsp1 test behavior in the dsp1test regression suite.
  */
 
 // Bancada de teste host-side para o DSP-1 HLE (sndsp1.cpp).

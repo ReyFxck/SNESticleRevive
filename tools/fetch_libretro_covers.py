@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Downloads and indexes matching Libretro artwork for ROM collections.
+# Downloads and indexes matching Libretro artwork for ROM collections.
 
 """Download matching Libretro artwork for SNES/NES ROM folders.
 

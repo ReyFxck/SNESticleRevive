@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snspcdsp behavior for SNES audio processing.
+ * Implements snspcdsp behavior for SNES audio processing.
  */
 
 #include <string.h>

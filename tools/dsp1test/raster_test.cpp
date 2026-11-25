@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Exercises raster test behavior in the dsp1test regression suite.
+ * Exercises raster test behavior in the dsp1test regression suite.
  */
 
 // Teste do comando Raster (0x0A) do DSP-1 - gera a matriz Mode-7

@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the sndsp2 interface for the SNES emulation core.
+ * Declares the sndsp2 interface for the SNES emulation core.
  */
 
 /*

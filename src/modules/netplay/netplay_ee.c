@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements netplay ee behavior for the emulator netplay frontend.
+ * Implements netplay ee behavior for the emulator netplay frontend.
  */
 
 #include <tamtypes.h>

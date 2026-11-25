@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the snstate interface for SNES save-state serialization.
+ * Declares the snstate interface for SNES save-state serialization.
  */
 
 #ifndef _SNSTATE_H

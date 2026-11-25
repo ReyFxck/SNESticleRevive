@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements font behavior for shared base utilities.
+ * Implements font behavior for shared base utilities.
  */
 
 #include <stdlib.h>
@@ -400,7 +398,6 @@ Int32 FontGetStrWidth(const Char *pStr)
 	return iWidth;
 }
 
-
 static void _FontDrawStr(FontT *pFont, Float32 vx, Float32 vy, Float32 vz, const Char *pStr, Uint32 uColor)
 {
     TextureT *pTexture = &pFont->Texture;
@@ -552,7 +549,6 @@ void FontMakeFromMap(FontT *pFont, CSurface *pSurface, Uint32 uVramAddr,
     GPFifoFlush();
 }
 
-
 void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a)
 {
     Uint32 uR, uG, uB, uA;
@@ -606,12 +602,10 @@ void FontSelect(Int32 iFont)
 	_Font_State.pFont = _Font_pFonts[iFont];
 }
 
-
 void FontSetFont(Int32 iFont, FontT *pFont)
 {
     _Font_pFonts[iFont] = pFont;
 }
-
 
 Int32 FontGetWidth()
 {
@@ -623,7 +617,6 @@ Int32 FontGetHeight()
 	return _Font_State.pFont ? _Font_State.pFont->uCharY : 0;
 }
 
-
 Uint32 FontGetVramSize()
 {
     /* One block: UI RGBA8 atlas | CJK PSMT4 atlas | palette page.
@@ -633,7 +626,6 @@ Uint32 FontGetVramSize()
          + CJK_ATLAS_BYTES                                      /* CJK atlas */
          + 8192U;                                               /* palette   */
 }
-
 
 void FontInit(Uint32 uVramAddr)
 {
@@ -718,15 +710,6 @@ void FontShutdown()
 	FontDelete(&_Font_Default);
 	FontDelete(&_Font_Fixed);
 }
-
-
-
-//
-//
-//
-
-
-
 
 void FontNew(FontT *pFont)
 {

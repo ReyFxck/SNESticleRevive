@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the snppublend mm interface for SNES picture processing.
+ * Declares the snppublend mm interface for SNES picture processing.
  */
 
 #ifndef _SNPPUBLEND_MM_H

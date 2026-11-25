@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the rendersurface interface for shared rendering and audio buffers.
+ * Declares the rendersurface interface for shared rendering and audio buffers.
  */
 
 #ifndef _RENDERSURFACE_H

@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the audframeschedule interface for shared rendering and audio buffers.
+ * Declares the audframeschedule interface for shared rendering and audio buffers.
  */
 
 #ifndef _AUDFRAMESCHEDULE_H

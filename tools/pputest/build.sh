@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Builds the pputest host-side regression suite.
+# Builds the pputest host-side regression suite.
 
-# Bancada host-side para regressões pequenas do renderer SNES/PPU.
-#
-# Uso:  cd tools/pputest && ./build.sh && execute os *_test
+# Usage: cd tools/pputest && ./build.sh; run the generated *_test binaries.
 set -e
 cd "$(dirname "$0")"
 ROOT=../..

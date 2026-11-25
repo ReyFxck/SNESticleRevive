@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Exercises cpu test behavior in the cputest regression suite.
+ * Exercises cpu test behavior in the cputest regression suite.
  */
 
 #include <cstdio>

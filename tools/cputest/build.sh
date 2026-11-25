@@ -1,9 +1,7 @@
 #!/bin/sh
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Builds the cputest host-side regression suite.
+# Builds the cputest host-side regression suite.
 
 set -eu
 

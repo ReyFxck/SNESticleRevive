@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the snsdd1 interface for the SNES emulation core.
+ * Declares the snsdd1 interface for the SNES emulation core.
  */
 
 /*

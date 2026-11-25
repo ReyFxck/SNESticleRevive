@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements main behavior for the emulator application layer.
+ * Implements main behavior for the emulator application layer.
  */
 
 #include <stdio.h>
@@ -168,7 +166,6 @@ extern "C" int MainBuildHostIOPath(const char *pGuestPath, char *pOut, int nOut)
 	(void)i;
 	return 1;
 }
-
 
 /* SAF directory handles are not reliable on every Android HostFS bridge:
    a successful encoded dopen can actually enumerate the ELF root. Accept

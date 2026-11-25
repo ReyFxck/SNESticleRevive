@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snobc1 behavior for the SNES emulation core.
+ * Implements snobc1 behavior for the SNES emulation core.
  */
 
 #include "types.h"

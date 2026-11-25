@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snio behavior for the SNES emulation core.
+ * Implements snio behavior for the SNES emulation core.
  */
 
 #include <stdio.h>
@@ -165,7 +163,6 @@ Bool SnesIO::GetLightGunPosition(Uint16 *pX, Uint16 *pY) const
 	return GetJustifierPosition(pX, pY);
 }
 
-
 Uint8 SnesIO::ReadSerialPad(Uint32 uPad)
 {
 	// read top-most joypad bit
@@ -279,9 +276,7 @@ Uint8 SnesIO::ReadSerial1()
 		}
 	}
 
-	// confirmed:
-	// this port always returns with 1C bits on
-	// havent tested with multitap yet though
+	// Bits 2-4 are high; multitap behavior remains unverified.
 	return uData | 0x1C;
 }
 

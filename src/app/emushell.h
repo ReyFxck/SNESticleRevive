@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the emushell interface for the emulator application layer.
+ * Declares the emushell interface for the emulator application layer.
  */
 
 #ifndef _EMUSHELL_H
@@ -32,7 +30,7 @@ protected:
 	CEmuRom  		*m_pBios;		// current active bios
 
 	Uint32			m_nMaxSaveChars;
-    Char 			m_RomName[256];		// base rom filename "Super Mario World"
+    Char 			m_RomName[256];		// Base ROM filename
 	Char			m_SaveName[256];    // save filename "Super Mar001"
 
 	// list of registered systems

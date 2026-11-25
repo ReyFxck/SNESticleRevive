@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements emushell behavior for the emulator application layer.
+ * Implements emushell behavior for the emulator application layer.
  */
 
 #include <string.h>

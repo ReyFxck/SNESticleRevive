@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the snrom interface for SNES cartridge loading and mapping.
+ * Declares the snrom interface for SNES cartridge loading and mapping.
  */
 
 #ifndef _SNROM_H

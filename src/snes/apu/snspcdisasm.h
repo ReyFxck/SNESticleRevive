@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the snspcdisasm interface for SNES audio processing.
+ * Declares the snspcdisasm interface for SNES audio processing.
  */
 
 #ifndef _SNSPCDISASM_H

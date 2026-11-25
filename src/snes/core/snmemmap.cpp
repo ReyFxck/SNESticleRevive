@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snmemmap behavior for the SNES emulation core.
+ * Implements snmemmap behavior for the SNES emulation core.
  */
 
 #include <stdlib.h>
@@ -131,12 +129,7 @@ static SnesMemMapT	_SnesMemMap_HiRom_DSP1[]=
 static SnesMemMapT _SnesMemMap_LoRom_DSP1[]={
     {0x20,0x3F,0x8000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
     {0xA0,0xBF,0x8000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
-    /* DR mirror $C0-$CF (regiao FastROM): jogos como Super Mario Kart
-       apontam o HDMA do Mode-7 para o espelho do DSP em $C0-$CF.
-       Sem isto o HDMA le ROM em vez do registrador de dados do DSP e a
-       matriz Mode-7 vira lixo -> pista achatada (mas a CPU, que usa
-       $30-$3F, funciona, por isso o jogo "roda" mesmo assim). Veja o
-       mapa de memoria do DSP-1 LoROM ($30-$3F / $C0-$CF). */
+    /* FastROM DR mirror $C0-$CF: HDMA must read DSP data, not ROM. */
     {0xC0,0xCF,0x8000,0xBFFF,SNCPU_CYCLE_FAST,SNESMEM_TYPE_DSP1},
     /* SR (Status Register): $20-$3F:C000-FFFF + mirror $A0-$BF + $C0-$CF
        Sem isto a CPU le ROM em vez do status e o DSP-1 trava */
@@ -266,7 +259,6 @@ static Uint32 _SnesMirrorRomOffset(Uint32 uSize, Uint32 uPos)
 
 	return uMask + _SnesMirrorRomOffset(uSize - uMask, uPos - uMask);
 }
-
 
 /* HiROM advances one full 64 KiB ROM bank for every CPU bank even when only
    $8000-$FFFF is visible.  The legacy table mapper advances by the visible

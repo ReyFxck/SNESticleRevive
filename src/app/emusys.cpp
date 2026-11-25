@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements emusys behavior for the emulator application layer.
+ * Implements emusys behavior for the emulator application layer.
  */
 
 #include "types.h"

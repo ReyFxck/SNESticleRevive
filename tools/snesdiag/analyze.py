@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Summarizes snesdiag-v1 records from Android emulator text logs.
+# Summarizes snesdiag-v1 records from Android emulator text logs.
 
 """Summarize snesdiag-v1 records from a PCSX2/NetherSX2/ARMSX2 TXT log."""
 

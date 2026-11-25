@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the snspctimer interface for SNES audio processing.
+ * Declares the snspctimer interface for SNES audio processing.
  */
 
 #ifndef _SNSPCTIMER_H

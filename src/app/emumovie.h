@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the emumovie interface for the emulator application layer.
+ * Declares the emumovie interface for the emulator application layer.
  */
 
 #ifndef _emumovie_h

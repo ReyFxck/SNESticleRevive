@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the bmpfile interface for shared media decoding.
+ * Declares the bmpfile interface for shared media decoding.
  */
 
 #ifndef _BMPFILE_H

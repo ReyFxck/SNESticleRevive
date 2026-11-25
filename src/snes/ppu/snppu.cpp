@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snppu behavior for SNES picture processing.
+ * Implements snppu behavior for SNES picture processing.
  */
 
 #include <string.h>
@@ -154,7 +152,7 @@ void SnesPPU::WriteVMDATALTimed(Uint8 uData, Bool bAllow)
 	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
 	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
 	                                    (m_Regs.vmain >> 2) & 3);
-	
+
 	/* In active display VRAM rejects the write, but VMADD still advances. */
 	if (bAllow)
 	{
@@ -186,7 +184,7 @@ void SnesPPU::WriteVMDATAHTimed(Uint8 uData, Bool bAllow)
 	SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
 	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
 	                                    (m_Regs.vmain >> 2) & 3);
-	
+
 	/* In active display VRAM rejects the write, but VMADD still advances. */
 	if (bAllow)
 	{
@@ -216,7 +214,7 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 	g_DbgPPURegWrites[0x18]++;
 	g_DbgPPURegWrites[0x19]++;
 #endif
-	
+
 	if (!CanAccessVRAM(m_uLine))
 	{
 		/* Neither byte reaches VRAM; both address side effects remain. */
@@ -268,7 +266,7 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 	   byte pair is one consecutive VRAM word. Copy those words here and
 	   invalidate the renderer once for the whole burst instead of making
 	   thousands of calls through WriteVMDATALH(). */
-	
+
 	if (nBytes <= 0) return;
 	if (!CanAccessVRAM(m_uLine))
 	{
@@ -1340,7 +1338,6 @@ void SnesPPU::Reset()
 	m_PPU1OpenBus = 0;
 	m_PPU2OpenBus = 0;
 	m_bCountersLatched = FALSE;
-
 
 	// confirmed:
 	m_Regs.stat77 =  SNPPU_VERSION_5C77;

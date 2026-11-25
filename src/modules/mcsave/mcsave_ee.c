@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements mcsave ee behavior for the PlayStation 2 memory-card save client.
+ * Implements mcsave ee behavior for the PlayStation 2 memory-card save client.
  */
 
 #include <tamtypes.h>

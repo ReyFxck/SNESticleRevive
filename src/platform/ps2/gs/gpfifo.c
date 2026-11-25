@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements gpfifo behavior for the PlayStation 2 Graphics Synthesizer backend.
+ * Implements gpfifo behavior for the PlayStation 2 Graphics Synthesizer backend.
  */
 
 #include <stdio.h>

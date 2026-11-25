@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements inputdevice behavior for shared base utilities.
+ * Implements inputdevice behavior for shared base utilities.
  */
 
 #include <string.h>

@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Builds the dsp1test host-side regression suite.
+# Builds the dsp1test host-side regression suite.
 
 # Bancada de teste host-side para o DSP-1 HLE.
 # Compila o codigo REAL (src/snes/core/sndsp1.cpp) num binario de PC

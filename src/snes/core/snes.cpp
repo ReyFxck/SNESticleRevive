@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snes behavior for the SNES emulation core.
+ * Implements snes behavior for the SNES emulation core.
  */
 
 #include <stdlib.h>
@@ -455,26 +453,13 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 {
 	Int32 nCycles;
 
-/*#if SNES_DEBUG
-    if (g_bStateDebug)
-    {
-        ConDebug("SyncSPC cpu=%06d spc=%06d\n",
-            SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME),
-            SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME)
-            );
-
-    }
-#endif */
-
     Int32 CpuTime = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME);
     Int32 SpcTime = SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME);
 
-    // get cycle count
     nCycles = CpuTime - SpcTime - m_Spc.Cycles;
     nCycles += uExtra;
     if (nCycles > (SNSPC_CYCLE * SNES_SPCMINCYCLES))
     {
-        // execute SPC
         PROF_ENTER("SNSpcExecute");
 #if SNDBG_LOG
         Uint32 _tAPU = ProfCtrGetCycle();
@@ -498,46 +483,6 @@ void SnesSystem::SyncSPC(Int32 uExtra)
             &m_Spc, SNSPC_COUNTER_TOTAL));
     }
 
-//#if SNES_DEBUG
-//    {
-//        ConDebug("DoneSyncSPC cpu=%06d spc=%06d\n",
-//            SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME),
-//            SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME)
-//            );
-//    }
-//#endif
-
-    /*
-    // get cycle count
-    nCycles = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME) - SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME);
-    nCycles += uExtra;
-
-    // get cycle count
-    PROF_ENTER("SNSpcExecute");
-    SNSPCExecuteToCycle( &m_Spc, nCycles );
-    PROF_LEAVE("SNSpcExecute");
-
-#if SNSPCIO_WRITEQUEUE
-    m_SpcIO.SyncQueueAll();
-#endif
-*/
-
-    /*
-	// get cycle count
-	nCycles = SNCPUGetCounter(&m_Cpu, SNCPU_COUNTER_FRAME) - SNSPCGetCounter(&m_Spc, SNSPC_COUNTER_FRAME);
-	nCycles += uExtra;
-	if (nCycles > (SNSPC_CYCLE * SNES_SPCMINCYCLES))
-	{
-		// execute SPC
-        PROF_ENTER("SNSpcExecute");
-		SNSPCExecute(&m_Spc, nCycles);
-        PROF_LEAVE("SNSpcExecute");
-
-		#if SNSPCIO_WRITEQUEUE
-		m_SpcIO.SyncQueueAll();
-		#endif
-	}
-    */
 }
 
 void SnesSystem::SyncSA1To(Int32 nClock)
@@ -707,10 +652,7 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 		return v;
 	}
 
-	// The four CPU/APU communication ports repeat throughout $2140-$217F
-	// on real SNES hardware.  Some games deliberately use those mirrors;
-	// treating $2144+ as open bus can turn a 16-bit port read into a value
-	// which never matches and leave the game in an infinite wait loop.
+	// APUIO0-3 mirror every four bytes through $217F; polling needs both bytes.
 	if (uAddr >= 0x2140 && uAddr <= 0x217F)
 	{
 		pSnes->SyncSPC();
@@ -785,7 +727,6 @@ Uint8 SNCPU_TRAPFUNC SnesSystem::Read2000(SNCpuT *pCpu, Uint32 uAddr)
 	}
 }
 
-//#define SNES_SPCWRITE_LATENCY (21)
 #define SNES_SPCWRITE_LATENCY (0)
 
 #if SNES_DEBUG
@@ -922,9 +863,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 			break;
 
 		default:
-			/* $2184-$21FF has no B-bus register behind it.  Writes are
-			   ignored; in particular, the old Donkey Kong-specific $2184
-			   exception was just one instance of this generic rule. */
+			/* $2184-$21FF is unmapped; ignore writes. */
 			if (uAddr >= 0x2184 && uAddr <= 0x21FF)
 				break;
 			/* All other locations in this trap page are base-console open
@@ -1127,16 +1066,11 @@ void SNCPU_TRAPFUNC SnesSystem::Write4000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 				pSnes->GetSCPUMasterClock(), (uData & 0x01) ? TRUE : FALSE);
             pIO->m_Regs.nmitimen = uData;
 
-            // unconfirmed:
-            // should nmi be disabled if someone set 0 to nmitimen register?
-            // this breaks final fight
-            // has nmi enable been set to zero?
+            // Preserve latched RDNMI when NMI enable is cleared.
             if ( !( uData & 0x80 ))
             {
-                // if so, disable 'BLANK NMI' for good
                 if ( pIO->m_Regs.rdnmi & 0x80 )
                 {
-//                    pIO->m_Regs.rdnmi &= ~0x80;
                 }
             }
 
@@ -1575,9 +1509,7 @@ void SnesSystem::Reset()
 	if (m_bSDD1)
 		RemapSDD1();
 
-	// So' o cartucho com S-RTC deve tocar o relogio do host (time/gmtime).
-	// Antes isso rodava no boot de TODO jogo -> se time()/gmtime() falhar no
-	// PS2 real, quebraria o boot de qualquer jogo.
+	// Only S-RTC cartridges need the host clock; avoid RTC calls on other boots.
 	if (m_bSRTC)
 		m_SRTC.Reset();
 
@@ -2670,7 +2602,6 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
             g_SnesDbgHUD.Skipped = (Uint32)(g_DbgVideoSkippedFrames);
             g_SnesDbgHUD.QueueFull = (Uint32)(g_DbgPPUQueueFull);
             g_SnesDbgHUD.Ready = TRUE;
-
 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam

@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements snppurender behavior for SNES picture processing.
+ * Implements snppurender behavior for SNES picture processing.
  */
 
 #include <stdlib.h>
@@ -367,7 +365,6 @@ static void _SnesPPUBuildPseudoHiresLine(
 		pOut[i] = _SnesPPUAveragePseudoHires15(uMain, uSub);
 	}
 }
-
 
 void SnesPPURender::RenderLine32(Int32 iLine, Bool bPlanar)
 {

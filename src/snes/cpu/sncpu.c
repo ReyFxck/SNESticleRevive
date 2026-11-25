@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Implements sncpu behavior for SNES CPU emulation.
+ * Implements sncpu behavior for SNES CPU emulation.
  */
 
 #include <stdlib.h>
@@ -822,7 +820,6 @@ void SNCPUIRQ(SNCpuT *pCpu)
 			SNCPU_CYCLE_FAST * 2);
 	}
 }
-
 
 void SNCPUNMIToVector(SNCpuT *pCpu, Uint16 uVector)
 {

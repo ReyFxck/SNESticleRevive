@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the dbgterm interface for shared debugging support.
+ * Declares the dbgterm interface for shared debugging support.
  */
 
 #pragma once

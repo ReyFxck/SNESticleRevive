@@ -1,8 +1,6 @@
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Builds, packages and validates SNESticleRevive for PlayStation 2.
+# Builds, packages and validates SNESticleRevive for PlayStation 2.
 
 ISO_TOOL ?= $(firstword $(shell command -v mkisofs 2>/dev/null) $(shell command -v genisoimage 2>/dev/null) $(shell command -v xorriso 2>/dev/null))
 PS2_PACKER_SRC_DIR ?= $(PS2DEV_CACHE_DIR)/ps2-packer-src
@@ -19,12 +17,10 @@ BUILD_OK_FILE ?= $(BUILD_META_DIR)/ok.list
 BUILD_META_DIR ?= $(OBJ_DIR)/.meta
 BUILD_CONFIG_FILE ?= $(BUILD_META_DIR)/compile-mode.txt
 BUILD_TOTAL ?= $(words $(OBJS))
-# VERBOSE=1 mostra a mensagem de warning/erro COMPLETA (sem o corte de
-# 58 colunas do resumo) e despeja o log inteiro do compilador em
-# warnings (erros ja' fazem 'cat' do log sempre). Ex.: make VERBOSE=1
+# VERBOSE=1 shows complete warnings/errors and compiler logs.
 VERBOSE ?= 0
 SHOW_WARN_LOG ?= $(VERBOSE)
-# Largura do resumo de 1 linha; VERBOSE solta o limite (mostra tudo).
+# One-line summary width; unrestricted in verbose mode.
 MSG_WIDTH ?= $(if $(filter 1,$(VERBOSE)),100000,58)
 COLOR ?= 1
 PS2DEV_CACHE_DIR ?= $(shell if [ -n "$$XDG_CACHE_HOME" ]; then printf "%s/ps2dev" "$$XDG_CACHE_HOME"; else printf "%s/.cache/ps2dev" "$$HOME"; fi)
@@ -60,21 +56,15 @@ BIN2C   ?= $(PS2SDK)/bin/bin2c
 EE_CC ?= $(shell if command -v ee-gcc >/dev/null 2>&1; then echo ee-gcc; elif command -v mips64r5900el-ps2-elf-gcc >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-gcc; elif [ -x "$(PS2DEV)/ee/bin/ee-gcc" ]; then echo "$(PS2DEV)/ee/bin/ee-gcc"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc"; fi)
 EE_CXX ?= $(shell if command -v ee-g++ >/dev/null 2>&1; then echo ee-g++; elif command -v mips64r5900el-ps2-elf-g++ >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-g++; elif [ -x "$(PS2DEV)/ee/bin/ee-g++" ]; then echo "$(PS2DEV)/ee/bin/ee-g++"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++"; fi)
 EE_STRIP ?= $(shell if command -v ee-strip >/dev/null 2>&1; then echo ee-strip; elif command -v mips64r5900el-ps2-elf-strip >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-strip; elif [ -x "$(PS2DEV)/ee/bin/ee-strip" ]; then echo "$(PS2DEV)/ee/bin/ee-strip"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip"; fi)
-# ps2-packer is Pixel's LZMA self-extracting ELF packer
-# (https://github.com/ps2dev/ps2-packer, shipped with ps2dev/ps2dev).
-# When present the ISO embeds the packed ELF instead of the stripped
-# one: typically a ~70% size reduction (1.6 MB -> 490 KB).  Override
-# with PS2_PACKER=... or PACK=0 to skip the pack step entirely.
+# Pixel's LZMA ELF packer: https://github.com/ps2dev/ps2-packer
+# Override PS2_PACKER or set PACK=0 to skip packing.
 PS2_PACKER ?= $(shell if [ -x "$(PS2DEV)/bin/ps2-packer" ]; then printf "%s" "$(PS2DEV)/bin/ps2-packer"; else command -v ps2-packer 2>/dev/null; fi)
 PACK       ?= 1
 
 IRX_DIR     ?= $(PS2SDK)/iop/irx
 
-# SNES_DIAGNOSTICS=1 enables the low-overhead general CPU/PPU/GS report every
-# 120 emulated frames.  The longer window keeps the TXT/SIO stream below its
-# own throughput ceiling.  SNES_DIAGNOSTICS=2 also enables bounded deep
-# OBJ/DMA/chip capture. Keep deep mode for short reproductions because its
-# probes are measurable work on EE.
+# Diagnostics: 1 = general 120-frame reports; 2 = bounded deep capture.
+# Deep capture adds measurable EE overhead.
 SNES_DIAGNOSTICS ?= 0
 ifneq ($(filter 0 1 2,$(SNES_DIAGNOSTICS)),$(SNES_DIAGNOSTICS))
 $(error SNES_DIAGNOSTICS must be 0, 1 or 2)
@@ -94,9 +84,7 @@ $(error Use SNES_TARGET_PROFILE=1 with SNES_DIAGNOSTICS=0)
 endif
 endif
 
-# Caches independentes: OBJ e BG fisico compartilham linhas 4bpp, enquanto
-# SNES_BG_CACHE controla apenas os caches de linha BG/hires ja decodificada.
-# Cada camada pode ser desligada separadamente para comparacao A/B.
+# Independent OBJ, physical CHR and decoded BG/hires line caches for A/B.
 SNES_OBJ_CACHE ?= 1
 SNES_OBJ_SKIP_EMPTY ?= 1
 SNES_OBJ_DENSE_COPY ?= 1
@@ -258,15 +246,8 @@ VERSION_DEFS := $(APP_VERSION_DEF) -DBUILD_DATE=\"$(BUILD_DATE)\" -DBUILD_TIME=\
 CFLAGS   += $(VERSION_DEFS)
 CXXFLAGS += $(VERSION_DEFS)
 
-# ---- Cover art (capas) -----------------------------------------------
-# COVERS_PATH e' VAZIO por padrao: o emulador procura a capa <rom>.png ao
-# lado da propria ROM (e tambem em subpastas covers/ e Named_Boxarts/).
-# Passe um caminho absoluto para usar uma pasta unica de capas,
-# independentemente de onde a ROM esteja, ex.:
-#     make COVERS_PATH=mass:/snes/covers
-#     make COVERS_PATH=mc0:/SNESticle/covers
-# A capa procurada nessa pasta sera "<COVERS_PATH>/<nome-da-rom>.png"
-# (esse caminho e' tentado PRIMEIRO; os relativos a ROM ficam de fallback).
+# Cover art: absolute COVERS_PATH takes priority over ROM-relative lookup.
+# Default: <rom>.png, covers/ and Named_Boxarts/ beside the ROM.
 COVERS_PATH ?=
 ifneq ($(strip $(COVERS_PATH)),)
 COVERS_DEF := -DCOVERS_PATH=\"$(COVERS_PATH)\"
@@ -276,11 +257,8 @@ endif
 CFLAGS   += $(COVERS_DEF)
 CXXFLAGS += $(COVERS_DEF)
 
-# Download automatico de thumbnails Libretro. COVER=n (padrao) nunca usa
-# rede. COVER=y/cover=y, usado com `make iso ROMS=...`, baixa boxart, title,
-# snap e logo para a arvore temporaria da ISO sem modificar as ROMs originais.
-# `make covers ROMS=...` e' o modo explicito para gravar as mesmas pastas no
-# dispositivo/pasta de ROMs (USB, HDD, MMCE, SMB etc.).
+# COVER=y downloads Libretro art into the ISO staging tree; default is offline.
+# make covers ROMS=... writes artwork beside ROMs without modifying ROM files.
 COVER ?= n
 cover ?= $(COVER)
 COVER_SYSTEM ?= auto
@@ -957,26 +935,9 @@ fix-packer: $(PS2_PACKER_LOCAL)
 	@echo "[fix-packer] use com:  make iso PS2_PACKER='$(PS2_PACKER_LOCAL)'"
 	@echo "[fix-packer] (ou nao faca nada -- make iso ja detecta e usa esse)"
 
-# Packed ELF.  ps2-packer's stub decompresses the loadable segments
-# back to their original load address at boot, so the resulting
-# self-extracting ELF behaves exactly like the original to the BIOS
-# / OPL / wLaunchELF / emulators.  Used as a model: the wLaunchELF_ISR
-# Makefile (israpps/wLaunchELF_ISR) ships UNC-BOOT.ELF as the
-# uncompressed build artifact and BOOT.ELF as the packed one.
-#
-# Path hygiene: `tr -d '\r\t'` + `sed` strip CR/tab/leading-trailing
-# whitespace that proot, msys git, or a Windows checkout might have
-# injected into the path string.  `--` forces ps2-packer's getopt to
-# stop treating later args as options even if the path was mangled
-# before we could strip it.
-#
-# Broken-binary detection: a healthy ps2-packer with no args prints
-# "X files specified, I need exactly 2." (or similar).  A broken one
-# prints "Unknown option <garbage>" -- seen on at least one user's
-# AArch64 ps2dev install where the shipped binary has corrupted
-# argv handling.  When we detect this, we rebuild ps2-packer locally
-# from source (see $(PS2_PACKER_LOCAL) above) and use the rebuild
-# silently.  No user action required.
+# Packed ELF preserves load addresses; see israpps/wLaunchELF_ISR.
+# Sanitize CR/tab/outer whitespace in paths; -- ends option parsing.
+# Rebuild a broken ps2-packer locally if its argument check fails.
 $(TARGET_PACKED): ensure-local-ps2-packer $(TARGET)
 	@set -e; \
 	mkdir -p "$(dir $@)" "$(OBJ_DIR)/.logs"; \

@@ -1,9 +1,7 @@
 /*
  * Copyright (c) 1997-2004-2022 Icer Addis
  * Re-Worked By ReyFxck, Claude Aí, ChatGPT
- *
- * Description:
- *   Declares the op65816 interface for SNES CPU emulation.
+ * Declares the op65816 interface for SNES CPU emulation.
  */
 
 	// NOP_

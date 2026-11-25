@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 1997-2004-2022 Icer Addis
 # Re-Worked By ReyFxck, Claude Aí, ChatGPT
-#
-# Description:
-#   Validates the DSP-4 cartridge address map.
+# Validates the DSP-4 cartridge address map.
 
 import pathlib
 import re
