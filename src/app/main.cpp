@@ -169,6 +169,116 @@ extern "C" int MainBuildHostIOPath(const char *pGuestPath, char *pOut, int nOut)
 	return 1;
 }
 
+
+/* SAF directory handles are not reliable on every Android HostFS bridge:
+   a successful encoded dopen can actually enumerate the ELF root. Accept
+   that fallback only when qualified child names prove the requested parent.
+   Never change HostFS permissions or accept a path outside the ELF tree. */
+static int HostHexDigit(unsigned char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return -1;
+}
+
+static int HostSafeRelativeDirectory(const char *p)
+{
+    if (!p || !*p) return 0;
+    while (*p)
+    {
+        const char *end = strchr(p, '/');
+        size_t n = end ? (size_t)(end - p) : strlen(p);
+        if (!n || (n == 1 && p[0] == '.') ||
+            (n == 2 && p[0] == '.' && p[1] == '.')) return 0;
+        for (size_t i = 0; i < n; ++i)
+            if (p[i] == ':' || p[i] == '\\' || p[i] == '%') return 0;
+        if (!end) return 1;
+        p = end + 1;
+    }
+    return 0;
+}
+
+static int HostDocumentID(const char *uri, char *out, size_t size)
+{
+    const char *p = strstr(uri, "/document/");
+    if (!p || !size) return 0;
+    p += 10;
+    size_t n = 0;
+    while (*p)
+    {
+        unsigned char c = (unsigned char)*p++;
+        if (c == '%')
+        {
+            if (!p[0] || !p[1]) return 0;
+            int a = HostHexDigit(p[0]), b = HostHexDigit(p[1]);
+            if (a < 0 || b < 0) return 0;
+            c = (unsigned char)((a << 4) | b);
+            p += 2;
+        }
+        if (!c || n + 1 >= size) return 0;
+        out[n++] = (char)c;
+    }
+    out[n] = 0;
+    return n != 0;
+}
+
+static int HostQualifiedChild(const char *parent, const char *entry)
+{
+    size_t n = strlen(parent);
+    if (strncmp(parent, entry, n) || entry[n] != '/') return 0;
+    const char *leaf = entry + n + 1;
+    return *leaf && strcmp(leaf, ".") && strcmp(leaf, "..") &&
+           !strchr(leaf, '/') && !strchr(leaf, '\\') && !strchr(leaf, ':');
+}
+
+extern "C" int MainHostOpenDirectory(const char *path)
+{
+    if (!path) return -EINVAL;
+    int fd = fileXioDopen(path);
+    if (fd >= 0 || strncmp(path, "host:", 5)) return fd;
+    // Browser directory paths end in '/'; a SAF document ID does not.
+    char guest[1024], uri[1024], parent[1024];
+    size_t len = strlen(path);
+    if (len >= sizeof(guest)) return fd;
+    memcpy(guest, path, len + 1);
+    while (len > 5 && guest[len - 1] == '/') guest[--len] = 0;
+    if (!HostSafeRelativeDirectory(guest + 5)) return fd;
+    if (!MainBuildHostIOPath(guest, uri, sizeof(uri)) ||
+        !HostDocumentID(uri, parent, sizeof(parent))) return fd;
+
+    int probe = fileXioDopen(uri);
+    if (probe < 0) return probe;
+    iox_dirent_t entry;
+    int seen = 0, result = 0;
+    int valid = 1;
+    /* Require a complete, bounded and nonempty verified listing. A bare
+       name or an empty listing cannot distinguish a broken SAF backend. */
+    for (int i = 0; i < 1024; ++i)
+    {
+        result = fileXioDread(probe, &entry);
+        if (result <= 0) break;
+        entry.name[sizeof(entry.name) - 1] = 0;
+        if (!strcmp(entry.name, ".") || !strcmp(entry.name, "..")) continue;
+        if (!HostQualifiedChild(parent, entry.name))
+        {
+            valid = 0;
+            break;
+        }
+        ++seen;
+    }
+    fileXioDclose(probe);
+    if (!valid || !seen || result != 0)
+    {
+        DLog("[hostfs] rejected unverified SAF directory path=%s entries=%d", path, seen);
+        return fd;
+    }
+
+    int opened = fileXioDopen(uri);
+    DLog("[hostfs] verified SAF directory path=%s entries=%d fd=%d", path, seen, opened);
+    return opened;
+}
+
 void MainSetBootDir(const char *pPath)
 {
 	size_t len;

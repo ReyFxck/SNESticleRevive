@@ -41,6 +41,7 @@ extern "C" {
 #include "embedded_irx.h"   /* lazy storage stacks (USB/CDFS/HDD/MMCE) */
 
 extern "C" void DLog(const char *fmt, ...);
+extern "C" int MainHostOpenDirectory(const char *path);
 
 #if defined(SNDBG_LOG) && SNDBG_LOG
 #define HOSTFS_DLOG(...) DLog(__VA_ARGS__)
@@ -183,7 +184,7 @@ static Bool BrowserResolveHostDirectory(const Char *pParent, const Char *pName,
 	             pName) >= (int)sizeof(path))
 		return FALSE;
 
-	dfd = fileXioDopen(path);
+	dfd = MainHostOpenDirectory(path);
 	if (dfd >= 0)
 	{
 		fileXioDclose(dfd);
@@ -317,7 +318,7 @@ static int BrowserOpenDirectory(const Char *pPath)
 	if (bSmb && SmbEnsureMounted() < 0)
 		return -1;
 
-	dfd = fileXioDopen(pPath);
+	dfd = bHost ? MainHostOpenDirectory(pPath) : fileXioDopen(pPath);
 	if (bHost)
 		HOSTFS_DLOG("[hostfs] dopen path=%s result=%d", pPath, dfd);
 	if (bSmb && dfd < 0)

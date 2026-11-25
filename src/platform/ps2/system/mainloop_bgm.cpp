@@ -246,6 +246,7 @@ static Bool _HasExt(const char *name, const char *ext)
 char *MainGetBootDir();
 char *MainGetBootPath();
 extern "C" int MainBuildHostIOPath(const char *guest, char *out, int outBytes);
+extern "C" int MainHostOpenDirectory(const char *path);
 
 #if defined(SNDBG_LOG) && SNDBG_LOG
 #define BGM_HOST_LOG(...) DLog(__VA_ARGS__)
@@ -263,14 +264,13 @@ static Bool _IsHostPath(const char *p)
    paths in the playlist; only translate at the I/O boundary. */
 static int _HostOpen(const char *path, Bool directory)
 {
-    int fd = directory ? fileXioDopen(path) : fileXioOpen(path, FIO_O_RDONLY, 0);
+    int fd = directory ? MainHostOpenDirectory(path) : fileXioOpen(path, FIO_O_RDONLY, 0);
     if (fd >= 0) return fd;
-    /* SAF file opens work on some NetherSX2 builds, but dopen on the
-       encoded URI may return the ELF root for *any* path (even files).
-       Never use the URI fallback for directory handles. */
+    /* Directory fallback is already validated by MainHostOpenDirectory.
+       File fallback uses the same URI builder as ROM loading. */
     if (directory)
     {
-        BGM_HOST_LOG("[bgm-host] dopen path=%s result=%d (no URI retry)", path, fd);
+        BGM_HOST_LOG("[bgm-host] dopen path=%s result=%d (verified fallback exhausted)", path, fd);
         return fd;
     }
     char uri[1024];
@@ -680,7 +680,14 @@ static void _ScanHostManifest()
         if (len && line[len-1] == '\r') line[len-1] = 0;
         char path[256];
         if (_HostManifestPath(line) && _HostJoin(path, sizeof(path), "host:", line))
-            _IndexAdd(path, _HasExt(line, ".mod") ? 1 : 2);
+        {
+            int track = _HostOpen(path, FALSE);
+            if (track >= 0)
+            {
+                fileXioClose(track);
+                _IndexAdd(path, _HasExt(line, ".mod") ? 1 : 2);
+            }
+        }
         line = next;
     }
     BGM_HOST_LOG("[bgm-host] manifest tracks=%d", s_indexCount-before);
@@ -717,7 +724,7 @@ static void _ScanHostBootBgm(void)
     const Bool saf = boot && !strncmp(boot, "host:content://", 15);
     if (saf)
     {
-        BGM_HOST_LOG("[bgm-host] SAF safe scan (flat only, no URI dopen)");
+        BGM_HOST_LOG("[bgm-host] SAF safe scan (flat, verified URI dopen)");
         _ScanHostManifest();
         if (s_indexCount > before) return;
     }
@@ -773,6 +780,8 @@ static void _ScanHostBootBgm(void)
         fileXioDclose(fd);
     }
     BGM_HOST_LOG("[bgm-host] boot scan tracks=%d", s_indexCount - before);
+    if (saf && s_indexCount == before)
+        BGM_HOST_LOG("[bgm-host] no readable tracks; try BGM.txt or BGM-*.xm/mod beside ELF");
 }
 
 static void _WakeAfterNewSource(int before)

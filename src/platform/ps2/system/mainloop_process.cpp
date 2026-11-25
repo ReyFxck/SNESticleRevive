@@ -513,9 +513,51 @@ Bool MainLoopProcess()
         window.uSession = g_DbgSessionId;
         g_MainLoopDiagFront.Ready = FALSE;
     }
+    /* Start-to-start cadence includes post-accounting diagnostic output,
+       capture pumping and the return to the next MainLoopProcess call.
+       Keep it separate from the legacy ps2-frame schema. */
+    struct CadenceWindowT
+    {
+        Uint32 Session, HostHz, PrevStart, PrevLoop, HavePrev;
+        Uint32 Count, Max, Over105, Over150;
+        Uint64 Total, Tail;
+    };
+    static CadenceWindowT cadence;
+    if (!bSnesDisplay || cadence.Session != g_DbgSessionId ||
+        cadence.HostHz != g_DbgHostRefreshHz)
+    {
+        memset(&cadence, 0, sizeof(cadence));
+        cadence.Session = g_DbgSessionId;
+        cadence.HostHz = g_DbgHostRefreshHz;
+    }
     if (bSnesDisplay)
     {
         Uint32 uLoop = ProfCtrGetCycle() - uLoopStart;
+        if (cadence.HavePrev && cadence.HostHz)
+        {
+            const Uint32 interval = uLoopStart - cadence.PrevStart;
+            const Uint32 budget = PROFCTR_COUNT_HZ / cadence.HostHz;
+            cadence.Total += interval;
+            if (interval > cadence.PrevLoop)
+                cadence.Tail += interval - cadence.PrevLoop;
+            if (interval > cadence.Max) cadence.Max = interval;
+            if (interval > budget + budget / 20) ++cadence.Over105;
+            if (interval > budget + budget / 2) ++cadence.Over150;
+            if (++cadence.Count == SNDBG_FRAME_PERIOD)
+            {
+                DLog("[ps2-cadence] session=%u host-hz=%u intervals=%u avg/max/tail=%u/%u/%u over105/150=%u/%u",
+                    (unsigned)cadence.Session, (unsigned)cadence.HostHz,
+                    (unsigned)cadence.Count,
+                    (unsigned)(cadence.Total / cadence.Count), (unsigned)cadence.Max,
+                    (unsigned)(cadence.Tail / cadence.Count),
+                    (unsigned)cadence.Over105, (unsigned)cadence.Over150);
+                cadence.Count = cadence.Max = cadence.Over105 = cadence.Over150 = 0;
+                cadence.Total = cadence.Tail = 0;
+            }
+        }
+        cadence.PrevStart = uLoopStart;
+        cadence.PrevLoop = uLoop;
+        cadence.HavePrev = 1;
         Uint32 uWork = uLoop - _MainLoop_DiagFlipCount;
         if (!window.nFrames || uWork < window.uMinWork) window.uMinWork = uWork;
         if (uWork > window.uMaxWork) window.uMaxWork = uWork;

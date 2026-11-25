@@ -264,6 +264,13 @@ static void _FPSColor()
     int c = MainLoopFPSNormalizeColor(MainLoopFPSGetColor());
     FontColor4f(colors[c][0], colors[c][1], colors[c][2], 1.0f);
 }
+/* Logical spacing for the compact, pixel-aligned profiler font. */
+static Int32 _FPSCompactLineHeight()
+{
+    const int scale = (int)(GPPrimGetScaleY() + 0.999f);
+    const int line = FontGetHeight() + 1;
+    return scale > 1 ? (line * ((scale + 1) / 2) + scale - 1) / scale : line;
+}
 #if SNDBG_LOG
 static void _FPSHitText(char out[5], Uint32 pct)
 {
@@ -274,13 +281,19 @@ static void _DrawDiagnosticFPS()
 {
     const SnesDbgHUDT &p = g_SnesDbgHUD;
     FontSelect(2);
-    const int h = FontGetHeight() + 1;
-    int y = 24;
-    PolyTexture(NULL); PolyBlend(TRUE);
-    PolyColor4f(0,0,0,0.78f);
-    PolyRect(3, y - 1, 250, h * 13 + 2);
+    // Match the transparent FPS header. Compact glyphs only in high modes;
+    // native 240p remains readable at 1:1.
+    PolyBlend(TRUE);
+    FontSetCompact(TRUE);
+    const int h = _FPSCompactLineHeight();
+    int y = 12 + h;
     _FPSColor();
-    if (!p.Ready) { FontPrintf(6,y,"Measuring SNES..."); return; }
+    if (!p.Ready)
+    {
+        FontPrintf(6,y,"Measuring SNES...");
+        FontSetCompact(FALSE);
+        return;
+    }
     FontPrintf(6,y,"CAP %u.%u FPS (core)",p.Capacity10/10,p.Capacity10%10); y+=h;
     FontPrintf(6,y,"EE kcy AVG %u MAX %u",p.Avg/1000,p.Max/1000); y+=h;
     FontPrintf(6,y,"BUD %u SLOW %u/%u",p.Budget/1000,p.Slow,p.Frames); y+=h;
@@ -302,6 +315,7 @@ static void _DrawDiagnosticFPS()
         FontPrintf(6,y,"PREP %u.%u SUB %u.%u FLIP %u.%u",HUD10(f.Prep10),HUD10(f.Submit10),HUD10(f.Flip10));
 #undef HUD10
     }
+    FontSetCompact(FALSE);
 }
 #endif
 
@@ -312,19 +326,18 @@ static void _MainLoopDrawTargetProfile()
     if (!SnesTargetProfileIsEnabled() || _bMenu || _pSystem != _pSnes || _MainLoop_BlackScreen) return;
     const MainLoopTargetProfileSnapshotT *p = &g_MainLoopTargetProfile;
     FontSelect(2);
-    Int32 h = FontGetHeight() + 1;
+    PolyBlend(TRUE);
+    FontSetCompact(TRUE);
+    const Int32 h = _FPSCompactLineHeight();
     /* Gameplay crops the 240-line UI canvas. Keep the complete panel
        above line 216 so the 224-line SNES aperture includes its footer. */
     const Int32 rows = AUDIO_RFAUDS2 ? 9 : 8;
     Int32 y = 216 - h * rows;
-    PolyTexture(NULL);
-    PolyBlend(TRUE);
-    PolyColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-    PolyRect(3.0f, (Float32)y - 1.0f, 250.0f, (Float32)(h * rows + 1));
     _FPSColor();
     if (!p->Ready)
     {
         FontPrintf(6, y, "Measuring target frames...");
+        FontSetCompact(FALSE);
         return;
     }
     // All times are inclusive means in milliseconds per PS2 iteration.
@@ -362,6 +375,7 @@ static void _MainLoopDrawTargetProfile()
         FontPrintf(6, y, "RFAuds2 output unavailable");
 #endif
 #undef TARGET_FMT
+    FontSetCompact(FALSE);
 }
 #endif
 
@@ -605,7 +619,10 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
     if (MainLoopFPSIsEnabled() && !_bMenu && _pSystem && !_MainLoop_BlackScreen)
     {
         FontSelect(2); _FPSColor();
-        if (g_MainLoopFPS.Ready && MainLoopFPSGetMode() == MAINLOOP_FPS_SIMPLE)
+        const MainLoopFPSModeE mode = MainLoopFPSGetMode();
+        // The full profiler header uses exactly the same font scale as its body.
+        FontSetCompact(mode == MAINLOOP_FPS_PROFILER);
+        if (g_MainLoopFPS.Ready && mode == MAINLOOP_FPS_SIMPLE)
             FontPrintf(6, 12, "FPS %u.%u",
                 (unsigned)(g_MainLoopFPS.DrawRate10 / 10), (unsigned)(g_MainLoopFPS.DrawRate10 % 10));
         else if (g_MainLoopFPS.Ready)
@@ -614,17 +631,18 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
                 (unsigned)(g_MainLoopFPS.DrawRate10 / 10), (unsigned)(g_MainLoopFPS.DrawRate10 % 10),
                 (unsigned)(g_MainLoopFPS.PresentRate10 / 10), (unsigned)(g_MainLoopFPS.PresentRate10 % 10));
         else FontPrintf(6, 12, "FPS...");
-        if (MainLoopFPSGetMode() == MAINLOOP_FPS_PROFILER)
+        if (mode == MAINLOOP_FPS_PROFILER)
         {
 #if SNDBG_LOG
             if (_pSystem == _pSnes) _DrawDiagnosticFPS();
-            else FontPrintf(6,24,"SNES profiler only");
+            else FontPrintf(6,12 + _FPSCompactLineHeight(),"SNES profiler only");
 #elif SNES_TARGET_PROFILE
-            if (_pSystem != _pSnes) FontPrintf(6,24,"SNES profiler only");
+            if (_pSystem != _pSnes) FontPrintf(6,12 + _FPSCompactLineHeight(),"SNES profiler only");
 #else
-            FontPrintf(6,24,"Profiler build required");
+            FontPrintf(6,12 + _FPSCompactLineHeight(),"Profiler build required");
 #endif
         }
+        FontSetCompact(FALSE);
     }
     #if SNES_TARGET_PROFILE
     _MainLoopDrawTargetProfile();

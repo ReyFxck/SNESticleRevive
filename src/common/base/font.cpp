@@ -34,10 +34,18 @@ extern "C" {
  * Layout still lives in the 256x240 logical space, so advances and
  * FontGetStrWidth convert the physical glyph size back to logical with
  * the SAME helper (_FontAdvLogical) -> centering/columns stay aligned. */
+static Bool s_FontCompact = FALSE;
+
+void FontSetCompact(Bool compact)
+{
+    s_FontCompact = compact;
+}
+
 static inline Int32 _FontDrawScale(void)
 {
     /* Round upward so integer glyph scaling remains crisp. */
     int n = (int)(GPPrimGetScaleY() + 0.999f);
+    if (s_FontCompact && n > 1) n = (n + 1) / 2;
     return (n < 1) ? 1 : n;
 }
 #define FONT_DRAW_SCALE (_FontDrawScale())
@@ -194,6 +202,11 @@ static Int32 _FontDrawChar(FontCharT *pFontChar, float fX, float fY, float z1, U
 
     px0 = fX * sx + GPPrimGetOffsetX();
     py0 = fY * sy + GPPrimGetOffsetY();
+    if (s_FontCompact && FONT_DRAW_SCALE == 1 && (sx != 1.0f || sy != 1.0f))
+    {
+        px0 = (float)((Int32)(px0 + 0.5f));
+        py0 = (float)((Int32)(py0 + 0.5f));
+    }
 
     /*
      * At native 240p, place the source coordinates on texel centres and

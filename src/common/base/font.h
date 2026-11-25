@@ -42,6 +42,8 @@ Uint32 FontGetVramSize();
 
 void FontSetFont(Int32 iFont, FontT *pFont);
 void FontSelect(Int32 iFont);
+/* Scoped compact integer scaling for diagnostics; restore after drawing. */
+void FontSetCompact(Bool compact);
 void FontPrintf(Float32 vx, Float32 vy, const Char *pFormat, ...);
 void FontPuts(Float32 vx, Float32 vy, const Char *pStr);
 void FontColor4f(Float32 r, Float32 g, Float32 b, Float32 a);
