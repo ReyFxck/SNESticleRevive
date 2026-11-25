@@ -48,12 +48,18 @@ extern "C" {
 #include "audio.h"
 };
 
-static Bool s_ShowFPS = FALSE;
+static MainLoopFPSModeE s_FPSMode = MAINLOOP_FPS_OFF;
 MainLoopFPSSnapshotT g_MainLoopFPS;
-Bool MainLoopFPSIsEnabled() { return s_ShowFPS; }
-void MainLoopFPSSetEnabled(Bool enabled)
+MainLoopDiagFrontT g_MainLoopDiagFront;
+static int s_FPSColor = 0;
+int MainLoopFPSGetColor() { return s_FPSColor; }
+void MainLoopFPSSetColor(int color) { s_FPSColor = MainLoopFPSNormalizeColor(color); }
+Bool MainLoopFPSIsEnabled() { return s_FPSMode != MAINLOOP_FPS_OFF; }
+MainLoopFPSModeE MainLoopFPSGetMode() { return s_FPSMode; }
+void MainLoopFPSSetMode(int mode)
 {
-    s_ShowFPS = enabled;
+    s_FPSMode = MainLoopFPSNormalizeMode(mode);
+    SnesTargetProfileSetEnabled(s_FPSMode == MAINLOOP_FPS_PROFILER);
     g_MainLoopFPS.Ready = FALSE;
 }
 
@@ -62,7 +68,7 @@ static void MainLoopFPSFinish(Bool gameplay, Uint32 start,
 {
     struct WindowT { Uint32 Start, Source, Draw, Present; };
     static WindowT window;
-    if (!s_ShowFPS || !gameplay)
+    if (!MainLoopFPSIsEnabled() || !gameplay)
     {
         memset(&window, 0, sizeof(window));
         g_MainLoopFPS.Ready = FALSE;
@@ -188,9 +194,9 @@ Bool MainLoopProcess()
     if (SnesTargetProfileIsEnabled())
         memset(&g_SnesTargetProfile, 0, sizeof(g_SnesTargetProfile));
 #endif
-    Uint32 fpsStart = s_ShowFPS ? ProfCtrGetCycle() : 0;
+    Uint32 fpsStart = MainLoopFPSIsEnabled() ? ProfCtrGetCycle() : 0;
     Emu::System *fpsSystem = _pSystem;
-    Uint32 fpsFrameBefore = (s_ShowFPS && fpsSystem) ? fpsSystem->GetFrame() : 0;
+    Uint32 fpsFrameBefore = (MainLoopFPSIsEnabled() && fpsSystem) ? fpsSystem->GetFrame() : 0;
     Uint32 fpsDrawnFrames = 0;
     Aud_Service();
     NetPlayRPCInputT NetInput;
@@ -476,7 +482,7 @@ Bool MainLoopProcess()
 	_MenuRuntimeUpdate();
 
 	MainLoopRender();
-    if (s_ShowFPS)
+    if (MainLoopFPSIsEnabled())
         MainLoopFPSFinish(!_bMenu && fpsSystem && _pSystem == fpsSystem &&
             !_MainLoop_BlackScreen, fpsStart,
             _pSystem == fpsSystem && fpsSystem ? fpsSystem->GetFrame() - fpsFrameBefore : 0,
@@ -505,6 +511,7 @@ Bool MainLoopProcess()
     {
         memset(&window, 0, sizeof(window));
         window.uSession = g_DbgSessionId;
+        g_MainLoopDiagFront.Ready = FALSE;
     }
     if (bSnesDisplay)
     {
@@ -518,6 +525,12 @@ Bool MainLoopProcess()
         window.uFlip += _MainLoop_DiagFlipCount;
         if (++window.nFrames == SNDBG_FRAME_PERIOD)
         {
+            g_MainLoopDiagFront.Work10 = SnesTargetProfileMillis10(window.uLoop-window.uFlip,window.nFrames);
+            g_MainLoopDiagFront.MaxWork10 = SnesTargetProfileMillis10(window.uMaxWork,1);
+            g_MainLoopDiagFront.Flip10 = SnesTargetProfileMillis10(window.uFlip,window.nFrames);
+            g_MainLoopDiagFront.Prep10 = SnesTargetProfileMillis10(window.uPrep,window.nFrames);
+            g_MainLoopDiagFront.Submit10 = SnesTargetProfileMillis10(window.uSubmit,window.nFrames);
+            g_MainLoopDiagFront.Ready = TRUE;
             DLog("[ps2-frame] session=%u input=%u host-hz=%u display-frames=%u count avg loop/prep/submit/flip=%u/%u/%u/%u work min/avg/max=%u/%u/%u",
                 (unsigned)window.uSession, (unsigned)_uInputFrame,
                 (unsigned)g_DbgHostRefreshHz, (unsigned)window.nFrames,

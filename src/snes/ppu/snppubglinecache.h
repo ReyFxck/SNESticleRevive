@@ -258,9 +258,55 @@ _INLINE void SnesPPUBGLineCacheCopyOverlap(
 	Uint32 nOverlap = 33u - nExposed;
 	Uint32 uSourceCell = nStep > 0 ? nExposed : 0u;
 	Uint32 uDestCell = nStep > 0 ? 0u : nExposed;
-	for (Uint32 i = 0; i < nOverlap; ++i)
-		((Uint64 *)pDest)[uDestCell + i] =
-			((const Uint64 *)pSource)[uSourceCell + i];
+    Uint8 *dst = pDest + uDestCell * 8u;
+    const Uint8 *src = pSource + uSourceCell * 8u;
+    Uint32 cells = nOverlap;
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE_FAST_COPY
+    // Identical alignment: peel one 8-byte cell, then copy two per LQ/SQ.
+    // Different alignment: use a four-cell LD/SD batch. Never touch the
+    // exposed cells, since they are decoded by the caller afterwards.
+    if ((((uintptr_t)dst | (uintptr_t)src) & 7u) == 0)
+    {
+        if ((((uintptr_t)dst ^ (uintptr_t)src) & 15u) == 0)
+        {
+            if (((uintptr_t)dst & 15u) && cells)
+            {
+                __asm__ __volatile__("ld $8, 0(%1)\n\tsd $8, 0(%0)"
+                    : : "r"(dst), "r"(src) : "$8", "memory");
+                dst += 8; src += 8; --cells;
+            }
+            while (cells >= 8)
+            {
+                __asm__ __volatile__(
+                    "lq $8, 0(%1)\n\tlq $9, 16(%1)\n\tlq $10, 32(%1)\n\tlq $11, 48(%1)\n\t"
+                    "sq $8, 0(%0)\n\tsq $9, 16(%0)\n\tsq $10, 32(%0)\n\tsq $11, 48(%0)"
+                    : : "r"(dst), "r"(src) : "$8", "$9", "$10", "$11", "memory");
+                dst += 64; src += 64; cells -= 8;
+            }
+            while (cells >= 2)
+            {
+                __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)"
+                    : : "r"(dst), "r"(src) : "$8", "memory");
+                dst += 16; src += 16; cells -= 2;
+            }
+        }
+        while (cells >= 4)
+        {
+            __asm__ __volatile__(
+                "ld $8, 0(%1)\n\tld $9, 8(%1)\n\tld $10, 16(%1)\n\tld $11, 24(%1)\n\t"
+                "sd $8, 0(%0)\n\tsd $9, 8(%0)\n\tsd $10, 16(%0)\n\tsd $11, 24(%0)"
+                : : "r"(dst), "r"(src) : "$8", "$9", "$10", "$11", "memory");
+            dst += 32; src += 32; cells -= 4;
+        }
+        while (cells)
+        {
+            __asm__ __volatile__("ld $8, 0(%1)\n\tsd $8, 0(%0)"
+                : : "r"(dst), "r"(src) : "$8", "memory");
+            dst += 8; src += 8; --cells;
+        }
+    }
+#endif
+    if (cells) memcpy(dst, src, cells * 8u);
 	memcpy(pOpaque + uDestCell, pSourceOpaque + uSourceCell, nOverlap);
 	memcpy(pPriority + uDestCell, pSourcePriority + uSourceCell, nOverlap);
 }

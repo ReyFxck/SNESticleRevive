@@ -55,6 +55,24 @@
 #define SNDBG_LOG 1
 #endif
 
+#if SNDBG_LOG
+struct SnesDbgHUDT {
+    Bool Ready;
+    Uint32 Capacity10, Avg, Max, Budget, Slow, Frames;
+    Uint32 CPU, PPU, APU, Mix, MDMA, HDMA, SA1, GSU;
+    Uint32 Obj, Blend, M7, BGMap, BGChr, BGMain, BGSub, ColorMath;
+    Uint32 Validate, Restore, Store;
+    Uint32 LineHitPct, ChrHitPct, ObjHitPct; // 101 = no accesses
+    Uint32 Rendered, Skipped, QueueFull;
+};
+extern SnesDbgHUDT g_SnesDbgHUD;
+_INLINE Uint32 SnesDbgHUDHitPct(Uint32 hit, Uint32 miss)
+{
+    Uint64 total = (Uint64)hit + miss;
+    return total ? (Uint32)((Uint64)hit * 100u / total) : 101u;
+}
+#endif
+
 /* Contrato estavel consumido por scripts e comparacoes entre jogos. */
 #define SNDBG_SCHEMA             "snesdiag-v1"
 #define SNDBG_FRAME_PERIOD       30u

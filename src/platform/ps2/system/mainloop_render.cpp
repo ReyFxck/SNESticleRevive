@@ -256,6 +256,55 @@ void MainLoopSafeFrameskipAfterFlip()
 #endif
 }
 
+static void _FPSColor()
+{
+    static const Float32 colors[][3] = {
+        {1,1,1}, {0.25f,1,0.25f}, {0.25f,1,1}, {1,1,0.25f}, {1,0.35f,0.35f}, {1,0.35f,1}
+    };
+    int c = MainLoopFPSNormalizeColor(MainLoopFPSGetColor());
+    FontColor4f(colors[c][0], colors[c][1], colors[c][2], 1.0f);
+}
+#if SNDBG_LOG
+static void _FPSHitText(char out[5], Uint32 pct)
+{
+    if (pct > 100u) { strcpy(out, "--"); return; }
+    snprintf(out, 5, "%u", (unsigned)pct);
+}
+static void _DrawDiagnosticFPS()
+{
+    const SnesDbgHUDT &p = g_SnesDbgHUD;
+    FontSelect(2);
+    const int h = FontGetHeight() + 1;
+    int y = 24;
+    PolyTexture(NULL); PolyBlend(TRUE);
+    PolyColor4f(0,0,0,0.78f);
+    PolyRect(3, y - 1, 250, h * 13 + 2);
+    _FPSColor();
+    if (!p.Ready) { FontPrintf(6,y,"Measuring SNES..."); return; }
+    FontPrintf(6,y,"CAP %u.%u FPS (core)",p.Capacity10/10,p.Capacity10%10); y+=h;
+    FontPrintf(6,y,"EE kcy AVG %u MAX %u",p.Avg/1000,p.Max/1000); y+=h;
+    FontPrintf(6,y,"BUD %u SLOW %u/%u",p.Budget/1000,p.Slow,p.Frames); y+=h;
+    FontPrintf(6,y,"CPU %u%% PPU %u%% SPC %u%%",p.CPU,p.PPU,p.APU); y+=h;
+    FontPrintf(6,y,"MIX %u%% DMA %u%% HDMA %u%%",p.Mix,p.MDMA,p.HDMA); y+=h;
+    FontPrintf(6,y,"SA1 %u%% GSU %u%% M7 %u%%",p.SA1,p.GSU,p.M7); y+=h;
+    FontPrintf(6,y,"CHR %u%% MAP %u%% OBJ %u%%",p.BGChr,p.BGMap,p.Obj); y+=h;
+    FontPrintf(6,y,"BG M/S %u/%u%% BL %u%%",p.BGMain,p.BGSub,p.Blend); y+=h;
+    char bg[5], chr[5], obj[5];
+    _FPSHitText(bg,p.LineHitPct); _FPSHitText(chr,p.ChrHitPct); _FPSHitText(obj,p.ObjHitPct);
+    FontPrintf(6,y,"HIT%% BG %s CHR %s OBJ %s",bg,chr,obj); y+=h;
+    FontPrintf(6,y,"CACHE V/R/S %u/%u/%u k",p.Validate/1000,p.Restore/1000,p.Store/1000); y+=h;
+    FontPrintf(6,y,"DRAW %u SKIP %u QFULL %u",p.Rendered,p.Skipped,p.QueueFull); y+=h;
+    const MainLoopDiagFrontT &f = g_MainLoopDiagFront;
+    if (f.Ready)
+    {
+#define HUD10(v) (unsigned)((v)/10u), (unsigned)((v)%10u)
+        FontPrintf(6,y,"WORK %u.%u MAX %u.%u ms",HUD10(f.Work10),HUD10(f.MaxWork10)); y+=h;
+        FontPrintf(6,y,"PREP %u.%u SUB %u.%u FLIP %u.%u",HUD10(f.Prep10),HUD10(f.Submit10),HUD10(f.Flip10));
+#undef HUD10
+    }
+}
+#endif
+
 // The HUD is compiled only into the explicit target-profile ELF.
 #if SNES_TARGET_PROFILE
 static void _MainLoopDrawTargetProfile()
@@ -272,7 +321,7 @@ static void _MainLoopDrawTargetProfile()
     PolyBlend(TRUE);
     PolyColor4f(0.0f, 0.0f, 0.0f, 0.75f);
     PolyRect(3.0f, (Float32)y - 1.0f, 250.0f, (Float32)(h * rows + 1));
-    FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    _FPSColor();
     if (!p->Ready)
     {
         FontPrintf(6, y, "Measuring target frames...");
@@ -555,13 +604,27 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 
     if (MainLoopFPSIsEnabled() && !_bMenu && _pSystem && !_MainLoop_BlackScreen)
     {
-        FontSelect(2); FontColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        if (g_MainLoopFPS.Ready)
+        FontSelect(2); _FPSColor();
+        if (g_MainLoopFPS.Ready && MainLoopFPSGetMode() == MAINLOOP_FPS_SIMPLE)
+            FontPrintf(6, 12, "FPS %u.%u",
+                (unsigned)(g_MainLoopFPS.DrawRate10 / 10), (unsigned)(g_MainLoopFPS.DrawRate10 % 10));
+        else if (g_MainLoopFPS.Ready)
             FontPrintf(6, 12, "EMU %u.%u DRAW %u.%u PS2 %u.%u",
                 (unsigned)(g_MainLoopFPS.SourceRate10 / 10), (unsigned)(g_MainLoopFPS.SourceRate10 % 10),
                 (unsigned)(g_MainLoopFPS.DrawRate10 / 10), (unsigned)(g_MainLoopFPS.DrawRate10 % 10),
                 (unsigned)(g_MainLoopFPS.PresentRate10 / 10), (unsigned)(g_MainLoopFPS.PresentRate10 % 10));
         else FontPrintf(6, 12, "FPS...");
+        if (MainLoopFPSGetMode() == MAINLOOP_FPS_PROFILER)
+        {
+#if SNDBG_LOG
+            if (_pSystem == _pSnes) _DrawDiagnosticFPS();
+            else FontPrintf(6,24,"SNES profiler only");
+#elif SNES_TARGET_PROFILE
+            if (_pSystem != _pSnes) FontPrintf(6,24,"SNES profiler only");
+#else
+            FontPrintf(6,24,"Profiler build required");
+#endif
+        }
     }
     #if SNES_TARGET_PROFILE
     _MainLoopDrawTargetProfile();

@@ -42,6 +42,7 @@ extern "C" void SnesRomLabTraceUnhandledAccess(SNCpuT *pCpu,
 
 // --- diagnostico de TIMING (ver sndbglog.h) ---
 #if SNDBG_LOG
+SnesDbgHUDT g_SnesDbgHUD;
 static Uint32 g_TmgFrameStart = 0;   // COP0 cycle no inicio do frame
 static Uint32 g_TmgWinFrames  = 0;   // frames acumulados na janela
 static Uint64 g_TmgWinSumCyc  = 0;   // 64-bit: nao transborda em jogos travados
@@ -399,6 +400,7 @@ static void SnesDbgResetWindow(void)
 
 static void SnesDbgResetSession(void)
 {
+    memset(&g_SnesDbgHUD, 0, sizeof(g_SnesDbgHUD));
 	g_DbgSessionId++;
 	if (!g_DbgSessionId)
 		g_DbgSessionId = 1;
@@ -2595,6 +2597,40 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				uPPUOther = 0;
 			Uint32 pPPUOther = (Uint32)((uPPUOther * 100u) / sum);
 			const SNGSUDiagT &gd = m_GSU.GetDiag();
+            // Snapshot of the existing diagnostic window; no new probes.
+            g_SnesDbgHUD.Capacity10 = (Uint32)(fps10);
+            g_SnesDbgHUD.Avg = (Uint32)(avg);
+            g_SnesDbgHUD.Max = (Uint32)(g_TmgWinMaxCyc);
+            g_SnesDbgHUD.Budget = (Uint32)(uBudget);
+            g_SnesDbgHUD.Slow = (Uint32)(g_TmgWinSlowFrames);
+            g_SnesDbgHUD.Frames = (Uint32)(g_TmgWinFrames);
+            g_SnesDbgHUD.CPU = (Uint32)(pCPU);
+            g_SnesDbgHUD.PPU = (Uint32)(pPPU);
+            g_SnesDbgHUD.APU = (Uint32)(pAPU);
+            g_SnesDbgHUD.Mix = (Uint32)(pMix);
+            g_SnesDbgHUD.MDMA = (Uint32)(pMDMA);
+            g_SnesDbgHUD.HDMA = (Uint32)(pHDMA);
+            g_SnesDbgHUD.SA1 = (Uint32)(pSA1);
+            g_SnesDbgHUD.GSU = (Uint32)(pGSU);
+            g_SnesDbgHUD.Obj = (Uint32)(pObj);
+            g_SnesDbgHUD.Blend = (Uint32)(pBlend);
+            g_SnesDbgHUD.M7 = (Uint32)(pM7);
+            g_SnesDbgHUD.BGMap = (Uint32)(pBGMap);
+            g_SnesDbgHUD.BGChr = (Uint32)(pBGChr);
+            g_SnesDbgHUD.BGMain = (Uint32)(pBGMain);
+            g_SnesDbgHUD.BGSub = (Uint32)(pBGSub);
+            g_SnesDbgHUD.ColorMath = (Uint32)(pColorMath);
+            g_SnesDbgHUD.Validate = (Uint32)(g_TmgWinSumBGLineValidate / g_TmgWinFrames);
+            g_SnesDbgHUD.Restore = (Uint32)(g_TmgWinSumBGLineRestore / g_TmgWinFrames);
+            g_SnesDbgHUD.Store = (Uint32)(g_TmgWinSumBGLineStore / g_TmgWinFrames);
+            g_SnesDbgHUD.LineHitPct = SnesDbgHUDHitPct(g_DbgBGLineCacheHits, g_DbgBGLineCacheMisses);
+            g_SnesDbgHUD.ChrHitPct = SnesDbgHUDHitPct(g_DbgBGChrCacheHits, g_DbgBGChrCacheMisses);
+            g_SnesDbgHUD.ObjHitPct = SnesDbgHUDHitPct(g_DbgObjCacheHits, g_DbgObjCacheMisses);
+            g_SnesDbgHUD.Rendered = (Uint32)(g_DbgVideoRenderedFrames);
+            g_SnesDbgHUD.Skipped = (Uint32)(g_DbgVideoSkippedFrames);
+            g_SnesDbgHUD.QueueFull = (Uint32)(g_DbgPPUQueueFull);
+            g_SnesDbgHUD.Ready = TRUE;
+
 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
@@ -2651,14 +2687,15 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)(g_TmgWinSumObjDraw / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumHDMAData / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumHDMATable / g_TmgWinFrames));
-			DLog("[snes-bg-line-cost] avg validate/restore/store=%u/%u/%u cache-mode1/mode5=%u/%u fast-copy/stamp=%u/%u",
+			DLog("[snes-bg-line-cost] avg validate/restore/store=%u/%u/%u cache-mode1/mode5=%u/%u fast-copy/stamp=%u/%u fast-scroll=%u",
 				(unsigned)(g_TmgWinSumBGLineValidate / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumBGLineRestore / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumBGLineStore / g_TmgWinFrames),
 				(unsigned)SNPPU_BG_CACHE_MODE1,
 				(unsigned)SNPPU_BG_CACHE_MODE5,
 				(unsigned)SNPPU_BG_CACHE_FAST_COPY,
-				(unsigned)SNPPU_BG_CACHE_FAST_STAMP);
+				(unsigned)SNPPU_BG_CACHE_FAST_STAMP,
+                (unsigned)SNPPU_BG_CACHE_FAST_COPY);
 			DLog("[snes-raster] ppu queued/applied/full=%u/%u/%u hdma lines/active/xfer=%u/%u/%u bg layers/reloads/chrrows=%u/%u/%u",
 				(unsigned)g_DbgPPUQueuedWrites,
 				(unsigned)g_DbgPPUAppliedWrites,

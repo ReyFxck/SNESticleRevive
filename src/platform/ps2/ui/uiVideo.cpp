@@ -40,12 +40,12 @@ extern "C" {
 extern Char _SramPath[256];
 extern TextureT _OutTex;
 
-#define VIDEO_ITEM_COUNT 23
+#define VIDEO_ITEM_COUNT 24
 
 /* Persistence                                                         */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 23
+#define VIDEOCFG_VERSION 25
 
 typedef struct
 {
@@ -99,8 +99,9 @@ typedef struct
 	Int32  scanlines;    /* 0=off, 1=CRT-style overlay                  */
 	Int32  language;     /* I18nLanguageE                                */
 	Int32  tvstandard;   /* GSK_TV_STANDARD_*                            */
-	Int32 showfps;
+	Int32 showfps; /* MainLoopFPSModeE; v23 used a boolean */
 	Int32 diagnostics;
+    Int32 fpscolor;
 } VideoCfgT;
 
 /* v21 is the exact prefix before TV-standard policy was added. */
@@ -288,8 +289,9 @@ void VideoSettingsSave(void)
 	cfg.scanlines = g_GskScanlines ? 1 : 0;
 	cfg.language = I18nGetLanguage();
 	cfg.tvstandard = g_GskTvStandard;
-	cfg.showfps = MainLoopFPSIsEnabled() ? 1 : 0;
+	cfg.showfps = MainLoopFPSGetMode();
 	cfg.diagnostics = SnesTargetProfileIsEnabled() ? 1 : 0;
+    cfg.fpscolor = MainLoopFPSGetColor();
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
@@ -322,6 +324,18 @@ void VideoSettingsLoad(void)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
 		}
+        else if (header.version == 23 || header.version == 24)
+        {
+            // v23/v24 share the exact prefix before fpscolor.
+            loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg) - sizeof(cfg.fpscolor));
+            if (loaded)
+            {
+                if (header.version == 23)
+                    cfg.showfps = cfg.showfps == 1 ? MAINLOOP_FPS_DETAILED : MAINLOOP_FPS_OFF;
+                if (cfg.diagnostics == 1) cfg.showfps = MAINLOOP_FPS_PROFILER;
+                cfg.version = VIDEOCFG_VERSION;
+            }
+        }
 		else if (header.version == 22)
         {
             memset(&oldcfg22, 0, sizeof(oldcfg22));
@@ -441,8 +455,8 @@ void VideoSettingsLoad(void)
 		if (cfg.covers == 0 || cfg.covers == 1) CoverSetEnabled(cfg.covers ? TRUE : FALSE);
 		if (cfg.bgmvol >= 0 && cfg.bgmvol <= 100) BgmSetVolume(cfg.bgmvol);
 		if (cfg.bgmrate >= 8000 && cfg.bgmrate <= 48000) BgmSetRate(cfg.bgmrate);
-		MainLoopFPSSetEnabled(cfg.showfps == 1 ? TRUE : FALSE);
-		SnesTargetProfileSetEnabled(cfg.diagnostics == 1 ? TRUE : FALSE);
+		MainLoopFPSSetMode(cfg.showfps);
+		MainLoopFPSSetColor(cfg.fpscolor);
 		if (cfg.gamevol >= 0 && cfg.gamevol <= 100) AudMixGameSetVolume(cfg.gamevol);
 		if (cfg.hddenable == 0 || cfg.hddenable == 1) HddSupportSetEnabled(cfg.hddenable);
 		if (cfg.mmceenable == 0 || cfg.mmceenable == 1) MmceSupportSetEnabled(cfg.mmceenable);
@@ -531,13 +545,13 @@ static const Int32 _VideoItemY[] =
 	14, 26, 38, 50, 62, 74, 86, 98, 110,  /* Screen */
 	140, 152,                               /* Interface */
 	182, 194, 206,                          /* Audio */
-	236, 248, 260,                          /* Performance */
-	290, 302, 314, 326, 338, 350           /* Storage */
+	236, 248, 260, 272,                     /* Performance */
+	302, 314, 326, 338, 350, 362           /* Storage */
 };
 
 #define VIDEO_VIEW_TOP   34
 #define VIDEO_VIEW_BOTTOM 181
-#define VIDEO_CONTENT_H 362
+#define VIDEO_CONTENT_H 374
 
 static Int32 _VideoScrollForSelection(Int32 sel)
 {
@@ -708,39 +722,46 @@ void CVideoScreen::Draw()
 	          I18nGetText(I18N_FRAMESKIP), MainLoopSafeFrameskipIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 
     _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[15] - scroll, 15, m_iSelect,
-              I18nTranslate("FPS Counter"), MainLoopFPSIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+              I18nTranslate("FPS Counter"),
+              MainLoopFPSGetMode() == MAINLOOP_FPS_SIMPLE ? I18nTranslate("FPS Only") :
+              MainLoopFPSGetMode() == MAINLOOP_FPS_DETAILED ? I18nTranslate("Detailed") :
+              MainLoopFPSGetMode() == MAINLOOP_FPS_PROFILER ? I18nTranslate("Profiler") :
+              I18nGetText(I18N_OFF));
+    static const char *fpsColors[] = {"White", "Green", "Cyan", "Yellow", "Red", "Magenta"};
+    _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
+              I18nTranslate("FPS Color"), I18nTranslate(fpsColors[MainLoopFPSGetColor()]));
 #if SNDBG_LOG
     if (DLogCaptureDestinationIsAllowed())
-        _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
+        _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll, 17, m_iSelect,
                   I18nTranslate("Diagnostic File Logging"),
                   DLogCaptureIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
     else
-        _VideoRowDisabled(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll,
+        _VideoRowDisabled(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll,
                           I18nTranslate("Diagnostic File Logging"),
                           I18nTranslate("Unavailable"));
 #elif SNES_TARGET_PROFILE
-    _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll, 16, m_iSelect,
+    _VideoRow(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll, 17, m_iSelect,
               I18nTranslate("Diagnostics"),
               SnesTargetProfileIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 #else
-    _VideoRowDisabled(VIDEO_VIEW_TOP + _VideoItemY[16] - scroll,
+    _VideoRowDisabled(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll,
                       I18nTranslate("Diagnostic File Logging"),
                       I18nTranslate("Build required"));
 #endif
 
 	/* Storage */
-	_VideoSection(VIDEO_VIEW_TOP + 276 - scroll, I18nGetText(I18N_STORAGE_DEVICES));
-	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[17] - scroll, 17, m_iSelect,
-	          I18nGetText(I18N_MASS_USB), MassStorageIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoSection(VIDEO_VIEW_TOP + 288 - scroll, I18nGetText(I18N_STORAGE_DEVICES));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[18] - scroll, 18, m_iSelect,
-	          I18nGetText(I18N_HDD_SUPPORT), HddSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	          I18nGetText(I18N_MASS_USB), MassStorageIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[19] - scroll, 19, m_iSelect,
-	          I18nGetText(I18N_MMCE_CARDS), _VideoMmceStatus());
+	          I18nGetText(I18N_HDD_SUPPORT), HddSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[20] - scroll, 20, m_iSelect,
-	          I18nGetText(I18N_MX4SIO_SD), _VideoMx4sioStatus());
+	          I18nGetText(I18N_MMCE_CARDS), _VideoMmceStatus());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[21] - scroll, 21, m_iSelect,
-	          I18nGetText(I18N_HOSTFS_EMU), HostFsSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	          I18nGetText(I18N_MX4SIO_SD), _VideoMx4sioStatus());
 	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[22] - scroll, 22, m_iSelect,
+	          I18nGetText(I18N_HOSTFS_EMU), HostFsSupportIsEnabled() ? I18nGetText(I18N_ON) : I18nGetText(I18N_OFF));
+	_VideoRow(VIDEO_VIEW_TOP + _VideoItemY[23] - scroll, 23, m_iSelect,
 	          I18nGetText(I18N_SMB_NETWORK), I18nTranslate(SmbGetStatusText()));
 
 	UiChromeScroll(scroll > 0,
@@ -775,7 +796,8 @@ static void _VideoResetDefaults()
 	g_GskDispOffY = 0;
 	g_GskTextureFilter = 0;
 	g_GskScanlines = 0;
-	MainLoopFPSSetEnabled(FALSE);
+	MainLoopFPSSetMode(MAINLOOP_FPS_OFF);
+    MainLoopFPSSetColor(0);
 	SnesTargetProfileSetEnabled(FALSE);
 
 	GSK_SetWidescreen(0);
@@ -912,9 +934,12 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				MainLoopSafeFrameskipIsEnabled() ? FALSE : TRUE);
 			break;
         case 15:
-            MainLoopFPSSetEnabled(MainLoopFPSIsEnabled() ? FALSE : TRUE);
+            MainLoopFPSSetMode(MainLoopFPSCycleMode(MainLoopFPSGetMode(), dir));
             break;
         case 16:
+            MainLoopFPSSetColor(MainLoopFPSCycleColor(MainLoopFPSGetColor(), dir));
+            break;
+        case 17:
 #if SNDBG_LOG
             if (!DLogCaptureDestinationIsAllowed())
             {
@@ -952,16 +977,16 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
                                         result, logPath[0] ? logPath : "emulog.txt");
             }
 #elif SNES_TARGET_PROFILE
-            SnesTargetProfileSetEnabled(SnesTargetProfileIsEnabled() ? FALSE : TRUE);
+            MainLoopFPSSetMode(MainLoopFPSGetMode() == MAINLOOP_FPS_PROFILER ? MAINLOOP_FPS_OFF : MAINLOOP_FPS_PROFILER);
 #endif
             break;
-		case 17:
+		case 18:
 			MassStorageSetEnabled(!MassStorageIsEnabled());
 			break;
-		case 18:
+		case 19:
 			HddSupportSetEnabled(!HddSupportIsEnabled());
 			break;
-		case 19:
+		case 20:
 			MmceSupportSetEnabled(!MmceSupportIsEnabled());
 			if (MmceSupportIsEnabled())
 			{
@@ -970,7 +995,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 20:
+		case 21:
 			Mx4sioSetEnabled(!Mx4sioIsEnabled());
 			if (Mx4sioIsEnabled())
 			{
@@ -979,10 +1004,10 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
-		case 21:
+		case 22:
 			HostFsSupportSetEnabled(!HostFsSupportIsEnabled());
 			break;
-		case 22:
+		case 23:
 			if (SmbSupportIsEnabled())
 			{
 				BgmIOBegin();

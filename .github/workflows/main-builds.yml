@@ -29,15 +29,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Production artifact: diagnostics/profile timing disabled, stripped,
+          # Production artifact: diagnostics disabled, optional runtime profiler, stripped,
           # then packed. The artifact ZIP contains one file: SNESticle.elf.
           - name: release
             diagnostics: 0
             artifact_name: SNESticle-release
 
-          # Deep diagnostic artifact: keep the linked ELF unstripped so symbol
-          # addresses remain available for addr2line/crash investigation.
-          # Do not pack this build; the artifact ZIP contains one ELF only.
+          # Deep diagnostic ELF is stripped and packed for play.
+          # Original symbol ELF is uploaded separately for addr2line.
           - name: diag2
             diagnostics: 2
             artifact_name: SNESticle-diag2
@@ -68,7 +67,7 @@ jobs:
           make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
             strip \
             SNES_DIAGNOSTICS=0 \
-            SNES_TARGET_PROFILE=0 \
+            SNES_TARGET_PROFILE=1 \
             PROFILE=0 \
             PACK=0
 
@@ -99,21 +98,25 @@ jobs:
           file artifacts/SNESticle.elf
           ls -lh artifacts/SNESticle.elf
 
-      - name: Build diag2 with symbols
+      - name: Build and pack diag2 (retain separate symbols)
         if: matrix.name == 'diag2'
         run: |
           make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
-            fast \
+            strip \
             SNES_DIAGNOSTICS=2 \
             SNES_TARGET_PROFILE=0 \
             PROFILE=0 \
             PACK=0
 
-          mkdir -p artifacts
-          cp build/SNESticle.elf artifacts/SNESticle-diag2.elf
-
+          make AUTO_INSTALL=yes COLOR=0 fix-packer
+          PACKER="${XDG_CACHE_HOME:-$HOME/.cache}/ps2dev/ps2-packer-src/ps2-packer"
+          test -x "$PACKER"
+          mkdir -p artifacts symbols
+          cp build/SNESticle.elf symbols/SNESticle-diag2-symbols.elf
+          "$PACKER" "$(pwd)/build/SNESticle.stripped.elf" "$(pwd)/artifacts/SNESticle-diag2.elf"
           test -s artifacts/SNESticle-diag2.elf
-          echo "=== Diag2: unstripped, symbols retained ==="
+          test "$(wc -c < artifacts/SNESticle-diag2.elf)" -lt "$(wc -c < symbols/SNESticle-diag2-symbols.elf)"
+          echo "=== Diag2: stripped + packed ==="
           file artifacts/SNESticle-diag2.elf
           ls -lh artifacts/SNESticle-diag2.elf
 
@@ -130,3 +133,12 @@ jobs:
           path: artifacts/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload diagnostic symbols (unpacked, optional)
+        if: matrix.name == 'diag2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticle-diag2-symbols
+          path: symbols/SNESticle-diag2-symbols.elf
+          if-no-files-found: error
+          retention-days: 7

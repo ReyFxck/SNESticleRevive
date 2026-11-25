@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -16,6 +17,7 @@
 #include <delaythread.h>
 #include <libcdvd.h>
 #define NEWLIB_PORT_AWARE
+#include <io_common.h>
 #include <fileXio.h>
 #include <fileXio_rpc.h>
 #include <libhdd.h>
@@ -33,6 +35,7 @@ extern "C" {
 
 #include "mainloop_bgm.h"
 #include "embedded_irx.h"
+#include "audio_log.h"
 
 /* ---- configuracao ---------------------------------------------------- */
 
@@ -238,6 +241,62 @@ static Bool _HasExt(const char *name, const char *ext)
    definicao (igual mainloop_init.cpp); usada para achar a pasta "bgm" AO
    LADO do ELF. */
 char *MainGetBootDir();
+extern "C" int MainBuildHostIOPath(const char *guest, char *out, int outBytes);
+
+#if defined(SNDBG_LOG) && SNDBG_LOG
+#define BGM_HOST_LOG(...) DLog(__VA_ARGS__)
+#else
+#define BGM_HOST_LOG(...) ((void)0)
+#endif
+
+static Bool _IsHostPath(const char *p)
+{
+    return p && strncmp(p, "host:", 5) == 0;
+}
+
+/* Use the same SAF sibling URI fallback as ROM loading. Never change the
+   emulator's permissions or escape the ELF directory. Keep guest-relative
+   paths in the playlist; only translate at the I/O boundary. */
+static int _HostOpen(const char *path, Bool directory)
+{
+    int fd = directory ? fileXioDopen(path) : fileXioOpen(path, FIO_O_RDONLY, 0);
+    if (fd >= 0) return fd;
+    char uri[1024];
+    if (MainBuildHostIOPath(path, uri, sizeof(uri)))
+    {
+        int first = fd;
+        fd = directory ? fileXioDopen(uri) : fileXioOpen(uri, FIO_O_RDONLY, 0);
+        BGM_HOST_LOG("[bgm-host] %s path=%s relative=%d uri=%d",
+                     directory ? "dopen" : "open", path, first, fd);
+        (void)first;
+    }
+    else
+        BGM_HOST_LOG("[bgm-host] %s path=%s result=%d",
+                     directory ? "dopen" : "open", path, fd);
+    return fd;
+}
+
+/* Android HostFS dread may return primary:PS2/BGM instead of BGM.
+   Only use the immediate child name, as the browser already does. */
+static const char *_HostLeaf(const char *name)
+{
+    const char *leaf = name;
+    for (const char *q = name; *q; ++q)
+        if (*q == '/' || *q == '\\') leaf = q + 1;
+    if (!*leaf || !strcmp(leaf, ".") || !strcmp(leaf, "..") || strchr(leaf, ':'))
+        return NULL;
+    return leaf;
+}
+
+static Bool _HostJoin(char *out, size_t bytes, const char *parent, const char *leaf)
+{
+    size_t len = strlen(parent);
+    if (!len || !leaf) return FALSE;
+    const char *sep = (parent[len - 1] == ':' || parent[len - 1] == '/' ||
+                       parent[len - 1] == '\\') ? "" : "/";
+    int n = snprintf(out, bytes, "%s%s%s", parent, sep, leaf);
+    return n >= 0 && (size_t)n < bytes;
+}
 
 /* Um caminho aponta pro drive de CD/DVD? */
 static Bool _IsDiscPath(const char *p)
@@ -512,9 +571,170 @@ static int _ScanDirAs(const char *scanDir, const char *indexDir, int depth)
     return 1;
 }
 
+/* Direct fileXio enumeration avoids newlib opendir's path normalization.
+   Probe subdirectories rather than trusting HostFS mode bits, which can
+   identify every entry as the same type on NetherSX2. */
+static int _ScanHostDir(const char *path, int depth)
+{
+    int fd = _HostOpen(path, TRUE);
+    if (fd < 0) return 0;
+    iox_dirent_t entry;
+    int result = 0;
+    int before = s_indexCount;
+    while (s_indexCount < BGM_INDEX_MAX && (result = fileXioDread(fd, &entry)) > 0)
+    {
+        entry.name[sizeof(entry.name) - 1] = 0;
+        const char *leaf = _HostLeaf(entry.name);
+        char child[256];
+        if (!_HostJoin(child, sizeof(child), path, leaf)) continue;
+        if (_HasExt(leaf, ".mod")) _IndexAdd(child, 1);
+        else if (_HasExt(leaf, ".xm")) _IndexAdd(child, 2);
+        else if (depth < BGM_SCAN_MAX_DEPTH)
+            _ScanHostDir(child, depth + 1);
+    }
+    fileXioDclose(fd);
+    BGM_HOST_LOG("[bgm-host] scan path=%s added=%d dread=%d", path,
+                 s_indexCount - before, result);
+    (void)before;
+    return 1;
+}
+
 static int _ScanDir(const char *scanDir, int depth)
 {
+    if (_IsHostPath(scanDir)) return _ScanHostDir(scanDir, depth);
     return _ScanDirAs(scanDir, scanDir, depth);
+}
+
+/* Optional manifest avoids directory enumeration on SAF implementations
+   that accept explicit file URI opens but reject directory opens. Only
+   relative .xm/.mod paths below BGM or bgm are accepted. */
+static Bool _HostManifestPath(const char *name)
+{
+    if (strncasecmp(name, "bgm/", 4) != 0) return FALSE;
+    if (strchr(name, ':') || strchr(name, '\\') || strchr(name, '%')) return FALSE;
+    for (const char *p = name; *p; )
+    {
+        const char *end = strchr(p, '/');
+        size_t n = end ? (size_t)(end-p) : strlen(p);
+        if (!n || (n == 1 && p[0] == '.') ||
+            (n == 2 && p[0] == '.' && p[1] == '.')) return FALSE;
+        if (!end) break;
+        p = end+1;
+        if (!*p) return FALSE;
+    }
+    return _HasExt(name, ".mod") || _HasExt(name, ".xm");
+}
+
+static void _ScanHostManifest()
+{
+    int fd = _HostOpen("host:BGM.txt", FALSE);
+    if (fd < 0) fd = _HostOpen("host:bgm.txt", FALSE);
+    if (fd < 0) return;
+    char text[4097];
+    int size = fileXioLseek(fd, 0, FIO_SEEK_END);
+    int n = 0;
+    if (size > 0 && size <= 4096 && fileXioLseek(fd, 0, FIO_SEEK_SET) == 0)
+    {
+        while (n < size)
+        {
+            int got = fileXioRead(fd, text+n, size-n);
+            if (got <= 0 || got > size-n) break;
+            n += got;
+        }
+    }
+    fileXioClose(fd);
+    if (size <= 0 || n != size || memchr(text, 0, (size_t)n)) return;
+    text[n] = 0;
+    int before = s_indexCount;
+    for (char *line = text; line && *line; )
+    {
+        char *next = strchr(line, '\n');
+        if (next) *next++ = 0;
+        size_t len = strlen(line);
+        if (len && line[len-1] == '\r') line[len-1] = 0;
+        char path[256];
+        if (_HostManifestPath(line) && _HostJoin(path, sizeof(path), "host:", line))
+            _IndexAdd(path, _HasExt(line, ".mod") ? 1 : 2);
+        line = next;
+    }
+    BGM_HOST_LOG("[bgm-host] manifest tracks=%d", s_indexCount-before);
+    (void)before;
+}
+
+/* Scan actual case spellings from the root first. If listing is not
+   reliable, explicitly probe both conventional names. For SAF builds
+   that deny every directory open, BGM.txt and flat BGM-*.xm/mod are
+   optional fallbacks, not changes to permissions. */
+static void _ScanHostBootBgm(void)
+{
+    int before = s_indexCount;
+    const char *bd = MainGetBootDir();
+    if (!bd || strcmp(bd, "host:") != 0)
+    {
+        _ScanHostDir(s_bootBgm, 0);
+        if (s_indexCount == before)
+        {
+            char upper[sizeof(s_bootBgm)];
+            size_t len = strlen(s_bootBgm);
+            if (len >= 3 && !strcmp(s_bootBgm + len - 3, "bgm"))
+            {
+                memcpy(upper, s_bootBgm, len + 1);
+                memcpy(upper + len - 3, "BGM", 3);
+                _ScanHostDir(upper, 0);
+            }
+        }
+        return;
+    }
+    Bool lower = FALSE, upper = FALSE;
+    char found[8][4];
+    int foundCount = 0;
+    int fd = fileXioDopen("host:");
+    if (fd >= 0)
+    {
+        iox_dirent_t entry;
+        while (s_indexCount < BGM_INDEX_MAX && fileXioDread(fd, &entry) > 0)
+        {
+            entry.name[sizeof(entry.name) - 1] = 0;
+            const char *leaf = _HostLeaf(entry.name);
+            if (!leaf || strcasecmp(leaf, "bgm")) continue;
+            Bool duplicate = FALSE;
+            for (int i = 0; i < foundCount; ++i)
+                if (!strcmp(found[i], leaf)) duplicate = TRUE;
+            if (!duplicate && foundCount < 8) memcpy(found[foundCount++],leaf,4);
+            if (!strcmp(leaf, "BGM")) upper = TRUE;
+            if (!strcmp(leaf, "bgm")) lower = TRUE;
+        }
+        fileXioDclose(fd);
+    }
+    for (int i = 0; i < foundCount && s_indexCount < BGM_INDEX_MAX; ++i)
+    {
+        char path[256];
+        if (_HostJoin(path,sizeof(path),"host:",found[i])) _ScanHostDir(path,0);
+    }
+    // A successful root listing with one usable spelling is enough on
+    // case-insensitive filesystems. Otherwise try the missing spellings.
+    if (!foundCount || s_indexCount == before)
+    {
+        if (!upper) _ScanHostDir("host:BGM", 0);
+        if (!lower && s_indexCount == before) _ScanHostDir("host:bgm", 0);
+    }
+    if (s_indexCount == before) _ScanHostManifest();
+    if (s_indexCount == before && (fd = fileXioDopen("host:")) >= 0)
+    {
+        iox_dirent_t entry;
+        while (s_indexCount < BGM_INDEX_MAX && fileXioDread(fd, &entry) > 0)
+        {
+            entry.name[sizeof(entry.name)-1] = 0;
+            const char *leaf = _HostLeaf(entry.name);
+            char path[256];
+            if (!leaf || strncasecmp(leaf,"BGM-",4) ||
+                !_HostJoin(path,sizeof(path),"host:",leaf)) continue;
+            if (_HasExt(leaf,".xm")) _IndexAdd(path,2);
+            else if (_HasExt(leaf,".mod")) _IndexAdd(path,1);
+        }
+        fileXioDclose(fd);
+    }
+    BGM_HOST_LOG("[bgm-host] boot scan tracks=%d", s_indexCount - before);
 }
 
 static void _WakeAfterNewSource(int before)
@@ -746,7 +966,9 @@ static void _BuildIndex(void)
 
     /* Primeiro escaneia caminhos que nao dependem de CD/DVD, MMCE ou HDD.
        Os dispositivos especiais possuem etapas proprias abaixo. */
-    if (s_bootBgm[0] && !_IsDiscPath(s_bootBgm) &&
+    if (_IsHostPath(s_bootBgm))
+        _ScanHostBootBgm();
+    else if (s_bootBgm[0] && !_IsDiscPath(s_bootBgm) &&
         !_IsMassPath(s_bootBgm) && _MmcePathSlot(s_bootBgm) < 0 &&
         !_IsHddPath(s_bootBgm))
         _ScanDir(s_bootBgm, 0);
@@ -869,6 +1091,32 @@ static char *_LoadFileAlloc(const char *path, long *outLen)
         openPath = mapped;
     }
 
+    if (_IsHostPath(openPath))
+    {
+        int fd = _HostOpen(openPath, FALSE);
+        if (fd < 0) return NULL;
+        int size = fileXioLseek(fd, 0, FIO_SEEK_END);
+        if (size <= 0 || fileXioLseek(fd, 0, FIO_SEEK_SET) < 0)
+        {
+            fileXioClose(fd);
+            return NULL;
+        }
+        buf = (char *)malloc((size_t)size);
+        if (!buf) { fileXioClose(fd); return NULL; }
+        int n = 0;
+        while (n < size)
+        {
+            int got = fileXioRead(fd, buf+n, size-n);
+            if (got <= 0 || got > size-n) break;
+            n += got;
+        }
+        fileXioClose(fd);
+        BGM_HOST_LOG("[bgm-host] read path=%s bytes=%d/%d", path, n, size);
+        if (n != size) { free(buf); return NULL; }
+        *outLen = size;
+        return buf;
+    }
+
     f = fopen(openPath, "rb");
     if (!f) return NULL;
 
@@ -946,11 +1194,15 @@ static void _TryLoad(void)
                     free(fileBuf);
                     _ResetResampler();
                     s_state = (kind == 1) ? BGM_MOD : BGM_XM;
+                    if (_IsHostPath(path))
+                        BGM_HOST_LOG("[bgm-host] playing path=%s rate=%d", path, s_rate);
                     return;
                 }
             }
         }
 
+        if (_IsHostPath(path))
+            BGM_HOST_LOG("[bgm-host] track failed path=%s load=%d start=%d", path, loadRet, startRet);
         if (fileBuf) free(fileBuf);
         if (s_xmp)
         {
