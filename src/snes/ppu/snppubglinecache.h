@@ -11,6 +11,7 @@
 
 #include "types.h"
 #include <string.h>
+#include <stdint.h>
 #include "snppurender.h"
 
 #ifndef SNPPU_BG_LINE_CACHE_LINES
@@ -208,6 +209,41 @@ _INLINE Int32 SnesPPUBGLineCacheScrollStep(
 	Uint32 uReverseDelta = (uOldX - uNewX) & uMask;
 	return uReverseDelta && uReverseDelta <= SNPPU_BG_LINE_SCROLL_MAX
 		? -(Int32)uReverseDelta : 0;
+}
+
+/* Copy exactly 33 decoded cells. Both cache rows and BGPlanes are
+   16-byte aligned in the renderer. The EE path avoids the generic memcpy
+   prologue/byte loop and never writes into the following mask. */
+#ifndef SNPPU_BG_CACHE_FAST_COPY
+#define SNPPU_BG_CACHE_FAST_COPY 1
+#endif
+_INLINE void SnesPPUBGLineCacheCopyPixels(Uint8 *pDest, const Uint8 *pSource)
+{
+#if CODE_PLATFORM == CODE_PS2 && SNPPU_BG_CACHE_FAST_COPY
+	if ((((uintptr_t)pDest | (uintptr_t)pSource) & 15u) == 0)
+	{
+		for (Uint32 i = 0; i < 4; ++i)
+		{
+			__asm__ __volatile__(
+				"lq $8, 0x00(%1)\n\t"
+				"lq $9, 0x10(%1)\n\t"
+				"lq $10, 0x20(%1)\n\t"
+				"lq $11, 0x30(%1)\n\t"
+				"sq $8, 0x00(%0)\n\t"
+				"sq $9, 0x10(%0)\n\t"
+				"sq $10, 0x20(%0)\n\t"
+				"sq $11, 0x30(%0)\n\t"
+				: : "r"(pDest), "r"(pSource)
+				: "$8", "$9", "$10", "$11", "memory");
+			pDest += 64;
+			pSource += 64;
+		}
+		__asm__ __volatile__("ld $8, 0(%1)\n\tsd $8, 0(%0)"
+			: : "r"(pDest), "r"(pSource) : "$8", "memory");
+		return;
+	}
+#endif
+	memcpy(pDest, pSource, SNPPU_BG_LINE_PIXELS);
 }
 
 /* Both pixel buffers are 8-byte aligned. Retain at least 25 cells; beyond

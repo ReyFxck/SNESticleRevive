@@ -94,8 +94,25 @@ static void CheckScrollReuse()
 	}
 }
 
+static void CheckPixelCopy()
+{
+	Uint8 source[304] _ALIGN(16), got[304] _ALIGN(16), expected[304] _ALIGN(16);
+	for (Uint32 i = 0; i < sizeof(source); ++i) source[i] = (Uint8)(i * 73u + 19u);
+	for (Uint32 srcOff : { 16u, 17u, 24u })
+		for (Uint32 dstOff : { 16u, 17u, 24u })
+		{
+			std::memset(got, 0xA5, sizeof(got));
+			std::memset(expected, 0xA5, sizeof(expected));
+			std::memcpy(expected + dstOff, source + srcOff, SNPPU_BG_LINE_PIXELS);
+			SnesPPUBGLineCacheCopyPixels(got + dstOff, source + srcOff);
+			Check("exact 264-byte copy and surrounding guards",
+				std::memcmp(got, expected, sizeof(got)) == 0, TRUE);
+		}
+}
+
 int main()
 {
+	CheckPixelCopy();
 	CheckScrollReuse();
 #if SNPPU_BG_LINE_CACHE_LINES == 512
 	Check("upper tilemap rows have their own cache slots",

@@ -20,6 +20,7 @@
 #include "sndbglog.h"
 #include "sntargetprofile.h"
 #include "snppubglinecache.h"
+#include "snppuvramstamp.h"
 
 #if SNES_TARGET_PROFILE
 SnesTargetProfileFrameT g_SnesTargetProfile;
@@ -2650,12 +2651,14 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)(g_TmgWinSumObjDraw / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumHDMAData / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumHDMATable / g_TmgWinFrames));
-			DLog("[snes-bg-line-cost] avg validate/restore/store=%u/%u/%u cache-mode1/mode5=%u/%u",
+			DLog("[snes-bg-line-cost] avg validate/restore/store=%u/%u/%u cache-mode1/mode5=%u/%u fast-copy/stamp=%u/%u",
 				(unsigned)(g_TmgWinSumBGLineValidate / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumBGLineRestore / g_TmgWinFrames),
 				(unsigned)(g_TmgWinSumBGLineStore / g_TmgWinFrames),
 				(unsigned)SNPPU_BG_CACHE_MODE1,
-				(unsigned)SNPPU_BG_CACHE_MODE5);
+				(unsigned)SNPPU_BG_CACHE_MODE5,
+				(unsigned)SNPPU_BG_CACHE_FAST_COPY,
+				(unsigned)SNPPU_BG_CACHE_FAST_STAMP);
 			DLog("[snes-raster] ppu queued/applied/full=%u/%u/%u hdma lines/active/xfer=%u/%u/%u bg layers/reloads/chrrows=%u/%u/%u",
 				(unsigned)g_DbgPPUQueuedWrites,
 				(unsigned)g_DbgPPUAppliedWrites,

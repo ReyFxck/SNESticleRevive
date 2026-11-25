@@ -6,6 +6,10 @@
 #include "types.h"
 #include "snppurender.h"
 
+#ifndef SNPPU_BG_CACHE_FAST_STAMP
+#define SNPPU_BG_CACHE_FAST_STAMP 1
+#endif
+
 #ifndef SNPPU_BG_CACHE_ROWMEMO
 #define SNPPU_BG_CACHE_ROWMEMO 1
 #endif
@@ -214,6 +218,29 @@ struct SnesPPUVramStampT
 		const Uint32 nPhysicalTiles =
 			(uMode == 5u && pInfo->uBitDepth && pInfo->uChrSize) ? 2u : 1u;
 		Uint32 uLastChunk = 0xFFFFFFFFu;
+#if SNPPU_BG_CACHE_FAST_STAMP
+		/* Common Mode 1 / small Mode 5 case: the CHR base is aligned to
+		   a 32-word chunk. Fold the word-to-chunk conversion outside the
+		   tile loop and avoid the inner physical-half loop altogether.
+		   No dependency is dropped: the arithmetic is identical modulo VRAM. */
+		if (nPhysicalTiles == 1u && !(pInfo->uChrAddr & 31u))
+		{
+			const Uint32 uBaseChunk = pInfo->uChrAddr >> 5;
+			const Uint32 uChunkShift = 5u - uTileShift;
+			for (Uint32 i = 0; i < nTiles; ++i)
+			{
+				const Uint32 uChunk = (uBaseChunk +
+					((Uint32)pTiles[i].uTile >> uChunkShift)) & 1023u;
+				if (uChunk != uLastChunk)
+				{
+					const Uint32 uChunkStamp = uChunks32[uChunk];
+					if (uChunkStamp > uStamp) uStamp = uChunkStamp;
+					uLastChunk = uChunk;
+				}
+			}
+		}
+		else
+#endif
 		for (Uint32 i = 0; i < nTiles; ++i)
 		{
 			const Uint32 uTile = pTiles[i].uTile;

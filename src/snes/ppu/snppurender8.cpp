@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stddef.h>
 #include "types.h"
 #include "console.h"
 #include "snppu.h"
@@ -89,16 +90,19 @@ struct SnesPPUBGLineCacheEntryT
 	Uint8 uKeyPad[30];
 #endif
 	Uint8 uMain[SNPPU_BG_LINE_PIXELS];
+	Uint8 uSubAlignPad[8];
 	Uint8 uSub[SNPPU_BG_LINE_PIXELS];
 	Uint8 uMainOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
 	Uint8 uMainPriority[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
 	Uint8 uSubOpaque[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
 	Uint8 uSubPriority[SNPPU_BG_LINE_MASK_BYTES] _ALIGN(8);
-	Uint8 uEntryPad[16];
+	Uint8 uEntryPad[8];
 };
 
 typedef char SnesPPUBGLineEntrySizeCheck[
-	(sizeof(SnesPPUBGLineCacheEntryT) == 12 * 64) ? 1 : -1];
+	(sizeof(SnesPPUBGLineCacheEntryT) == 12 * 64 &&
+	 offsetof(SnesPPUBGLineCacheEntryT, uMain) % 16 == 0 &&
+	 offsetof(SnesPPUBGLineCacheEntryT, uSub) % 16 == 0) ? 1 : -1];
 
 /* A second normal-resolution way does not need the Mode 5 main/sub pair.
    Keeping only the one decoded plane cuts the extra way from 768 KiB to
@@ -120,7 +124,8 @@ struct SnesPPUBGLineCacheNormalEntryT
 };
 
 typedef char SnesPPUBGLineNormalEntrySizeCheck[
-	(sizeof(SnesPPUBGLineCacheNormalEntryT) == 416) ? 1 : -1];
+	(sizeof(SnesPPUBGLineCacheNormalEntryT) == 416 &&
+	 offsetof(SnesPPUBGLineCacheNormalEntryT, uMain) % 16 == 0) ? 1 : -1];
 
 /* Four BGs by wrapped world scanline. Every renderer input in Key must match
    and any VRAM write advances Generation. A direct-map collision can only
@@ -253,8 +258,7 @@ static _INLINE Bool _SnesPPURestoreBGLine(
 #else
 	if (bCopyPixels)
 #endif
-		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
-			SNPPU_BG_LINE_PIXELS);
+		SnesPPUBGLineCacheCopyPixels((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain);
 	_SnesPPURestoreCachedMasks(
 		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
@@ -268,8 +272,7 @@ static _INLINE Bool _SnesPPURestoreBGLine(
 #else
 		if (bCopyPixels)
 #endif
-			memcpy((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub,
-				SNPPU_BG_LINE_PIXELS);
+			SnesPPUBGLineCacheCopyPixels((Uint8 *)pRenderInfo->BGPlanes[iSubPlane], pEntry->uSub);
 		_SnesPPURestoreCachedMasks(
 			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_OPAQUE],
 			&pRenderInfo->BGPlanes[iSubPlane][SNPPU_BGPLANE_PRI],
@@ -288,8 +291,7 @@ static _INLINE void _SnesPPUStoreBGLine(
 {
 	Uint32 iSubPlane = iBG + 2u;
 
-	memcpy(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG],
-		SNPPU_BG_LINE_PIXELS);
+	SnesPPUBGLineCacheCopyPixels(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG]);
 	memcpy(pEntry->uMainOpaque, pMainOpaque, 33u);
 	memset(pEntry->uMainOpaque + 33u, 0,
 		SNPPU_BG_LINE_MASK_BYTES - 33u);
@@ -307,8 +309,7 @@ static _INLINE void _SnesPPUStoreBGLine(
 #endif
 	if (bHiresPair)
 	{
-		memcpy(pEntry->uSub, (Uint8 *)pRenderInfo->BGPlanes[iSubPlane],
-			SNPPU_BG_LINE_PIXELS);
+		SnesPPUBGLineCacheCopyPixels(pEntry->uSub, (Uint8 *)pRenderInfo->BGPlanes[iSubPlane]);
 		memcpy(pEntry->uSubOpaque, pSubOpaque, 33u);
 		memset(pEntry->uSubOpaque + 33u, 0,
 			SNPPU_BG_LINE_MASK_BYTES - 33u);
@@ -339,8 +340,7 @@ static _INLINE void _SnesPPURestoreBGLineNormal(
 #else
 	if (bCopyPixels)
 #endif
-		memcpy((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain,
-			SNPPU_BG_LINE_PIXELS);
+		SnesPPUBGLineCacheCopyPixels((Uint8 *)pRenderInfo->BGPlanes[iBG], pEntry->uMain);
 	_SnesPPURestoreCachedMasks(
 		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_OPAQUE],
 		&pRenderInfo->BGPlanes[iBG][SNPPU_BGPLANE_PRI],
@@ -354,8 +354,7 @@ static _INLINE void _SnesPPUStoreBGLineNormal(
 	SnesRender8pInfoT *pRenderInfo, Uint32 iBG,
 	const Uint8 *pMainOpaque, const Uint8 *pMainPriority)
 {
-	memcpy(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG],
-		SNPPU_BG_LINE_PIXELS);
+	SnesPPUBGLineCacheCopyPixels(pEntry->uMain, (Uint8 *)pRenderInfo->BGPlanes[iBG]);
 	memcpy(pEntry->uMainOpaque, pMainOpaque, 33u);
 	memset(pEntry->uMainOpaque + 33u, 0,
 		SNPPU_BG_LINE_MASK_BYTES - 33u);
@@ -2534,15 +2533,16 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #endif
 
 		PROF_ENTER("BGCHR");
-		/* Exact dependency-layout key for the rowmemo hot path.  Full NBA
-		   bytes are used intentionally: an unrelated nibble can only cause an
-		   extra cold validation, never stale pixels. */
+		/* Exact dependency-layout key for the rowmemo hot path. Keep the full
+		   BGMODE byte (including tile-size bits), not only its low mode bits.
+		   Full NBA bytes are intentional: an unrelated nibble can only cause
+		   an extra cold validation, never stale pixels. */
 		const Uint32 uBGDepConfig[4] =
 		{
-			(Uint32)uBGMode | ((Uint32)pRegs->bg1sc << 8) | ((Uint32)pRegs->bg12nba << 16),
-			(Uint32)uBGMode | ((Uint32)pRegs->bg2sc << 8) | ((Uint32)pRegs->bg12nba << 16),
-			(Uint32)uBGMode | ((Uint32)pRegs->bg3sc << 8) | ((Uint32)pRegs->bg34nba << 16),
-			(Uint32)uBGMode | ((Uint32)pRegs->bg4sc << 8) | ((Uint32)pRegs->bg34nba << 16)
+			(Uint32)pRegs->bgmode | ((Uint32)pRegs->bg1sc << 8) | ((Uint32)pRegs->bg12nba << 16),
+			(Uint32)pRegs->bgmode | ((Uint32)pRegs->bg2sc << 8) | ((Uint32)pRegs->bg12nba << 16),
+			(Uint32)pRegs->bgmode | ((Uint32)pRegs->bg3sc << 8) | ((Uint32)pRegs->bg34nba << 16),
+			(Uint32)pRegs->bgmode | ((Uint32)pRegs->bg4sc << 8) | ((Uint32)pRegs->bg34nba << 16)
 		};
 		for (iBG=0; iBG <= 3; iBG++)
 		{
