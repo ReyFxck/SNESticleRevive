@@ -105,6 +105,26 @@ static void CheckTimedALU()
 	Check("last-cycle multiply write keeps loaded shift H", io.ReadALU(&cpu, 0x4215), 0x04);
 }
 
+static void CheckALUWrap()
+{
+    SnesIO io; SNCpuT cpu={};
+    io.Reset(); io.ResetALUTiming(0xfffffff7u);
+    cpu.uCpuCycleCount=0xfffffff8u; io.WriteALU(&cpu,0x4202,0x80);
+    cpu.uCpuCycleCount=0xfffffff9u; io.WriteALU(&cpu,0x4203,3);
+    Check("same cycle read",io.ReadALU(&cpu,0x4217),0);
+    cpu.uCpuCycleCount=0; Check("wrapped read before completion",io.ReadALU(&cpu,0x4217),0);
+    cpu.uCpuCycleCount=1; Check("wrapped read seven steps",io.ReadALU(&cpu,0x4217),0);
+    cpu.uCpuCycleCount=2; Check("wrapped read eight steps",io.ReadALU(&cpu,0x4217),1);
+    Check("wrapped result L",io.ReadALU(&cpu,0x4216),0x80);
+    for(unsigned a=0;a<256;++a) for(unsigned b=0;b<256;++b) {
+        io.ResetALUTiming(); cpu.uCpuCycleCount=1; io.WriteALU(&cpu,0x4202,a);
+        cpu.uCpuCycleCount=2; io.WriteALU(&cpu,0x4203,b);
+        cpu.uCpuCycleCount=11;
+        unsigned lo=io.ReadALU(&cpu,0x4216),hi=io.ReadALU(&cpu,0x4217);
+        Check("multiply exhaustive",lo|(hi<<8),a*b);
+    }
+    std::puts("ALU wrap + 65536 multiplication cases PASS");
+}
 static void CheckAutoJoypadTiming()
 {
 	SnesIO io;
@@ -348,6 +368,7 @@ int main()
 {
 	CheckPowerOnRegisters();
 	CheckTimedALU();
+	CheckALUWrap();
 	CheckAutoJoypadTiming();
 	CheckSpecialPeripherals();
 	CheckScanlineTiming();

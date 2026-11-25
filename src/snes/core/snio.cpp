@@ -548,10 +548,13 @@ void SnesIO::RunALU(SNCpuT *pCpu, Bool bReadPhase)
 	/* On the real 5A22 a read samples before the write point of the current
 	   machine cycle. MesenCE represents that by advancing the ALU to C-1 for
 	   reads (and the first phase of writes), then to C for writes. */
-	if (bReadPhase && uCpuCycle)
-		uCpuCycle--;
+    if (bReadPhase && (uCpuCycle || m_uAluPrevCpuCycle))
+        uCpuCycle--;
 
-	nCycles = uCpuCycle - m_uAluPrevCpuCycle;
+    nCycles = uCpuCycle - m_uAluPrevCpuCycle;
+    // A read at an already-published write phase is not a 2^32-cycle
+    // advance. Forward modular timestamps remain valid across wrap.
+    if (bReadPhase && nCycles == 0xffffffffu) return;
 	while (nCycles-- && (m_uMultCounter || m_uDivCounter))
 	{
 		if (m_uMultCounter)

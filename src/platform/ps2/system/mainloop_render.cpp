@@ -383,6 +383,9 @@ static void _MainLoopDrawTargetProfile()
 Uint32 _MainLoop_DiagPrepCount;
 Uint32 _MainLoop_DiagSubmitCount;
 Uint32 _MainLoop_DiagFlipCount;
+#if SNDBG_LOG
+Uint32 _MainLoop_DiagVRBefore, _MainLoop_DiagVRAfter;
+#endif
 #endif
 
 void MainLoopRender()
@@ -668,7 +671,13 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 #if SNDBG_LOG || SNES_TARGET_PROFILE
     Uint32 uFlipStart = measure ? ProfCtrGetCycle() : 0;
 #endif
+#if SNDBG_LOG
+    _MainLoop_DiagVRBefore = (Uint32)TestVRstart();
+#endif
     GSK_SyncFlip();
+#if SNDBG_LOG
+    _MainLoop_DiagVRAfter = (Uint32)TestVRstart();
+#endif
 #if SNDBG_LOG || SNES_TARGET_PROFILE
     _MainLoop_DiagFlipCount = measure ? ProfCtrGetCycle() - uFlipStart : 0;
 #endif

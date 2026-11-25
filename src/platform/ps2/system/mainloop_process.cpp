@@ -530,8 +530,43 @@ Bool MainLoopProcess()
         cadence.Session = g_DbgSessionId;
         cadence.HostHz = g_DbgHostRefreshHz;
     }
+    // Observe the legacy interrupt counter, never wait on or reset it.
+    // If a platform stops delivering this IRQ, zero deltas are diagnostic
+    // evidence of an unavailable counter, not proof of a missed VBlank.
+    struct VRWindowT { Uint32 Session, HostHz, PrevAfter, HavePrev, Count;
+        Uint32 Before, During, Zero, Multiple, Invalid; };
+    static VRWindowT vr;
+    if (!bSnesDisplay || vr.Session != g_DbgSessionId || vr.HostHz != g_DbgHostRefreshHz)
+    {
+        memset(&vr, 0, sizeof(vr));
+        vr.Session = g_DbgSessionId;
+        vr.HostHz = g_DbgHostRefreshHz;
+    }
     if (bSnesDisplay)
     {
+        if (vr.HavePrev)
+        {
+            const Uint32 before = _MainLoop_DiagVRBefore - vr.PrevAfter;
+            const Uint32 during = _MainLoop_DiagVRAfter - _MainLoop_DiagVRBefore;
+            if (before > 16 || during > 16) ++vr.Invalid;
+            else
+            {
+                vr.Before += before;
+                vr.During += during;
+                if (!(before + during)) ++vr.Zero;
+                if (before + during > 1) ++vr.Multiple;
+            }
+            if (++vr.Count == SNDBG_FRAME_PERIOD)
+            {
+                DLog("[ps2-vblank-irq] session=%u intervals=%u before/during=%u/%u zero/multiple/invalid=%u/%u/%u",
+                    (unsigned)vr.Session, (unsigned)vr.Count, (unsigned)vr.Before,
+                    (unsigned)vr.During, (unsigned)vr.Zero, (unsigned)vr.Multiple,
+                    (unsigned)vr.Invalid);
+                vr.Count = vr.Before = vr.During = vr.Zero = vr.Multiple = vr.Invalid = 0;
+            }
+        }
+        vr.PrevAfter = _MainLoop_DiagVRAfter;
+        vr.HavePrev = 1;
         Uint32 uLoop = ProfCtrGetCycle() - uLoopStart;
         if (cadence.HavePrev && cadence.HostHz)
         {

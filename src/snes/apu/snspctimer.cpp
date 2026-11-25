@@ -9,9 +9,13 @@
 #include "types.h"
 #include "snspctimer.h"
 
+typedef char SNSpcTimerLegacySize[(sizeof(SNSpcTimerT) == 20) ? 1 : -1];
+static const Uint8 kTestGated = 0xA5;
+
 void SNSpcTimerReset(SNSpcTimerT *pTimer, Uint32 uCyclesPerTick)
 {
 	pTimer->bEnabled		= FALSE;
+	pTimer->uTestGate = 0;
 	pTimer->uUpCounter		= 0;
 	pTimer->uCompare		= 0;
 	pTimer->uCyclesPerTick	= uCyclesPerTick;
@@ -30,11 +34,19 @@ void SNSpcTimerSync(SNSpcTimerT *pTimer, Int32 nCycles)
 	const Uint32 tick = pTimer->uCyclesPerTick;
 	if (!tick) return;
 	const Uint32 old = (Uint32)pTimer->nElapsedCycles;
-	Uint32 stage = (old / tick) & 255u;
-	const Uint32 total = old % tick + elapsed;
-	Uint32 pulses = total / tick;
-	const Uint32 phase = total % tick;
-	if (pTimer->bEnabled && pulses)
+    const Uint32 oldQuotient = old / tick;
+    Uint32 stage = oldQuotient & 255u;
+    const Uint32 oldPhase = old - oldQuotient * tick;
+    const Uint32 total = oldPhase + elapsed;
+    // Most polling accesses occur before the next prescaler edge.
+    if (total < tick)
+    {
+        pTimer->nElapsedCycles = (Int32)(stage * tick + total);
+        return;
+    }
+    Uint32 pulses = total / tick;
+    const Uint32 phase = total - pulses * tick;
+	if (pTimer->bEnabled && pTimer->uTestGate != kTestGated && pulses)
 	{
 		/* A changed target below the current counter must wait for wrap.
 		   Equality is tested on each increment, never by >= comparison. */
@@ -64,6 +76,32 @@ void SNSpcTimerSetEnable(SNSpcTimerT *pTimer, Int32 nCycles, Bool bEnable)
 		pTimer->uUpCounter = 0;
 	}
 	pTimer->bEnabled = bEnable;
+}
+
+/* TEST bits 3/0 gate the prescaler output, independent of CONTROL's
+   enable latch. Do not reset the target or output counter on gate writes.
+   The half-period level is derived from the packed prescaler phase. */
+void SNSpcTimerSetTestGate(SNSpcTimerT *pTimer, Int32 nCycles, Bool bAllow)
+{
+    SNSpcTimerSync(pTimer, nCycles);
+    const Uint32 tick = pTimer->uCyclesPerTick;
+    if (!bAllow && pTimer->uTestGate != kTestGated && pTimer->bEnabled && tick)
+    {
+        Uint32 stage = ((Uint32)pTimer->nElapsedCycles / tick) & 255u;
+        const Uint32 phase = (Uint32)pTimer->nElapsedCycles % tick;
+        // Gating a high prescaler output produces a falling edge.
+        if (phase >= tick / 2u)
+        {
+            stage = (stage + 1u) & 255u;
+            if (stage == pTimer->uCompare)
+            {
+                stage = 0;
+                pTimer->uUpCounter = (pTimer->uUpCounter + 1u) & 15u;
+            }
+            pTimer->nElapsedCycles = (Int32)(stage * tick + phase);
+        }
+    }
+    pTimer->uTestGate = bAllow ? 0 : kTestGated;
 }
 
 void SNSpcTimerSetTimer(SNSpcTimerT *pTimer, Uint8 uValue)

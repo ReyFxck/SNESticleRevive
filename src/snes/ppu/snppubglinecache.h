@@ -175,6 +175,25 @@ _INLINE Bool SnesPPUBGLineCacheKeyMatches(
 #endif
 }
 
+/* An unchanged VRAM epoch plus the exact fetch key proves the previously
+   validated dependency stamp is still current. No probabilistic hash. */
+_INLINE Uint32 SnesPPUBGLineCacheKeyGeneration(const SnesPPUBGLineCacheKeyT *pKey)
+{
+#if SNPPU_BG_CACHE_PACKED_KEY
+    return (Uint32)pKey->uGenerationState;
+#else
+    return pKey->uGeneration;
+#endif
+}
+_INLINE Bool SnesPPUBGLineCacheEpochMatches(const SnesPPUBGLineCacheKeyT *pKey,
+    Uint32 uValidatedEpoch, Uint32 uCurrentEpoch, Uint32 uState,
+    Uint32 uBG, Uint32 uMode, const SnesBGInfoT *pInfo)
+{
+    return uValidatedEpoch == uCurrentEpoch &&
+        SnesPPUBGLineCacheKeyMatches(pKey, SnesPPUBGLineCacheKeyGeneration(pKey),
+            uState, uBG, uMode, pInfo);
+}
+
 /* Reuse an overlapping 33-cell window only when every other fetch input is
    exact. Normal 16x16 maps have two 8-dot cells per horizontal map entry;
    native hires has one logical cell (two physical CHR halves) per entry. */

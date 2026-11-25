@@ -220,6 +220,15 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 #endif
 	switch (uAddr)
 	{
+    case 0xF0: // TEST: the timer gate is separate from CONTROL.
+        // Hardware ignores TEST register writes while PSW.P is set.
+        // RAM controls and access-clock selection remain unimplemented.
+        if (!(pSpc->Regs.rPSW & SNSPC_FLAG_P))
+            for (Uint32 i = 0; i < 3; ++i)
+                SNSpcTimerSetTestGate(&pIO->m_Regs.spc_timer[i], iCycle,
+                    (uData & 0x09u) == 0x08u);
+        break;
+
 	case 0xF1:	// control
 		{
 			/* Apply already-visible CPU writes, then clear both the live latch

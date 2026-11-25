@@ -132,6 +132,36 @@ static uint64_t Exercise(Uint32 rate, bool extended = false)
 	return capture.hash;
 }
 
+// EDL=0 repeats one stereo cell. Seed the cell with a constant BRR
+// voice, then gate writes and main output: repeated reads must be audible
+// and must not overwrite the cell with zero.
+static bool CheckEchoWriteDisable()
+{
+    Uint8 ram[65536] = {};
+    SNSpcDsp dsp{}; SNSpcDspMixFull mixer{};
+    dsp.SetMem(ram); dsp.SetMixer(0,&mixer); dsp.SetMixer(1,NULL);
+    mixer.SetDsp(&dsp); dsp.Reset(); mixer.Reset();
+    ram[0x1001]=ram[0x1003]=0x20;
+    ram[0x2000]=0x83;
+    for(unsigned i=1;i<9;++i) ram[0x2000+i]=0x77;
+    dsp.Write8(SNSPCDSP_REG_DIR,0x10);
+    dsp.Write8(SNSPCDSP_REG_VOLL,127); dsp.Write8(SNSPCDSP_REG_VOLR,127);
+    dsp.Write8(SNSPCDSP_REG_PITCHHI,0x10); dsp.Write8(SNSPCDSP_REG_GAIN,127);
+    dsp.Write8(SNSPCDSP_REG_EON,1); dsp.Write8(SNSPCDSP_REG_EDL,0);
+    dsp.Write8(SNSPCDSP_REG_EFB,0); dsp.Write8(SNSPCDSP_REG_ECHOFIR0,127);
+    dsp.Write8(SNSPCDSP_REG_EVOLL,127); dsp.Write8(SNSPCDSP_REG_EVOLR,127);
+    dsp.Write8(SNSPCDSP_REG_MVOLL,0); dsp.Write8(SNSPCDSP_REG_MVOLR,0);
+    dsp.Write8(SNSPCDSP_REG_FLG,0); dsp.Write8(SNSPCDSP_REG_KON,1);
+    Capture seed; seed.rate=32000; seed.samples=64; mixer.Mix(&seed);
+    dsp.Write8(SNSPCDSP_REG_FLG,0x20);
+    Capture a,b,zero;
+    a.rate=b.rate=zero.rate=32000; a.samples=b.samples=zero.samples=32;
+    mixer.Mix(&a); mixer.Mix(&b);
+    for(unsigned i=0;i<64;++i) zero.Add(0);
+    const bool ok=a.produced==32 && b.produced==32 && a.hash==b.hash && a.hash!=zero.hash;
+    std::printf("echo write-disable readback: %s\n",ok?"PASS":"FAIL");
+    return ok;
+}
 int main()
 {
 	static const Uint32 rates[] = { 32000, 44100, 48000 };
@@ -139,7 +169,7 @@ int main()
 		UINT64_C(0x62FA954A37C83057), UINT64_C(0x0D19ED458CD96149),
 		UINT64_C(0xCD9D6A629D9DBC95)
 	};
-	int failures = 0;
+	int failures = CheckEchoWriteDisable() ? 0 : 1;
 	for (Uint32 i = 0; i < 3; i++)
 	{
 		uint64_t result = Exercise(rates[i]);

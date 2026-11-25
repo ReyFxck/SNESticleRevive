@@ -388,4 +388,25 @@ static inline void SNMaskAndNotOr(SNMaskT *pDest, const SNMaskT *pA,
 #endif
 }
 
+/* A & ~(B | C), for window + BG3 priority clipping in one pass. */
+static inline void SNMaskAndNot2(SNMaskT *pDest, const SNMaskT *pA,
+    const SNMaskT *pB, const SNMaskT *pC)
+{
+#if SNMASKOP_INLINE && SNMASKOP_ASSEMBLY
+    __asm__ __volatile__(
+        "lq $8, 0(%1)\n\t" "lq $9, 16(%1)\n\t"
+        "lq $10, 0(%2)\n\t" "lq $11, 16(%2)\n\t"
+        "lq $12, 0(%3)\n\t" "lq $13, 16(%3)\n\t"
+        "por $10, $10, $12\n\t" "por $11, $11, $13\n\t"
+        "pnor $10, $10, $0\n\t" "pnor $11, $11, $0\n\t"
+        "pand $8, $8, $10\n\t" "pand $9, $9, $11\n\t"
+        "sq $8, 0(%0)\n\t" "sq $9, 16(%0)\n\t"
+        : : "r"(pDest), "r"(pA), "r"(pB), "r"(pC)
+        : "$8", "$9", "$10", "$11", "$12", "$13", "memory");
+#else
+    for (Uint32 i = 0; i < 4; ++i)
+        pDest->uMask64[i] = pA->uMask64[i] & ~(pB->uMask64[i] | pC->uMask64[i]);
+#endif
+}
+
 #endif

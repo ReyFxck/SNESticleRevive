@@ -3,7 +3,7 @@ set -eu
 cd "$(dirname "$0")/../.."
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-for flags in '' '-DSNPPU_BG_CHR_CACHE=0 -DSNPPU_BG_CHR_REPEAT_FINAL=0'; do
+for flags in '' '-DSNPPU_BG_CHR_CACHE=0 -DSNPPU_BG_CHR_REPEAT_FINAL=0' '-DSNPPU_BG_CACHE_PACKED_KEY=0 -DSNPPU_BG_LINE_CACHE_WAYS=1'; do
     ${CXX:-g++} -O2 -fno-strict-aliasing -ffunction-sections -fdata-sections -Wl,--gc-sections \
         -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 -DSNDBG_LOG=0 $flags \
         -I src/common/base -I src/common/render -I src/common/debug -I src/common/system \

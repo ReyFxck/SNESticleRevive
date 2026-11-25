@@ -65,6 +65,12 @@ jobs:
         if: matrix.name == 'release'
         run: bash tools/pputest/test_hardware_accuracy.sh
 
+      - name: Verify 65C816 bus and interrupt host regressions
+        if: matrix.name == 'release'
+        run: |
+          bash tools/cputest/build.sh
+          tools/cputest/cpu_test </dev/null
+
       - name: Verify SA-1 and SuperFX host regressions
         if: matrix.name == 'release'
         run: |

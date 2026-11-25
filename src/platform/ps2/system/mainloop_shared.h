@@ -174,6 +174,9 @@ extern Float32 _MainLoop_fOutputIntensity;
 extern Uint32 _MainLoop_DiagPrepCount;
 extern Uint32 _MainLoop_DiagSubmitCount;
 extern Uint32 _MainLoop_DiagFlipCount;
+#if SNDBG_LOG
+extern Uint32 _MainLoop_DiagVRBefore, _MainLoop_DiagVRAfter;
+#endif
 #endif
 
 void MainLoopRender();

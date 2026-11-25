@@ -20,10 +20,12 @@ typedef struct SNSpcTimer_t
 	Uint8	uCompare;			// low-counter compare
 	Uint8	uUpCounter;			// 4-bit hi-counter value
 	Bool	bEnabled;
+	Uint8 uTestGate; // former padding; 0 = normal, 0xA5 = globally gated
 } SNSpcTimerT;
 
 void SNSpcTimerReset(SNSpcTimerT *pTimer, Uint32 uCyclesPerTick);
 void SNSpcTimerSetEnable(SNSpcTimerT *pTimer, Int32 nCycles, Bool bEnable);
+void SNSpcTimerSetTestGate(SNSpcTimerT *pTimer, Int32 nCycles, Bool bAllow);
 void SNSpcTimerSetTimer(SNSpcTimerT *pTimer, Uint8 uValue);
 void SNSpcTimerSync(SNSpcTimerT *pTimer, Int32 nCycles);
 Uint8 SNSpcTimerGetCounter(SNSpcTimerT *pTimer, Int32 nCycles);

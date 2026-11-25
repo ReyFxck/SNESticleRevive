@@ -102,6 +102,11 @@ static void TestMasks()
         got=a; SNMaskAndNotOr(&got,&got,&b,&c); Check(!std::memcmp(&got,&expected,32),"alias A");
         got=b; SNMaskAndNotOr(&got,&a,&got,&c); Check(!std::memcmp(&got,&expected,32),"alias B");
         got=c; SNMaskAndNotOr(&got,&a,&b,&got); Check(!std::memcmp(&got,&expected,32),"alias C");
+        for(unsigned j=0;j<8;++j) expected.uMask32[j]=a.uMask32[j]&~(b.uMask32[j]|c.uMask32[j]);
+        SNMaskAndNot2(&got,&a,&b,&c); Check(!std::memcmp(&got,&expected,32),"fused ANDNOT2");
+        got=a; SNMaskAndNot2(&got,&got,&b,&c); Check(!std::memcmp(&got,&expected,32),"ANDNOT2 alias A");
+        got=b; SNMaskAndNot2(&got,&a,&got,&c); Check(!std::memcmp(&got,&expected,32),"ANDNOT2 alias B");
+        got=c; SNMaskAndNot2(&got,&a,&b,&got); Check(!std::memcmp(&got,&expected,32),"ANDNOT2 alias C");
     }
     for(unsigned i=0;i<4096;++i) {
         Uint8 src[33],dst[48],expected[48];
@@ -113,4 +118,38 @@ static void TestMasks()
     }
     std::puts("Masks: 65536 fused cases + 4096 stores PASS");
 }
-int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); }
+static void TestMosaicAndEpoch()
+{
+    unsigned cases=0;
+    for(unsigned mosaic=0;mosaic<16;++mosaic)
+    for(unsigned scroll=0;scroll<8;++scroll)
+    for(unsigned pattern=0;pattern<4;++pattern)
+    for(unsigned trial=0;trial<32;++trial) {
+        Uint8 src[48] _ALIGN(16) = {}, pri[48] _ALIGN(16) = {};
+        SNMaskT op, pr;
+        for(unsigned j=0;j<33;++j) {
+            src[j]=pattern?Next():0;
+            pri[j]=pattern==2?src[j]:pattern==3?(src[j]&Next()):0;
+        }
+        _SnesPPURestoreCachedMasks(&op,&pr,src,pri,scroll,
+            _SnesPPUClassifyBGLineMasks(src,pri),mosaic);
+        for(unsigned x=0;x<256;++x) {
+            unsigned bit=(x/(mosaic+1))*(mosaic+1)+scroll;
+            Check(((op.uMask8[x/8]>>(x&7))&1)==((src[bit/8]>>(bit&7))&1),"mosaic opaque");
+            Check(((pr.uMask8[x/8]>>(x&7))&1)==((pri[bit/8]>>(bit&7))&1),"mosaic priority");
+        }
+        ++cases;
+    }
+    SnesBGInfoT info={}; info.uBitDepth=4;
+    SnesPPUBGLineCacheKeyT key;
+    for(unsigned m=0;m<16;++m) {
+        info.uMosaic=m;
+        SnesPPUBGLineCacheSetKey(&key,99,0x10000,0,1,&info);
+        Check(SnesPPUBGLineCacheEpochMatches(&key,7,7,0x10000,0,1,&info),"same epoch/key");
+        Check(!SnesPPUBGLineCacheEpochMatches(&key,7,8,0x10000,0,1,&info),"changed epoch");
+        Check(!SnesPPUBGLineCacheEpochMatches(&key,7,7,0x10001,0,1,&info),"changed tile");
+        Check(bool(SnesPPUBGLineCacheEpochMatches(&key,7,7,0x20000,0,1,&info))==(m==0),"mosaic phase key");
+    }
+    std::printf("Mosaic masks: %u cases; epoch key: 64 checks PASS\n",cases);
+}
+int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndEpoch(); }

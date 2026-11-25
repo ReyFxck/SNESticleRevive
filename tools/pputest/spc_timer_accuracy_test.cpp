@@ -68,6 +68,15 @@ int main()
     SNSpcTimerReset(&t,tick); t.iCycleSync=(Int32)0xfffffff0u; SNSpcTimerSetTimer(&t,1);
     SNSpcTimerSetEnable(&t,t.iCycleSync,TRUE);
     check("32-bit time wrap",SNSpcTimerGetCounter(&t,(Int32)(0xfffffff0u+tick)),1);
+    SNSpcTimerReset(&t,tick); SNSpcTimerSetTimer(&t,1);
+    SNSpcTimerSetEnable(&t,0,TRUE);
+    SNSpcTimerSetTestGate(&t,tick/2, FALSE);
+    check("TEST falling edge",SNSpcTimerGetCounter(&t,tick/2),1);
+    check("TEST gate blocks pulses",SNSpcTimerGetCounter(&t,4*tick),0);
+    SNSpcTimerSetTestGate(&t,4*tick,TRUE);
+    check("TEST resumes prescaler",SNSpcTimerGetCounter(&t,5*tick),1);
+    SNSpcTimerSetTestGate(&t,5*tick+1,FALSE);
+    check("low phase gate no falling edge",SNSpcTimerGetCounter(&t,6*tick),0);
     randomized(128*21); randomized(tick);
     SNSpcT spc; std::memset(&spc,0,sizeof(spc));
     spc.Mem[0]=0x12; spc.Mem[0xffff]=0x34; spc.Mem[1]=0x56;

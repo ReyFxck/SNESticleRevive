@@ -95,5 +95,14 @@ int main() {
         check(io.m_Regs.apu_r[i]==0x80+i,"output latch preserved");
         check(spc.Mem[0xF4+i]==0x80+i,"underlying ARAM preserved");
     }
+    spc.Regs.rPSW=0;
+    SNSPCWrite8(&spc,0xF0,0x00);
+    for(unsigned i=0;i<3;++i) check(io.m_Regs.spc_timer[i].uTestGate!=0,"TEST gate closes");
+    spc.Regs.rPSW=SNSPC_FLAG_P;
+    SNSPCWrite8(&spc,0xF0,0x08);
+    for(unsigned i=0;i<3;++i) check(io.m_Regs.spc_timer[i].uTestGate!=0,"PSW.P protects TEST");
+    spc.Regs.rPSW=0;
+    SNSPCWrite8(&spc,0xF0,0x08);
+    for(unsigned i=0;i<3;++i) check(io.m_Regs.spc_timer[i].uTestGate==0,"TEST gate opens");
     std::printf("APU physical memory: %u assertions PASS\n",checks);
 }

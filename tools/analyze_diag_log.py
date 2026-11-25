@@ -71,6 +71,17 @@ def analyze(path):
                       cadence_tail_ms=round(sum(c[2]*c[5] for c in cadence)*1000/(count*hz), 3),
                       cadence_over105=sum(c[6] for c in cadence),
                       cadence_over150=sum(c[7] for c in cadence))
+    epoch = [int(x) for x in re.findall(r"\[snes-bg-line-epoch\] hits=(\d+)", text)]
+    if epoch:
+        result["bg_line_epoch_hits"] = sum(epoch)
+    vr = [tuple(map(int,x)) for x in re.findall(
+        r"\[ps2-vblank-irq\] session=(\d+) intervals=(\d+) before/during=(\d+)/(\d+) zero/multiple/invalid=(\d+)/(\d+)/(\d+)",text)]
+    if vr:
+        result["vblank_irq"] = {"intervals":sum(x[1] for x in vr),
+            "before_flip":sum(x[2] for x in vr),"during_flip":sum(x[3] for x in vr),
+            "zero":sum(x[4] for x in vr),"multiple":sum(x[5] for x in vr),
+            "invalid":sum(x[6] for x in vr),
+            "counter_observed":any(x[2] or x[3] for x in vr)}
     return result
 
 if __name__ == "__main__":

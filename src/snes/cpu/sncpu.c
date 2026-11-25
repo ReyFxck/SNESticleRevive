@@ -479,6 +479,7 @@ Uint8 SNCPUPeek8(SNCpuT *pCpu, Uint32 Addr)
 	Uint32 iBank;
 	Uint8 *pBankMem;
 
+	Addr &= 0xFFFFFFu;
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
@@ -515,6 +516,7 @@ Uint8 SNCPURead8(SNCpuT *pCpu, Uint32 Addr)
 	Uint8 *pBankMem;
 	Uint8 uData;
 
+	Addr &= 0xFFFFFFu;
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	pBankMem = pCpu->Bank[iBank].pMem;
 
@@ -579,6 +581,7 @@ void SNCPUReadMem(SNCpuT *pCpu, Uint32 uAddr, Uint8 *pBuffer, Uint32 nTotalBytes
 		Uint32 iBank;
 		Uint8 *pBankMem;
 
+		uAddr &= 0xFFFFFFu;
 		nBytes = nTotalBytes;
 
 		// calculate number of bytes to end of bank
@@ -625,6 +628,7 @@ void  SNCPUWrite8(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
 	Uint32 iBank;
 	Uint8 *pBankMem;
 
+	Addr &= 0xFFFFFFu;
 	iBank = Addr >> SNCPU_BANK_SHIFT;
 	/* CPU writes drive the data bus even when the addressed device ignores
 	   the write, so trapped write handlers must see the newly driven byte. */

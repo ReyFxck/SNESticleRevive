@@ -103,6 +103,19 @@ static bool Check24BitBusWrap(SNCpuT *cpu, Uint8 *memory)
 	ok &= SNCPURead8(cpu, 0x1000123) == 0x5A;
 	SNCPUWrite8(cpu, 0x1000123, 0xC3);
 	ok &= memory[0x0123] == 0xC3;
+    ok &= SNCPUPeek8(cpu, 0xff000123u)==0xC3;
+    ok &= SNCPURead8(cpu, 0xff000123u)==0xC3;
+    SNCPUWrite8(cpu,0xff000123u,0x5A);
+    ok &= memory[0x0123]==0x5A;
+    memory[0xffffff]=0x34; memory[0]=0x12; memory[1]=0x56;
+    ok &= SNCPURead16(cpu,0xffffff)==0x1234;
+    ok &= SNCPURead24(cpu,0xffffff)==0x561234;
+    Uint8 wrapped[3];
+    SNCPUReadMem(cpu,0xffffffffu,wrapped,3);
+    ok &= wrapped[0]==0x34 && wrapped[1]==0x12 && wrapped[2]==0x56;
+    SNCPUWrite16(cpu,0xffffff,0xABCD);
+    ok &= memory[0xffffff]==0xCD && memory[0]==0xAB;
+    memory[0xffffff]=memory[0]=memory[1]=0;
 
 	/* The overflow page must also forward I/O/trap accesses with the masked
 	   24-bit address, rather than exposing $100:xxxx to the device. */
