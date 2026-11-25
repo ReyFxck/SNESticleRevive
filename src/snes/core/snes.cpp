@@ -1474,6 +1474,7 @@ SnesSystem::SnesSystem()
 	m_SpcDspMixer.SetDsp(&m_SpcDsp);
 	m_SpcDspSilentMixer.SetDsp(&m_SpcDsp);
 	m_SpcDsp.SetMem(m_Spc.Mem);
+	m_SpcDsp.SetIPLOverlay(m_Spc.ShadowMem, &m_Spc.bRomEnable);
 
 	// setup dma controller
 	m_DMAC.SetCPU(&m_Cpu);

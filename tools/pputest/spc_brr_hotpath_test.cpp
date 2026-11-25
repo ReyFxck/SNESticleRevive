@@ -68,12 +68,12 @@ static unsigned SpcTest() {
 }
 static Uint8 ReferenceBRR(const Uint8 *data, Int16 *out, Int16 p0, Int16 p1) {
     const int coeff[4][2]={{0,0},{240,0},{488,-240},{460,-208}};
-    unsigned h=data[0],r=h>>4; if(r>12)r-=4;
+    unsigned h=data[0],r=h>>4;
     Int16 decode[16];
     for (unsigned j=0;j<16;++j) {
         int nibble=(data[1+j/2] >> (j%2?0:4))&15;
         if(nibble>=8)nibble-=16;
-        decode[j]=(Int16)(nibble*(1<<r));
+        decode[j]=(Int16)(r>12 ? (nibble<0 ? -4096 : 0) : nibble*(1<<r));
     }
     for(unsigned j=0;j<16;++j) {
         int f=(h>>2)&3;

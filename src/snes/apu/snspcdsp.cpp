@@ -10,19 +10,22 @@
 #include "types.h"
 #include "prof.h"
 #include "snspcdsp.h"
+#include "snspcdefs.h"
 #include "console.h"
 
 #define SNSPCDSP_DETERMINISMSAFE (0)
 #define SNSPCDSP_DEBUGPRINT (CODE_DEBUG && FALSE)
 
-SNSpcDsp::SNSpcDsp()
+SNSpcDsp::SNSpcDsp() : m_pMem(0), m_pShadow(0), m_pRomEnable(0)
 {
+	memset(m_pMixer, 0, sizeof(m_pMixer));
 }
 
 void SNSpcDsp::Reset()
 {
 	memset(m_Regs, 0, sizeof(m_Regs));
-	m_Regs[SNSPCDSP_REG_FLG] = 0x40;
+	/* Model the internal reset flags; actual register readback is undefined. */
+	m_Regs[SNSPCDSP_REG_FLG] = 0xE0;
 	m_Queue.Reset();
 }
 
@@ -137,6 +140,25 @@ Uint8 SNSpcDsp::Read8(Uint32 uAddr)
 	return m_Regs[uAddr];
 }
 
+/* The DSP sees physical ARAM, not the SPC700 IPL read overlay. */
+Uint8 SNSpcDsp::ReadSampleByte(Uint16 addr) const
+{
+    if (addr >= SNSPC_ROM_ADDR && m_pShadow && m_pRomEnable && *m_pRomEnable)
+        return m_pShadow[addr - SNSPC_ROM_ADDR];
+    return m_pMem[addr];
+}
+
+const Uint8 *SNSpcDsp::GetSampleBlock(Uint16 addr, Uint8 (&scratch)[9]) const
+{
+    /* Common case: the nine bytes are contiguous in real ARAM. */
+    if (addr <= 0xFFF7u &&
+        (addr <= SNSPC_ROM_ADDR - 9 || !m_pShadow || !m_pRomEnable || !*m_pRomEnable))
+        return m_pMem + addr;
+    for (unsigned i = 0; i < 9; ++i)
+        scratch[i] = ReadSampleByte((Uint16)(addr + i));
+    return scratch;
+}
+
 Uint16 SNSpcDsp::GetSampleDir(Uint8 uSrcN, Uint32 uOffset)
 {
 	Uint16 uSampleDir;
@@ -147,8 +169,8 @@ Uint16 SNSpcDsp::GetSampleDir(Uint8 uSrcN, Uint32 uOffset)
 	uSampleDir+= uOffset;
 
 	// read word from sample directory
-	uData = m_pMem[uSampleDir + 0] << 0;
-	uData|= m_pMem[uSampleDir + 1] << 8;
+	uData = ReadSampleByte(uSampleDir);
+	uData |= ReadSampleByte((Uint16)(uSampleDir + 1)) << 8;
 	return uData;
 }
 

@@ -229,14 +229,10 @@ void SNSpcIO::Write8Trap(SNSpcT *pSpc, Uint32 uAddr, Uint8 uData)
 			if (uData&0x10)
 			{
 				pIO->ClearCpuPorts(0x03);
-				pSpc->Mem[0xf4] = 0x00;
-				pSpc->Mem[0xf5] = 0x00;
 			}
 			if (uData&0x20)
 			{
 				pIO->ClearCpuPorts(0x0C);
-				pSpc->Mem[0xf6] = 0x00;
-				pSpc->Mem[0xf7] = 0x00;
 			}
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[0], iCycle, (uData & 1));
 			SNSpcTimerSetEnable(&pIO->m_Regs.spc_timer[1], iCycle, (uData & 2));

@@ -120,7 +120,7 @@ void SnesDMAC::EndDMATiming()
 	m_uDMAClockCounter = 0;
 }
 
-Bool SnesDMAC::IsABusForbidden(Uint32 uAddr) const
+Bool SnesDMAC::IsABusForbidden(Uint32 uAddr)
 {
 	Uint32 uBank = (uAddr >> 16) & 0xFF;
 	Uint32 uLow = uAddr & 0xFFFF;
@@ -130,7 +130,8 @@ Bool SnesDMAC::IsABusForbidden(Uint32 uAddr) const
 		return FALSE;
 	if (uLow >= 0x2100 && uLow <= 0x21FF)
 		return TRUE;
-	if (uLow == 0x420B || uLow == 0x420C ||
+	if ((uLow >= 0x4000 && uLow <= 0x41FF) ||
+	    (uLow >= 0x4200 && uLow <= 0x421F) ||
 	    (uLow >= 0x4300 && uLow <= 0x437F))
 		return TRUE;
 	return FALSE;
@@ -985,7 +986,7 @@ void SnesDMAC::BeginHDMA()
 
 		pChan = &m_Channels[uChan];
 		pChan->a2ax = pChan->a1tx;
-		pChan->ntlrx = SnesHDMARead8(m_pCPU,
+		pChan->ntlrx = ReadABus(
 			(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 		ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 		pChan->a2ax++;
@@ -996,7 +997,7 @@ void SnesDMAC::BeginHDMA()
 
 		if (pChan->dmapx & 0x40)
 		{
-			uLow = SnesHDMARead8(m_pCPU,
+			uLow = ReadABus(
 				(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 			ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 			pChan->a2ax++;
@@ -1009,7 +1010,7 @@ void SnesDMAC::BeginHDMA()
 			}
 			else
 			{
-				pChan->dasx = uLow | (SnesHDMARead8(m_pCPU,
+				pChan->dasx = uLow | (ReadABus(
 					(Uint16)pChan->a2ax | (pChan->a1bx << 16)) << 8);
 				ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 				pChan->a2ax++;
@@ -1046,14 +1047,19 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 		else
 			uAddrA = (pChan->a1bx << 16) | pChan->a2ax;
 
-		if (pChan->dmapx & 0x80)
+		if (uPortB == 0x80 && IsWorkRAMAddress(uAddrA))
+		{
+			/* The same WRAM bus conflict applies to HDMA. */
+			if (pChan->dmapx & 0x80) WriteABus(uAddrA, 0xFF);
+		}
+		else if (pChan->dmapx & 0x80)
 		{
 			uData = SnesHDMARead8(m_pCPU, uAddrB);
-			SNCPUWrite8(m_pCPU, uAddrA, uData);
+			WriteABus(uAddrA, uData);
 		}
 		else
 		{
-			uData = SnesHDMARead8(m_pCPU, uAddrA);
+			uData = ReadABus(uAddrA);
 			if (!SnesHDMATryQueuePPUWrite(
 			        m_pPPU, uLine, uPortB, uData))
 			{
@@ -1203,7 +1209,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 
 		/* The S-CPU performs this table read on every active scanline.  Its
 		   value is discarded until the seven-bit line counter reaches zero. */
-		uNewCounter = SnesHDMARead8(m_pCPU,
+		uNewCounter = ReadABus(
 			(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 		ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 
@@ -1219,7 +1225,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 					!((m_HDMAEnable & ~m_HDMAEnded) & uHigherMask);
 				Uint8 uLow;
 
-				uLow = SnesHDMARead8(m_pCPU,
+				uLow = ReadABus(
 					(Uint16)pChan->a2ax | (pChan->a1bx << 16));
 				ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
 				pChan->a2ax++;
@@ -1232,7 +1238,7 @@ void SnesDMAC::ProcessHDMA(Uint32 uLine)
 				}
 				else
 				{
-					pChan->dasx = uLow | (SnesHDMARead8(m_pCPU,
+					pChan->dasx = uLow | (ReadABus(
 						(Uint16)pChan->a2ax |
 						(pChan->a1bx << 16)) << 8);
 					ConsumeMasterClocks(SNCPU_CYCLE_SLOW);

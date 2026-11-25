@@ -10,8 +10,8 @@
 #include "snspcbrr.h"
 #include "prof.h"
 
-/* Preserve the existing Revive BRR arithmetic, including the invalid-range
-   mapping and 16-bit wrap after doubling. Decode and filter in one pass.
+/* Preserve the existing Revive BRR arithmetic, including the 16-bit wrap after doubling. Handle the documented
+   invalid-range sign-only rule before the predictor. Decode and filter in one pass.
    Copy the eight source bytes first: the old decoder also consumed all input
    before writing the output (including overlapping buffers). */
 static __inline Int32 _BRRNibble(Uint32 n, Uint32 range)
@@ -28,14 +28,21 @@ static __inline Int16 _BRRFilterSample(Int32 sample, Int32 prev0, Int32 prev1,
 	return (Int16)(sample * 2);
 }
 
-Uint8 SNSpcBRRDecode(Uint8 *pBRRBlock, Int16 *pOut, Int32 iPrev0, Int32 iPrev1)
+Uint8 SNSpcBRRDecode(const Uint8 *pBRRBlock, Int16 *pOut, Int32 iPrev0, Int32 iPrev1)
 {
 	const Uint8 header = pBRRBlock[0];
 	Uint32 range = header >> 4;
 	Uint8 data[8];
 	Int32 i, coeff0, coeff1;
-	if (range > 12) range -= 4;
-	for (i = 0; i < 8; ++i) data[i] = pBRRBlock[i + 1];
+	if (range > 12)
+	{
+		/* Ranges 13..15 produce 0 or -2048 before prediction.
+		   Normalize sign-only nibbles once to keep the inner loop unchanged. */
+		range = 9;
+		for (i = 0; i < 8; ++i) data[i] = pBRRBlock[i + 1] & 0x88;
+	}
+	else
+		for (i = 0; i < 8; ++i) data[i] = pBRRBlock[i + 1];
 
 	switch ((header >> 2) & 3)
 	{

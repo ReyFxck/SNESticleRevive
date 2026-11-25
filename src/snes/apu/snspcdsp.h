@@ -111,7 +111,11 @@ struct SNSpcChannelT
 	Uint8			envx;
 	Uint8			outx;
 	Uint8			endx;
-	Uint8			pad;
+	Uint8			bZeroBlock; // former padding: $0000 is a valid BRR address
+
+	Bool HasBlock() const { return uBlockAddr != 0 || bZeroBlock == TRUE; }
+	void SetBlockAddress(Uint16 addr) { uBlockAddr = addr; bZeroBlock = (addr == 0); }
+	void EndBlock() { uBlockAddr = 0; bZeroBlock = FALSE; }
 
 	Int16			BlockData[2][16];	// current BRR block; previous row tail [13..15] is Gaussian history
 };
@@ -133,6 +137,8 @@ class    SNSpcDsp
 	Uint8			m_Regs[SNSPCDSP_REG_NUM];
 
 	Uint8			*m_pMem;		// pointer to sample memory
+	const Uint8 *m_pShadow;
+	const Bool *m_pRomEnable;
 
 	ISNSpcDspMix	*m_pMixer[SNSPCDSP_MAXMIXERS];;
 
@@ -161,7 +167,11 @@ public:
 	Uint8	Read8(Uint32 uAddr);
 
 	inline Uint8	GetReg(SNSpcDspRegE eReg) {return m_Regs[eReg];}
-	inline void	SetMem(Uint8 *pMem) {m_pMem = pMem;}
+	inline void	SetMem(Uint8 *pMem) {m_pMem = pMem; m_pShadow = 0; m_pRomEnable = 0;}
+	inline void SetIPLOverlay(const Uint8 *shadow, const Bool *enabled)
+	{ m_pShadow = shadow; m_pRomEnable = enabled; }
+	Uint8 ReadSampleByte(Uint16 addr) const;
+	const Uint8 *GetSampleBlock(Uint16 addr, Uint8 (&scratch)[9]) const;
 	inline Uint8 *GetMem() {return m_pMem;}
 
 	void	UpdateFlags(ISNSpcDspMix *pMixer);

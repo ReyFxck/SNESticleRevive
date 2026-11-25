@@ -295,6 +295,26 @@ static void CheckDMATimingMath()
 	Check("DMA end sync xslow +4", SnesDMAC::CalcEndSync(20, 12), 4);
 }
 
+static void CheckDMABusMap()
+{
+    /* Every bank and every low address: system-bank MMIO is not accessible
+       through DMA A-bus. Cartridge/WRAM banks at the same offsets are valid. */
+    for (unsigned bank=0; bank<256; ++bank)
+    for (unsigned low=0; low<65536; ++low)
+    {
+        bool system = bank<0x40 || (bank>=0x80 && bank<0xc0);
+        bool expected = system && ((low>=0x2100 && low<0x2200) ||
+            (low>=0x4000 && low<0x4220) || (low>=0x4300 && low<0x4380));
+        if (SnesDMAC::IsABusForbidden((bank<<16)|low) != expected)
+        {
+            std::printf("FAIL DMA A-bus %02X:%04X\n",bank,low);
+            ++g_Failures;
+            return;
+        }
+    }
+    std::printf("DMA A-bus map: 16777216 addresses PASS\n");
+}
+
 static void CheckDMARegisterMap()
 {
 	SnesDMAC dma;
@@ -333,6 +353,7 @@ int main()
 	CheckScanlineTiming();
 	CheckDMATimingMath();
 	CheckDMARegisterMap();
+	CheckDMABusMap();
 
 	if (g_Failures)
 	{

@@ -187,7 +187,8 @@ void SNSpcDspMix::KeyOn(Int32 iChannel)
 
 	pChannel->eEnvState  = SNSPCDSP_ENVSTATE_ATTACK;
 	pChannel->nEnvCount  = 0;
-	pChannel->uBlockAddr = m_pDsp->GetSampleDir(pRegs->srcn, 0);
+	pChannel->SetBlockAddress(m_pDsp->GetSampleDir(pRegs->srcn, 0));
+	if (!pChannel->uBlockAddr) pChannel->uOldBlockAddr = 0xFFFF;
     // clear endx
 	pChannel->endx		 = FALSE;
 }
@@ -231,7 +232,7 @@ Int32 SNSpcDspMix::OutputEnvelope(Int32 iChannel, Uint8 *pOut, Int32 nSamples)
 
 	#if !SNSPCDSP_MIXSILENCE
 	// sample has ended
-	if (pChannel->uBlockAddr== 0)
+	if (!pChannel->HasBlock())
 	{
 		return 0;
 	}
@@ -525,12 +526,13 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 	pChannel->BlockData[0][15] = pChannel->BlockData[1][15];
 
 	// decode next block
-	if (pChannel->uBlockAddr!=0)
+	if (pChannel->HasBlock())
 	{
 		PROF_ENTER("SNSpcBRRDecode");
-		uFlags = SNSpcBRRDecode((m_pDsp->GetMem() + pChannel->uBlockAddr), pChannel->BlockData[1], pChannel->BlockData[0][15], pChannel->BlockData[0][14]);
+		Uint8 scratch[9];
+		uFlags = SNSpcBRRDecode(m_pDsp->GetSampleBlock(pChannel->uBlockAddr, scratch), pChannel->BlockData[1], pChannel->BlockData[0][15], pChannel->BlockData[0][14]);
 		PROF_LEAVE("SNSpcBRRDecode");
-		pChannel->uBlockAddr += 9;
+		pChannel->SetBlockAddress((Uint16)(pChannel->uBlockAddr + 9));
 	}  else
 	{
 		// fade out slowly
@@ -549,10 +551,10 @@ void SNSpcDspMixFull::FetchBlock(Int32 iChannel)
 		if (uFlags & 2 )
 		{
 			// do looping here?
-			pChannel->uBlockAddr = m_pDsp->GetSampleDir(pRegs->srcn, 2);
+			pChannel->SetBlockAddress(m_pDsp->GetSampleDir(pRegs->srcn, 2));
 		} else
 		{
-			pChannel->uBlockAddr = 0;
+			pChannel->EndBlock();
 		}
 	}
 }
@@ -567,7 +569,7 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 	Int16 *pBlockData;
 
 #if !SNSPCDSP_MIXSILENCE
-	if (pChannel->uBlockAddr == 0)
+	if (!pChannel->HasBlock())
 	{
 		pChannel->uOldBlockAddr = pChannel->uBlockAddr;
 		// silent sample data
@@ -643,7 +645,7 @@ Int32 SNSpcDspMixFull::OutputSample(Int32 iChannel, Int16 *pOut, Int32 nSamples,
 	}
 
 	// voice ended?
-	if (pChannel->uBlockAddr == 0)
+	if (!pChannel->HasBlock())
 	{
 		pChannel->eEnvState = SNSPCDSP_ENVSTATE_SILENCE;
 		pChannel->endx = TRUE;
@@ -1268,12 +1270,12 @@ void SNSpcDspMixSilent::FetchBlock(Int32 iChannel)
 	SNSpcChannelT *pChannel = GetChannel(iChannel);
 
 	// decode next block
-	if (pChannel->uBlockAddr!=0)
+	if (pChannel->HasBlock())
 	{
 		Uint8 uFlags = 0;
 
-		uFlags = m_pDsp->GetMem()[pChannel->uBlockAddr];
-		pChannel->uBlockAddr += 9;
+		uFlags = m_pDsp->ReadSampleByte(pChannel->uBlockAddr);
+		pChannel->SetBlockAddress((Uint16)(pChannel->uBlockAddr + 9));
 
 		// end of sample reached?
 		if (uFlags&1)
@@ -1285,10 +1287,10 @@ void SNSpcDspMixSilent::FetchBlock(Int32 iChannel)
 			if (uFlags & 2 )
 			{
 				// do looping here?
-				pChannel->uBlockAddr = m_pDsp->GetSampleDir(pRegs->srcn, 2);
+				pChannel->SetBlockAddress(m_pDsp->GetSampleDir(pRegs->srcn, 2));
 			} else
 			{
-				pChannel->uBlockAddr = 0;
+				pChannel->EndBlock();
 			}
 		}
 
@@ -1303,7 +1305,7 @@ Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples, Int32 nSam
 	Int32 iPhaseInc;
 	Uint32 uPitch;
 
-	if (pChannel->uBlockAddr == 0)
+	if (!pChannel->HasBlock())
 	{
 		pChannel->uOldBlockAddr = pChannel->uBlockAddr;
 		// silent sample data
@@ -1338,7 +1340,7 @@ Int32 SNSpcDspMixSilent::OutputSample(Int32 iChannel, Int32 nSamples, Int32 nSam
 	}
 
 	// voice ended?
-	if (pChannel->uBlockAddr == 0)
+	if (!pChannel->HasBlock())
 	{
 		pChannel->eEnvState = SNSPCDSP_ENVSTATE_SILENCE;
 		pChannel->endx = TRUE;      // this is what we came here for

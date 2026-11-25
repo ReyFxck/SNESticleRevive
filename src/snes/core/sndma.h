@@ -65,6 +65,7 @@ public:
 	void                        SetHDMAEnable(Uint8 uData);
 	Uint8                       GetMDMAEnable() {return m_MDMAEnable;}
 	Uint8                       GetHDMAEnable() {return m_HDMAEnable;}
+	static Bool                 IsABusForbidden(Uint32 uAddr);
 	static Uint32               CalcStartSync(Uint32 uMasterClock)
 	{
 		return 8u - (uMasterClock & 7u);
@@ -107,7 +108,6 @@ private:
 	void                        RebuildHDMAActiveList();
 #endif
 	Uint32                      GetPausedCpuSpeed() const;
-	Bool                        IsABusForbidden(Uint32 uAddr) const;
 	Bool                        IsWorkRAMAddress(Uint32 uAddr) const;
 	Uint8                       ReadABus(Uint32 uAddr);
 	void                        WriteABus(Uint32 uAddr, Uint8 uData);
