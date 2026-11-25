@@ -222,9 +222,6 @@ public:
 	void                    WriteVMDATAH(Uint8 uData);
 	void                    WriteVMDATALH(Uint8 uDataL, Uint8 uDataH);
 	void                    WriteVMDATABlock(const Uint8 *pData, Int32 nBytes);
-	/* Deferred VRAM DMA writes for active display */
-	void                    WriteVMDATAL_Deferred(Uint8 uData);
-	void                    WriteVMDATAH_Deferred(Uint8 uData);
 	void                    Write8(Uint32 uAddr, Uint8 uData);
 	/* CPU/DMA timed B-bus accessors. These preserve port-address side effects
 	   even when active display redirects or blocks the underlying memory. */
@@ -280,34 +277,6 @@ private:
 	Uint8                   m_PPU1OpenBus;
 	Uint8                   m_PPU2OpenBus;
 	Bool                    m_bCountersLatched;
-
-    /* Window register write buffering for active display.
-       Mid-frame window register writes ($2123-$212B) trigger GS pipeline
-       flushes on PS2. Buffer them and apply once at VBlank. */
-    struct SnesPPUWindowBufferT
-    {
-        /* Only logic/select registers are buffered.
-           WH0-WH3 take effect immediately for per-scanline accuracy. */
-        Uint8   w12sel, w34sel, wobjsel, wbglog, wobjlog;
-        Bool    bPending;
-    } m_WindowBuffer;
-
-    /* VRAM DMA deferral for active display.
-       Mid-frame VRAM uploads ($2118/$2119) trigger GS stalls on PS2.
-       Buffer them and apply once at VBlank. */
-    struct SnesPPUVramDmaBufferT
-    {
-        struct EntryT
-        {
-            Uint32  uAddr;
-            Uint16  uData;
-            Bool    bHigh;  // TRUE = $2119 (high), FALSE = $2118 (low)
-        };
-        static const Uint32 MAX_ENTRIES = 2048;
-        EntryT  aEntries[MAX_ENTRIES];
-        Uint32  uCount;
-        Bool    bActive;
-    } m_VramDmaBuffer;
 
     ISnesPPURender *        m_pRender;
 

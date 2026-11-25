@@ -143,40 +143,6 @@ static Uint32 _SwizzleVramAddr(Uint32 uVramAddr, Uint32 uFullGraphic)
 	}
 }
 
-/* Deferred VRAM DMA write - used during active display to buffer VRAM uploads
-   and apply at VBlank, avoiding mid-frame GS stalls on PS2. */
-void SnesPPU::WriteVMDATAL_Deferred(Uint8 uData)
-{
-	if (m_VramDmaBuffer.uCount < m_VramDmaBuffer.MAX_ENTRIES)
-	{
-		SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
-		Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
-		                                    (m_Regs.vmain >> 2) & 3);
-		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].uAddr = uVramAddr;
-		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].uData = (Uint16)uData | (pVram[uVramAddr].w & 0xFF00);
-		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].bHigh = FALSE;
-		m_VramDmaBuffer.uCount++;
-		m_VramDmaBuffer.bActive = TRUE;
-	}
-	m_Regs.vmaddr.w += m_Regs.vminc[0];
-}
-
-void SnesPPU::WriteVMDATAH_Deferred(Uint8 uData)
-{
-	if (m_VramDmaBuffer.uCount < m_VramDmaBuffer.MAX_ENTRIES)
-	{
-		SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
-		Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
-		                                    (m_Regs.vmain >> 2) & 3);
-		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].uAddr = uVramAddr;
-		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].uData = ((Uint16)uData << 8) | (pVram[uVramAddr].w & 0x00FF);
-		m_VramDmaBuffer.aEntries[m_VramDmaBuffer.uCount].bHigh = TRUE;
-		m_VramDmaBuffer.uCount++;
-		m_VramDmaBuffer.bActive = TRUE;
-	}
-	m_Regs.vmaddr.w += m_Regs.vminc[1];
-}
-
 void SnesPPU::WriteVMDATALTimed(Uint8 uData, Bool bAllow)
 {
 #if SNDBG_LOG
@@ -189,21 +155,18 @@ void SnesPPU::WriteVMDATALTimed(Uint8 uData, Bool bAllow)
 	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
 	                                    (m_Regs.vmain >> 2) & 3);
 	
-	/* Defer VRAM writes during active display ONLY when explicitly not allowed
-	   (i.e., DMA during active display with bAllow=FALSE). CPU writes and VBlank
-	   DMA go through immediately to avoid breaking mid-frame sprite uploads. */
-	if (!bAllow)
+	/* In active display VRAM rejects the write, but VMADD still advances. */
+	if (bAllow)
 	{
-		WriteVMDATAL_Deferred(uData);
-	}
-	else if (pVram[uVramAddr].b.l != uData)
-	{
-		pVram[uVramAddr].b.l = uData;
-		if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
-	}
+		if (pVram[uVramAddr].b.l != uData)
+		{
+			pVram[uVramAddr].b.l = uData;
+			if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
+		}
 #if SNDBG_LOG
-	else ++g_DbgVRAMIdenticalBytes;
+		else ++g_DbgVRAMIdenticalBytes;
 #endif
+	}
 	m_Regs.vmaddr.w += m_Regs.vminc[0];
 }
 
@@ -224,21 +187,18 @@ void SnesPPU::WriteVMDATAHTimed(Uint8 uData, Bool bAllow)
 	Uint32 uVramAddr = _SwizzleVramAddr(m_Regs.vmaddr.w,
 	                                    (m_Regs.vmain >> 2) & 3);
 	
-	/* Defer VRAM writes during active display ONLY when explicitly not allowed
-	   (i.e., DMA during active display with bAllow=FALSE). CPU writes and VBlank
-	   DMA go through immediately to avoid breaking mid-frame sprite uploads. */
-	if (!bAllow)
+	/* In active display VRAM rejects the write, but VMADD still advances. */
+	if (bAllow)
 	{
-		WriteVMDATAH_Deferred(uData);
-	}
-	else if (pVram[uVramAddr].b.h != uData)
-	{
-		pVram[uVramAddr].b.h = uData;
-		if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
-	}
+		if (pVram[uVramAddr].b.h != uData)
+		{
+			pVram[uVramAddr].b.h = uData;
+			if (m_pRender) m_pRender->UpdateVRAM(uVramAddr);
+		}
 #if SNDBG_LOG
-	else ++g_DbgVRAMIdenticalBytes;
+		else ++g_DbgVRAMIdenticalBytes;
 #endif
+	}
 	m_Regs.vmaddr.w += m_Regs.vminc[1];
 }
 
@@ -257,12 +217,10 @@ void SnesPPU::WriteVMDATALH(Uint8 uDataL, Uint8 uDataH)
 	g_DbgPPURegWrites[0x19]++;
 #endif
 	
-	/* Defer VRAM writes during active display ONLY when explicitly not allowed.
-	   CPU writes go through immediately. */
 	if (!CanAccessVRAM(m_uLine))
 	{
-		WriteVMDATAL_Deferred(uDataL);
-		WriteVMDATAH_Deferred(uDataH);
+		/* Neither byte reaches VRAM; both address side effects remain. */
+		m_Regs.vmaddr.w += m_Regs.vminc[0] + m_Regs.vminc[1];
 	}
 	else
 	{
@@ -311,19 +269,21 @@ void SnesPPU::WriteVMDATABlock(const Uint8 *pData, Int32 nBytes)
 	   invalidate the renderer once for the whole burst instead of making
 	   thousands of calls through WriteVMDATALH(). */
 	
-	/* Defer VRAM writes during active display ONLY when VRAM access is not
-	   allowed (DMA during active display). CPU-initiated block writes and
-	   VBlank DMA go through immediately. */
+	if (nBytes <= 0) return;
 	if (!CanAccessVRAM(m_uLine))
 	{
-		while (nBytes >= 2)
-		{
-			WriteVMDATALH(pData[0], pData[1]);
-			pData += 2;
-			nBytes -= 2;
-		}
-		if (nBytes > 0)
-			WriteVMDATAL(*pData);
+		/* Blocked writes must not be replayed next frame, even the odd tail. */
+		const Uint32 hi = (Uint32)nBytes >> 1;
+		const Uint32 lo = hi + ((Uint32)nBytes & 1u);
+		m_Regs.vmaddr.w = (Uint16)(m_Regs.vmaddr.w +
+			lo * m_Regs.vminc[0] + hi * m_Regs.vminc[1]);
+#if SNDBG_LOG
+		g_DbgVRAMWrites += (Uint32)nBytes;
+#endif
+#if SNDBG_DEEP
+		g_DbgPPURegWrites[0x18] += lo;
+		g_DbgPPURegWrites[0x19] += hi;
+#endif
 		return;
 	}
 
@@ -988,36 +948,21 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		break;
 
 	case 0x2123:	// window registers
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.w12sel = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.w12sel != uData)
+		if (m_Regs.w12sel != uData)
 		{
 			m_Regs.w12sel = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		}
 		break;
 	case 0x2124:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.w34sel = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.w34sel != uData)
+		if (m_Regs.w34sel != uData)
 		{
 			m_Regs.w34sel = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		}
 		break;
 	case 0x2125:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.wobjsel = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.wobjsel != uData)
+		if (m_Regs.wobjsel != uData)
 		{
 			m_Regs.wobjsel = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
@@ -1057,24 +1002,14 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		}
 		break;
 	case 0x212A:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.wbglog = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.wbglog != uData)
+		if (m_Regs.wbglog != uData)
 		{
 			m_Regs.wbglog = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
 		}
 		break;
 	case 0x212B:
-		if (IsActiveDisplay(m_uLine))
-		{
-			m_WindowBuffer.wobjlog = uData;
-			m_WindowBuffer.bPending = TRUE;
-		}
-		else if (m_Regs.wobjlog != uData)
+		if (m_Regs.wobjlog != uData)
 		{
 			m_Regs.wobjlog = uData;
 			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
@@ -1259,71 +1194,6 @@ void SnesPPU::BeginFrame()
 	m_bFrameInterlace =
 		(m_Regs.setini & SNESPPU_SETINI_INTERLACE) != 0;
 
-	/* Apply buffered window register changes from previous frame's active display.
-	   This avoids mid-frame GS pipeline flushes on PS2.
-	   WH0-WH3 are NOT buffered (they take effect immediately for per-scanline effects). */
-	if (m_WindowBuffer.bPending)
-	{
-		if (m_Regs.w12sel != m_WindowBuffer.w12sel)
-		{
-			m_Regs.w12sel = m_WindowBuffer.w12sel;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		if (m_Regs.w34sel != m_WindowBuffer.w34sel)
-		{
-			m_Regs.w34sel = m_WindowBuffer.w34sel;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		if (m_Regs.wobjsel != m_WindowBuffer.wobjsel)
-		{
-			m_Regs.wobjsel = m_WindowBuffer.wobjsel;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		if (m_Regs.wbglog != m_WindowBuffer.wbglog)
-		{
-			m_Regs.wbglog = m_WindowBuffer.wbglog;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		if (m_Regs.wobjlog != m_WindowBuffer.wobjlog)
-		{
-			m_Regs.wobjlog = m_WindowBuffer.wobjlog;
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_WINDOW);
-		}
-		m_WindowBuffer.bPending = FALSE;
-	}
-
-	/* Flush deferred VRAM DMA from previous frame's active display.
-	   This avoids mid-frame GS stalls on PS2. */
-	if (m_VramDmaBuffer.bActive && m_VramDmaBuffer.uCount > 0)
-	{
-		SnesReg16T *pVram = (SnesReg16T *)m_VRAM;
-		Bool bVramDirty = FALSE;
-		Uint32 uMinAddr = SNESPPU_VRAM_NUMWORDS;
-		Uint32 uMaxAddr = 0;
-		for (Uint32 i = 0; i < m_VramDmaBuffer.uCount; i++)
-		{
-			const SnesPPUVramDmaBufferT::EntryT &entry = m_VramDmaBuffer.aEntries[i];
-			Uint32 uAddr = entry.uAddr & (SNESPPU_VRAM_NUMWORDS - 1);
-			if (pVram[uAddr].w != entry.uData)
-			{
-				pVram[uAddr].w = entry.uData;
-				bVramDirty = TRUE;
-				if (uAddr < uMinAddr) uMinAddr = uAddr;
-				if (uAddr > uMaxAddr) uMaxAddr = uAddr;
-			}
-		}
-		if (bVramDirty && m_pRender)
-		{
-			m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR | SNESPPURENDER_UPDATE_BGCHR);
-			// Batch VRAM updates into a single range instead of per-entry calls
-			if (uMinAddr <= uMaxAddr)
-			{
-				m_pRender->UpdateVRAMRange(uMinAddr, uMaxAddr - uMinAddr + 1);
-			}
-		}
-		m_VramDmaBuffer.uCount = 0;
-		m_VramDmaBuffer.bActive = FALSE;
-	}
 }
 
 void SnesPPU::EndFrame()
@@ -1424,6 +1294,7 @@ void SnesPPU::Reset()
 	m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_ALL);
 	m_Queue.Reset();
 	m_uLine = 0;
+	m_bVBlank = FALSE;
 	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
 	m_bFrameInterlace = FALSE;
 
@@ -1439,11 +1310,6 @@ void SnesPPU::Reset()
 	m_PPU2OpenBus = 0;
 	m_bCountersLatched = FALSE;
 
-	// Window buffer
-	memset(&m_WindowBuffer, 0, sizeof(m_WindowBuffer));
-
-	// VRAM DMA buffer
-	memset(&m_VramDmaBuffer, 0, sizeof(m_VramDmaBuffer));
 
 	// confirmed:
 	m_Regs.stat77 =  SNPPU_VERSION_5C77;
@@ -1462,8 +1328,6 @@ SnesPPU::SnesPPU()
 	m_bVBlank = FALSE;
 	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
 	m_bFrameInterlace = FALSE;
-	memset(&m_WindowBuffer, 0, sizeof(m_WindowBuffer));
-	memset(&m_VramDmaBuffer, 0, sizeof(m_VramDmaBuffer));
 }
 
 #ifdef SNES_DEBUG

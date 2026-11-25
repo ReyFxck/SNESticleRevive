@@ -145,6 +145,7 @@ void SNSPCReset(SNSpcT *pCpu, Bool bHardReset)
 
 Uint8 SNSPCPeek8(SNSpcT *pCpu, Uint32 uAddr)
 {
+	uAddr &= 0xFFFFu;
 	return pCpu->Mem[uAddr];
 }
 
@@ -163,6 +164,7 @@ void SNSPCPeekMem(SNSpcT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes)
 
 Uint8 SNSPCRead8(SNSpcT *pCpu, Uint32 uAddr)
 {
+	uAddr &= 0xFFFFu;
 	if (uAddr >= 0xF0 && uAddr < 0x100)
 	{
 		return pCpu->pReadTrapFunc(pCpu, uAddr);
@@ -201,6 +203,7 @@ void SNSPCSetTrapFunc(SNSpcT *pSpc, SNSpcReadTrapFuncT pReadTrap, SNSpcWriteTrap
 
 void SNSPCWrite8(SNSpcT *pCpu, Uint32 uAddr, Uint8 uData)
 {
+	uAddr &= 0xFFFFu;
 	// don't write to rom area
 	if (uAddr < SNSPC_ROM_ADDR || !pCpu->bRomEnable)
 	{

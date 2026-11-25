@@ -61,6 +61,10 @@ jobs:
         if: matrix.name == 'release'
         run: bash tools/pputest/test_spc_brr_hotpath.sh
 
+      - name: Verify PPU memory ports, raster registers and SPC timers
+        if: matrix.name == 'release'
+        run: bash tools/pputest/test_hardware_accuracy.sh
+
       - name: Verify SA-1 and SuperFX host regressions
         if: matrix.name == 'release'
         run: |

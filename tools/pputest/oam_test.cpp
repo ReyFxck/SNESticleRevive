@@ -434,6 +434,55 @@ static void CheckReadRegisterSemantics()
 	Check("CGRAM read high PPU2 bit", ppu.Read8(0x213B), 0x92);
 }
 
+static void CheckBlockedVRAMAndWindows()
+{
+    SnesPPU ppu; TestRender render;
+    ppu.SetPPURender(&render); render.SetPPU(&ppu);
+    const Uint8 bytes[] = {0x11, 0x22, 0x33, 0x44, 0x55};
+    for (unsigned mode=0; mode<2; ++mode)
+    {
+        ppu.Reset(); ppu.BeginFrame(); ppu.Sync(1);
+        ppu.Write8(0x2115, mode ? 0x80 : 0x00);
+        ppu.GetVramPtr(0x10)[0]=0xCAFE;
+        ppu.GetVramPtr(0x11)[0]=0xBEEF;
+        ppu.GetVramPtr(0x12)[0]=0xAABB;
+        ppu.WriteTimed(0x2116,0x10,2,500); ppu.WriteTimed(0x2117,0,2,500);
+        render.ClearStats();
+        ppu.WriteTimed(0x2118,0x01,2,500);
+        ppu.WriteTimed(0x2119,0x02,2,500);
+        Check("blocked timed pair increments once",ppu.GetRegs()->vmaddr.w,0x11);
+        ppu.WriteVMDATALH(0x03,0x04);
+        Check("blocked bulk pair increments once",ppu.GetRegs()->vmaddr.w,0x12);
+        ppu.WriteVMDATABlock(bytes,sizeof(bytes));
+        Check("blocked odd block increments",ppu.GetRegs()->vmaddr.w,mode?0x14:0x15);
+        Check("blocked writes no invalidation",render.uSingleCalls+render.uRangeCalls,0);
+        ppu.EndFrame(); ppu.BeginFrame();
+        Check("blocked writes not replayed 0",ppu.GetVramPtr(0x10)[0],0xCAFE);
+        Check("blocked writes not replayed 1",ppu.GetVramPtr(0x11)[0],0xBEEF);
+        Check("blocked writes not replayed 2",ppu.GetVramPtr(0x12)[0],0xAABB);
+        Check("blocked odd tail not stored",ppu.GetVramPtr(0x14)[0],0);
+        Check("no deferred invalidation",render.uSingleCalls+render.uRangeCalls,0);
+    }
+    ppu.Reset(); ppu.BeginFrame(); ppu.Sync(1);
+    ppu.Write8(0x2124,0x12); ppu.Write8(0x2125,0x34);
+    ppu.Write8(0x212A,0x56); ppu.Write8(0x212B,0x78);
+    ppu.WriteTimed(0x2123,0xAB,2,1100);
+    Check("active W12SEL",ppu.GetRegs()->w12sel,0xAB);
+    Check("active W34SEL",ppu.GetRegs()->w34sel,0x12);
+    Check("active WOBJSEL",ppu.GetRegs()->wobjsel,0x34);
+    Check("active WBGLOG",ppu.GetRegs()->wbglog,0x56);
+    Check("active WOBJLOG",ppu.GetRegs()->wobjlog,0x78);
+    ppu.EndFrame(); ppu.BeginFrame();
+    ppu.Write8(0x2123,0xCD);
+    ppu.Sync(1); ppu.Write8(0x212B,0x03);
+    ppu.EndFrame(); ppu.BeginFrame();
+    Check("partial window write preserves unrelated register",ppu.GetRegs()->w12sel,0xCD);
+    Check("partial window write preserves W34SEL",ppu.GetRegs()->w34sel,0x12);
+    Check("WOBJLOG persists",ppu.GetRegs()->wobjlog,0x03);
+    ppu.EndFrame(); ppu.Reset();
+    Check("PPU reset clears vblank flag",ppu.InVBlank(),FALSE);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc == 2 && !std::strcmp(argv[1], "--vram-hotpath"))
@@ -455,6 +504,7 @@ int main(int argc, char **argv)
 	CheckActiveDisplayMemoryPorts();
 	CheckMode4VRAMAddressDataDMA();
 	CheckReadRegisterSemantics();
+	CheckBlockedVRAMAndWindows();
 
 	ppu.SetPPURender(&render);
 	render.SetPPU(&ppu);
@@ -570,6 +620,7 @@ int main(int argc, char **argv)
 	{
 		const Uint8 data[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
 		ppu.Reset();
+		ppu.Write8(0x2100, 0x80); // VRAM DMA requires forced blank or VBlank.
 		render.ClearStats();
 		ppu.Write8(0x2115, 0x80); // increment by one after $2119
 		ppu.Write8(0x2116, 0x34);
@@ -589,6 +640,7 @@ int main(int argc, char **argv)
 	{
 		const Uint8 data[] = {0xAA, 0xBB, 0xCC, 0xDD};
 		ppu.Reset();
+		ppu.Write8(0x2100, 0x80); // VRAM DMA requires forced blank or VBlank.
 		ppu.Write8(0x2115, 0x80);
 		ppu.Write8(0x2116, 0xFF);
 		ppu.Write8(0x2117, 0x7F);
@@ -602,6 +654,7 @@ int main(int argc, char **argv)
 	{
 		const Uint8 data[] = {0xAA, 0xBB, 0xCC};
 		ppu.Reset();
+		ppu.Write8(0x2100, 0x80); // VRAM DMA requires forced blank or VBlank.
 		ppu.Write8(0x2115, 0x80);
 		ppu.Write8(0x2116, 0x20);
 		ppu.Write8(0x2117, 0x00);
@@ -615,6 +668,7 @@ int main(int argc, char **argv)
 	{
 		const Uint8 data[] = {0x12, 0x34};
 		ppu.Reset();
+		ppu.Write8(0x2100, 0x80); // VRAM DMA requires forced blank or VBlank.
 		render.ClearStats();
 		ppu.Write8(0x2115, 0x00); // increment after $2118
 		ppu.Write8(0x2116, 0x30);

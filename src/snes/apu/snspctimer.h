@@ -13,8 +13,8 @@ typedef struct SNSpcTimer_t
 {
 	Int32	iCycleSync;
 
-	Int32	nElapsedCycles;		// # of elapsed cycles since timer was started
-	Int32	iDivisor;			// UpCounter = nElapsedCycles / Divisor
+	Int32	nElapsedCycles;		// stage-2 counter * tick + free-running prescaler phase
+	Int32	iDivisor;			// legacy state field: target period in master clocks
 
 	Uint32	uCyclesPerTick;		// clock cycles per tick (low-counter)
 	Uint8	uCompare;			// low-counter compare
