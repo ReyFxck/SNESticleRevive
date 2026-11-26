@@ -3312,12 +3312,12 @@ static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPrio
 			++mismatches;
 			unsigned pixel = 0;
 			while (pixel < 256 && pLine[pixel] == candidate[pixel]) ++pixel;
-			printf("[snes-vu0] mismatch line=%d pixel=%u mode=%u disabled=1\n", iLine, pixel, (unsigned)(pRegs->m7sel >> 6));
+			DLog("[snes-vu0] mismatch line=%d pixel=%u mode=%u disabled=1\n", iLine, pixel, (unsigned)(pRegs->m7sel >> 6));
 		}
 	} else ++bypass;
 	++calls;
 	if (calls == 1 || calls % 2240 == 0) {
-		printf("[snes-vu0] shadow=1 calls=%u checked=%u bypass=%u mismatch=%u disabled=%u ref-cyc=%llu vu-cyc=%llu\n",
+		DLog("[snes-vu0] shadow=1 calls=%u checked=%u bypass=%u mismatch=%u disabled=%u ref-cyc=%llu vu-cyc=%llu\n",
 			calls, checked, bypass, mismatches, (unsigned)disabled,
 			(unsigned long long)refCycles, (unsigned long long)vuCycles);
 	}
