@@ -636,6 +636,53 @@ static void CheckFixedCGRAMHDMA()
     std::printf("HDMA CGRAM equivalence: %u cases %s\n",cases,g_Failures?"FAIL":"PASS");
 }
 
+static void CheckMode7Mosaic()
+{
+    struct MosaicRender : TestRender {
+        SnesPPU *ppu;
+        Int32 sampled[240];
+        void RenderLine(Int32 line) { sampled[line]=ppu->GetMode7MosaicLine(line); }
+    };
+    SnesPPU ppu; MosaicRender r; r.ppu=&ppu; r.SetPPU(&ppu); ppu.SetPPURender(&r);
+    for(unsigned size=1;size<=16;++size) for(unsigned mask : {1u,2u,3u}) {
+        ppu.Reset(); ppu.BeginFrame(); ppu.Write8(0x2106,(Uint8)(((size-1)<<4)|mask));
+        ppu.Sync(224);
+        for(unsigned line=1;line<=224;++line) Check("mode7 mosaic vertical",r.sampled[line],(mask&1)?1+(line-1)/size*size:line);
+    }
+    // Queued HBlank write after line 7 must start a block at line 8.
+    ppu.Reset(); ppu.BeginFrame(); ppu.Sync(7);
+    ppu.EnqueueWrite(7,0x2106,0x31); ppu.Sync(19);
+    for(unsigned line=8;line<=19;++line) Check("mosaic midframe enable",r.sampled[line],8+(line-8)/4*4);
+    std::puts("Mode7 mosaic: 10752 static samples + midframe enable PASS");
+}
+static void CheckFixedScrollHDMA()
+{
+    static Uint8 mem[65536]; for(unsigned i=0;i<65536;++i) mem[i]=(Uint8)(i*13+9);
+    unsigned cases=0;
+    for(unsigned mode : {2u,6u}) for(unsigned indirect : {0u,0x40u})
+    for(unsigned port : {0x0du,0x0eu,0x10u,0x14u,0x1bu,0x1cu,0x1du,0x1eu,0x1fu,0x20u})
+    for(unsigned start : {0u,0x20ffu,0x2100u,0x7fffu,0xffffu}) {
+        SnesPPU ppu,ref; TestRender r,rr;
+        ppu.SetPPURender(&r); r.SetPPU(&ppu); ppu.Reset();
+        ref.SetPPURender(&rr); rr.SetPPU(&ref); ref.Reset();
+        SNCpuT cpu={}; cpu.Cycles=10000; cpu.uOpenBus=0xe3;
+        for(unsigned i=0;i<8;++i) cpu.Bank[i].pMem=mem;
+        SnesDMAC dma; dma.SetCPU(&cpu); dma.SetPPU(&ppu);
+        SnesDMAChT &ch=dma.m_Channels[0]; ch.dmapx=(Uint8)(mode|indirect); ch.bbadx=port;
+        ch.a2ax=indirect?0xaaaa:start; ch.dasx=indirect?start:0x5555;
+        dma.ProcessHDMACh(0,1); ppu.Sync(2);
+        Uint8 bus=0xe3;
+        for(unsigned i=0;i<2;++i) {Uint16 addr=(Uint16)(start+i); if(!SnesDMAC::IsABusForbidden(addr)) bus=mem[addr]; ref.Write8(0x2100|port,bus);}
+        Check("scroll HDMA registers",memcmp(ppu.GetRegs(),ref.GetRegs(),sizeof(SnesPPURegsT)),0);
+        Check("scroll HDMA open bus",cpu.uOpenBus,bus);
+        Check("scroll HDMA timing",cpu.Cycles,10000-2*SNCPU_CYCLE_SLOW);
+        Check("scroll HDMA direct offset",ch.a2ax,indirect?0xaaaa:(Uint16)(start+2));
+        Check("scroll HDMA indirect offset",ch.dasx,indirect?(Uint16)(start+2):0x5555);
+        ++cases;
+    }
+    std::printf("Fixed scroll/matrix HDMA: %u cases %s\n",cases,g_Failures?"FAIL":"PASS");
+}
+
 static void CheckSyncGuard()
 {
     SnesPPU ppu; TestRender r; ppu.SetPPURender(&r); r.SetPPU(&ppu); ppu.Reset();
@@ -659,6 +706,8 @@ int main(int argc, char **argv)
 {
 	CheckFixedPortDMA();
     CheckFixedCGRAMHDMA();
+    CheckFixedScrollHDMA();
+    CheckMode7Mosaic();
     CheckSyncGuard();
     if (argc == 2 && !std::strcmp(argv[1], "--vram-hotpath"))
 	{

@@ -2084,6 +2084,13 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 			SNMaskBool(pAddSubMask, &BGMask, bAddSubMask ? true : false);
 		}
 
+		if (BGMask.uMask64[0] == ~0ull && BGMask.uMask64[1] == ~0ull &&
+		    BGMask.uMask64[2] == ~0ull && BGMask.uMask64[3] == ~0ull)
+		{
+			memcpy(pLine8, (const Uint8 *)pBGPlane + (uScrollX & 7), 256);
+			bRendered = TRUE;
+			return;
+		}
 		if (!bRendered)
 		{
 			// render it
@@ -2993,7 +3000,8 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		Uint32 _tObjB = ProfCtrGetCycle();
 #endif
 		_SnesPPURenderOBJ8(pMain8, pMain, ObjLine, nObjLine,  (tmw&SNESPPU_MASK_OBJ) ? &pBGWindow[4] : NULL, bBG3Pri ? &BG3Pri : NULL,
-			pMainAddSubMask, (cgadsub & 0x10) ? 1 : 0);
+			pMainAddSubMask, (cgadsub & 0x10) ? 1 : 0,
+			(uBGMode == 7 && (pRegs->cgwsel & 1)) ? &pMain[SNPPU_BGPLANE_PLANE7] : NULL);
 #if SNDBG_LOG
 		{
 			Uint32 _dObjDraw = ProfCtrGetCycle() - _tObjB;
@@ -3145,51 +3153,13 @@ static void _FetchMode7Priority(Uint8 *pPriority, Uint8 *pLine, Int32 nPixels)
 #if CODE_PLATFORM == CODE_PS2
 static void _FetchMode7Opaque(Uint8 *pMask, Uint8 *pLine, Int32 nPixels)
 {
-	Uint64 uMask64;
-	Uint64 *pLine64 = (Uint64 *)pLine;
-	Uint64 uZero;
-	Uint64 uOne;
-
-	uMask64 = 0x8080808080808080;
-	uZero	= 0x0000000000000000;
-	uOne    = 0xFFFFFFFFFFFFFFFF;
-
-	while (nPixels > 0)
-	{
-		Uint64 uData64;
-		Uint64 uOpaque = 0;
-
-		// fetch 8 pixels
-		uData64 = pLine64[0];
-		pLine64++;
-
-		__asm__ (
-			"pceqb      %0,%0,$0        \n"   // %0 = FF or 00
-			: "+r" (uData64)
-			);
-
-		if (uData64==uZero)
-		{
-			pMask[0] = 0xFF;
-			pMask++;
-		} else
-		if (uData64==uOne)
-		{
-			pMask[0] = 0x00;
-			pMask++;
-		} else
-		{
-			// get priority bits
-			uData64 = uData64 & uMask64;
-
-			uOpaque = SnesPPUMode7ByteHighBits(uData64);
-
-			// store priority
-			pMask[0] = (Uint8)(uOpaque^0xFF);
-			pMask++;
-		}
-		nPixels-=8;
-	}
+    const Uint64 *src = (const Uint64 *)pLine;
+    while (nPixels > 0) {
+        Uint64 equal = *src++;
+        __asm__ ("pceqb %0,%0,$0" : "+r" (equal));
+        *pMask++ = SnesPPUMode7ByteHighBits(~equal);
+        nPixels -= 8;
+    }
 }
 #else
 
@@ -3245,7 +3215,7 @@ static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPrio
 		pRegs->m7x.w, pRegs->m7y.w,
 		(Int16)pRegs->m7a.w, (Int16)pRegs->m7b.w,
 		(Int16)pRegs->m7c.w, (Int16)pRegs->m7d.w,
-		pRegs->m7sel, iLine);
+		pRegs->m7sel, pPPU->GetMode7MosaicLine(iLine));
 
 #if CODE_PLATFORM == CODE_PS2 && defined(SNES_VU0_SHADOW) && SNES_VU0_SHADOW
 	/* Original renderer remains authoritative. Compare raw bytes before EXTBG

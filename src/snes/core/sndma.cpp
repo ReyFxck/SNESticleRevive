@@ -1057,6 +1057,29 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
         return;
     }
 
+    // Common Mode 7/Mode 1 raster scroll and matrix updates: fixed port,
+    // A->B, with no B-bus memory access. Preserve byte ordering and fallback.
+    if (!(pChan->dmapx & 0x80) && (uMode == 2 || uMode == 6) &&
+        ((pChan->bbadx >= 0x0d && pChan->bbadx <= 0x14) ||
+         (pChan->bbadx >= 0x1b && pChan->bbadx <= 0x20)))
+    {
+        Uint16 *offset = (pChan->dmapx & 0x40) ? &pChan->dasx : &pChan->a2ax;
+        const Uint32 bank = (Uint32)((pChan->dmapx & 0x40) ? pChan->dasbx : pChan->a1bx) << 16;
+        const Uint32 port = 0x2100u | pChan->bbadx;
+        for (unsigned i = 0; i < 2; ++i) {
+            Uint8 data = ReadABus(bank | *offset);
+            if (!m_pPPU->EnqueueWrite(uLine, port, data, FALSE))
+                SNCPUWrite8(m_pCPU, port, data);
+            ++*offset;
+            ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
+        }
+#if SNDBG_LOG
+        if (pChan->bbadx <= 0x14) g_DbgHDMAScrollBytes += 2;
+        else g_DbgHDMAOtherBytes += 2;
+#endif
+        return;
+    }
+
 	for (Uint32 i = 0; i < nBytes; i++)
 	{
 		Uint32 uAddrA;

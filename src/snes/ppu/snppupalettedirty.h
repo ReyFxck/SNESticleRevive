@@ -17,4 +17,13 @@ struct SnesPPUPaletteGroups
     }
     Uint64 Bits() const { return (Uint64)low | ((Uint64)high << 32); }
 };
+/* Consume one nonempty CLUT row in ascending order. Caller selects a
+   32-bit half (rows 0..7 or 8..15). Never call ctz on zero. */
+_INLINE Uint32 SnesPPUPopPaletteRow(Uint32 &bits, Uint32 &row) {
+    row = (Uint32)__builtin_ctz(bits) >> 2;
+    Uint32 shift = row * 4u;
+    Uint32 groups = (bits >> shift) & 15u;
+    bits &= ~(15u << shift);
+    return groups;
+}
 #endif

@@ -186,6 +186,11 @@ public:
 	Bool                    IsForceBlank() const                        {return (m_Regs.inidisp & 0x80) != 0;}
 	Bool                    InVBlank() const                            {return m_bVBlank;}
 	Uint32                  GetIntensity()  const                       {return m_Regs.inidisp & 0xF;}
+	Int32                   GetMode7MosaicLine(Int32 line) const
+	{
+		return (m_Regs.mosaic & 1) && m_uMosaicCounter ?
+			line - ((Int32)(m_Regs.mosaic >> 4) + 1 - (Int32)m_uMosaicCounter) : line;
+	}
 	Uint32                  GetFrameVisibleLines() const                {return m_uFrameVisibleLines;}
 	Bool                    IsFrameInterlace() const                    {return m_bFrameInterlace;}
 	Bool                    GetField() const                             {return (m_Regs.stat78 & 0x80) != 0;}
@@ -265,6 +270,7 @@ private:
     friend class SnesDMAC;
 
     Uint32			        m_uLine;
+    Uint8                   m_uMosaicCounter;
     Bool                    m_bVBlank;
     Uint32                  m_uFrameVisibleLines;
     Bool                    m_bFrameInterlace;

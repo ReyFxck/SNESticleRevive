@@ -822,6 +822,10 @@ void SnesPPU::Write8(Uint32 uAddr, Uint8 uData)
 		break;
 
 	case 0x2106:	// mosaic (screen pixelation)
+		/* Reload on the transition from all BG mosaic bits off to any on.
+		   The next scanline tick consumes the extra count. */
+		if (!(m_Regs.mosaic & 15u) && (uData & 15u))
+			m_uMosaicCounter = (uData >> 4) + 2;
 		m_Regs.mosaic = uData;
 		break;
 
@@ -1209,6 +1213,7 @@ Uint8 SnesPPU::Read8(Uint32 uAddr, Uint8 uCpuOpenBus,
 void SnesPPU::BeginFrame()
 {
 	m_uLine   = 0;
+	m_uMosaicCounter = 0;
     m_bVBlank = FALSE;
 	/* OBJ range/time-over are sticky during a field and clear at vertical
 	   counter wrap.  The renderer raises them as each scanline is evaluated. */
@@ -1276,6 +1281,11 @@ void SnesPPU::Sync(Uint32 uLine)
             // are we within a frame?
             if (m_uLine > 0 && m_uLine <= m_uFrameVisibleLines)
             {
+                // The queue supplies the register state of this rendered line.
+                if (m_uLine == 1)
+                    m_uMosaicCounter = (m_Regs.mosaic & 15u) ? (m_Regs.mosaic >> 4) + 2 : 0;
+                if (m_uMosaicCounter && !--m_uMosaicCounter)
+                    m_uMosaicCounter = (m_Regs.mosaic & 15u) ? (m_Regs.mosaic >> 4) + 1 : 0;
                 // render a line
 				PROF_ENTER("PPURender");
 #if SNDBG_LOG
@@ -1325,6 +1335,7 @@ void SnesPPU::Reset()
 	m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_ALL);
 	m_Queue.Reset();
 	m_uLine = 0;
+	m_uMosaicCounter = 0;
 	m_bVBlank = FALSE;
 	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
 	m_bFrameInterlace = FALSE;
@@ -1355,6 +1366,7 @@ SnesPPU::SnesPPU()
 	m_PPU2OpenBus = 0;
 	m_bCountersLatched = FALSE;
 	m_uLine = 0;
+	m_uMosaicCounter = 0;
 	m_bVBlank = FALSE;
 	m_uFrameVisibleLines = SNESPPU_VISIBLE_LINES_NORMAL;
 	m_bFrameInterlace = FALSE;

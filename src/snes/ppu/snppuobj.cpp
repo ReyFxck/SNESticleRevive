@@ -68,7 +68,7 @@ static Uint32 _ObjCountBits8(Uint32 v)
 void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	const SnesRenderObj8T *pObjLine, Int32 nObjLine,
 	const SNMaskT *pWindow, const SNMaskT *pMask,
-	SNMaskT *pAddSubMask, Bool bAddSubMask)
+	SNMaskT *pAddSubMask, Bool bAddSubMask, SNMaskT *pDrawnOBJ)
 {
 	SNMaskT ObjMask;
 	SNMaskT PriorityMask[4];
@@ -149,6 +149,10 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 
 			uMask0 &= ~uBlocked0;
 			uMask1 &= ~uBlocked1;
+			if (pDrawnOBJ) {
+				pDrawnOBJ->uMask32[iWord] |= uMask0;
+				if (uMask1) pDrawnOBJ->uMask32[iWord + 1] |= uMask1;
+			}
 
 			if (pAddSubMask)
 			{
@@ -230,6 +234,7 @@ void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 						pAddSubMask->uMask32[iWord] &= ~uBit;
 				}
 
+				if (pDrawnOBJ) pDrawnOBJ->uMask32[iWord] |= uBit;
 				pLine8[iX] = pObj->uData[iPixel];
 #if SNDBG_DEEP
 				g_DbgObjDrawnPixels++;

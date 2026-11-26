@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include "snppupalettedirty.h"
+#include "snppudirectcolor.h"
 #include "../../src/snes/ppu/snppurender8.cpp"
 #include "../../src/snes/ppu/snppubg.cpp"
 
@@ -218,22 +219,69 @@ static void TestMode7Compose()
         for (unsigned pr=0;pr<4;++pr)
         {
             SnesRenderObj8T obj={};
-            obj.iPosX=(Int32)(Next()%249); obj.uPri=pr; obj.uPal=4;
+            obj.iPosX=(Int32)(Next()%263)-7; obj.uPri=pr; obj.uPal=4;
             for (unsigned i=0;i<8;++i) obj.uData[i]=0xF1;
             obj.uData[SNPPU_BGPLANE_OPAQUE]=0xFF;
             Uint8 actual[256] _ALIGN(16); memcpy(actual,pixels,256);
             const SNMaskT *window=(run&256)?&w1:NULL;
-            _SnesPPURenderOBJ8(actual,output,&obj,1,window,NULL,NULL,FALSE);
+            SNMaskT drawn={};
+            _SnesPPURenderOBJ8(actual,output,&obj,1,window,NULL,NULL,FALSE,&drawn);
             for (unsigned x=0;x<256;++x)
             {
                 unsigned bit=1u<<(x&7);
                 unsigned rank=!!(output[SNPPU_BGPLANE_LAYER0].uMask8[x/8]&bit)+2*!!(output[SNPPU_BGPLANE_LAYER1].uMask8[x/8]&bit);
-                bool visible=x>=(unsigned)obj.iPosX && x<(unsigned)obj.iPosX+8 && pr>=rank && (!window||!(window->uMask8[x/8]&bit));
+                bool visible=(Int32)x>=obj.iPosX && (Int32)x<obj.iPosX+8 && pr>=rank && (!window||!(window->uMask8[x/8]&bit));
                 Check(actual[x]==(visible?0xF1:pixels[x]),"Mode7 actual OBJ draw/window");
+                Check(!!(drawn.uMask8[x/8]&bit)==visible,"Mode7 actual OBJ coverage");
             }
         }
         ++cases;
     }
     std::printf("Mode7 BG1/EXTBG composition: %u randomized lines PASS\n",cases);
 }
-int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); TestPaletteGroups(); TestMode7Compose(); }
+static void TestRound12()
+{
+    // Exhaust every direct-color byte, all brightness levels and all three
+    // source classifications; then test the integrated line expansion.
+    Uint16 cgram[256], out[512]; Uint8 indices[256];
+    Uint32 rank[8], drawn[8];
+    for (unsigned i=0;i<256;++i) { cgram[i]=(Uint16)(Next()&32767); indices[i]=(Uint8)i; }
+    for(unsigned intensity=0;intensity<16;++intensity)
+    for(unsigned kind=0;kind<3;++kind) {
+        for(unsigned k=0;k<8;++k) {rank[k]=kind?~0u:0; drawn[k]=kind==2?~0u:0;}
+        SnesPPUMode7DirectLine(out,indices,rank,drawn,cgram,intensity);
+        for(unsigned i=0;i<256;++i) {
+            unsigned r=(i%8)*4,g=((i/8)%8)*4,b=(i/64)*8;
+            Uint16 ref=(Uint16)(r+32*g+1024*b);
+            Check(SnesPPUMode7Direct15(i)==ref,"direct RGB bits");
+            if(kind!=1 || !i) ref=cgram[i];
+            unsigned rr=(ref%32)*intensity/15,gg=((ref/32)%32)*intensity/15,bb=(ref/1024)*intensity/15;
+            Uint16 expected=(Uint16)(0x8000+rr+32*gg+1024*bb);
+            Check(out[2*i]==expected && out[2*i+1]==expected,"direct source + brightness");
+        }
+    }
+    // Compare the actual shared iterator to the former 16-row loop.
+    for(unsigned t=0;t<65536;++t) {
+        Uint64 bits=((Uint64)Next()<<32)|Next();
+        if(t<64) bits=(Uint64)1<<t;
+        Uint32 actual[16]={};
+        for(unsigned h=0;h<2;++h) {
+            Uint32 half=(Uint32)(bits>>(32*h));
+            while(half) {Uint32 row; Uint32 v=SnesPPUPopPaletteRow(half,row); Check(!actual[row+8*h],"palette no duplicate row"); actual[row+8*h]=v;}
+        }
+        for(unsigned r=0;r<16;++r) Check(actual[r]==((bits>>(4*r))&15),"sparse GIF row coverage");
+    }
+    // Full-mask fast path at every fine X, overlay/first layer, all pixel bytes.
+    for(unsigned fine=0;fine<8;++fine) for(unsigned overlay=0;overlay<2;++overlay) {
+        SNMaskT bg[SNPPU_BGPLANE_NUM]={}, screen[SNPPU_BGPLANE_NUM]={}, math={};
+        Uint8 *src=(Uint8*)bg; Uint8 dst[256] _ALIGN(16);
+        for(unsigned i=0;i<264;++i) src[i]=(Uint8)Next();
+        SNMaskSet(&bg[SNPPU_BGPLANE_OPAQUE]);
+        memset(dst,0xCC,256); Bool rendered=overlay;
+        _RenderBG8(dst,screen,bg,NULL,4,&math,1,NULL,NULL,0,rendered,fine,0);
+        Check(!memcmp(dst,src+fine,256),"fully opaque BG copy");
+        Check(rendered && math.uMask64[0]==~0ull && math.uMask64[3]==~0ull,"full BG math");
+    }
+    std::puts("Round12 direct colors: 12288; sparse rows: 65536; opaque BG: 16 PASS");
+}
+int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); TestPaletteGroups(); TestMode7Compose(); TestRound12(); }

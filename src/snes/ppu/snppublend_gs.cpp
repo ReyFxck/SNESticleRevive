@@ -496,9 +496,15 @@ Uint128 *SNPPUBlendGS::BuildSparsePaletteList(PaletteT *pPalette,
 	GSListBegin(pBuild, SNPPU_SPARSE_PALETTE_LIST_QWORDS, NULL);
 	GSDmaCntOpen();
 
-	for (iRow = 0; iRow < 16u; iRow++)
-	{
-		Uint32 uRowGroups = (Uint32)((uDirtyGroups >> (iRow * 4u)) & 0x0Fu);
+    // Sparse gradients often touch one row. Walk the nonempty 32-bit halves
+    // directly instead of testing all 16 rows with a variable 64-bit shift.
+    Uint32 halves[2] = {(Uint32)uDirtyGroups, (Uint32)(uDirtyGroups >> 32)};
+    for (Uint32 half = 0; half < 2; ++half)
+    while (halves[half])
+    {
+        Uint32 localRow;
+        Uint32 uRowGroups = SnesPPUPopPaletteRow(halves[half], localRow);
+        iRow = localRow + 8u * half;
 		while (uRowGroups)
 		{
 			Uint32 iFirst = (Uint32)__builtin_ctz(uRowGroups);

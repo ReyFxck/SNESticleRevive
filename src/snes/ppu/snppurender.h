@@ -196,7 +196,7 @@ struct SnesRenderObj8T
 void _SnesPPURenderOBJ8(Uint8 *pLine8, SNMaskT *pLine,
 	const SnesRenderObj8T *pObjLine, Int32 nObjLine,
 	const SNMaskT *pWindow, const SNMaskT *pMask,
-	SNMaskT *pAddSubMask, Bool bAddSubMask);
+	SNMaskT *pAddSubMask, Bool bAddSubMask, SNMaskT *pDrawnOBJ = NULL);
 
 struct SnesRender8pInfoT
 {

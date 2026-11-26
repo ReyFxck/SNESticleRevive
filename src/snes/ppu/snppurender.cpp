@@ -14,6 +14,7 @@
 #include "snppucolor.h"
 #include "snppuchrcache.h"
 #include "snppuhires.h"
+#include "snppudirectcolor.h"
 #include "snppuhirlinecache.h"
 #include "snppumathidentity.h"
 #include "rendersurface.h"
@@ -665,8 +666,25 @@ static Bool bPrint = TRUE;
 		g_TmgCycColorMath += ProfCtrGetCycle() - _tColorMath;
 		Uint32 _tBlend = ProfCtrGetCycle();
 #endif
-		if (bMode56HiresSimple)
-		{
+#if CODE_PLATFORM == CODE_PS2
+        /* The ordinary output texture is 512-dot BGR555. Use the existing
+           finalized-line DMA path, keeping indexed CGRAM data unmodified.
+           Math/clip/pseudo-hires combinations still require a separate compositor. */
+        if (uBGMode == 7 && (pRegs->cgwsel & 1) &&
+            !(pRegs->setini & SNESPPU_SETINI_PSEUDOHIR) &&
+            !(pRegs->cgadsub & 0x3F) && !(pRegs->cgwsel & 0xC0))
+        {
+            Uint16 pixels[512] _ALIGN(64);
+            SnesPPUMode7DirectLine(pixels, pBlendInfo->uMain8,
+                pRenderInfo->Main[SNPPU_BGPLANE_LAYER0].uMask32,
+                pRenderInfo->Main[SNPPU_BGPLANE_PLANE7].uMask32,
+                m_pPPU->GetCGData(), m_pPPU->GetIntensity());
+            m_pBlend->ExecHires512(pixels, iLine);
+        }
+        else
+#endif
+        if (bMode56HiresSimple)
+        {
 #if CODE_PLATFORM == CODE_PS2
 			_SnesPPUPrepareHiresPalette(m_pPPU->GetCGData(), m_pPPU->GetIntensity());
 			Uint16 *pCachePixels = NULL;

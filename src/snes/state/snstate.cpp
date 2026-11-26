@@ -252,6 +252,8 @@ void SnesPPU::SaveState(struct SNStatePPUT *pState)
 void SnesPPU::RestoreState(struct SNStatePPUT *pState)
 {
 	m_Regs = pState->Regs;
+	// Legacy save format has no mosaic phase; normal saves are frame-boundary.
+	m_uMosaicCounter = 0;
 	memcpy(m_CGRAM,   pState->m_CGRAM, sizeof(m_CGRAM));
 	m_pRender->InvalidateHiresPalette();
 	memcpy(m_VRAM,    pState->m_VRAM,  sizeof(m_VRAM));
