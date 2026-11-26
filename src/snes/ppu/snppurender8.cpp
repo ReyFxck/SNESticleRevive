@@ -17,6 +17,10 @@
 #include "snppubglinecache.h"
 #include "snppuvramstamp.h"
 #include "snppumode7.h"
+#if CODE_PLATFORM == CODE_PS2 && defined(SNES_VU0_SHADOW) && SNES_VU0_SHADOW
+#include "snppuvu0.h"
+#include "profctr.h"
+#endif
 #include "rendersurface.h"
 #include "snmask.h"
 #include "prof.h"
@@ -3267,6 +3271,17 @@ static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPrio
 		(Int16)pRegs->m7c.w, (Int16)pRegs->m7d.w,
 		pRegs->m7sel, iLine);
 
+#if CODE_PLATFORM == CODE_PS2 && defined(SNES_VU0_SHADOW) && SNES_VU0_SHADOW
+	/* Original renderer remains authoritative. Compare raw bytes before EXTBG
+	   priority extraction or sprite composition; no candidate reaches GS. */
+	static bool disabled = false;
+	static Uint32 calls = 0, checked = 0, bypass = 0, mismatches = 0;
+	static Uint64 refCycles = 0, vuCycles = 0;
+	static SnesVU0CoordGroup coords[64];
+	Uint8 candidate[256] _ALIGN(16);
+	const bool eligible = !disabled && SnesVU0Mode7Eligible(Line);
+	Uint32 startRef = ProfCtrGetCycle();
+#endif
 	switch (pRegs->m7sel>>6)
 	{
 	case 0: // screen repetition if outside of screen area
@@ -3284,6 +3299,29 @@ static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPrio
 			Line.x, Line.y, Line.dx, Line.dy);
 		break;
 	}
+
+#if CODE_PLATFORM == CODE_PS2 && defined(SNES_VU0_SHADOW) && SNES_VU0_SHADOW
+	if (eligible) {
+		refCycles += ProfCtrGetCycle() - startRef;
+		const Uint32 startVU = ProfCtrGetCycle();
+		SnesVU0Mode7TargetCoords(coords, Line);
+		SnesVU0Mode7FetchCoords(candidate, pVram, coords, pRegs->m7sel >> 6);
+		vuCycles += ProfCtrGetCycle() - startVU;
+		++checked;
+		if (!SnesVU0Mode7Compare(pLine, candidate, disabled)) {
+			++mismatches;
+			unsigned pixel = 0;
+			while (pixel < 256 && pLine[pixel] == candidate[pixel]) ++pixel;
+			printf("[snes-vu0] mismatch line=%d pixel=%u mode=%u disabled=1\n", iLine, pixel, (unsigned)(pRegs->m7sel >> 6));
+		}
+	} else ++bypass;
+	++calls;
+	if (calls == 1 || calls % 2240 == 0) {
+		printf("[snes-vu0] shadow=1 calls=%u checked=%u bypass=%u mismatch=%u disabled=%u ref-cyc=%llu vu-cyc=%llu\n",
+			calls, checked, bypass, mismatches, (unsigned)disabled,
+			(unsigned long long)refCycles, (unsigned long long)vuCycles);
+	}
+#endif
 
 	if (pPriority)
 	{

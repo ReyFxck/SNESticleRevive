@@ -31,15 +31,23 @@ jobs:
           - name: release
             diagnostics: 0
             artifact_name: SNESticle-release
+            vu0_shadow: 0
 
           - name: diag1
             diagnostics: 1
             artifact_name: SNESticle-diag1
+            vu0_shadow: 0
 
           # Keep a separate symbol ELF for addr2line.
           - name: diag2
             diagnostics: 2
             artifact_name: SNESticle-diag2
+            vu0_shadow: 0
+
+          - name: diag-vu0
+            diagnostics: 2
+            artifact_name: SNESticle-diag-vu0
+            vu0_shadow: 1
 
     steps:
       - name: Checkout
@@ -52,6 +60,10 @@ jobs:
       - name: Verify PPU hot-path equivalence
         if: matrix.name == 'release'
         run: bash tools/pputest/test_hotpath.sh
+
+      - name: Verify VU0 shadow model and fallback
+        if: matrix.name == 'release'
+        run: bash tools/pputest/test_vu0_shadow.sh
 
       - name: Verify DSP mixer feedback and PCM
         if: matrix.name == 'release'
@@ -144,6 +156,7 @@ jobs:
           make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
             strip \
             SNES_DIAGNOSTICS=${{ matrix.diagnostics }} \
+            SNES_VU0_SHADOW=${{ matrix.vu0_shadow }} \
             SNES_TARGET_PROFILE=0 \
             PROFILE=0 \
             PACK=0
