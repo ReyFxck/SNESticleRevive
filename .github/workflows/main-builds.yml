@@ -20,80 +20,102 @@ concurrency:
 
 jobs:
   build:
-    name: PS2 Build (${{ matrix.name }})
+    name: PS2 builds (release, diag1, diag2)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Release: diagnostics off, stripped and packed.
-          - name: release
-            diagnostics: 0
-            artifact_name: SNESticle-release
-            vu0_shadow: 0
-
-          - name: diag1
-            diagnostics: 1
-            artifact_name: SNESticle-diag1
-            vu0_shadow: 0
-
-          # Keep a separate symbol ELF for addr2line.
-          - name: diag2
-            diagnostics: 2
-            artifact_name: SNESticle-diag2
-            vu0_shadow: 0
-
-          - name: boot-recovery
-            diagnostics: 1
-            artifact_name: SNESticle-boot-recovery
-            vu0_shadow: 0
-
-          - name: diag-vu0
-            diagnostics: 2
-            artifact_name: SNESticle-diag-vu0
-            vu0_shadow: 1
-
+    # Three clean compilations on one runner; dependencies are prepared once.
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up tool paths and Python cache identity
+        id: toolpaths
+        shell: bash
+        run: |
+          echo "PS2DEV=$HOME/.local/ps2dev" >> "$GITHUB_ENV"
+          echo "PS2SDK=$HOME/.local/ps2dev/ps2sdk" >> "$GITHUB_ENV"
+          echo "GSKIT=$HOME/.local/ps2dev/gsKit" >> "$GITHUB_ENV"
+          echo "PS2DEV_CACHE_DIR=$HOME/.cache/ps2dev" >> "$GITHUB_ENV"
+          echo "PS2_PACKER_SRC_DIR=$HOME/.cache/ps2dev/ps2-packer-src" >> "$GITHUB_ENV"
+          echo "CI_PYTHON_ENV=$HOME/.cache/snesticle-ci/venv" >> "$GITHUB_ENV"
+          echo "python=$(python3 -c 'import platform; print(platform.python_version())')" >> "$GITHUB_OUTPUT"
+          for directory in bin ee/bin iop/bin dvp/bin ps2sdk/bin; do
+            echo "$HOME/.local/ps2dev/$directory" >> "$GITHUB_PATH"
+          done
+
+      - name: Restore PS2DEV and packer cache
+        id: ps2cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.local/ps2dev
+            ~/.cache/ps2dev
+          key: ps2dev-ubuntu-24.04-v3
+          restore-keys: |
+            ps2dev-ubuntu-24.04-v2
+
+      - name: Prepare PS2DEV and packer only if missing
+        shell: bash
+        run: bash tools/ci/prepare-deps.sh ps2
+
+      # Save before tests/builds, so a regression or a later cancellation does
+      # not force all dependencies to be downloaded again on the next push.
+      - name: Save PS2DEV and packer cache
+        if: steps.ps2cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.local/ps2dev
+            ~/.cache/ps2dev
+          key: ps2dev-ubuntu-24.04-v3
+
+      - name: Restore CPU-test Python environment
+        id: pycache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/snesticle-ci/venv
+          key: snesticle-python-ubuntu24-${{ runner.arch }}-${{ steps.toolpaths.outputs.python }}-${{ hashFiles('tools/ci/requirements.txt') }}-v1
+
+      - name: Prepare CPU-test Python environment only if missing
+        shell: bash
+        run: bash tools/ci/prepare-deps.sh python
+
+      - name: Save CPU-test Python environment
+        if: steps.pycache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/snesticle-ci/venv
+          key: snesticle-python-ubuntu24-${{ runner.arch }}-${{ steps.toolpaths.outputs.python }}-${{ hashFiles('tools/ci/requirements.txt') }}-v1
+
       - name: Verify HostFS URI and directory handling
-        if: matrix.name == 'release'
         run: python3 tools/test_hostfs_saf.py
 
       - name: Verify boot origin and lazy storage policy
-        if: matrix.name == 'release'
         run: python3 tools/test_boot_origin.py
 
       - name: Verify PPU hot-path equivalence
-        if: matrix.name == 'release'
         run: bash tools/pputest/test_hotpath.sh
 
       - name: Verify VU0 shadow model and fallback
-        if: matrix.name == 'release'
         run: bash tools/pputest/test_vu0_shadow.sh
 
       - name: Verify DSP mixer feedback and PCM
-        if: matrix.name == 'release'
         run: bash tools/pputest/test_mixer_feedback.sh
 
       - name: Verify SPC700 I/O timing and BRR decode
-        if: matrix.name == 'release'
         run: bash tools/pputest/test_spc_brr_hotpath.sh
 
       - name: Verify PPU memory ports, raster registers and SPC timers
-        if: matrix.name == 'release'
         run: bash tools/pputest/test_hardware_accuracy.sh
 
       - name: Verify 65C816 bus and interrupt host regressions
-        if: matrix.name == 'release'
         run: |
           bash tools/cputest/build.sh
           tools/cputest/cpu_test </dev/null
 
       - name: Verify SA-1 and SuperFX host regressions
-        if: matrix.name == 'release'
         run: |
           bash tools/sa1test/build.sh
           tools/sa1test/sa1_test
@@ -101,132 +123,51 @@ jobs:
           tools/superfxtest/gsu_test
 
       - name: Verify integrated portable ROM Lab
-        if: matrix.name == 'release'
         run: |
           bash tools/romlab/build.sh
           tools/romlab/romlab self-test
 
-      - name: Cache PS2DEV
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.local/ps2dev
-            ~/.cache/ps2dev
-          # Shared toolchain cache across build variants.
-          key: ps2dev-ubuntu-24.04-v2
+      - name: Build and validate packed release
+        shell: bash
+        run: bash tools/ci/build-variant.sh release
 
-      - name: Ensure PS2DEV toolchain
-        run: make AUTO_INSTALL=yes COLOR=0 ensure-ps2dev
+      - name: Build packed diagnostic 1
+        shell: bash
+        run: bash tools/ci/build-variant.sh diag1
 
-      - name: Clean build directory
-        run: make COLOR=0 clean
+      - name: Build packed diagnostic 2
+        shell: bash
+        run: bash tools/ci/build-variant.sh diag2
 
-      - name: Build release
-        if: matrix.name == 'release'
+      - name: Verify exactly three deliverable ELFs
+        shell: bash
         run: |
-          make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
-            strip \
-            SNES_DIAGNOSTICS=0 \
-            SNES_TARGET_PROFILE=1 \
-            PROFILE=0 \
-            PACK=0
+          test "$(find artifacts -type f | wc -l)" -eq 3
+          for elf in SNESticle.elf SNESticle-diag1.elf SNESticle-diag2.elf; do
+            test -s "artifacts/$elf"
+            file "artifacts/$elf"
+          done
 
-      - name: Verify release CPU
-        if: matrix.name == 'release'
-        run: |
-          python3 -m pip install --quiet unicorn==2.1.4 pyelftools==0.32
-          python3 tools/cputest/check_ps2_cpu.py build/SNESticle.elf
-          python3 tools/cputest/check_ps2_echo.py build/SNESticle.elf
-          python3 tools/cputest/check_ps2_voice.py build/SNESticle.elf
-
-      - name: Keep unpacked release ELF
-        if: matrix.name == 'release'
-        run: |
-          mkdir -p unpacked
-          cp build/SNESticle.stripped.elf unpacked/SNESticle-unpacked.elf
-          test -s unpacked/SNESticle-unpacked.elf
-
-      - name: Upload unpacked release ZIP
-        if: matrix.name == 'release'
+      - name: Upload packed release
         uses: actions/upload-artifact@v4
         with:
-          name: SNESticle-release-unpacked
-          path: unpacked/SNESticle-unpacked.elf
+          name: SNESticle-release
+          path: artifacts/SNESticle.elf
           if-no-files-found: error
           retention-days: 30
 
-      - name: Pack stripped release ELF
-        if: matrix.name == 'release'
-        run: |
-          # Build/repair the host ps2-packer, then feed it the already-stripped
-          # ELF. This guarantees the downloadable production ELF has no debug
-          # symbols before compression.
-          make AUTO_INSTALL=yes COLOR=0 fix-packer
-          PACKER="${XDG_CACHE_HOME:-$HOME/.cache}/ps2dev/ps2-packer-src/ps2-packer"
-          test -x "$PACKER"
-
-          mkdir -p artifacts
-          "$PACKER" \
-            "$(pwd)/build/SNESticle.stripped.elf" \
-            "$(pwd)/artifacts/SNESticle.elf"
-
-          test -s artifacts/SNESticle.elf
-          echo "=== Release: stripped + packed ==="
-          file artifacts/SNESticle.elf
-          ls -lh artifacts/SNESticle.elf
-
-      - name: Build and pack diagnostic ELF (retain separate symbols)
-        if: matrix.name != 'release' && matrix.name != 'boot-recovery'
-        run: |
-          make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
-            strip \
-            SNES_DIAGNOSTICS=${{ matrix.diagnostics }} \
-            SNES_VU0_SHADOW=${{ matrix.vu0_shadow }} \
-            SNES_TARGET_PROFILE=0 \
-            PROFILE=0 \
-            PACK=0
-
-          make AUTO_INSTALL=yes COLOR=0 fix-packer
-          PACKER="${XDG_CACHE_HOME:-$HOME/.cache}/ps2dev/ps2-packer-src/ps2-packer"
-          test -x "$PACKER"
-          mkdir -p artifacts symbols
-          cp build/SNESticle.elf symbols/SNESticle-${{ matrix.name }}-symbols.elf
-          "$PACKER" "$(pwd)/build/SNESticle.stripped.elf" "$(pwd)/artifacts/SNESticle-${{ matrix.name }}.elf"
-          test -s artifacts/SNESticle-${{ matrix.name }}.elf
-          test "$(wc -c < artifacts/SNESticle-${{ matrix.name }}.elf)" -lt "$(wc -c < symbols/SNESticle-${{ matrix.name }}-symbols.elf)"
-          echo "=== ${{ matrix.name }}: stripped + packed ==="
-          file artifacts/SNESticle-${{ matrix.name }}.elf
-          ls -lh artifacts/SNESticle-${{ matrix.name }}.elf
-
-      - name: Build unpacked boot recovery ELF
-        if: matrix.name == 'boot-recovery'
-        run: |
-          make AUTO_INSTALL=yes COLOR=0 JOBS=4 strip \
-            SNES_DIAGNOSTICS=1 SNES_VU0_SHADOW=0 \
-            SNES_TARGET_PROFILE=0 PROFILE=0 PACK=0 PS2_BOOT_RECOVERY=1
-          mkdir -p artifacts
-          cp build/SNESticle.stripped.elf artifacts/SNESticle-boot-recovery.elf
-          test -s artifacts/SNESticle-boot-recovery.elf
-
-      - name: Verify artifact contains exactly one ELF
-        run: |
-          test "$(find artifacts -maxdepth 1 -type f -name '*.elf' | wc -l)" -eq 1
-          test "$(find artifacts -maxdepth 1 -type f | wc -l)" -eq 1
-          find artifacts -maxdepth 1 -type f -printf '%f\n'
-
-      - name: Upload build ZIP
+      - name: Upload diagnostic 1
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: artifacts/
+          name: SNESticle-diag1
+          path: artifacts/SNESticle-diag1.elf
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload diagnostic symbols (unpacked, optional)
-        if: matrix.name != 'release' && matrix.name != 'boot-recovery'
+      - name: Upload diagnostic 2
         uses: actions/upload-artifact@v4
         with:
-          name: SNESticle-${{ matrix.name }}-symbols
-          path: symbols/SNESticle-${{ matrix.name }}-symbols.elf
+          name: SNESticle-diag2
+          path: artifacts/SNESticle-diag2.elf
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
