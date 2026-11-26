@@ -4,21 +4,26 @@ import argparse, re, statistics, sys
 from pathlib import Path
 
 def read(path):
-    rows=[]; rom=None; row=None; prev=None; diag={}; current_session=None
+    rows=[]; rom=None; row=None; prev=None; diag={}; current_session=None; run=0; last_frame=None
     def val(s,key):
         m=re.search(r'\b'+re.escape(key)+r'=([^\s]+)',s)
         return m.group(1) if m else None
     for line in Path(path).open(encoding='utf-8',errors='replace'):
         if '[rom]' in line:
-            rom=val(line,'crc32'); row=None; prev=None
+            rom=val(line,'crc32'); row=None; prev=None; current_session=None; last_frame=None; run+=1
         elif '[snes-diag]' in line:
             session=val(line,'session')
-            if session!=current_session: prev=None; current_session=session
+            if session!=current_session:
+                if current_session is not None: run+=1; last_frame=None; row=None
+                prev=None; current_session=session
             diag={k:val(line,k) for k in ['schema','level','session','window']}
         elif '[snes-frame]' in line:
             m=re.search(r'f=(\d+).*?budget=(\d+) cycles min/avg/max=(\d+)/(\d+)/(\d+).*?slow=(\d+).*?capacity=([\d.]+)',line)
             if m:
-                f,b,mi,avg,ma,slow=map(int,m.groups()[:6]); row=dict(diag,rom=rom,f=f,budget=b,avg=avg,slow=slow,capacity=float(m[7])); rows.append(row)
+                f,b,mi,avg,ma,slow=map(int,m.groups()[:6])
+                if last_frame is not None and f<=last_frame: run+=1; prev=None
+                last_frame=f
+                row=dict(diag,rom=rom,run=run,f=f,budget=b,avg=avg,slow=slow,capacity=float(m[7])); rows.append(row)
         elif row is not None and '[snes-perf]' in line:
             for k in ('cpu','sa1','ppu','apu','mdma','hdma','gsu','mix'):
                 x=val(line,k)
@@ -34,6 +39,9 @@ def read(path):
         elif row is not None and '[snes-cpu-poll]' in line:
             m=re.search(r'iterations vblank/iram=(\d+)/(\d+)',line)
             if m: row['poll_vblank'],row['poll_iram']=map(int,m.groups())
+        elif row is not None and '[snes-cpu-poll-active]' in line:
+            x=val(line,'iram-reads')
+            if x is not None: row['poll_active_iram']=int(x)
         elif row is not None and '[ps2-frame]' in line:
             m=re.search(r'avg loop/prep/submit/flip=(\d+)/(\d+)/(\d+)/(\d+) work min/avg/max=(\d+)/(\d+)/(\d+)',line)
             if m: row['loop'],row['prep'],row['submit'],row['flip'],_,row['work'],_=map(int,m.groups())
@@ -48,7 +56,6 @@ def read(path):
 def summarize(label, rows):
     n=sum(int(r['window']) for r in rows)
     cyc=sum(r['avg']*int(r['window']) for r in rows)/n
-    fps=sum(r['capacity']*r['avg']*int(r['window']) for r in rows)/sum(r['avg']*int(r['window']) for r in rows)
     # The logged capacity is rounded; compute equivalent throughput from EE clock.
     fps=294912000/cyc
     print(f'{label}: {len(rows)} janelas, {n} frames; {cyc:,.0f} ciclos/frame; capacidade {fps:.2f} FPS')
@@ -67,6 +74,7 @@ def summarize(label, rows):
         print('  sync avanço/sem avanço:',sum(r['advance'] for r in hot),sum(r['noadvance'] for r in hot))
     poll=[r for r in rows if 'poll_vblank' in r]
     if poll: print('  polling iterações VBlank/I-RAM:',sum(r['poll_vblank'] for r in poll),sum(r['poll_iram'] for r in poll))
+    if any('poll_active_iram' in r for r in rows): print('  polling ativo, leituras reais I-RAM:',sum(r.get('poll_active_iram',0) for r in rows))
     # Frontend windows may cover a different number of source frames when frameskip is active.
     front=[r for r in rows if 'loop' in r]
     if front: print(f'  média frontend (janelas): work={statistics.mean(r["work"] for r in front):.0f} loop={statistics.mean(r["loop"] for r in front):.0f} ciclos; não é FPS medido na tela')
@@ -74,18 +82,20 @@ def summarize(label, rows):
     return cyc
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument('baseline'); p.add_argument('candidate',nargs='?'); p.add_argument('--crc',help='CRC32 da ROM, obrigatório se houver mais de uma ROM'); p.add_argument('--start',type=int,default=0); p.add_argument('--end',type=int,default=2**31-1); a=p.parse_args()
-    def choose(path):
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('baseline'); p.add_argument('candidate',nargs='?'); p.add_argument('--crc',help='CRC32 da ROM, obrigatório se houver mais de uma ROM'); p.add_argument('--start',type=int,default=0); p.add_argument('--end',type=int,default=2**31-1); p.add_argument('--baseline-run',type=int,help='Carregamento da ROM no baseline (padrão: último)'); p.add_argument('--candidate-run',type=int,help='Carregamento da ROM no candidato (padrão: último)'); a=p.parse_args()
+    def choose(path, requested_run):
         r=read(path); crcs={x['rom'] for x in r}; crc=a.crc.upper() if a.crc else next(iter(crcs)) if len(crcs)==1 else None
         if not crc: p.error(f'{path}: selecione --crc dentre {sorted(crcs)}')
-        r=[x for x in r if x['rom'].upper()==crc and a.start<=x['f']<=a.end]
+        r=[x for x in r if x['rom'].upper()==crc ]
         if not r: p.error(f'{path}: nenhuma janela correspondente')
-        # Session counter is local to each run. Reject mixed runs instead of pairing incorrectly.
-        if len({x['session'] for x in r})!=1 or len({x['f'] for x in r})!=len(r): p.error(f'{path}: separe sessões/reset em arquivos individuais')
+        runs=sorted({x['run'] for x in r}); selected=requested_run if requested_run is not None else runs[-1]
+        print(f'{path}: carregamento {selected}, disponíveis {runs}')
+        r=[x for x in r if x['run']==selected and a.start<=x['f']<=a.end]
+        if not r: p.error(f'{path}: nenhuma janela no carregamento/intervalo escolhido')
         return r
-    old=choose(a.baseline)
+    old=choose(a.baseline,a.baseline_run)
     if not a.candidate: summarize('Baseline',old); return
-    new=choose(a.candidate)
+    new=choose(a.candidate,a.candidate_run)
     if old[0]['rom']!=new[0]['rom']: p.error('CRCs diferentes')
     if {x['level'] for x in old}!={x['level'] for x in new}: p.error('Níveis de diagnóstico diferentes; compare 1 com 1 ou 2 com 2')
     idx=lambda r:{(x['f'],x['window'],x['budget']):x for x in r}

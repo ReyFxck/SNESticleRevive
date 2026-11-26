@@ -33,6 +33,7 @@ Bool g_SnesTargetProfileEnabled = FALSE;
 // Trace runs keep every instruction; the ROM Lab differential test opts in.
 Bool g_RomLabSCPUPollFastPath = FALSE;
 Uint64 g_RomLabSCPUPollSkipped = 0;
+Uint64 g_RomLabSCPUPollExecuted = 0;
 extern "C" void SnesRomLabTraceUnhandledAccess(SNCpuT *pCpu,
     Uint32 uAddr, Uint8 uValue, Uint8 uFlags);
 #define ROMLAB_UNHANDLED(_cpu, _addr, _value, _flags) \
@@ -58,7 +59,7 @@ static Uint64 g_TmgWinSumSA1  = 0;
 // Sample 1/64 of advancing SA-1 syncs; avoid 3 extra Count reads per slice.
 static Uint32 g_SA1SyncCalls = 0, g_SA1SyncNoAdvance = 0, g_SA1SyncSamples = 0;
 static Uint64 g_SA1SampleBus = 0, g_SA1SampleStep = 0, g_SA1SampleIRQ = 0;
-static Uint32 g_SCPUPollVBlank = 0, g_SCPUPollIRAM = 0;
+static Uint32 g_SCPUPollVBlank = 0, g_SCPUPollIRAM = 0, g_SCPUPollIRAMExecuted = 0;
 static Uint64 g_TmgWinSumGSU  = 0;
 static Uint64 g_TmgWinSumMDMA = 0;
 static Uint64 g_TmgWinSumHDMA = 0;
@@ -282,7 +283,7 @@ static void SnesDbgResetWindow(void)
 	g_TmgWinSumSA1 = 0;
 	g_SA1SyncCalls = g_SA1SyncNoAdvance = g_SA1SyncSamples = 0;
 	g_SA1SampleBus = g_SA1SampleStep = g_SA1SampleIRQ = 0;
-	g_SCPUPollVBlank = g_SCPUPollIRAM = 0;
+	g_SCPUPollVBlank = g_SCPUPollIRAM = g_SCPUPollIRAMExecuted = 0;
 	g_TmgWinSumGSU = 0;
 	g_TmgWinSumMDMA = 0;
 	g_TmgWinSumHDMA = 0;
@@ -1666,6 +1667,120 @@ void SnesSystem::RescheduleLineIRQ(Bool bAllowImmediate)
 	SNCPUAbort(&m_Cpu);
 }
 
+// Recognize one or two LDA/branch pairs in private WRAM. Each shared
+// read still runs at its original clock, including arbitration and IRQs.
+struct SCPUIRAMPollPair
+{
+    Uint32 pc, addr;
+    Uint8 loadBytes, branch, rel;
+};
+
+static Bool DecodeSCPUIRAMPollPair(const SNCpuT &cpu, Uint32 pc,
+                                 const Uint8 *code, Uint32 available,
+                                 SCPUIRAMPollPair &pair)
+{
+    if (available < 4) return FALSE;
+    Uint32 addr, length;
+    switch (code[0]) {
+    case 0xA5: // Aligned native direct page: no extra DP cycle.
+        if (cpu.Regs.rDP & 0xFF) return FALSE;
+        addr = (Uint16)(cpu.Regs.rDP + code[1]); length = 2; break;
+    case 0xAD:
+        if (available < 5) return FALSE;
+        addr = cpu.Regs.rDB | (code[1] | ((Uint32)code[2] << 8)); length = 3; break;
+    case 0xAF:
+        if (available < 6) return FALSE;
+        addr = code[1] | ((Uint32)code[2] << 8) | ((Uint32)code[3] << 16); length = 4; break;
+    default: return FALSE;
+    }
+    if (available <= length+2 || (addr & 0x40F800u) != 0x003000u || addr > 0xFFFFFFu ||
+        (code[length] != 0xF0 && code[length] != 0xD0)) return FALSE;
+    pair.pc = pc; pair.addr = addr; pair.loadBytes = (Uint8)length;
+    pair.branch = code[length]; pair.rel = code[length+1];
+    return TRUE;
+}
+
+Bool SnesSystem::TryExecuteSCPUIRAMPoll(Uint32 pc, const SNCpuBankT &bank)
+{
+    const Uint8 op = bank.pMem[pc];
+    if (op != 0xA5 && op != 0xAD && op != 0xAF && op != 0xF0 && op != 0xD0)
+        return FALSE;
+    if (m_SA1.CanDeferHostPoll()) return FALSE;
+    if ((m_Cpu.Regs.rP & SNCPU_FLAG_X) &&
+        ((m_Cpu.Regs.rX.w | m_Cpu.Regs.rY.w) & 0xFF00)) return FALSE;
+    if (bank.uBankCycle != SNCPU_CYCLE_SLOW) return FALSE;
+    const Uint32 page = pc & ~((Uint32)SNCPU_BANK_MASK);
+    SCPUIRAMPollPair pairs[2];
+    unsigned count = 0, phase = 0;
+    // The scheduler can enter at either load or branch of a recognized loop.
+    for (Uint32 back = 0; back <= 10 && back <= pc-page; ++back) {
+        const Uint32 start = pc-back, available = SNCPU_BANK_SIZE-(start-page);
+        if (!DecodeSCPUIRAMPollPair(m_Cpu,start,bank.pMem+start,available,pairs[0])) continue;
+        const Uint32 next = start+pairs[0].loadBytes+2;
+        if ((Int8)pairs[0].rel == -(Int32)(pairs[0].loadBytes+2)) count=1;
+        else if ((Int8)pairs[0].rel >= 0 &&
+                 DecodeSCPUIRAMPollPair(m_Cpu,next,bank.pMem+next,
+                                       available-(next-start),pairs[1]) &&
+                 (Int8)pairs[1].rel == -(Int32)(next-start+pairs[1].loadBytes+2) &&
+                 (Uint32)pairs[0].rel >= pairs[1].loadBytes+2) count=2;
+        else continue;
+        for (unsigned i=0; i<count; ++i) {
+            if (pc==pairs[i].pc || pc==pairs[i].pc+pairs[i].loadBytes) {
+                phase=i; break;
+            }
+            if (i+1==count) count=0;
+        }
+        if (count) break;
+    }
+    if (!count) return FALSE;
+    // These addresses must still use the canonical SA-1 I/O trap.
+    for (unsigned i=0;i<count;++i) {
+        const SNCpuBankT &mem=m_Cpu.Bank[pairs[i].addr>>SNCPU_BANK_SHIFT];
+        if (mem.pMem || mem.pReadTrapFunc!=Read2000) return FALSE;
+    }
+    m_Cpu.nAbortCycles=0;
+    m_Cpu.bRunning=TRUE;
+    while (m_Cpu.Cycles>0 && !m_Cpu.uSignal && !m_bLineIRQReschedule) {
+        const SCPUIRAMPollPair &pair=pairs[phase];
+        if (pc==pair.pc) {
+            const Uint32 speed=m_Cpu.Bank[pair.addr>>SNCPU_BANK_SHIFT].uBankCycle;
+            m_Cpu.Cycles -= pair.loadBytes*bank.uBankCycle+speed;
+            m_Cpu.uCpuCycleCount += pair.loadBytes+1;
+            // The last operand byte is on the bus before the data read.
+            m_Cpu.uOpenBus=bank.pMem[pc+pair.loadBytes-1];
+            SNCPUSA1BusRecord(&m_Cpu,pair.addr,speed,1);
+            const Uint8 value=SNCPURead8(&m_Cpu,pair.addr);
+            m_Cpu.Regs.rA.b.l=value;
+            m_Cpu.Regs.rP=(m_Cpu.Regs.rP & ~(SNCPU_FLAG_N|SNCPU_FLAG_Z)) |
+                          (value & SNCPU_FLAG_N) | (value?0:SNCPU_FLAG_Z);
+            pc+=pair.loadBytes;
+#if SNESTICLE_ROMLAB
+            ++g_RomLabSCPUPollExecuted;
+#endif
+#if SNDBG_LOG
+            ++g_SCPUPollIRAMExecuted;
+#endif
+            if (m_Cpu.Cycles<=0 || m_Cpu.uSignal || m_bLineIRQReschedule) break;
+        }
+        const Bool taken=(pair.branch==0xF0)==((m_Cpu.Regs.rP & SNCPU_FLAG_Z)!=0);
+        m_Cpu.uOpenBus=pair.rel;
+        m_Cpu.Cycles-=2*bank.uBankCycle+(taken?SNCPU_CYCLE_FAST:0);
+        m_Cpu.uCpuCycleCount+=2+(taken?1:0);
+        const Uint32 after=pc+2;
+        pc=taken?((pc&0xFF0000u)|((after+(Int8)pair.rel)&0xFFFFu)):after;
+        if (pc==pairs[0].pc) phase=0;
+        else if (count==2 && pc==pairs[1].pc) phase=1;
+        else break;
+    }
+    m_Cpu.Regs.rPC=pc;
+    m_Cpu.bRunning=FALSE;
+    if (m_Cpu.nAbortCycles) {
+        m_Cpu.Cycles=m_Cpu.nAbortCycles;
+        m_Cpu.nAbortCycles=0;
+    }
+    return TRUE;
+}
+
 // Skip only complete, side-effect-free iterations of two known polling
 // instruction shapes in private WRAM. Measure one real iteration in the
 // selected backend, and leave the last iteration to normal execution.
@@ -1690,6 +1805,7 @@ Bool SnesSystem::TryFastForwardSCPUPoll()
 		return FALSE;
 	const SNCpuBankT &bank = m_Cpu.Bank[pc >> SNCPU_BANK_SHIFT];
 	if (!bank.pMem || !bank.bRAM) return FALSE;
+	if (TryExecuteSCPUIRAMPoll(pc, bank)) return TRUE;
 	const Uint8 *code = bank.pMem + pc;
 	Bool branchPhase = FALSE;
 	if ((code[0] == 0xF0 || code[0] == 0xD0) &&
@@ -3019,6 +3135,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned long long)g_SA1SampleStep, (unsigned long long)g_SA1SampleIRQ);
 				DLog("[snes-cpu-poll] iterations vblank/iram=%u/%u",
 				     (unsigned)g_SCPUPollVBlank, (unsigned)g_SCPUPollIRAM);
+				DLog("[snes-cpu-poll-active] iram-reads=%u", (unsigned)g_SCPUPollIRAMExecuted);
 				DLog("[snes-sa1-bus] conflict-ticks=%u dropped-events=%u",(unsigned)SNCPUSA1BusGetConflictTicks(),(unsigned)SNCPUSA1BusGetDroppedEvents());
 				DLog("[snes-sa1-idle] fast-forward-ticks=%llu sleep-slices=%llu active=%u",
 					(unsigned long long)m_SA1.GetIdleFastForwardTicks(),

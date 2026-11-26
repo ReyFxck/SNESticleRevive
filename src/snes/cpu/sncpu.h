@@ -145,6 +145,7 @@ extern Uint32 g_SNCPU_SA1BWRAMWriteEnabled;
 extern Uint32 g_SNCPU_SA1BWRAMProtectedBytes;
 extern Uint32 g_SNCPU_SA1BWRAMMap;
 extern Uint8 g_SNCPU_SA1BusPenaltyUnits[4][SNCPU_SA1_BUS_UNIT_MAX];
+extern Uint32 g_SNCPU_SA1BusDirtyEnd[4];
 void SNCPUSA1BusSetHost(SNCpuT *pCpu);
 void SNCPUSA1BusSetExecCpu(SNCpuT *pCpu);
 void SNCPUSA1BusSetIRAM(Uint8 *pIRAM);

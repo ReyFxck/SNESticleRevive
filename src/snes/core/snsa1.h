@@ -116,7 +116,9 @@ public:
 	Uint8 ReadCC1Byte(Uint32 uAddr);
 
 	// S-CPU interrupt/vector bridge.  State remains owned by the SA-1.
-	Bool  SCPUIRQPending() const;
+	Bool  SCPUIRQPending() const {
+        return (m_State.Registers[0x100] & m_State.Registers[0x001] & 0xA0) != 0;
+    }
 	Bool  SCPUUseNMIVector() const { return (m_State.Registers[0x009] & 0x10) ? TRUE : FALSE; }
 	Bool  SCPUUseIRQVector() const { return (m_State.Registers[0x009] & 0x40) ? TRUE : FALSE; }
 	Uint16 GetSCPUNMIVector() const;

@@ -51,6 +51,7 @@ extern "C" void DLog(const char *format, ...)
 
 extern Bool g_RomLabSCPUPollFastPath;
 extern Uint64 g_RomLabSCPUPollSkipped;
+extern Uint64 g_RomLabSCPUPollExecuted;
 
 namespace {
 
@@ -1406,9 +1407,62 @@ static bool CheckSCPUPollDifferential()
     puts("S-CPU polling differential: PASS"); return true;
 }
 
+static bool CheckActiveSCPUPollDifferential()
+{
+    const Uint8 activeCode[]={0x18,0xFB,0xA9,0xFF,0x8D,0x2A,0x22,0xC2,0x10,0xA2,0xFF,0x7F,0xCA,0xD0,0xFD,
+                              0xA9,0x81,0x85,0x02,0x85,0x4D,0xA9,0x80,0x8D,0x09,0x22,0xDB};
+    const Uint8 longPoll[]={0xAF,0x02,0x30,0x00,0xF0,0xFA,0x80,0xFE};
+    const Uint8 absPoll[]={0xAD,0x02,0x30,0xF0,0xFB,0x80,0xFE};
+    const Uint8 dpPoll[]={0xA5,0x02,0xF0,0xFC,0x80,0xFE};
+    const Uint8 doublePoll[]={0xA5,0x02,0xD0,0x04,0xA5,0x4D,0xF0,0xF8,0x80,0xFE};
+    const Uint8 *code[]={longPoll,absPoll,dpPoll,doublePoll,doublePoll,longPoll,longPoll};
+    const unsigned sizes[]={sizeof(longPoll),sizeof(absPoll),sizeof(dpPoll),sizeof(doublePoll),sizeof(doublePoll),sizeof(longPoll),sizeof(longPoll)};
+    for (unsigned fixture=0;fixture<7;++fixture) {
+        std::unique_ptr<SnesStateT> states[2];
+        Uint32 machine[2]; Uint8 openBus[2];
+        for (int fast=0;fast<2;++fast) {
+            std::vector<uint8_t> image=BuildSelfTestRom();
+            auto *header=(SNRomInfoT *)&image[0x7FC0];
+            header->RomMakeup=0x23; header->RomType=0x35; header->SRAMSize=3;
+            memcpy(image.data(),activeCode,sizeof(activeCode));
+            // Native host IRQ handler: acknowledge the SA-1 request, then RTI.
+            const Uint8 handler[]={0x48,0xA9,0x80,0x8D,0x02,0x22,0x68,0x40};
+            memcpy(image.data()+0x100,handler,sizeof(handler));
+            image[0x7FEE]=0x00; image[0x7FEF]=0x81;
+            CMemFileIO file; file.Open(image.data(),(Uint32)image.size());
+            SnesRom rom;
+            if (rom.LoadRom(&file)!=Emu::Rom::LOADERROR_NONE || rom.m_eMapping!=SNROM_MAPPING_SA1) return false;
+            SnesSystem system; system.SetSnesRom(&rom); system.Reset();
+            SNCpuT *cpu=system.GetCpu();
+            SNCPUWrite8(cpu,0x002203,0); SNCPUWrite8(cpu,0x002204,0x80);
+            SNCPUWrite8(cpu,0x002200,0);
+            if (fixture>=5) SNCPUWrite8(cpu,0x002201,0x80);
+            for (unsigned i=0;i<sizes[fixture];++i) SNCPUWrite8(cpu,0x7E1000+i,code[fixture][i]);
+            cpu->Regs.rPC=0x7E1000+(fixture==4?6:0);
+            cpu->Regs.rE=0; cpu->Regs.rP=SNCPU_FLAG_M|SNCPU_FLAG_X|SNCPU_FLAG_I|SNCPU_FLAG_Z;
+            if (fixture==6) cpu->Regs.rP &= ~SNCPU_FLAG_I;
+            cpu->Regs.rA.w=0x4200; cpu->Regs.rDB=0; cpu->Regs.rDP=0x3000; cpu->uSignal=0;
+            Emu::SysInputT input={};
+            for (size_t i=1;i<EMUSYS_DEVICE_NUM;++i) input.uPad[i]=EMUSYS_DEVICE_DISCONNECTED;
+            g_RomLabSCPUPollFastPath=(Bool)fast; g_RomLabSCPUPollExecuted=0;
+            for (int f=0;f<3;++f) system.ExecuteFrame(&input,NULL,NULL,Emu::System::MODE_ACCURATEDETERMINISTIC);
+            if (fast && g_RomLabSCPUPollExecuted<1000) { fprintf(stderr,"active poll fixture %u did not execute\n",fixture); return false; }
+            if (fast) printf("Active I-RAM poll fixture %u: %llu real reads\n",fixture,(unsigned long long)g_RomLabSCPUPollExecuted);
+            states[fast].reset(new SnesStateT); system.SaveState(states[fast].get());
+            machine[fast]=cpu->uCpuCycleCount; openBus[fast]=cpu->uOpenBus;
+        }
+        g_RomLabSCPUPollFastPath=FALSE;
+        if (memcmp(states[0].get(),states[1].get(),sizeof(SnesStateT)) || machine[0]!=machine[1] || openBus[0]!=openBus[1]) {
+            fprintf(stderr,"active poll differential mismatch (%u), machine %u/%u, openbus %02x/%02x\n",fixture,machine[0],machine[1],openBus[0],openBus[1]);
+            return false;
+        }
+    }
+    puts("Active I-RAM polling differential: PASS"); return true;
+}
+
 static int SelfTestCommand()
 {
-    if (!CheckSCPUPollDifferential()) return 1;
+    if (!CheckActiveSCPUPollDifferential() || !CheckSCPUPollDifferential()) return 1;
     if (!CheckEmptyMathRendering()) return 1;
     if (!CheckBGFineXRendering()) return 1;
     if (!CheckBGScrollRendering())

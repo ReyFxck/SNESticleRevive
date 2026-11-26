@@ -30,7 +30,7 @@ static Uint32 g_SNCPU_SA1BusFinalized = 0;
 static Uint32 g_SNCPU_SA1BusBits[4][SNCPU_SA1_BUS_TICK_MAX / 32];
 static Uint32 g_SNCPU_SA1BusFastIRAM[SNCPU_SA1_BUS_TICK_MAX / 32];
 /* Exclusive high-water mark of bytes written in each penalty row. */
-static Uint32 g_SNCPU_SA1BusDirtyEnd[4];
+Uint32 g_SNCPU_SA1BusDirtyEnd[4];
 Uint32 g_SNCPU_SA1BusConflictTicks = 0;
 /* Also incremented by the S-CPU R5900 event recorder. */
 Uint32 g_SNCPU_SA1BusDroppedEvents = 0;

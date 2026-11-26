@@ -197,6 +197,7 @@ private:
 	void	ExecuteTimedSlice(Int32 nCycles, Int32 &nIRQCycles, Int32 &nLineClock);
     void    ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles);
     Bool    TryFastForwardSCPUPoll();
+    Bool    TryExecuteSCPUIRAMPoll(Uint32 pc, const SNCpuBankT &bank);
     void    ExecuteCPU(Int32 nExecCycles);
 };
 

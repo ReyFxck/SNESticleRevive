@@ -80,7 +80,9 @@
 
 #define SP_SA1Track 0x74(sp)
 #define SP_SA1Exec  0x7C(sp)
-#define SP_SA1Tmp   0x80(sp)
+#define SP_SA1RomEnd  0x80(sp)
+#define SP_SA1IramEnd 0x84(sp)
+#define SP_SA1PCType  0x88(sp)
 
 #define SP_Data0   	0x78(sp)
 #define SP_Data1   	0x79(sp)
@@ -144,24 +146,10 @@
 /* Shared-bus event: end clock [15:0], fast [16], bytes [18:17], device [20:19]. */
 #if defined(SNCPU_ASM_VARIANT_PLAIN) || defined(SNCPU_ASM_VARIANT_SA1)
 #define SNCPU_SA1_TRACK(_addr,_cycles,_bytes)
+#define SNCPU_SA1_TRACK_PC(_addr,_cycles,_bytes)
 #else
-#define SNCPU_SA1_TRACK(_addr,_cycles,_bytes) \
-		lw t0,SP_SA1Track ;\
-		beq t0,zr,99f ;\
-		srl t0,_addr,SNCPU_BANK_SHIFT ;\
-		andi t0,t0,0x7FF ;\
-		lui t1,%hi(g_SNCPU_SA1HostBusPage) ;\
-		addiu t1,t1,%lo(g_SNCPU_SA1HostBusPage) ;\
-		addu t0,t0,t1 ;\
-		lbu t0,0(t0) ;\
-		beq t0,zr,99f ;\
-		addiu t1,zr,SNCPU_SA1_BUS_MIX_HIGH ;\
-		bne t0,t1,97f ;\
-		andi t1,_addr,0xF800 ;\
-		addiu t0,zr,0x3000 ;\
-		bne t1,t0,99f ;\
-		addiu t0,zr,SNCPU_SA1_BUS_IRAM ;\
-97:     sltiu t1,_cycles,SNCPU_CYCLE_SLOW ;\
+#define SNCPU_SA1_APPEND_EVENT(_cycles,_bytes) \
+		sltiu t1,_cycles,SNCPU_CYCLE_SLOW ;\
 		ori t1,t1,(_bytes<<1) ;\
 		sll t1,t1,16 ;\
 		sll t0,t0,19 ;\
@@ -188,7 +176,38 @@
 		srl t1,t1,2 ;\
 		addiu t1,t1,1 ;\
 		lui t0,%hi(g_SNCPU_SA1BusEventCount) ;\
-		sw t1,%lo(g_SNCPU_SA1BusEventCount)(t0) ;\
+		sw t1,%lo(g_SNCPU_SA1BusEventCount)(t0) ;
+
+#define SNCPU_SA1_TRACK(_addr,_cycles,_bytes) \
+		lw t0,SP_SA1Track ;\
+		beq t0,zr,99f ;\
+		srl t0,_addr,SNCPU_BANK_SHIFT ;\
+		andi t0,t0,0x7FF ;\
+		lui t1,%hi(g_SNCPU_SA1HostBusPage) ;\
+		addiu t1,t1,%lo(g_SNCPU_SA1HostBusPage) ;\
+		addu t0,t0,t1 ;\
+		lbu t0,0(t0) ;\
+		beq t0,zr,99f ;\
+		addiu t1,zr,SNCPU_SA1_BUS_MIX_HIGH ;\
+		bne t0,t1,97f ;\
+		andi t1,_addr,0xF800 ;\
+		addiu t0,zr,0x3000 ;\
+		bne t1,t0,99f ;\
+		addiu t0,zr,SNCPU_SA1_BUS_IRAM ;\
+97:     SNCPU_SA1_APPEND_EVENT(_cycles,_bytes) \
+99:
+
+/* Mapped instruction pages keep their bus device until Fetch8Update. */
+#define SNCPU_SA1_TRACK_PC(_addr,_cycles,_bytes) \
+		lw t0,SP_SA1PCType ;\
+		beq t0,zr,99f ;\
+		addiu t1,zr,SNCPU_SA1_BUS_MIX_HIGH ;\
+		bne t0,t1,97f ;\
+		andi t1,_addr,0xF800 ;\
+		addiu t0,zr,0x3000 ;\
+		bne t1,t0,99f ;\
+		addiu t0,zr,SNCPU_SA1_BUS_IRAM ;\
+97:     SNCPU_SA1_APPEND_EVENT(_cycles,_bytes) \
 99:
 #endif
 
@@ -241,18 +260,16 @@
 94:		lw		t1,SNCPU_Counter2			;\
 		subu		t1,t1,R_Cycles				;\
 		subu		t1,t1,_cycles				;\
-		sltiu		t2,t1,SNCPU_SA1_BUS_UNIT_MAX		;\
-		beq		t2,zr,90f				;\
-		sw		t1,SP_SA1Tmp				;\
-		sll		t1,t0,12				;\
-		sll		t2,t0,11				;\
-		addu		t0,t1,t2				;\
-		lui		t2,%hi(g_SNCPU_SA1BusPenaltyUnits)	;\
-		addiu		t2,t2,%lo(g_SNCPU_SA1BusPenaltyUnits)	;\
-		addu		t2,t2,t0				;\
-		lw		t1,SP_SA1Tmp				;\
-		addu		t2,t2,t1				;\
-		lbu		t0,0(t2)				;\
+		sltiu t2,t1,SNCPU_SA1_BUS_UNIT_MAX ;\
+		beq t2,zr,90f ;\
+		sll t2,t0,12 ;\
+		sll t0,t0,11 ;\
+		addu t0,t0,t2 ;\
+		lui t2,%hi(g_SNCPU_SA1BusPenaltyUnits) ;\
+		addu t0,t0,t2 ;\
+		addiu t0,t0,%lo(g_SNCPU_SA1BusPenaltyUnits) ;\
+		addu t0,t0,t1 ;\
+		lbu t0,0(t0) ;\
 		beq		t0,zr,90f				;\
 		nop						;\
 		subu		R_Cycles,R_Cycles,t0			;\
@@ -273,7 +290,8 @@
 		lw		t0,SNCPU_Counter2			;\
 		subu		t0,t0,R_Cycles				;\
 		subu		t0,t0,_cycles				;\
-		sltiu		t1,t0,SNCPU_SA1_BUS_UNIT_MAX		;\
+		lw t1,SP_SA1RomEnd ;\
+		sltu t1,t0,t1 ;\
 		beq		t1,zr,85f				;\
 		nop						;\
 		lui		t1,%hi(g_SNCPU_SA1BusPenaltyUnits)	;\
@@ -294,7 +312,8 @@
 		lw		t0,SNCPU_Counter2			;\
 		subu		t0,t0,R_Cycles				;\
 		addiu		t0,t0,-SNCPU_CYCLE_FAST		;\
-		sltiu		t1,t0,SNCPU_SA1_BUS_UNIT_MAX		;\
+		lw t1,SP_SA1IramEnd ;\
+		sltu t1,t0,t1 ;\
 		beq		t1,zr,86f				;\
 		nop						;\
 		lui		t1,%hi(g_SNCPU_SA1BusPenaltyUnits)	;\
@@ -355,15 +374,11 @@
 
 /* Most memory opcodes already paid every cycle in their helpers.  Keep
    the zero-tail dispatch compact; nonzero tails retain the old charge. */
-#if defined(SNCPU_ASM_VARIANT_PLAIN)
 #define SNCPU_ENDOP(_nCycles) SNCPU_ENDOP_##_nCycles
 #define SNCPU_ENDOP_0 j _SNCPUExecute_Loop ; nop
 #define SNCPU_ENDOP_1 SNCPU_ENDOP_TIMED(1)
 #define SNCPU_ENDOP_2 SNCPU_ENDOP_TIMED(2)
 #define SNCPU_ENDOP_3 SNCPU_ENDOP_TIMED(3)
-#else
-#define SNCPU_ENDOP(_nCycles) SNCPU_ENDOP_TIMED(_nCycles)
-#endif
 
 #define SNCPU_ABORTOP() \
 		j		_SNCPUExecute_Abort	;\
@@ -594,7 +609,6 @@
 /* Taken 8-bit branches cost another cycle on an emulation-mode page cross.
    Compare logical PCs, not host pointers, because the mapped bank base is not
    guaranteed to be 256-byte aligned. */
-#if defined(SNCPU_ASM_VARIANT_PLAIN)
 /* Native-mode branches never incur the emulation page penalty. Do the
    logical-PC comparison only when E is set; the common bank transition
    remains identical. _rel is R_t0 ($21), not a scratch t0/t1/t2. */
@@ -612,24 +626,6 @@
 		addiu R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST ;\
 96: \
 		SNCPU_BREL_PC16(_rel)
-#else
-#define SNCPU_BREL8_PC16(_rel)				\
-		lwu		t2,SP_PCBank						;\
-		subu	t2,R_PC,t2						;\
-		SNCPU_BREL_PC16(_rel)					;\
-		addu	t0,t2,_rel						;\
-		xor		t0,t0,t2						;\
-		andi	t0,t0,0xFF00						;\
-		sltu	t0,zr,t0						;\
-		lbu		t1,SNCPU_rE						;\
-		and		t0,t0,t1						;\
-		addu	R_CpuCycle,R_CpuCycle,t0			;\
-		sll		t1,t0,1						;\
-		addu	t0,t0,t1						;\
-		sll		t0,t0,1						;\
-		subu	R_Cycles,R_Cycles,t0
-
-#endif
 
 #define SNCPU_FETCH8(_dest)  		   \
 		jal		_SNCPU_Fetch8		;  \
@@ -700,6 +696,7 @@
 		nop					;\
 		addu		t0,t0,_addr			;\
 		lbu		_data,0(t0)			;\
+		sb _data,SNCPU_uOpenBus ;\
 		addiu	R_CpuCycle,R_CpuCycle,1	;\
 		addiu		t2,zr,SNCPU_CYCLE_FAST		;\
 		subu		R_Cycles,R_Cycles,t2		;\
@@ -725,7 +722,8 @@
 		nop					;\
 		addu		t0,t0,_addr			;\
 		sb		_data,0(t0)			;\
-96:		addiu	R_CpuCycle,R_CpuCycle,1	;\
+96:		sb _data,SNCPU_uOpenBus ;\
+		addiu	R_CpuCycle,R_CpuCycle,1	;\
 		addiu		t2,zr,SNCPU_CYCLE_FAST		;\
 		subu		R_Cycles,R_Cycles,t2		;\
 		SNCPU_SA1_IRAM_PENALTY()		;\
@@ -1195,6 +1193,40 @@ _SNCPU_Write8Trap:
 //
 */
 
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
+_SNCPU_Write16SA1IRAM:
+		sltiu t0,R_Addr,0x07FF
+		beq t0,zr,_SNCPU_Write16_Slow
+		andi t0,R_Addr,0xFF
+		addiu t1,zr,0xFF
+		beq t0,t1,_SNCPU_Write16_Slow
+		srl t0,R_Addr,8
+		addiu t1,zr,1
+		sllv t0,t1,t0
+		lui t1,%hi(g_SNCPU_SA1CIWP)
+		lbu t1,%lo(g_SNCPU_SA1CIWP)(t1)
+		and t0,t0,t1
+		beq t0,zr,1f
+		nop
+		lui t1,%hi(g_SNCPU_SA1IRAM)
+		lw t1,%lo(g_SNCPU_SA1IRAM)(t1)
+		beq t1,zr,_SNCPU_Write16_Slow
+		nop
+		addu t1,t1,R_Addr
+		sb R_Data,0(t1)
+		srl t0,R_Data,8
+		sb t0,1(t1)
+1:
+		addiu R_CpuCycle,R_CpuCycle,2
+		addiu R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST
+		SNCPU_SA1_IRAM_PENALTY()
+		addiu R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST
+		SNCPU_SA1_IRAM_PENALTY()
+		srl R_Data,R_Data,8
+		jr ra
+		sb R_Data,SNCPU_uOpenBus
+#endif
+
 _SNCPU_Write16_Slow:
 		sw		ra, SP_RA0
 
@@ -1215,11 +1247,11 @@ _SNCPU_Write16:
 
 _SNCPU_Write16_Fast:
 #if defined(SNCPU_ASM_VARIANT_SA1)
-		b		_SNCPU_Write16_Slow
+		b		_SNCPU_Write16SA1IRAM
 		nop
 #elif !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lw		t0,SP_SA1Exec
-		bne		t0,zr,_SNCPU_Write16_Slow
+		bne		t0,zr,_SNCPU_Write16SA1IRAM
 		nop
 #endif
         addiu	t1,R_Addr,1								// t1 = addr + 1
@@ -1551,6 +1583,30 @@ _SNCPU_Read8Trap:
 //
 */
 
+#if !defined(SNCPU_ASM_VARIANT_PLAIN)
+_SNCPU_Read16SA1IRAM:
+		sltiu t0,R_Addr,0x07FF
+		beq t0,zr,_SNCPU_Read16_Slow
+		nop
+		lui t1,%hi(g_SNCPU_SA1IRAM)
+		lw t1,%lo(g_SNCPU_SA1IRAM)(t1)
+		beq t1,zr,_SNCPU_Read16_Slow
+		nop
+		addu t1,t1,R_Addr
+		lbu R_Data,0(t1)
+		lbu t0,1(t1)
+		sll t0,t0,8
+		or R_Data,R_Data,t0
+		addiu R_CpuCycle,R_CpuCycle,2
+		addiu R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST
+		SNCPU_SA1_IRAM_PENALTY()
+		addiu R_Cycles,R_Cycles,-SNCPU_CYCLE_FAST
+		SNCPU_SA1_IRAM_PENALTY()
+		srl t0,R_Data,8
+		jr ra
+		sb t0,SNCPU_uOpenBus
+#endif
+
 _SNCPU_Read16_Slow:
 		sw		ra, SP_RA0
 
@@ -1571,11 +1627,11 @@ _SNCPU_Read16_Slow:
 _SNCPU_Read16:
 _SNCPU_Read16_Fast:
 #if defined(SNCPU_ASM_VARIANT_SA1)
-		b		_SNCPU_Read16_Slow
+		b		_SNCPU_Read16SA1IRAM
 		nop
 #elif !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lw		t0,SP_SA1Exec
-		bne		t0,zr,_SNCPU_Read16_Slow
+		bne		t0,zr,_SNCPU_Read16SA1IRAM
 		nop
 #endif
         addiu	t1,R_Addr,1								// t1 = addr + 1
@@ -1803,7 +1859,7 @@ _SNCPU_Fetch8Fast:
         addiu	R_PC,R_PC,1
         subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
+		SNCPU_SA1_TRACK_PC(R_Addr,R_PCCycles,1)
 
 		jr		ra
         sb		R_Data,SNCPU_uOpenBus
@@ -1825,6 +1881,18 @@ _SNCPU_Fetch8Update:
 
         beq		t1,zr,_SNCPU_Fetch8Trap   					// if bankaddr==0 goto trap
         sw		t1,SP_PCBank								// save pcbank
+#if !defined(SNCPU_ASM_VARIANT_PLAIN) && !defined(SNCPU_ASM_VARIANT_SA1)
+		lw t0,SP_SA1Track
+		beq t0,zr,1f
+		srl t0,R_PC,SNCPU_BANK_SHIFT
+		andi t0,t0,0x7FF
+		lui t2,%hi(g_SNCPU_SA1HostBusPage)
+		addiu t2,t2,%lo(g_SNCPU_SA1HostBusPage)
+		addu t0,t0,t2
+		lbu t0,0(t0)
+		sw t0,SP_SA1PCType
+1:
+#endif
 
         andi	R_PCCount, R_PC, SNCPU_BANK_MASK		// R_PCCount = PC & 0x1FFF ^ 0x1FFF
         xori	R_PCCount, R_PCCount, SNCPU_BANK_MASK
@@ -1909,7 +1977,7 @@ _SNCPU_Fetch16Fast:
 _SNCPU_Fetch16HostTiming:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,2)
+		SNCPU_SA1_TRACK_PC(R_Addr,R_PCCycles,2)
 		jr		ra
 		nop
 
@@ -2004,7 +2072,7 @@ _SNCPU_Fetch24HostTiming:
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
 		subu	R_Cycles,R_Cycles,R_PCCycles
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,3)
+		SNCPU_SA1_TRACK_PC(R_Addr,R_PCCycles,3)
 		jr		ra
 		nop
 
@@ -2344,13 +2412,23 @@ SNCPU_ASM_EXECUTE:
 		move	R_pCpu, a0
 #if defined(SNCPU_ASM_VARIANT_PLAIN)
 		/* No SA-1 sidecars are referenced by this specialization. */
-#elif defined(SNCPU_ASM_VARIANT_SA1)
-		/* The SA-1 identity is resolved by the preprocessor in this core. */
 #else
+#if !defined(SNCPU_ASM_VARIANT_SA1)
 		/* a1=0 selects the host recorder, a1=1 the SA-1 penalty paths. */
-		sw		a1,SP_SA1Exec
-		xori		t0,a1,1
-		sw		t0,SP_SA1Track
+        sw zr,SP_SA1PCType
+		sw a1,SP_SA1Exec
+		xori t0,a1,1
+		beq a1,zr,1f
+		sw t0,SP_SA1Track
+#endif
+		/* Finalized rows stay immutable throughout an SA-1 entry. */
+		lui t0,%hi(g_SNCPU_SA1BusDirtyEnd)
+		addiu t0,t0,%lo(g_SNCPU_SA1BusDirtyEnd)
+		lw t1,4(t0)
+		lw t2,12(t0)
+		sw t1,SP_SA1RomEnd
+		sw t2,SP_SA1IramEnd
+1:
 #endif
 
 		SNCPU_LOADREGSTATE();
@@ -2387,7 +2465,7 @@ _SNCPUExecute_Loop:
 #if !defined(SNCPU_ASM_VARIANT_PLAIN)
         subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
-		SNCPU_SA1_TRACK(R_Addr,R_PCCycles,1)
+		SNCPU_SA1_TRACK_PC(R_Addr,R_PCCycles,1)
 #endif
 
 		sll		t0, R_Data, 2							// R_Data = opcode * 4

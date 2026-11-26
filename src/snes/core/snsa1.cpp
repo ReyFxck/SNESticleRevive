@@ -210,12 +210,6 @@ Uint16 SNSA1::GetResetVector() const
 	                ((Uint16)m_State.Registers[0x004] << 8));
 }
 
-Bool SNSA1::SCPUIRQPending() const
-{
-	return ((m_State.Registers[0x100] &
-	         m_State.Registers[0x001] & 0xA0) != 0) ? TRUE : FALSE;
-}
-
 Uint16 SNSA1::GetSCPUNMIVector() const
 {
 	return (Uint16)(m_State.Registers[0x00C] |
@@ -1611,7 +1605,7 @@ void SNSA1::ClearIdlePollSleep()
 
 Bool SNSA1::CanDeferHostPoll() const
 {
-	return m_State.Running && m_bIdlePollSleeping &&
+	return m_bIdlePollSleeping && m_State.Running &&
 	       !(m_State.Registers[0x010] & 3) && !m_State.DMARunning &&
 	       !m_State.ArithmeticPending && !m_State.NMIPending &&
 	       !m_State.TimerMatch && !m_Cpu.uSignal && !SCPUIRQPending() &&
@@ -1661,7 +1655,6 @@ Bool SNSA1::TryFastForwardIdleLoop()
 {
 	Uint32 uPC;
 	Uint32 uLoopPC;
-	Uint32 uTarget;
 	Uint16 uDirect;
 	Uint16 uIRAM;
 	Uint8 uOp0, uArg, uBranch, uRel;
@@ -1695,43 +1688,27 @@ Bool SNSA1::TryFastForwardIdleLoop()
 	if (!PeekMappedCpuByte(uPC, &uOp0))
 		return FALSE;
 
+	// LDA dp / BEQ|BNE -4 can be entered at either instruction.
 	if (uOp0 == 0xA5)
-	{
-		/* Slice ended at the load half of: LDA dp / BEQ|BNE loop. */
 		uLoopPC = uPC;
-		if (!PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 1u) & 0xFFFFu), &uArg) ||
-		    !PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 2u) & 0xFFFFu), &uBranch) ||
-		    !PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 3u) & 0xFFFFu), &uRel))
-			return FALSE;
-		if (uBranch != 0xF0 && uBranch != 0xD0)
-			return FALSE;
-		uTarget = (uPC & 0xFF0000u) |
-		          (((uPC + 4u) + (Int8)uRel) & 0xFFFFu);
-		if (uTarget != uLoopPC)
-			return FALSE;
-	}
 	else if (uOp0 == 0xF0 || uOp0 == 0xD0)
-	{
-		/* A full-speed R5900 slice often expires at the branch half instead.
-		   Deep diagnostics single-step and happened to move execution back to
-		   LDA before the next idle check, which made diagnostic builds faster.
-		   Recognize the same loop from either architectural phase. */
-		uBranch = uOp0;
-		if (!PeekMappedCpuByte((uPC & 0xFF0000u) | ((uPC + 1u) & 0xFFFFu), &uRel))
-			return FALSE;
-		uLoopPC = (uPC & 0xFF0000u) |
-		          (((uPC + 2u) + (Int8)uRel) & 0xFFFFu);
-		if (!PeekMappedCpuByte(uLoopPC, &uOp0) || uOp0 != 0xA5 ||
-		    !PeekMappedCpuByte((uLoopPC & 0xFF0000u) | ((uLoopPC + 1u) & 0xFFFFu), &uArg))
-			return FALSE;
-		/* The load must be immediately followed by this exact branch. */
-		if (((uLoopPC + 2u) & 0xFFFFu) != (uPC & 0xFFFFu))
-			return FALSE;
-	}
+		uLoopPC = (uPC & 0xFF0000u) | ((uPC - 2u) & 0xFFFFu);
 	else
-	{
 		return FALSE;
+
+	const SNCpuBankT &bank = m_Cpu.Bank[uLoopPC >> SNCPU_BANK_SHIFT];
+	if (bank.pMem && (uLoopPC & SNCPU_BANK_MASK) <= SNCPU_BANK_SIZE - 4u)
+	{
+		const Uint8 *code = bank.pMem + uLoopPC;
+		uOp0 = code[0]; uArg = code[1]; uBranch = code[2]; uRel = code[3];
 	}
+	else if (!PeekMappedCpuByte(uLoopPC, &uOp0) ||
+	         !PeekMappedCpuByte((uLoopPC & 0xFF0000u) | ((uLoopPC + 1u) & 0xFFFFu), &uArg) ||
+	         !PeekMappedCpuByte((uLoopPC & 0xFF0000u) | ((uLoopPC + 2u) & 0xFFFFu), &uBranch) ||
+	         !PeekMappedCpuByte((uLoopPC & 0xFF0000u) | ((uLoopPC + 3u) & 0xFFFFu), &uRel))
+		return FALSE;
+	if (uOp0 != 0xA5 || (uBranch != 0xF0 && uBranch != 0xD0) || uRel != 0xFC)
+		return FALSE;
 
 	uDirect = (Uint16)(m_Cpu.Regs.rDP + uArg);
 	if (uDirect < 0x0800)
@@ -1824,21 +1801,24 @@ void SNSA1::RunScheduled(Uint32 uSA1Cycles, Int32 nBusClock, Uint32 *pBusCycles)
 		return;
 	}
 
-	if (FastForwardSleepingIdle(uCpuCycles))
+	if (m_bIdlePollSleeping && FastForwardSleepingIdle(uCpuCycles))
 	{
 		m_State.ExecutionSlices++;
 		m_State.ExecutedCycles += uSA1Cycles;
 		return;
 	}
 
-	FinalizeScheduledBus(nBusClock, pBusCycles);
 	nExecUnits = (Int32)(uCpuCycles * SNCPU_CYCLE_FAST);
 	SNCPUAddCycles(&m_Cpu, nExecUnits);
+	// A slice used entirely to repay prior instruction overshoot never
+	// touches memory. Leave the bus events queued until execution resumes.
+	if (m_Cpu.Cycles > 0)
+		FinalizeScheduledBus(nBusClock, pBusCycles);
 
 	for (nGuard = 0; nGuard < nGuardLimit && m_Cpu.Cycles > 0; nGuard++)
 	{
-		ServiceNMI();
-		ServiceIRQ();
+		if (m_State.NMIPending) ServiceNMI();
+		if (m_Cpu.uSignal & SNCPU_SIGNAL_IRQ) ServiceIRQ();
 
 		if (TryFastForwardIdleLoop())
 			break;
