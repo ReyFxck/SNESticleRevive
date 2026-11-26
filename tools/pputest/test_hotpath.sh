@@ -22,3 +22,8 @@ ${CXX:-g++} -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \
 ${CXX:-g++} -O2 -fno-strict-aliasing -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
     -I src/common/base -I src/snes/ppu tools/pputest/mode7_test.cpp -o "$work/mode7-test"
 "$work/mode7-test"
+
+# Exact dependency walk versus region-aware memo, including counter wrap.
+${CXX:-g++} -O2 -DCODE_PLATFORM=1 -DCODE_DEBUG=0 -DCODE_PROFILE=0 \
+    -I src/common/base -I src/common/render -I src/snes/ppu -I src/snes/core tools/pputest/vramstamp_test.cpp -o "$work/vramstamp-test"
+"$work/vramstamp-test"

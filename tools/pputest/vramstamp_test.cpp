@@ -155,6 +155,48 @@ static void CheckMemoConfig()
 		"tile-size config must reject old dependency memo");
 }
 
+static void CheckRegionMemo()
+{
+    Uint32 rng=0x1badb002u; unsigned cases=0, outside=0;
+    for (Uint32 depth : {2u,4u})
+    for (Uint32 size : {0u,1u})
+    for (Uint32 mapSize=0;mapSize<4;++mapSize)
+    for (Uint32 base : {0u,0x3000u,0x7000u}) {
+        SnesPPUVramStampT stamps, reference;
+        SnesBGInfoT info={}; info.uChrAddr=base; info.uBitDepth=depth;
+        info.uChrSize=size; info.uScrAddr=0x7c00u; info.uScrSize=mapSize;
+        SnesRenderTileT tiles[33]={};
+        for (Uint32 i=0;i<33;++i) { rng=rng*1664525u+1013904223u; tiles[i].uTile=(rng>>16)%(size?1041u:1024u); }
+        const Uint32 state=0x041fu, config=1u|(size<<7);
+        for (unsigned run=0;run<256;++run) {
+            Uint32 oldRegion=stamps.GetBGGeneration(0,1,&info);
+            rng=rng*1664525u+1013904223u;
+            Uint32 addr=run%4==0 ? ((base+tiles[run%33].uTile*depth*4)&0x7fffu) : (run%4==1 ? 0x7c1fu : ((rng>>16)&0x7fffu));
+            stamps.Invalidate(addr,1); reference.Invalidate(addr,1);
+            Uint32 expected=reference.GetBGLineGenerationSlow(0,state,config,1,&info,tiles,33,0,0);
+            Check(stamps.GetBGLineGeneration(0,state,config,1,&info,tiles,33)==expected,"region memo equals exact walk");
+            Check(stamps.GetBGLineGeneration(0,state|(7u<<16)|(7u<<24),config,1,&info,tiles,33)==expected,"fine X/Y dependency stamp");
+            if(oldRegion==stamps.GetBGGeneration(0,1,&info)) ++outside;
+            ++cases;
+        }
+    }
+    SnesPPUVramStampT stamps; SnesBGInfoT info={}; info.uBitDepth=4; info.uScrAddr=0x5000;
+    SnesRenderTileT tiles[33]={}; tiles[32].uTile=4; stamps.Invalidate(64,1);
+    Check(stamps.GetBGLineGeneration(0,0,1,1,&info,tiles,1)==0,"one-cell dependency");
+    Check(stamps.GetBGLineGeneration(0,0,1,1,&info,tiles,33)==stamps.uEpoch,"tile count rejects old memo");
+    // Map writes can change the referenced tiles; a changed region must walk again.
+    SnesPPUVramStampT dynamic;
+    SnesRenderTileT row[33]={};
+    dynamic.Invalidate(64,1);
+    Check(dynamic.GetBGLineGeneration(0,0,1,1,&info,row,33)==0,"old tile references");
+    dynamic.Invalidate(0x5000,1); row[0].uTile=4;
+    Check(dynamic.GetBGLineGeneration(0,0,1,1,&info,row,33)==dynamic.uEpoch,"changed map invalidates memo");
+    dynamic.uEpoch=0xffffffffu;
+    Check(dynamic.Invalidate(0x7000,1),"region memo wrap");
+    Check(dynamic.GetBGLineGeneration(0,0,1,1,&info,row,33)==0,"region memo cleared on epoch wrap");
+    std::printf("Region memo: %u exact comparisons, %u writes outside region\n",cases,outside);
+}
+
 int main()
 {
 	SnesBGInfoT info = {};
@@ -184,6 +226,7 @@ int main()
 	CheckFineBGLineDependencies();
 	CheckFastStampEquivalence();
 	CheckMemoConfig();
+	CheckRegionMemo();
 	std::puts(failures ? "vramstamp_test: FAIL" : "vramstamp_test: PASS");
 	return failures ? 1 : 0;
 }

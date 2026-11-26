@@ -38,6 +38,8 @@ struct SnesPPUVramStampT
 		Uint32 uState;
 		Uint32 uConfig;
 		Uint32 uStamp;
+		Uint32 uRegionStamp; // conservative whole-BG generation at last exact walk
+		Uint32 nTiles;
 	};
 #endif
 	Uint32 uEpoch;
@@ -125,6 +127,18 @@ struct SnesPPUVramStampT
 		}
 		return pRegion->uStamp;
 	}
+	/* Only real, register-aligned Mode 1 layouts are eligible. For other
+	   layouts retain the exact per-epoch dependency walk. A 16x16 tile
+	   can add 17 to its index; GetBGGeneration includes the extra page. */
+	static inline Bool CanReuseRegion(Uint32 uMode, const SnesBGInfoT *pInfo,
+		Uint32 nTiles)
+	{
+		return uMode == 1u && nTiles == 33u &&
+			(pInfo->uBitDepth == 2u || pInfo->uBitDepth == 4u) &&
+			!(pInfo->uScrAddr & 1023u) && !(pInfo->uChrAddr & 4095u) &&
+			pInfo->uScrSize <= 3u && pInfo->uChrSize <= 1u;
+	}
+
 	/* Fast conservative dependency generation for the ordinary Mode 1/5 BG
 	   line cache.  The previous implementation re-walked every tilemap word
 	   plus every physical CHR tile before *every* cache lookup.  On EE that
@@ -162,10 +176,20 @@ struct SnesPPUVramStampT
 			(uMemoState >> 16) ^ uConfigKey) & (SNPPU_BG_ROWMEMO_SLOTS - 1u);
 #endif
 		LineMemoT *pMemo = &LineMemo[iBG & 3u][uMemoIndex];
-		if (pMemo->uEpoch == uEpoch &&
-		    pMemo->uState == uMemoState &&
-		    pMemo->uConfig == uConfigKey)
-			return pMemo->uStamp;
+		if (pMemo->uEpoch && pMemo->uState == uMemoState &&
+		    pMemo->uConfig == uConfigKey && pMemo->nTiles == nTiles)
+		{
+			if (pMemo->uEpoch == uEpoch) return pMemo->uStamp;
+			/* Writes outside the entire BG map/CHR region cannot alter
+			   the exact row dependency stamp. Retain the previous exact
+			   stamp, not the coarse region stamp. */
+			if (CanReuseRegion(uMode, pInfo, nTiles) &&
+			    pMemo->uRegionStamp == GetBGGeneration(iBG & 3u, uMode, pInfo))
+			{
+				pMemo->uEpoch = uEpoch;
+				return pMemo->uStamp;
+			}
+		}
 		return GetBGLineGenerationSlow(iBG, uVramState, uConfigKey, uMode,
 			pInfo, pTiles, nTiles, uMemoState, uMemoIndex);
 #else
@@ -266,6 +290,9 @@ struct SnesPPUVramStampT
 		pMemo->uState = uMemoState;
 		pMemo->uConfig = uConfigKey;
 		pMemo->uStamp = uStamp;
+		pMemo->nTiles = nTiles;
+		pMemo->uRegionStamp = CanReuseRegion(uMode, pInfo, nTiles) ?
+			GetBGGeneration(iBG & 3u, uMode, pInfo) : 0u;
 #else
 		(void)iBG;
 		(void)uConfigKey;

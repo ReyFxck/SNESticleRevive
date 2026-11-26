@@ -152,7 +152,8 @@ enum
     SNPPU_BG_MASKCLASS_OPAQUE_ANY = 1u,
     SNPPU_BG_MASKCLASS_PRIORITY_ANY = 2u,
     SNPPU_BG_MASKCLASS_PRIORITY_SAME = 4u,
-    SNPPU_BG_MASKCLASS_VALID = 8u
+    SNPPU_BG_MASKCLASS_VALID = 8u,
+    SNPPU_BG_MASKCLASS_OPAQUE_ALL = 16u
 };
 
 /* Classify the stored 40-byte masks once on a cache miss. Most Mode 1 hits
@@ -171,6 +172,10 @@ static inline __attribute__((always_inline)) Uint8 _SnesPPUClassifyBGLineMasks(
                    (pO[4] ^ pP[4]);
     Uint8 uClass = SNPPU_BG_MASKCLASS_VALID;
     if (uOpaque) uClass |= SNPPU_BG_MASKCLASS_OPAQUE_ANY;
+    // All 264 meaningful bits, including the fine-X carrier byte.
+    if ((pO[0] & pO[1] & pO[2] & pO[3]) == ~0ull &&
+        pOpaque[32] == 0xffu)
+        uClass |= SNPPU_BG_MASKCLASS_OPAQUE_ALL;
     if (uPriority) uClass |= SNPPU_BG_MASKCLASS_PRIORITY_ANY;
     if (uOpaque && !uDiff) uClass |= SNPPU_BG_MASKCLASS_PRIORITY_SAME;
     return uClass;
@@ -220,7 +225,12 @@ static inline __attribute__((always_inline)) void _SnesPPURestoreCachedMasksRaw(
     }
 #endif
 
-    _SnesPPUMaskSHL(pOpaqueDest, pOpaqueSrc, uFineX);
+#if SNPPU_BG_CACHE_MASKCLASS
+    if (uMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ALL)
+        SNMaskSet(pOpaqueDest);
+    else
+#endif
+        _SnesPPUMaskSHL(pOpaqueDest, pOpaqueSrc, uFineX);
 
 #if SNPPU_BG_CACHE_MASKCLASS
     if (!(uMaskClass & SNPPU_BG_MASKCLASS_PRIORITY_ANY))
@@ -265,7 +275,16 @@ static inline __attribute__((always_inline)) void _SnesPPURestoreCachedMasks(
     _SnesPPURestoreCachedMasksRaw(pOpaqueDest, pPriorityDest,
         pOpaqueSrc, pPrioritySrc, uFineX, uMaskClass);
     if (uMosaic)
+    {
+#if SNPPU_BG_CACHE_MASKCLASS
+        if (!(uMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ANY) ||
+            ((uMaskClass & SNPPU_BG_MASKCLASS_OPAQUE_ALL) &&
+             (!(uMaskClass & SNPPU_BG_MASKCLASS_PRIORITY_ANY) ||
+              (uMaskClass & SNPPU_BG_MASKCLASS_PRIORITY_SAME))))
+            return;
+#endif
         _SnesPPUApplyCachedMosaic(pOpaqueDest, pPriorityDest, uMosaic);
+    }
 }
 
 static _INLINE Bool _SnesPPURestoreBGLine(

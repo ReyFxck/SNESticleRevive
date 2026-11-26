@@ -154,6 +154,30 @@ static void TestMosaicAndKey()
     }
     std::printf("Mosaic masks: %u cases; cache key: 64 checks PASS\n",cases);
 }
+static void TestUniformCachedMasks()
+{
+    unsigned cases=0;
+    for(unsigned mosaic=0;mosaic<16;++mosaic)
+    for(unsigned scroll=0;scroll<8;++scroll)
+    for(unsigned pattern=0;pattern<6;++pattern) {
+        Uint8 opaque[40] _ALIGN(16)={}, priority[40] _ALIGN(16)={};
+        if(pattern) std::memset(opaque,255,33);
+        if(pattern==2 || pattern==4) std::memset(priority,255,33);
+        if(pattern==3) for(unsigned i=0;i<33;++i) priority[i]=Next();
+        if(pattern==4 || pattern==5) { opaque[32]=0x01; priority[32]&=0x01; }
+        Uint8 cls=_SnesPPUClassifyBGLineMasks(opaque,priority);
+        Check(bool(cls & SNPPU_BG_MASKCLASS_OPAQUE_ALL)==(pattern>=1 && pattern<=3),"full mask includes carrier byte");
+        SNMaskT op,pr;
+        _SnesPPURestoreCachedMasks(&op,&pr,opaque,priority,scroll,cls,mosaic);
+        for(unsigned x=0;x<256;++x) {
+            unsigned bit=(x/(mosaic+1))*(mosaic+1)+scroll;
+            Check(((op.uMask8[x/8]>>(x&7))&1)==((opaque[bit/8]>>(bit&7))&1),"uniform opacity oracle");
+            Check(((pr.uMask8[x/8]>>(x&7))&1)==((priority[bit/8]>>(bit&7))&1),"uniform priority oracle");
+        }
+        ++cases;
+    }
+    std::printf("Uniform cached masks: %u lines PASS\n",cases);
+}
 static void TestPaletteGroups()
 {
     SnesPPUPaletteGroups groups;
@@ -284,4 +308,4 @@ static void TestRound12()
     }
     std::puts("Round12 direct colors: 12288; sparse rows: 65536; opaque BG: 16 PASS");
 }
-int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); TestPaletteGroups(); TestMode7Compose(); TestRound12(); }
+int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); TestUniformCachedMasks(); TestPaletteGroups(); TestMode7Compose(); TestRound12(); }
