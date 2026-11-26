@@ -236,9 +236,23 @@ static void CheckByteGather()
 		}
 }
 
+static void CheckOpaqueBits()
+{
+    Uint32 random=0x1245789u;
+    for (Uint32 bits=0;bits<256;++bits)
+        for (Uint32 trial=0;trial<256;++trial)
+        {
+            Uint64 data=0;
+            for (Uint32 b=0;b<8;++b)
+                if (bits & (1u<<b)) data|=(Uint64)(1+NextRandom(&random)%255)<<(b*8);
+            Check("opaque mask",SnesPPUMode7OpaqueBits(data),bits);
+        }
+}
+
 int main()
 {
 	CheckByteGather();
+    CheckOpaqueBits();
 	Uint32 uRandom = 0x4D374B91u;
 	Int32 i;
 

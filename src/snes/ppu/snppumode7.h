@@ -126,10 +126,44 @@ _INLINE Uint8 SnesPPUMode7RepeatPixel(const Uint8 *pVram,
 	return pVram[uChrBase | SnesPPUMode7PixelByteOffset(x, y)];
 }
 
+/* 0=mixed/unknown, 1=inside, 2=outside one edge. Guard endpoint arithmetic. */
+_INLINE Int32 SnesPPUMode7LineBounds(Int32 n, Int32 x, Int32 y, Int32 dx, Int32 dy)
+{
+    if (n <= 0 || n > 256 || (Uint32)dx + 32768u > 65536u ||
+        (Uint32)dy + 32768u > 65536u ||
+        (Uint32)x + 0x20000000u >= 0x40000000u ||
+        (Uint32)y + 0x20000000u >= 0x40000000u) return 0;
+    const Int32 ex = x + dx * (n - 1), ey = y + dy * (n - 1);
+    if (((Uint32)x | (Uint32)y | (Uint32)ex | (Uint32)ey) < 0x40000u) return 1;
+    if ((x < 0 && ex < 0) || (y < 0 && ey < 0) ||
+        (x >= 0x40000 && ex >= 0x40000) || (y >= 0x40000 && ey >= 0x40000)) return 2;
+    return 0;
+}
+
+/* Exact nonzero mask, with no carries across byte boundaries. */
+_INLINE Uint8 SnesPPUMode7OpaqueBits(Uint64 data)
+{
+    const Uint64 low = 0x7F7F7F7F7F7F7F7Full;
+    return SnesPPUMode7ByteHighBits(((data & low) + low) | data);
+}
+
+_INLINE void SnesPPUMode7Fill(Uint8 *pLine, Uint8 value, Int32 nPixels)
+{
+    /* Also usable by the freestanding R5900 differential test. */
+    while (nPixels-- > 0) *pLine++ = value;
+}
+
 _INLINE void SnesPPUMode7FetchRepeat(
 	Uint8 *pLine, Int32 nPixels, const Uint8 *pVram,
 	Int32 x, Int32 y, Int32 dx, Int32 dy)
 {
+    if (nPixels <= 0) return;
+    if (dx == 0 && dy == 0)
+    {
+        const Uint32 base = (Uint32)pVram[SnesPPUMode7TileByteAddress(x, y)] << 7;
+        SnesPPUMode7Fill(pLine, pVram[base | SnesPPUMode7PixelByteOffset(x, y)], nPixels);
+        return;
+    }
 	Uint32 uLastTileAddr = 0xFFFFFFFFu;
 	Uint32 uChrBase = 0;
 
@@ -224,6 +258,22 @@ _INLINE void SnesPPUMode7FetchClamp(
 	Uint8 *pLine, Int32 nPixels, const Uint8 *pVram,
 	Int32 x, Int32 y, Int32 dx, Int32 dy)
 {
+    if (nPixels <= 0) return;
+    const Int32 bounds = SnesPPUMode7LineBounds(nPixels, x, y, dx, dy);
+    if (bounds == 1)
+    {
+        SnesPPUMode7FetchRepeat(pLine, nPixels, pVram, x, y, dx, dy);
+        return;
+    }
+    if (bounds == 2)
+    {
+        while (nPixels-- > 0)
+        {
+            *pLine++ = pVram[SnesPPUMode7PixelByteOffset(x, y)];
+            x += dx; y += dy;
+        }
+        return;
+    }
 	Uint32 uLastTileAddr = 0xFFFFFFFFu;
 	Uint32 uChrBase = 0;
 	while (nPixels-- > 0)
@@ -245,6 +295,14 @@ _INLINE void SnesPPUMode7FetchBlack(
 	Uint8 *pLine, Int32 nPixels, const Uint8 *pVram,
 	Int32 x, Int32 y, Int32 dx, Int32 dy)
 {
+    if (nPixels <= 0) return;
+    const Int32 bounds = SnesPPUMode7LineBounds(nPixels, x, y, dx, dy);
+    if (bounds == 1)
+    {
+        SnesPPUMode7FetchRepeat(pLine, nPixels, pVram, x, y, dx, dy);
+        return;
+    }
+    if (bounds == 2) { SnesPPUMode7Fill(pLine, 0, nPixels); return; }
 	Uint32 uLastTileAddr = 0xFFFFFFFFu;
 	Uint32 uChrBase = 0;
 	while (nPixels-- > 0)

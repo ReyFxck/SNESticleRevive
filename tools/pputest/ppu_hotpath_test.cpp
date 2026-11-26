@@ -173,4 +173,67 @@ static void TestPaletteGroups()
     }
     std::puts("Palette groups: 1048576 incremental marks PASS");
 }
-int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); TestPaletteGroups(); }
+/* Production fetch-layer finishing and composition; independent pixel oracle.
+   Layer code 0 lets OBJ0 through, 1 blocks OBJ0, 2 blocks OBJ0/1. */
+static void TestMode7Compose()
+{
+    unsigned cases=0;
+    for (unsigned run=0; run<4096; ++run)
+    {
+        SNMaskT bg1[SNPPU_BGPLANE_NUM]={}, bg2[SNPPU_BGPLANE_NUM]={};
+        SNMaskT output[SNPPU_BGPLANE_NUM]={}, w1={}, w2={}, math={};
+        Uint8 raw[256], pixels[256] _ALIGN(16);
+        const bool ext=(run&1)!=0, en1=(run&2)!=0, en2=ext&&(run&4)!=0;
+        const bool clip1=(run&8)!=0, clip2=(run&16)!=0;
+        const bool math1=(run&32)!=0, math2=(run&64)!=0, backdrop=(run&128)!=0;
+        const Uint8 mosaic=(Uint8)(Next()&255);
+        for (unsigned x=0;x<256;++x) raw[x]=(x&7)==0?0:(x&7)==1?0x80:(Uint8)Next();
+        for (unsigned i=0;i<32;++i) {w1.uMask8[i]=(Uint8)Next(); w2.uMask8[i]=(Uint8)Next();}
+        memcpy(bg1,raw,256);
+        _FinishMode7Layers((Uint8*)bg1,&bg1[SNPPU_BGPLANE_PRI],&bg1[SNPPU_BGPLANE_OPAQUE],en2?bg2:NULL,mosaic);
+        if (backdrop) SNMaskSet(&math);
+        Bool rendered=FALSE;
+        if (en2) _RenderBG8(pixels,output,bg2,clip2?&w2:NULL,7,&math,math2,NULL,NULL,4,rendered,0,0);
+        if (en1) _RenderBG8(pixels,output,bg1,clip1?&w1:NULL,8,&math,math1,NULL,NULL,ext?8:7,rendered,0,0);
+        if (!rendered) memset(pixels,0,256);
+        unsigned size=(mosaic>>4)+1;
+        for (unsigned x=0;x<256;++x)
+        {
+            const unsigned bit=1u<<(x&7);
+            unsigned v1=raw[(mosaic&1)?x-x%size:x];
+            unsigned v2=raw[(mosaic&2)?x-x%size:x];
+            bool a=en1&&v1&&(!clip1||!(w1.uMask8[x/8]&bit));
+            bool b=en2&&(v2&127)&&(!clip2||!(w2.uMask8[x/8]&bit));
+            bool hi=b&&(v2&128);
+            unsigned expected=hi?(v2&127):a?v1:b?(v2&127):0;
+            unsigned pri=hi?2:a?1:0;
+            bool wantMath=hi?math2:a?math1:b?math2:backdrop;
+            unsigned actualPri=!!(output[SNPPU_BGPLANE_LAYER0].uMask8[x/8]&bit) + 2*!!(output[SNPPU_BGPLANE_LAYER1].uMask8[x/8]&bit);
+            Check(pixels[x]==expected,"Mode7 composited pixel");
+            Check(actualPri==pri,"Mode7 OBJ priority code");
+            Check(!!(math.uMask8[x/8]&bit)==wantMath,"Mode7 color math selection");
+        }
+        /* Exercise actual OBJ renderer on the composed BG masks, with a
+           different window per screen. The mask represents each BG rank. */
+        for (unsigned pr=0;pr<4;++pr)
+        {
+            SnesRenderObj8T obj={};
+            obj.iPosX=(Int32)(Next()%249); obj.uPri=pr; obj.uPal=4;
+            for (unsigned i=0;i<8;++i) obj.uData[i]=0xF1;
+            obj.uData[SNPPU_BGPLANE_OPAQUE]=0xFF;
+            Uint8 actual[256] _ALIGN(16); memcpy(actual,pixels,256);
+            const SNMaskT *window=(run&256)?&w1:NULL;
+            _SnesPPURenderOBJ8(actual,output,&obj,1,window,NULL,NULL,FALSE);
+            for (unsigned x=0;x<256;++x)
+            {
+                unsigned bit=1u<<(x&7);
+                unsigned rank=!!(output[SNPPU_BGPLANE_LAYER0].uMask8[x/8]&bit)+2*!!(output[SNPPU_BGPLANE_LAYER1].uMask8[x/8]&bit);
+                bool visible=x>=(unsigned)obj.iPosX && x<(unsigned)obj.iPosX+8 && pr>=rank && (!window||!(window->uMask8[x/8]&bit));
+                Check(actual[x]==(visible?0xF1:pixels[x]),"Mode7 actual OBJ draw/window");
+            }
+        }
+        ++cases;
+    }
+    std::printf("Mode7 BG1/EXTBG composition: %u randomized lines PASS\n",cases);
+}
+int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); TestPaletteGroups(); TestMode7Compose(); }

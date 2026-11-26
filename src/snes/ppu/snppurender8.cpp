@@ -68,7 +68,7 @@
 #define SNPPU_OBJ_SKIP_EMPTY (TRUE)
 #endif
 
-static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque);
+static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque, SNMaskT *pBG2);
 
 #if SNPPU_OBJ_CACHE || SNPPU_BG_CHR_CACHE
 static SnesPPUChrCacheT _SnesPPU_ChrCache _ALIGN(64);
@@ -1927,6 +1927,21 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 {
 	if (uBitDepth!=0)
 	{
+        /* Ordinary Mode 7 has only one BG and zero texels already are the
+           backdrop. Copy the full line when no clip/other BG is involved,
+           preserving the opacity and OBJ priority masks. */
+        if (uPriority == 7u && !pWindow && !pExtraMask && !pBGPri &&
+            !bRendered && uScrollX == 0)
+        {
+            const SNMaskT *opaque = &pBGPlane[SNPPU_BGPLANE_OPAQUE];
+            memcpy(pLine8, (const Uint8 *)pBGPlane, 256);
+            SNMaskCopy(&pLine[SNPPU_BGPLANE_LAYER0], opaque);
+            SNMaskClear(&pLine[SNPPU_BGPLANE_LAYER1]);
+            if (pAddSubMask) SNMaskBool(pAddSubMask, opaque, bAddSubMask != 0);
+            bRendered = TRUE;
+            return;
+        }
+
 		SNMaskT BGMask;		// bits of BG to render
 		SNMaskT BGPri;      // bits of BG with high priority
 		SNMaskT *pCallerBGPri = pBGPri;
@@ -2048,14 +2063,14 @@ static void _RenderBG8(Uint8 *pLine8, SNMaskT *pLine, SNMaskT *pBGPlane, SNMaskT
 			SNMaskAndNotOr(&pLine[SNPPU_BGPLANE_LAYER1], &pLine[SNPPU_BGPLANE_LAYER1], &BGMask, pBGPri);
 			break;
 
-		case 7:
-			// lo = 10
-
-	// contra 3 = happy
-			SNMaskClear(&pLine[SNPPU_BGPLANE_LAYER0]);
-			SNMaskCopy(&pLine[SNPPU_BGPLANE_LAYER1], pBGPri);
-	// bgpri = 0 sadv
-			break;
+        case 7: // Mode 7 BG1: behind OBJ1, in front of OBJ0 (01).
+            SNMaskCopy(&pLine[SNPPU_BGPLANE_LAYER0], &BGMask);
+            SNMaskClear(&pLine[SNPPU_BGPLANE_LAYER1]);
+            break;
+        case 8: // EXTBG BG1: preserve BG2 high (10), replace BG2 low (00).
+            SNMaskANDN(&BGMask, &BGMask, &pLine[SNPPU_BGPLANE_LAYER1]);
+            SNMaskBool(&pLine[SNPPU_BGPLANE_LAYER0], &BGMask, true);
+            break;
 		}
 
 #if SNPPU_BG_COMPOSE_MASKCLASS
@@ -2106,47 +2121,7 @@ static _INLINE void _DecodeOBJRow4(SnesChrLookupT *pLookup, Uint8 *pHFlip,
 	*pOpaque = pHFlip[uPlane0 | uPlane1 | uPlane2 | uPlane3];
 }
 
-/* Quick check if sprite at [x, x+width) is COMPLETELY BLOCKED by window mask.
-   The window mask has 1 = blocked/hidden, 0 = visible.
-   Returns TRUE if sprite should be rendered (not fully blocked). */
-static Bool _SnesPPUOBJOverlapsWindow(Int32 x, Int32 width, const SNMaskT *pWindow)
-{
-	if (!pWindow)
-		return TRUE;  // no window = fully visible
-
-	if (x >= 256 || x + width <= 0)
-		return FALSE;  // completely off-screen
-
-	Int32 start = x < 0 ? 0 : x;
-	Int32 end = x + width;
-	if (end > 256)
-		end = 256;
-
-	Int32 startWord = start >> 5;
-	Int32 endWord = (end - 1) >> 5;
-
-	/* Check if ANY pixel in the sprite range is visible (mask bit = 0).
-	   If all pixels are blocked (mask bit = 1), sprite is fully hidden. */
-	for (Int32 w = startWord; w <= endWord; w++)
-	{
-		Uint32 wordMask = pWindow->uMask32[w];
-
-		/* Mask out bits outside sprite range */
-		if (w == startWord && start & 31)
-			wordMask |= (1u << (start & 31)) - 1;  // force 1 = blocked for bits before start
-		if (w == endWord && (end & 31))
-			wordMask |= ~((1u << (end & 31)) - 1);  // force 1 = blocked for bits after end
-
-		/* If any bit is 0 (visible) in the sprite range, keep the sprite */
-		if (wordMask != 0xFFFFFFFFu)
-			return TRUE;
-	}
-
-	/* All pixels in sprite range are blocked (1) - cull it */
-	return FALSE;
-}
-
-static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList, SnesRenderObj8T *pObjLine, Int32 MaxObj8Line, Int32 iLine, Uint32 uBaseAddr, Uint32 uNameSelect, Uint16 *pVram, Bool bObjInterlace, Bool bOddField, const SNMaskT *pObjWindow, Int32 *pFetchedTiles)
+static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList, SnesRenderObj8T *pObjLine, Int32 MaxObj8Line, Int32 iLine, Uint32 uBaseAddr, Uint32 uNameSelect, Uint16 *pVram, Bool bObjInterlace, Bool bOddField, Int32 *pFetchedTiles)
 {
 	Int32 nObjLine = 0;
 	Int32 nFetchedTiles = 0;
@@ -2184,10 +2159,7 @@ static Int32 _FetchOBJ(SnesRenderObjT *pObjBase, Uint8 *pObjList, Int32 nObjList
 		ObjX<<=32-9;
 		ObjX>>=32-9;
 
-		/* Early window culling: skip sprites completely outside OBJ window.
-		   This avoids expensive tile fetch for clipped sprites (e.g., HUD). */
-		if (pObjWindow && !_SnesPPUOBJOverlapsWindow(ObjX, (Int32)uSize, pObjWindow))
-			continue;
+        /* OBJ windows apply in composition, after the hardware fetch budget. */
 		ObjY = (Int32)_SnesPPUOBJLineY(
 			iLine, pObj->uPosY, pObj->uHeight, pObj->uVXOR,
 			bObjInterlace, bOddField);
@@ -2453,6 +2425,11 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 	if (!bPseudoHires && !bNativeHires &&
 	    (!(pRegs->cgwsel & 0x02) || cgadsub == 0))
 		ts = 0;
+    if (uBGMode == 7)
+    {
+        const Uint8 allowed = (pRegs->setini & 0x40) ? 0x13 : 0x11;
+        tm &= allowed; ts &= allowed;
+    }
 	uFetchLayers = tm | ts;
 
 #if SNDBG_LOG
@@ -2482,8 +2459,11 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 		   compositor generico usa somente estes campos de BG1. */
 		BGInfo[0].uBitDepth = 8;
 		BGInfo[0].uScrollX = 0;
-		BGInfo[0].Priority = 7;
-		BGInfo[1].uBitDepth = 0;
+        const Bool extbg = (pRegs->setini & 0x40) != 0;
+        BGInfo[0].Priority = extbg ? 8 : 7;
+        BGInfo[1].uBitDepth = extbg ? 7 : 0;
+        BGInfo[1].uScrollX = 0;
+        BGInfo[1].Priority = 4;
 		BGInfo[2].uBitDepth = 0;
 		BGInfo[3].uBitDepth = 0;
 	}
@@ -2509,7 +2489,6 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 			ObjLine, SNPPU_MAXOBJCHR, iLine, (pRegs->obsel & 7) << 13,
 			_SnesPPUOBJNameSelect(pRegs->obsel), m_pPPU->GetVramPtr(0),
 			m_pPPU->IsObjInterlace(), bOddField,
-			(tmw & SNESPPU_MASK_OBJ) ? &pBGWindow[4] : NULL,
 			&nObjFetchedTiles);
 		SNTARGET_END(OBJ, _targetOBJFetch);
 	}
@@ -2957,30 +2936,17 @@ void SnesPPURender::RenderLine8(Int32 iLine, SnesRender8pInfoT *pRenderInfo)
 #if SNDBG_LOG
 		Uint32 _tM7 = ProfCtrGetCycle();
 #endif
-		pRenderInfo->BGMaskClass[0] = 0;
-	pRenderInfo->BGMaskClass[1] = 0;
-	if (uFetchLayers & (SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2))
-			_FetchMode7((Uint8 *)pRenderInfo->BGPlanes[0], m_pPPU, iLine,
-				&pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_PRI],
-				&pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_OPAQUE]);
+        pRenderInfo->BGMaskClass[0] = 0;
+        pRenderInfo->BGMaskClass[1] = 0;
+        if (uFetchLayers & (SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2))
+            _FetchMode7((Uint8 *)pRenderInfo->BGPlanes[0], m_pPPU, iLine,
+                &pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_PRI],
+                &pRenderInfo->BGPlanes[0][SNPPU_BGPLANE_OPAQUE],
+                (uFetchLayers & SNESPPU_MASK_BG2) ? pRenderInfo->BGPlanes[1] : NULL);
 #if SNDBG_LOG
-		g_TmgCycM7 += ProfCtrGetCycle() - _tM7;
+        g_TmgCycM7 += ProfCtrGetCycle() - _tM7;
 #endif
-		PROF_LEAVE("BGMODE7");
-
-		/* Plain Mode 7 has BG1 only.  BG2 is a distinct EXTBG layer when
-		   SETINI.6 is enabled; it must never be treated as a second copy of
-		   BG1.  The old alias made games that put only BG2 on the sub screen
-		   add the Mode 7 picture to itself, producing the blown-out world-map
-		   colors seen in Trials of Mana. */
-		{
-			const Uint8 uMainBG1 = tm & SNESPPU_MASK_BG1;
-			const Uint8 uSubBG1 = ts & SNESPPU_MASK_BG1;
-			tm &= (Uint8)~0x0F;
-			ts &= (Uint8)~0x0F;
-			if (uMainBG1) tm |= SNESPPU_MASK_BG1;
-			if (uSubBG1) ts |= SNESPPU_MASK_BG1;
-		}
+        PROF_LEAVE("BGMODE7");
 	}
 
 	SNTARGET_END(BGFetch, _targetBGFetch);
@@ -3240,16 +3206,7 @@ static void _FetchMode7Opaque(Uint8 *pMask, Uint8 *pLine, Int32 nPixels)
 		uData64 = pLine64[0];
 		pLine64++;
 
-		// on a mips processor this produces several movn instructions
-		uOpaque|= ((uData64 >> 0x00) & 0xFF) ? 1 : 0;
-		uOpaque|= ((uData64 >> 0x08) & 0xFF) ? 2 : 0;
-		uOpaque|= ((uData64 >> 0x10) & 0xFF) ? 4 : 0;
-		uOpaque|= ((uData64 >> 0x18) & 0xFF) ? 8 : 0;
-		uOpaque|= ((uData64 >> 0x20) & 0xFF) ? 16 : 0;
-		uOpaque|= ((uData64 >> 0x28) & 0xFF) ? 32 : 0;
-		uOpaque|= ((uData64 >> 0x30) & 0xFF) ? 64 : 0;
-		uOpaque|= ((uData64 >> 0x38) & 0xFF) ? 128 : 0;
-
+        uOpaque = SnesPPUMode7OpaqueBits(uData64);
 		// store priority
 		pMask[0] = (Uint8)uOpaque;
 		pMask++;
@@ -3257,7 +3214,26 @@ static void _FetchMode7Opaque(Uint8 *pMask, Uint8 *pLine, Int32 nPixels)
 	}
 }
 #endif
-static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque)
+static void _FinishMode7Layers(Uint8 *pLine, SNMaskT *pPriority,
+    SNMaskT *pOpaque, SNMaskT *pBG2, Uint8 mosaicReg)
+{
+    /* Only BG2 consumes bit 7 as priority. BG1 retains all 8 bits.
+       Horizontal mosaic is independent; vertical timing remains separate. */
+    const Uint32 mosaic = (mosaicReg >> 4) + 1;
+    if (pBG2)
+    {
+        Uint8 *pixels2 = (Uint8 *)pBG2;
+        memcpy(pixels2, pLine, 256);
+        if (mosaic > 1 && (mosaicReg & 2)) _MosaicBG8(pixels2, 256, mosaic);
+        _FetchMode7Priority(pBG2[SNPPU_BGPLANE_PRI].uMask8, pixels2, 256);
+        _FetchMode7Opaque(pBG2[SNPPU_BGPLANE_OPAQUE].uMask8, pixels2, 256);
+    }
+    if (mosaic > 1 && (mosaicReg & 1)) _MosaicBG8(pLine, 256, mosaic);
+    if (pPriority) SNMaskSet(pPriority);
+    _FetchMode7Opaque(pOpaque->uMask8, pLine, 256);
+}
+
+static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPriority, SNMaskT *pOpaque, SNMaskT *pBG2)
 {
 	const SnesPPURegsT *pRegs = pPPU->GetRegs();
 	SnesPPUMode7LineT Line;
@@ -3323,20 +3299,5 @@ static void _FetchMode7(Uint8 *pLine, SnesPPU *pPPU, Int32 iLine, SNMaskT *pPrio
 	}
 #endif
 
-	if (pPriority)
-	{
-		if (pRegs->setini & 0x40)
-		{
-			PROF_ENTER("_FetchMode7Priority");
-			_FetchMode7Priority(pPriority->uMask8, pLine, 256);
-			PROF_LEAVE("_FetchMode7Priority");
-		} else
-		{
-			SNMaskSet(pPriority);
-
-		}
-	}
-
-	// no transparency?
-	_FetchMode7Opaque(pOpaque->uMask8, pLine, 256);
+    _FinishMode7Layers(pLine, pPriority, pOpaque, pBG2, (Uint8)pRegs->mosaic);
 }
