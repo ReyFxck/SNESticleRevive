@@ -4966,9 +4966,17 @@ SNCPU_OP(0x24c)
 SNCPU_OP(0x34c)
 SNCPU_OP(0x44c)
 	SNCPU_FETCH16(R_t0)
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+    sh R_t0,SNCPU_rPC
+    sw zr,SP_PCBank
+    lui R_PCCount,0xC000
+    j _SNCPU_ExecuteFetchUpdate
+    lwu R_PC,SNCPU_rPC
+#else
 	SNCPU_SET_PC16(R_t0)
 	SNCPU_SA1_JUMP_PENALTY()
 	SNCPU_ENDOP(0)
+#endif
 
 	// addr_abslong_JSL_
 SNCPU_OP(0x022)

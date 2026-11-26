@@ -2188,7 +2188,7 @@ void SnesSystem::ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles)
 void SnesSystem::ExecuteTimedSlice(
 	Int32 nCycles, Int32 &nIRQCycles, Int32 &nLineClock)
 {
-	while (nCycles > 0)
+	if (nCycles <= 0) return;
 	{
 		if (m_bLightGunLatchPending &&
 		    m_uLine == m_uLightGunLatchLine &&
@@ -2208,12 +2208,11 @@ void SnesSystem::ExecuteTimedSlice(
 			   use to synchronize the gun with the raster. */
 			m_PPU.LatchCounters(m_uLightGunLatchX, m_uLightGunLatchY);
 			m_bLightGunLatchPending = FALSE;
-			continue;
+			if (nCycles == 0) return;
 		}
 
 		ExecuteWithIRQ(nCycles, nIRQCycles);
 		nLineClock += nCycles;
-		nCycles = 0;
 	}
 }
 

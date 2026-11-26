@@ -368,6 +368,40 @@ static bool CheckBlockMove(SNCpuT *cpu, Uint8 *memory)
 	return ok;
 }
 
+/* Block moves refetch within PB even if operands span its boundary. */
+static bool CheckBlockMoveBoundaries(SNCpuT *cpu, Uint8 *memory)
+{
+    bool ok = true;
+    const Uint32 pcs[] = {0x019FFD,0x019FFE,0x019FFF,0x01FFFD,0x01FFFE,0x01FFFF};
+    unsigned cases = 0;
+    for (Uint32 pc : pcs) for (unsigned op : {0x44u,0x54u})
+        for (unsigned e : {0u,1u}) for (unsigned count : {0u,1u,2u}) {
+            Uint32 pb=pc&0xFF0000;
+            auto addr=[&](unsigned i){return pb|((pc+i)&0xFFFF);};
+            memory[addr(0)]=op; memory[addr(1)]=0x02; memory[addr(2)]=0x03;
+            cpu->Regs.rPC=pc; cpu->Regs.rA.w=count; cpu->Regs.rX.w=0x40;
+            cpu->Regs.rY.w=0x50; cpu->Regs.rS.w=0x1ff;
+            cpu->Regs.rP=e?0x34:0x04; cpu->Regs.rE=e;
+            cpu->uSignal=0; cpu->Cycles=1000;
+            int step=op==0x54?1:-1;
+            for(unsigned i=0;i<=count;i++) memory[0x030040+step*(int)i]=0x81+i;
+            for(unsigned i=0;i<=count;i++) {
+                SNCPUExecuteOne(cpu);
+                ok &= cpu->Regs.rPC==(i==count?addr(3):pc);
+                ok &= memory[0x020050+step*(int)i]==0x81+i;
+            }
+            ok &= cpu->Regs.rA.w==0xffff;
+            for(unsigned i=0;i<=count;i++) {
+                memory[0x030040+step*(int)i]=0;
+                memory[0x020050+step*(int)i]=0;
+            }
+            for(unsigned i=0;i<3;i++) memory[addr(i)]=0;
+            cases++;
+        }
+    std::printf("block move PC/page wrap: %u cases %s\n",cases,ok?"PASS":"FAIL");
+    return ok;
+}
+
 static unsigned ParseNumber(const std::string &text)
 {
 	return (unsigned)std::strtoul(text.c_str(), NULL, 10);
@@ -470,7 +504,7 @@ int main(int argc, char **argv)
 		std::free(memory);
 		return 1;
 	}
-	if (!CheckInterruptSemantics(&cpu, memory) || !CheckBlockMove(&cpu, memory))
+	if (!CheckInterruptSemantics(&cpu, memory) || !CheckBlockMove(&cpu, memory) || !CheckBlockMoveBoundaries(&cpu, memory))
 	{
 		std::free(memory);
 		return 1;

@@ -83,6 +83,7 @@
 #define SP_SA1RomEnd  0x80(sp)
 #define SP_SA1IramEnd 0x84(sp)
 #define SP_SA1PCType  0x88(sp)
+#define SP_WrapAddr   0x8C(sp) /* survives nested read trap spills */
 
 #define SP_Data0   	0x78(sp)
 #define SP_Data1   	0x79(sp)
@@ -457,19 +458,19 @@
 
 #define SNCPU_ADC8(_dest,_src)					\
 		jal		_SNCPU_ADC8						;\
-        nop
+        move t0,R_t2
 
 #define SNCPU_ADC16(_dest,_src)					\
 		jal		_SNCPU_ADC16					;\
-        nop
+        move t0,R_t2
 
 #define SNCPU_SBC8(_dest,_src)					\
 		jal		_SNCPU_SBC8						;\
-        nop
+        move t0,R_t2
 
 #define SNCPU_SBC16(_dest,_src)					\
 		jal		_SNCPU_SBC16					;\
-        nop
+        move t0,R_t2
 
 /* Stop at this instruction boundary when an asserted IRQ becomes unmasked.
    Save the cycles following the instruction so the outer scheduler vectors
@@ -1157,11 +1158,16 @@ _SNCPU_Write8Generic:
         andi	t2,t2,0xFF
         addu	t0,t1,R_Addr
 		subu	R_Cycles, R_Cycles, t2
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        jr ra
+        sb R_Data,0(t0)
+#else
         sb		R_Data, 0(t0)
 		SNCPU_SA1_PENALTY(R_Addr,t2)
 		SNCPU_SA1_TRACK(R_Addr,t2,1)
 		jr		ra
         nop
+#endif
 
 _SNCPU_Write8ZeroBank:
         lw		t0,SNCPU_pMem(R_pCpu)	 				// t0 = bank addr
@@ -1297,11 +1303,16 @@ _SNCPU_Write16_Fast:
         sb		R_Data, 0(t0)							// store low byte
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
         sb		t1, 1(t0)								// store high byte
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        jr ra
+        sb t1,SNCPU_uOpenBus
+#else
 		sb		t1,SNCPU_uOpenBus	// recorder clobbers t1, including its delay slot
 		SNCPU_SA1_TRACK(R_Addr,t2,2)
 
 		jr		ra
         nop
+#endif
 
 _SNCPU_Write16Trap:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for memory access
@@ -1845,12 +1856,12 @@ _SNCPU_Read16DP:
 		nop
 
 		sw		ra,SP_RA0
-		sw		t0,SP_SaveTrap
+		sw		t0,SP_WrapAddr
 		jal		_SNCPU_Read8
 		nop
 		sb		R_Data,SP_Data0
 
-		lw		R_Addr,SP_SaveTrap
+		lw		R_Addr,SP_WrapAddr
 		jal		_SNCPU_Read8
 		nop
 		sb		R_Data,SP_Data1
@@ -1867,13 +1878,13 @@ _SNCPU_Read24Wrap16:
 		nop
 
 		sw		ra,SP_RA0
-		sw		R_Addr,SP_SaveTrap
+		sw		R_Addr,SP_WrapAddr
 		sw		zr,SP_Data0
 		jal		_SNCPU_Read8
 		nop
 		sb		R_Data,SP_Data0
 
-		lw		t0,SP_SaveTrap
+		lw		t0,SP_WrapAddr
 		lui		t1,0x00FF
 		and		t1,t0,t1
 		addiu	t0,t0,1
@@ -1883,7 +1894,7 @@ _SNCPU_Read24Wrap16:
 		nop
 		sb		R_Data,SP_Data1
 
-		lw		t0,SP_SaveTrap
+		lw		t0,SP_WrapAddr
 		lui		t1,0x00FF
 		and		t1,t0,t1
 		addiu	t0,t0,2
@@ -2106,15 +2117,32 @@ _SNCPU_Fetch16Slow:
 
 _SNCPU_Fetch24:
 _SNCPU_Fetch24Fast:
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        slti    t0,R_PCCount,2
+        bne     t0,zr,_SNCPU_Fetch24Trap
+        addiu   R_PCCount,R_PCCount,-3
+#else
 		addiu	R_PCCount,R_PCCount,-3
 		blez	R_PCCount,_SNCPU_Fetch24Trap
 		nop
+#endif
 		addiu	R_CpuCycle,R_CpuCycle,3
 
 #if !defined(SNCPU_ASM_VARIANT_PLAIN)
 		lwu		t0,SP_PCBank
 		subu	R_Addr,R_PC,t0
 #endif
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        lbu R_Data,0(R_PC)
+        lbu t1,1(R_PC)
+        lbu t2,2(R_PC)
+        addiu R_PC,R_PC,3
+        sll t1,t1,8
+        sb t2,SNCPU_uOpenBus
+        sll t2,t2,16
+        or R_Data,R_Data,t1
+        or R_Data,R_Data,t2
+#else
 		lwr		R_Data,0(R_PC)
 		lwl		R_Data,3(R_PC)
 		addiu	R_PC,R_PC,3
@@ -2122,6 +2150,7 @@ _SNCPU_Fetch24Fast:
 		srl		R_Data,R_Data,8
 		srl		t0,R_Data,16
 		sb		t0,SNCPU_uOpenBus
+#endif
 
 #if defined(SNCPU_ASM_VARIANT_PLAIN)
 		subu	R_Cycles,R_Cycles,R_PCCycles
@@ -2333,7 +2362,6 @@ _SNCPU_DPMaskDone:
 
 _SNCPU_ADC8:
         andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF		 // clear overflow flag
-		move	t0,R_t2						     // t0 = target
         addu	R_t2,R_t2,R_t1					 // dest = target + src
         addu	R_t2,R_t2,R_fC					 // dest+= carry
         xor		t1,t0,R_t1						 // t1= target ^ src
@@ -2342,18 +2370,15 @@ _SNCPU_ADC8:
         and		t1,t1,t2						 // t1 = (dest ^ target) &	~(target ^ src)
         srl		t1,t1,1							 // shift into bit position
         andi	t1,t1,SNCPU_FLAG_V
-        or		R_P,R_P,t1
-
-		andi	t1,R_P,SNCPU_FLAG_D
-        bne		t1,zr,_SNCPU_ADC8_DECIMAL
-		nop
+		andi t2,R_P,SNCPU_FLAG_D
+		bne t2,zr,_SNCPU_ADC8_DECIMAL
+		or R_P,R_P,t1
 
 		jr		ra
 		nop
 
 _SNCPU_ADC16:
         andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF
-		move	t0,R_t2
         addu	R_t2,R_t2,R_t1
         addu	R_t2,R_t2,R_fC					 // dest+= carry
         xor		t1,t0,R_t1
@@ -2362,18 +2387,15 @@ _SNCPU_ADC16:
         and		t1,t1,t2
         srl		t1,t1,9
         andi	t1,t1,SNCPU_FLAG_V
-        or		R_P,R_P,t1
-
-		andi	t1,R_P,SNCPU_FLAG_D
-        bne		t1,zr,_SNCPU_ADC16_DECIMAL
-		nop
+		andi t2,R_P,SNCPU_FLAG_D
+		bne t2,zr,_SNCPU_ADC16_DECIMAL
+		or R_P,R_P,t1
 
 		jr		ra
 		nop
 
 _SNCPU_SBC8:
         andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF
-		move	t0,R_t2
         addu	R_t2,R_t2,R_t1
         addu	R_t2,R_t2,R_fC					 // dest+= carry
         xor		t1,t0,R_t1
@@ -2382,18 +2404,15 @@ _SNCPU_SBC8:
         and		t1,t1,t2
         srl		t1,t1,1
         andi	t1,t1,SNCPU_FLAG_V
-        or		R_P,R_P,t1
-
-		andi	t1,R_P,SNCPU_FLAG_D
-        bne		t1,zr,_SNCPU_SBC8_DECIMAL
-		nop
+		andi t2,R_P,SNCPU_FLAG_D
+		bne t2,zr,_SNCPU_SBC8_DECIMAL
+		or R_P,R_P,t1
 
 		jr		ra
 		nop
 
 _SNCPU_SBC16:
         andi	R_P,R_P,SNCPU_FLAG_V ^ 0xFF
-		move	t0,R_t2
         addu	R_t2,R_t2,R_t1
         addu	R_t2,R_t2,R_fC					 // dest+= carry
         xor		t1,t0,R_t1
@@ -2402,11 +2421,9 @@ _SNCPU_SBC16:
         and		t1,t1,t2
         srl		t1,t1,9
         andi	t1,t1,SNCPU_FLAG_V
-        or		R_P,R_P,t1
-
-		andi	t1,R_P,SNCPU_FLAG_D
-        bne		t1,zr,_SNCPU_SBC16_DECIMAL
-		nop
+		andi t2,R_P,SNCPU_FLAG_D
+		bne t2,zr,_SNCPU_SBC16_DECIMAL
+		or R_P,R_P,t1
 
 		jr		ra
 		nop
@@ -2568,11 +2585,10 @@ _SNCPUExecute_Loop:
 #endif
 
 _SNCPU_ExecuteFetchUpdate:
-		blez	R_Cycles, _SNCPUExecute_Done
-        addiu	R_PC,R_PC,1
-
-		jal		_SNCPU_Fetch8Update				// reads data, pc+=1
-        addiu	R_PC,R_PC,-1
+        blez R_Cycles,_SNCPUExecute_DoneNoRewind
+        nop
+        jal _SNCPU_Fetch8Update
+        nop
 
 		sll		t0, R_Data, 2							// R_Data = opcode * 4
         addu	t0, t0, R_pOpTable  					// t0 = OpTable + opcode * 4
@@ -2767,30 +2783,28 @@ _SNCPUExecute_DoneNoRewind:
         j       _SNCPUExecute_Loop
         nop
     SNCPU_OP_ALL(f0);
-        SNCPU_GETFLAG_Z(R_t1);
+        andi R_t1,R_fZ,0xFFFF
         SNCPU_FETCH8(R_t0)
-        bne     R_t1,zr,_SNCPU_Branch8Taken
+        beq     R_t1,zr,_SNCPU_Branch8Taken
         sll     R_t0,R_t0,24
         j       _SNCPUExecute_Loop
         nop
     SNCPU_OP_ALL(d0);
-        SNCPU_GETFLAG_Z(R_t1);
+        andi R_t1,R_fZ,0xFFFF
         SNCPU_FETCH8(R_t0)
-        beq     R_t1,zr,_SNCPU_Branch8Taken
+        bne     R_t1,zr,_SNCPU_Branch8Taken
         sll     R_t0,R_t0,24
         j       _SNCPUExecute_Loop
         nop
     SNCPU_OP_ALL(90);
-        SNCPU_GETFLAG_C(R_t1);
         SNCPU_FETCH8(R_t0)
-        beq     R_t1,zr,_SNCPU_Branch8Taken
+        beq     R_fC,zr,_SNCPU_Branch8Taken
         sll     R_t0,R_t0,24
         j       _SNCPUExecute_Loop
         nop
     SNCPU_OP_ALL(b0);
-        SNCPU_GETFLAG_C(R_t1);
         SNCPU_FETCH8(R_t0)
-        bne     R_t1,zr,_SNCPU_Branch8Taken
+        bne     R_fC,zr,_SNCPU_Branch8Taken
         sll     R_t0,R_t0,24
         j       _SNCPUExecute_Loop
         nop
@@ -3129,10 +3143,14 @@ _SNCPU_MVN_X0_Normal:
 
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
-        movn	R_PC,t0,R_A
-        movn	R_PCCount,t1,R_A
-
-        SNCPU_ADDI(R_A, -1)
+        movn R_PC,t0,R_A
+        movn R_PCCount,t1,R_A
+        /* A rewind spanning a mapped page needs a new mapping. */
+        sltiu t0,R_PCCount,SNCPU_BANK_SIZE
+        lui t1,0xC000
+        movz R_PCCount,t1,t0
+        SNCPU_ADDI(R_A,-1)
+        SNCPU_ANDI(R_A,0xFFFF)
 	SNCPU_ENDOP(2)
 
 	SNCPU_OP_X1E1(54);
@@ -3159,10 +3177,14 @@ _SNCPU_MVN_X0_Normal:
 
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
-        movn	R_PC,t0,R_A
-        movn	R_PCCount,t1,R_A
-
-        SNCPU_ADDI(R_A, -1)
+        movn R_PC,t0,R_A
+        movn R_PCCount,t1,R_A
+        /* A rewind spanning a mapped page needs a new mapping. */
+        sltiu t0,R_PCCount,SNCPU_BANK_SIZE
+        lui t1,0xC000
+        movz R_PCCount,t1,t0
+        SNCPU_ADDI(R_A,-1)
+        SNCPU_ANDI(R_A,0xFFFF)
 	SNCPU_ENDOP(2)
 
 	SNCPU_OP_X0(44);
@@ -3189,10 +3211,14 @@ _SNCPU_MVN_X0_Normal:
 
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
-        movn	R_PC,t0,R_A
-        movn	R_PCCount,t1,R_A
-
-        SNCPU_ADDI(R_A, -1)
+        movn R_PC,t0,R_A
+        movn R_PCCount,t1,R_A
+        /* A rewind spanning a mapped page needs a new mapping. */
+        sltiu t0,R_PCCount,SNCPU_BANK_SIZE
+        lui t1,0xC000
+        movz R_PCCount,t1,t0
+        SNCPU_ADDI(R_A,-1)
+        SNCPU_ANDI(R_A,0xFFFF)
 	SNCPU_ENDOP(2)
 
 	SNCPU_OP_X1E1(44);
@@ -3219,10 +3245,14 @@ _SNCPU_MVN_X0_Normal:
 
         addiu	t0,R_PC,-3			// if A!=0, PC-=3
         addiu	t1,R_PCCount, 3		//  PCCount+=3 also
-        movn	R_PC,t0,R_A
-        movn	R_PCCount,t1,R_A
-
-        SNCPU_ADDI(R_A, -1)
+        movn R_PC,t0,R_A
+        movn R_PCCount,t1,R_A
+        /* A rewind spanning a mapped page needs a new mapping. */
+        sltiu t0,R_PCCount,SNCPU_BANK_SIZE
+        lui t1,0xC000
+        movz R_PCCount,t1,t0
+        SNCPU_ADDI(R_A,-1)
+        SNCPU_ANDI(R_A,0xFFFF)
 	SNCPU_ENDOP(2)
 
 	SNCPU_OP_ALL(cb);

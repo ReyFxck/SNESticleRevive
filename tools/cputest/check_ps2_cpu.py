@@ -49,9 +49,9 @@ def hook(cpu,address,size,data):
 uc.hook_add(UC_HOOK_CODE,hook)
 banks=b''.join(struct.pack('<IIIBBBB',BASE,0,0,8,255,0,0) for _ in range(SIZE//8192))
 rng=random.Random(713);zero=bytes(SIZE)
-def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False,operand=0x34,program=None,extra=None,stack=0x1ff):
+def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False,operand=0x34,program=None,extra=None,stack=0x1ff,acc=0x1234):
  global trace
- state=bytearray(60);a=0x1234;x=0x17;y=0x21;s=stack
+ state=bytearray(60);a=acc;x=0x17;y=0x21;s=stack
  struct.pack_into('<HHHHBBHII',state,0,a,x,y,s,p,mode,dp,pc,0x020000)
  struct.pack_into('<iIIII',state,20,cycles,100,100,100,100);state[49]=1;state[52]=0x75;struct.pack_into('<I',state,56,1000)
  uc.mem_write(BASE,zero);ctypes.memset(mem,0,SIZE)
@@ -149,5 +149,28 @@ if __name__=='__main__':
     for op in [0x48,0x68,0xda,0xfa,0x0b,0x2b,0xf4,0x20,0x22,0x60,0x6b,0x40]:
      result=check(op,mode=e,p=flags,stack=stack,core=core);n+=1
      if result:fails.append(result);print(json.dumps({'case':'stack-wrap','core':core,'stack':hex(stack),**result}),flush=True)
+ # Round 18: ALU delay slots, decimal flags and carry-in.
+ for core in ['SNCPUExecute_ASM_Plain','SNCPUExecute_ASM']:
+  for p in [0x04,0x05,0x0c,0x0d,0x34,0x35,0x3c,0x3d]:
+   for op in [0x69,0xe9]:
+    for a,v in [(0x007f,0x01),(0x8000,0x80),(0xffff,0xff),(0x0099,0x01)]:
+     result=check(op,p=p,acc=a,operand=v,core=core);n+=1
+     if result:fails.append(result);print(json.dumps({'case':'alu-delay-slots','core':core,**result}),flush=True)
+  for dp in [0x2000,0x2100,0x3f00]:
+   for op in [0xb2,0x92]:
+    result=check(op,mode=1,p=0x34,dp=dp,operand=255,traps=True,core=core,extra={dp+255:b'\x22',dp:b'\x33'});n+=1
+    if result:fails.append(result);print(json.dumps({'case':'dp-trap-wrap','core':core,**result}),flush=True)
+  for pc in [0x019ffd,0x019ffe,0x019fff,0x01fffd,0x01fffe,0x01ffff]:
+   for op in [0x44,0x54]:
+    for acc in [0,1,2]:
+     for budget in [1,52*(acc+1)+14]:
+      result=check(op,pc=pc,p=0x04,acc=acc,core=core,cycles=budget,program=bytes([op,2,3,0xea,0xea]));n+=1
+      if result:fails.append(result);print(json.dumps({'case':'blockmove-wrap','core':core,**result}),flush=True)
+ for pc in [0x019ffb,0x019ffc,0x019ffd,0x019ffe,0x019fff,0x01fffc,0x01fffd,0x01fffe,0x01ffff]:
+  for op in [0x4c,0xaf]:
+   for cycles in [1,24,40]:
+    program=bytes([op,0x10,0x80,0x03,0xea,0xea])
+    result=check(op,p=0x04,pc=pc,cycles=cycles,program=program,extra={0x018010:b'\xea\xea\xea',0x038010:b'\x45\x67'});n+=1
+    if result:fails.append(result);print(json.dumps({'case':'jump-long-fetch','core':'plain',**result}),flush=True)
  print('cases',n,'failures',len(fails))
  raise SystemExit(bool(fails))
