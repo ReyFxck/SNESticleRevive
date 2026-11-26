@@ -33,11 +33,15 @@ void Aud_Wait();
 int  Aud_IsInitialized();
 /* Poll/launch at most one audio RPC without waiting for the IOP queue. */
 void Aud_Service(void);
+/* Opportunistic service: no idle query or synchronous start. */
+void Aud_ServicePending(void);
 
 typedef struct AudOutputStatsT {
     unsigned int queued_ee_frames, queued_iop_frames;
     unsigned int underruns, silent_frames, backpressure_waits;
     unsigned int missed_refills;
+    unsigned int submitted_frames, accepted_frames, zero_accepts, partial_accepts;
+    unsigned int stats_launches, pending_services, inflight_frames, rpc_pending;
 } AudOutputStatsT;
 /* Last completed telemetry, no RPC. Returns 0 when unsupported/unavailable. */
 int Aud_GetOutputStats(AudOutputStatsT *stats);

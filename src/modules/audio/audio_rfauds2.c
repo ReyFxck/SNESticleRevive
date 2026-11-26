@@ -17,6 +17,8 @@ extern void DLog(const char *fmt, ...);
 static short s_pcm[AUD_EE_FRAMES * 2u] __attribute__((aligned(64)));
 static unsigned int s_read, s_write, s_count, s_flight_frames;
 static unsigned int s_backpressure_waits;
+static unsigned int s_submitted, s_accepted, s_zero_accepts, s_partial_accepts;
+static unsigned int s_stats_launches, s_pending_services;
 static int s_ready, s_play_requested, s_running;
 enum { AUD_IDLE, AUD_SUBMIT, AUD_STATS };
 static int s_pending;
@@ -65,6 +67,9 @@ static int Aud_Poll(void)
             Aud_Result(RFAUDS2_ERROR_PROTOCOL, "accepted prefix");
             return 0;
         }
+        s_accepted += accepted;
+        if (!accepted) ++s_zero_accepts;
+        else if (accepted < s_flight_frames) ++s_partial_accepts;
         s_read = (s_read + accepted) & AUD_EE_MASK;
         s_count -= accepted;
         s_flight_frames = 0;
@@ -95,12 +100,12 @@ static void Aud_TryStart(int force)
     if (Aud_Result(rfauds2_start(), "start")) s_running = 1;
 }
 
-static void Aud_Pump(void)
+static void Aud_Pump(int allow_stats, int allow_start)
 {
     unsigned int count, contiguous;
     if (!s_ready) return;
     if (Aud_Poll()) {
-        Aud_TryStart(0);
+        if (allow_start) Aud_TryStart(0);
         if (s_ready && s_count) {
             count = s_count;
             contiguous = AUD_EE_FRAMES - s_read;
@@ -109,14 +114,17 @@ static void Aud_Pump(void)
                 count = RFAUDS2_ASYNC_MAX_FRAMES;
             if (Aud_Result(rfauds2_submit_s16_async(s_pcm + s_read * 2u,
                                                    count), "submit launch")) {
+                s_submitted += count;
                 s_flight_frames = count;
                 s_pending = AUD_SUBMIT;
             }
-        } else if (s_ready) {
+        } else if (s_ready && allow_stats) {
             /* Occupancy changes while the EE has nothing to submit. Avoid
                synchronous queue queries in menu/BGM and frame callers. */
-            if (Aud_Result(rfauds2_get_stats_async(), "stats launch"))
+            if (Aud_Result(rfauds2_get_stats_async(), "stats launch")) {
+                ++s_stats_launches;
                 s_pending = AUD_STATS;
+            }
         }
     }
 }
@@ -124,7 +132,7 @@ static void Aud_Pump(void)
 static void Locked_Aud_Service(void)
 {
     SNTARGET_BEGIN(_targetAudioService);
-    Aud_Pump();
+    Aud_Pump(1, 1);
     SNTARGET_END(Audio, _targetAudioService);
 }
 
@@ -135,6 +143,8 @@ static int Locked_Aud_Init(int sync, int buffersize, int maxenqueuesamples)
     if (s_ready) return 0;
     s_read = s_write = s_count = s_flight_frames = 0;
     s_backpressure_waits = 0;
+    s_submitted = s_accepted = s_zero_accepts = s_partial_accepts = 0;
+    s_stats_launches = s_pending_services = 0;
     s_pending = AUD_IDLE;
     s_running = 0;
     s_play_requested = 1;
@@ -157,7 +167,8 @@ static void Locked_Aud_Enqueue(short *left, short *right, int size, int wait)
     /* Like audsrv_play_audio, new PCM restarts playback after stop/clear. */
     s_play_requested = 1;
     while (size > 0 && s_ready) {
-        Aud_Pump();
+        /* No idle stats RPC immediately before copying fresh PCM. */
+        Aud_Pump(0, 1);
         space = AUD_EE_FRAMES - s_count;
         if (!space) {
             /* Exceptional bounded back-pressure. No overwrite or silent
@@ -177,7 +188,7 @@ static void Locked_Aud_Enqueue(short *left, short *right, int size, int wait)
         s_write = (s_write + count) & AUD_EE_MASK;
         s_count += count;
         left += count; right += count; size -= (int)count;
-        Aud_Pump();
+        Aud_Pump(0, 1);
     }
     SNTARGET_END(Audio, _targetAudioEnqueue);
     if (wait) Locked_Aud_Wait();
@@ -247,6 +258,9 @@ static void Locked_Aud_Clearbuff(void)
     if (!Aud_Result(rfauds2_stop(), "stop")) return;
     if (!Aud_Result(rfauds2_flush(), "flush")) return;
     s_read = s_write = s_count = s_flight_frames = 0;
+    s_submitted = s_accepted = s_zero_accepts = s_partial_accepts = 0;
+    s_stats_launches = s_pending_services = 0;
+    s_backpressure_waits = 0;
     s_running = 0;
     s_play_requested = 0;
 }
@@ -273,6 +287,14 @@ static int Locked_Aud_GetOutputStats(AudOutputStatsT *output)
     output->silent_frames = stats.silent_frames;
     output->backpressure_waits = s_backpressure_waits;
     output->missed_refills = stats.missed_refills;
+    output->submitted_frames = s_submitted;
+    output->accepted_frames = s_accepted;
+    output->zero_accepts = s_zero_accepts;
+    output->partial_accepts = s_partial_accepts;
+    output->stats_launches = s_stats_launches;
+    output->pending_services = s_pending_services;
+    output->inflight_frames = s_flight_frames;
+    output->rpc_pending = (unsigned int)s_pending;
     return 1;
 }
 
@@ -283,6 +305,18 @@ static int Locked_Aud_GetOutputStats(AudOutputStatsT *output)
 static int s_audio_lock = -1;
 static void Aud_Lock(void) { if (s_audio_lock >= 0) WaitSema(s_audio_lock); }
 static void Aud_Unlock(void) { if (s_audio_lock >= 0) SignalSema(s_audio_lock); }
+
+/* PollSema acquires the lock without waiting. No idle queries or
+   synchronous start at these opportunistic in-frame service points. */
+void Aud_ServicePending(void)
+{
+    if (s_audio_lock < 0 || PollSema(s_audio_lock) < 0) return;
+    if (s_ready && (s_count || s_pending != AUD_IDLE)) {
+        ++s_pending_services;
+        Aud_Pump(0, 0);
+    }
+    Aud_Unlock();
+}
 
 void Aud_Service(void)
 {

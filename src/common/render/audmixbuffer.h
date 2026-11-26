@@ -60,6 +60,7 @@ public:
     virtual void OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSamples, Int32 nSamples);
     virtual void OutputSamplesMono(Int16 *pSamples, Int32 nSamples);
     virtual void Flush();
+    virtual void ServicePending();
 };
 
 /* Game (emulator) audio volume: 0..100, where 100 = the build's base gain.

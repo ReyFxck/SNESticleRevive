@@ -17,6 +17,8 @@ public:
 	virtual void	OutputSamplesMono(Int16 *pSamples, Int32 nSamples);
 	virtual void	OutputSamplesStereo(Int16 *pLeftSamples, Int16 *pRightSamples, Int32 nSamples);
     virtual void    Flush();
+    /* Host transport only: does not advance emulated time or change PCM. */
+    virtual void    ServicePending() {}
 };
 
 #endif

@@ -638,12 +638,16 @@ Bool MainLoopProcess()
                 (unsigned)((window.uLoop - window.uFlip) / window.nFrames),
                 (unsigned)window.uMaxWork);
             AudOutputStatsT audio;
-            if (Aud_GetOutputStats(&audio))
+            if (Aud_GetOutputStats(&audio)) {
                 DLog("[ps2-audio] session=%u ee/io=%u/%u underruns=%u silent=%u backpressure=%u missed-refills=%u",
                     (unsigned)window.uSession, audio.queued_ee_frames,
                     audio.queued_iop_frames, audio.underruns, audio.silent_frames,
                     audio.backpressure_waits, audio.missed_refills);
-            else
+                DLog("[ps2-audio-rpc] session=%u submitted/accepted=%u/%u zero/partial=%u/%u stats/service=%u/%u flight/pending=%u/%u",
+                    (unsigned)window.uSession, audio.submitted_frames, audio.accepted_frames,
+                    audio.zero_accepts, audio.partial_accepts, audio.stats_launches,
+                    audio.pending_services, audio.inflight_frames, audio.rpc_pending);
+            } else
                 DLog("[ps2-audio] session=%u stats=unavailable", (unsigned)window.uSession);
             memset(&window, 0, sizeof(window));
             window.uSession = g_DbgSessionId;

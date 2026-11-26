@@ -299,6 +299,7 @@ int Aud_IsInitialized(void)
 }
 
 void Aud_Service(void) {}
+void Aud_ServicePending(void) {}
 
 int Aud_GetOutputStats(AudOutputStatsT *stats)
 {

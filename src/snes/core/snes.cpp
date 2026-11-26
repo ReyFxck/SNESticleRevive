@@ -11,6 +11,7 @@
 #include "types.h"
 #include "snes.h"
 #include "rendersurface.h"
+#include "mixbuffer.h"
 #include "console.h"
 #include "prof.h"
 #include "sntiming.h"
@@ -2514,6 +2515,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 		#endif
 
 		ExecuteLine();
+		/* Service previous PCM without advancing the emulated audio clock. */
+		if (pSound && (m_uLine & 31u) == 31u) pSound->ServicePending();
 	}
 
 	// sync ppu at end of frame (this ensures all rendering has been completed)
@@ -2547,6 +2550,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     for ( ; m_uLine < uFrameLines; m_uLine++)
 	{
 		ExecuteLine();
+		if (pSound && (m_uLine & 31u) == 31u) pSound->ServicePending();
 	}
 
     // clear 'BLANK NMI' flag at end of v-blank

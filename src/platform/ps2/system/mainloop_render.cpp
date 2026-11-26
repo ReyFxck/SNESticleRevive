@@ -666,6 +666,7 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
        and resets gsKit's draw queue for the next frame. The
        legacy WaitForNextVRstart / GS_SetCrtFB / GS_SetDrawFB
        block is now subsumed by this single call. */
+    Aud_ServicePending();
     PROF_ENTER("WaitVBlank");
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle();
 #if SNDBG_LOG || SNES_TARGET_PROFILE
@@ -684,6 +685,7 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle() - _uVblankCycle;
 	MainLoopSafeFrameskipAfterFlip();
     PROF_LEAVE("WaitVBlank");
+    Aud_ServicePending();
 
     /* whichdrawbuf is now decorative - gsKit owns the active
        framebuffer index via gsGlobal->ActiveBuffer. Keep it

@@ -8,6 +8,8 @@ extern "C" {
 }
 
 static std::vector<Int16> capturedLeft, capturedRight;
+static unsigned serviceCalls;
+extern "C" void Aud_ServicePending(void) { ++serviceCalls; }
 extern "C" int Aud_IsInitialized(void) { return 1; }
 extern "C" void Aud_Enqueue(short *left, short *right, int count, int)
 {
@@ -95,6 +97,11 @@ static bool CheckChunks(int rate, bool async, int length, int chunk, bool flush)
 
 int main()
 {
+	AudMixBuffer sync(32000, FALSE), async(32000, TRUE);
+	CMixBuffer *base = &sync; base->ServicePending();
+	if (serviceCalls) return 1;
+	base = &async; base->ServicePending();
+	if (serviceCalls != 1) return 1;
 	static const int volumes[] = { 100, 50, 0, 1, 99, -1, 101 };
 	for (int volume : volumes)
 		for (int async = 0; async < 2; async++)

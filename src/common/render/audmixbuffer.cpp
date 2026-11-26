@@ -242,6 +242,11 @@ void AudMixBuffer::Flush()
     m_nOutSamples = 0;
 }
 
+void AudMixBuffer::ServicePending()
+{
+    if (m_bAsync) Aud_ServicePending();
+}
+
 void AudMixBuffer::OutputSamplesMono(Int16 *pSamples,Int32 nSamples)
 {
     OutputSamplesStereo(pSamples, pSamples, nSamples);

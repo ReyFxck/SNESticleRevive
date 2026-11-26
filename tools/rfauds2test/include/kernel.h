@@ -4,5 +4,6 @@ int RotateThreadReadyQueue(int priority);
 typedef struct { int init_count, max_count; } ee_sema_t;
 int CreateSema(ee_sema_t *semaphore);
 int WaitSema(int id);
+int PollSema(int id);
 int SignalSema(int id);
 #endif

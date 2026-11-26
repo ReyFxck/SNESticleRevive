@@ -36,6 +36,13 @@ int WaitSema(int id)
     locked = 1;
     return 0;
 }
+int PollSema(int id)
+{
+    assert(id == 1);
+    if (locked || pthread_mutex_trylock(&audio_lock) != 0) return -1;
+    locked = 1;
+    return 1;
+}
 int SignalSema(int id)
 {
     assert(id == 1 && locked);
@@ -212,6 +219,7 @@ static void *service_thread(void *unused)
 {
     (void)unused;
     while (atomic_load(&threaded)) {
+        Aud_ServicePending();
         Aud_Service();
         (void)Aud_Available();
         (void)Aud_Buffered();
@@ -226,6 +234,20 @@ int main(void)
     assert(Aud_Init(0, 960*25, 4000) == 0);
     assert(Aud_IsInitialized());
     assert(Aud_Available() == CAPACITY);
+    Aud_Clearbuff();
+    unsigned int queries = async_queries;
+    Aud_ServicePending();
+    assert(async_queries == queries && !pending);
+    enqueue(798, 0);
+    assert(pending == 1 && async_queries == queries);
+    advance(); advance();
+    Aud_ServicePending();
+    assert(Aud_GetOutputStats(&stats) && stats.accepted_frames == 798 &&
+        stats.submitted_frames == 798 && stats.queued_ee_frames == 0 &&
+        stats.pending_services == 1 && !stats.rpc_pending);
+    WaitSema(1); Aud_ServicePending(); SignalSema(1);
+    assert(async_queries == queries);
+    Aud_Clearbuff(); reset_oracle();
     consume_rate = 0;
     enqueue(4000, 0);
     enqueue(512, 0); /* Fill the larger ring after the two primed halves. */
