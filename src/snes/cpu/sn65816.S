@@ -893,12 +893,7 @@
 		lw		_dest,SP_Data0		;\
 		SNCPU_RESTRICT_STACK()
 
-#define SNCPU_SAVEREGSTATE() 				\
-		sw		R_PCCount, SP_Save0		   ; \
-		sw		R_DPMASK, SP_Save1		   ; \
-		sw		R_pOpTable, SP_Save2 	   ; \
-		sw		R_PCCycles, SP_Save3 	   ; \
-		sw		R_PC, SP_Save4			   ; \
+#define SNCPU_SAVEARCHSTATE() \
         sh		R_A, SNCPU_rA			   ; \
         sh		R_X, SNCPU_rX			   ; \
         sh		R_Y, SNCPU_rY			   ; \
@@ -909,12 +904,7 @@
 		sw		R_CpuCycle,SNCPU_uCpuCycleCount ; \
 		sw		R_Cycles, SNCPU_Cycles
 
-#define SNCPU_LOADREGSTATE()			    \
-		lw		R_PCCount, SP_Save0		   ; \
-		lwu		R_DPMASK, SP_Save1		   ; \
-		lwu		R_pOpTable, SP_Save2 	   ; \
-		lwu		R_PCCycles, SP_Save3 	   ; \
-		lwu		R_PC, SP_Save4			   ; \
+#define SNCPU_LOADARCHSTATE() \
         lhu		R_A, SNCPU_rA			   ; \
         lhu		R_X, SNCPU_rX			   ; \
         lhu		R_Y, SNCPU_rY			   ; \
@@ -924,6 +914,22 @@
         lbu		R_P, SNCPU_rP			   ; \
 		lw		R_CpuCycle,SNCPU_uCpuCycleCount ; \
 		lw		R_Cycles,SNCPU_Cycles
+
+#define SNCPU_SAVEREGSTATE() 				\
+		sw		R_PCCount, SP_Save0		   ; \
+		sw		R_DPMASK, SP_Save1		   ; \
+		sw		R_pOpTable, SP_Save2 	   ; \
+		sw		R_PCCycles, SP_Save3 	   ; \
+		sw		R_PC, SP_Save4			   ; \
+        SNCPU_SAVEARCHSTATE()
+
+#define SNCPU_LOADREGSTATE()			    \
+		lw		R_PCCount, SP_Save0		   ; \
+		lwu		R_DPMASK, SP_Save1		   ; \
+		lwu		R_pOpTable, SP_Save2 	   ; \
+		lwu		R_PCCycles, SP_Save3 	   ; \
+		lwu		R_PC, SP_Save4			   ; \
+        SNCPU_LOADARCHSTATE()
 
 /*
 //
@@ -1716,6 +1722,36 @@ _SNCPU_Read16Trap:
 */
 
 _SNCPU_Read24:
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        /* All three bytes must be in the same directly mapped 8 KiB page.
+           Byte loads avoid reading a fourth byte beyond the mapping. The
+           caller handles 16-bit bank wrapping; I/O and page crossings keep
+           the original byte-by-byte path. No SA-1 accounting is bypassed. */
+        andi    t0,R_Addr,SNCPU_BANK_MASK
+        sltiu   t0,t0,(SNCPU_BANK_SIZE-2)
+        beq     t0,zr,_SNCPU_Read24_Slow
+        srl     t0,R_Addr,SNCPU_BANK_SHIFT
+        sll     t0,t0,4
+        addu    t0,t0,R_pCpu
+        lw      t1,SNCPU_pMem(t0)
+        lbu     t2,SNCPU_uBankCycle(t0)
+        beq     t1,zr,_SNCPU_Read24_Slow
+        addu    t0,t1,R_Addr
+        subu    R_Cycles,R_Cycles,t2
+        subu    R_Cycles,R_Cycles,t2
+        subu    R_Cycles,R_Cycles,t2
+        addiu   R_CpuCycle,R_CpuCycle,3
+        lbu     R_Data,0(t0)
+        lbu     t1,1(t0)
+        lbu     t2,2(t0)
+        sll     t1,t1,8
+        sb      t2,SNCPU_uOpenBus
+        sll     t2,t2,16
+        or      R_Data,R_Data,t1
+        jr      ra
+        or      R_Data,R_Data,t2
+_SNCPU_Read24_Slow:
+#endif
 		sw		ra, SP_RA0
         sw		zr,SP_Data0
 
@@ -2431,7 +2467,9 @@ SNCPU_ASM_EXECUTE:
 1:
 #endif
 
-		SNCPU_LOADREGSTATE();
+		/* Entry initializes all interpreter-private registers below; never
+		   load uninitialized spill slots from the fresh stack frame. */
+		SNCPU_LOADARCHSTATE();
 
         jal		_SNCPU_DecomposeFlags		// decompose flags
         nop
@@ -2462,6 +2500,9 @@ _SNCPUExecute_Loop:
         // Only count the opcode when it will execute. The terminal probe
         // above rewinds PC at Done and must not advance the 5A22 math clock.
         addiu	R_CpuCycle,R_CpuCycle,1
+        /* The mapped opcode fetch drives the bus just like Fetch8Update.
+           The budget-exhausted terminal probe must not change open bus. */
+        sb		R_Data,SNCPU_uOpenBus
 #if !defined(SNCPU_ASM_VARIANT_PLAIN)
         subu	R_Cycles,R_Cycles,R_PCCycles
 		SNCPU_SA1_ROM_PENALTY(R_PCCycles)
@@ -2524,7 +2565,8 @@ _SNCPUExecute_DoneNoRewind:
         jal		_SNCPU_ComposeFlags		// decompose flags
         nop
 
-		SNCPU_SAVEREGSTATE();
+		/* No callback follows: the private spill slots are dead at exit. */
+		SNCPU_SAVEARCHSTATE();
 
 // cleanup stack frame
 

@@ -1899,6 +1899,18 @@ void SnesSystem::ExecuteCPU(Int32 nCycles)
 
     while (m_Cpu.Cycles > 0)
     {
+        /* Ordinary cartridges spend most raster slices with no pending
+           signal. Keep the same execution budget and abort/reschedule check,
+           but bypass the interrupt/DMA/SA-1 dispatch for that common case. */
+        if (m_Cpu.uSignal == 0 && !m_bSA1)
+        {
+            assert(m_DMAC.GetMDMAEnable() == 0);
+            SNCPUExecute(&m_Cpu);
+            if (m_bLineIRQActive && m_bLineIRQReschedule)
+                break;
+            continue;
+        }
+
 		/* STP ignores IRQ/NMI and remains halted until reset.  Consume the
 		   scheduler budget so the PPU and APU keep advancing. */
 		if ((m_Cpu.uSignal & SNCPU_SIGNAL_STP) &&

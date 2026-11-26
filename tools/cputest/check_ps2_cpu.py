@@ -49,13 +49,19 @@ def hook(cpu,address,size,data):
 uc.hook_add(UC_HOOK_CODE,hook)
 banks=b''.join(struct.pack('<IIIBBBB',BASE,0,0,8,255,0,0) for _ in range(SIZE//8192))
 rng=random.Random(713);zero=bytes(SIZE)
-def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False,operand=0x34):
+def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False,operand=0x34,program=None,extra=None):
  global trace
  state=bytearray(60);a=0x1234;x=0x17;y=0x21;s=0x1ff
  struct.pack_into('<HHHHBBHII',state,0,a,x,y,s,p,mode,dp,pc,0x020000)
  struct.pack_into('<iIIII',state,20,cycles,100,100,100,100);state[49]=1;state[52]=0x75;struct.pack_into('<I',state,56,1000)
  uc.mem_write(BASE,zero);ctypes.memset(mem,0,SIZE)
  updates={pc:bytes([op,operand,0x12,0x03,0xea,0xea]),0xffe0:bytes(range(32)),0x0100:bytes([0x34,0x12,0x07])*85}
+ if program is not None:
+  del updates[pc]
+  # Program fetch wraps the low 16 bits without changing PB.
+  for i,value in enumerate(program):
+   updates[(pc&0xff0000)|((pc+i)&0xffff)]=bytes([value])
+ if extra: updates.update(extra)
  for addr,v in updates.items():uc.mem_write(BASE+addr,v);ctypes.memmove(ctypes.addressof(mem.contents)+addr,v,len(v))
  mapped=bytearray(banks)
  if traps:
@@ -98,5 +104,23 @@ if __name__=='__main__':
    for op in range(256):
     result=check(op,e,flags,dp=0x2100,core=core,traps=True);n+=1
     if result:fails.append(result);print(json.dumps({'core':core,'traps':True,**result}),flush=True)
+ # Consecutive mapped opcodes: open bus must reflect the LAST executed
+ # opcode/operand, not the first opcode or the terminal budget probe.
+ # Also exercise an exit at each side of a program page/bank boundary.
+ for core in ['SNCPUExecute_ASM_Plain','SNCPUExecute_ASM']:
+  program=bytes([0x18,0x38,0xea,0x88,0xe8,0xea,0xa9,0x5a,0xea,0xea,0xea])
+  for pc in [0x018000,0x019ffe,0x01fffe]:
+   for cycles in [0,14,28,42,70,110]:
+    result=check(program[0],pc=pc,cycles=cycles,core=core,program=program);n+=1
+    if result:fails.append(result);print(json.dumps({'core':core,'stream':True,**result}),flush=True)
+ # LDA [dp] with the 24-bit pointer in a mapped page, across its end,
+ # across a 16-bit bank boundary, and in an I/O/trap page.
+ for dp,operand,traps in [(0x100,0x34,False),(0x1f00,0xfd,False),(0x1f00,0xfe,False),(0x1f00,0xff,False),(0xff00,0xfe,False),(0xff00,0xff,False),(0x2100,0x34,True)]:
+  for e,flags in [(0,0x34),(0,0x04),(1,0x34)]:
+   addr=(dp+operand)&0xffff
+   extra={((addr+i)&0xffff):bytes([value]) for i,value in enumerate([0x34,0x12,0x03])}
+   extra[0x031234]=bytes([0x9a,0x76])
+   result=check(0xa7,mode=e,p=flags,dp=dp,operand=operand,traps=traps,extra=extra);n+=1
+   if result:fails.append(result);print(json.dumps({'core':'plain-long-pointer','dp':hex(dp),**result}),flush=True)
  print('cases',n,'failures',len(fails))
  raise SystemExit(bool(fails))
