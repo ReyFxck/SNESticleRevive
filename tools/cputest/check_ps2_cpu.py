@@ -49,9 +49,9 @@ def hook(cpu,address,size,data):
 uc.hook_add(UC_HOOK_CODE,hook)
 banks=b''.join(struct.pack('<IIIBBBB',BASE,0,0,8,255,0,0) for _ in range(SIZE//8192))
 rng=random.Random(713);zero=bytes(SIZE)
-def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False,operand=0x34,program=None,extra=None):
+def check(op,mode=0,p=0x34,dp=0x100,pc=0x018000,cycles=1,core="SNCPUExecute_ASM_Plain",traps=False,operand=0x34,program=None,extra=None,stack=0x1ff):
  global trace
- state=bytearray(60);a=0x1234;x=0x17;y=0x21;s=0x1ff
+ state=bytearray(60);a=0x1234;x=0x17;y=0x21;s=stack
  struct.pack_into('<HHHHBBHII',state,0,a,x,y,s,p,mode,dp,pc,0x020000)
  struct.pack_into('<iIIII',state,20,cycles,100,100,100,100);state[49]=1;state[52]=0x75;struct.pack_into('<I',state,56,1000)
  uc.mem_write(BASE,zero);ctypes.memset(mem,0,SIZE)
@@ -122,5 +122,32 @@ if __name__=='__main__':
    extra[0x031234]=bytes([0x9a,0x76])
    result=check(0xa7,mode=e,p=flags,dp=dp,operand=operand,traps=traps,extra=extra);n+=1
    if result:fails.append(result);print(json.dumps({'core':'plain-long-pointer','dp':hex(dp),**result}),flush=True)
+ # Round 17: 16-bit operand fetch across physical mapping and PB wrap.
+ # LDA immediate (M=0) and LDX immediate (X=0), with two bytes exactly
+ # at the end of the page, across the page, and across the program bank.
+ for pc in [0x019ffc,0x019ffd,0x019ffe,0x019fff,0x01fffd,0x01fffe,0x01ffff]:
+  for op in [0xa9,0xa2]:
+   for cycles in [1,24,40]:
+    program=bytes([op,0x9a,0x76,0xea,0xea,0xea])
+    result=check(op,p=0x04,pc=pc,cycles=cycles,program=program);n+=1
+    if result:fails.append(result);print(json.dumps({'case':'word-fetch-boundary',**result}),flush=True)
+ # LDA (dp) tests low-byte page edges, E wrapping, nonaligned DP, and
+ # data reads at the last two bytes of an 8 KiB page.
+ for dp,operand in [(0x0000,0xfe),(0x0000,0xff),(0x0100,0xff),(0x01f1,0x0e),(0x1f00,0xff),(0xff00,0xff)]:
+  for e,flags in [(0,0x04),(0,0x34),(1,0x34)]:
+   addr=(dp+operand)&0xffff
+   hi=((dp&0xff00)|((addr+1)&0xff)) if e and not(dp&255) else ((addr+1)&0xffff)
+   for dest in [0x1ffe,0x1fff]:
+    extra={addr:bytes([dest&255]),hi:bytes([dest>>8]),0x020000+dest:bytes([0x9a,0x76])}
+    result=check(0xb2,mode=e,p=flags,dp=dp,operand=operand,extra=extra);n+=1
+    if result:fails.append(result);print(json.dumps({'case':'dp-word-pointer','dp':hex(dp),**result}),flush=True)
+ # Native stack wraps at 16 bits; E-mode ordinary and raw stack transfers
+ # differ at $0100/$01ff. Exercise all widths and return/call operations.
+ for core in ['SNCPUExecute_ASM_Plain','SNCPUExecute_ASM']:
+  for e,flags,stacks in [(0,0x04,[0,1,0xfffe,0xffff]),(1,0x34,[0x100,0x101,0x1fe,0x1ff])]:
+   for stack in stacks:
+    for op in [0x48,0x68,0xda,0xfa,0x0b,0x2b,0xf4,0x20,0x22,0x60,0x6b,0x40]:
+     result=check(op,mode=e,p=flags,stack=stack,core=core);n+=1
+     if result:fails.append(result);print(json.dumps({'case':'stack-wrap','core':core,'stack':hex(stack),**result}),flush=True)
  print('cases',n,'failures',len(fails))
  raise SystemExit(bool(fails))

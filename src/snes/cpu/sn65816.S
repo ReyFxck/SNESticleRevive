@@ -749,10 +749,11 @@
 		move	R_Data, _data		   \
 
 #define SNCPU_RESTRICT_STACK() \
-		lbu		t0,SNCPU_rE			;\
-		beq		t0,zr,1f			;\
-		andi	t1,R_S,0x00FF		;\
-		ori		R_S,t1,0x0100		;\
+        lbu     t0,SNCPU_rE             ;\
+        beq     t0,zr,1f               ;\
+        andi    R_S,R_S,0xFFFF         ;\
+        andi    R_S,R_S,0x00FF         ;\
+        ori     R_S,R_S,0x0100         ;\
 1:
 
 #define SNCPU_POP8(_dest)  		   \
@@ -764,6 +765,7 @@
 
 #define SNCPU_POP8_RAW(_dest) \
 		addiu	R_S,R_S,1			;  \
+        andi    R_S,R_S,0xFFFF          ;\
 		jal		_SNCPU_Read8		;  \
 		move	R_Addr,R_S			;  \
 		move	_dest,R_Data			;  \
@@ -843,6 +845,7 @@
 		jal		_SNCPU_Write8		;\
 		srl		R_Data,_src,8		;\
 		addiu	R_S,R_S,-1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		move	R_Addr,R_S			;\
 		jal		_SNCPU_Write8		;\
 		srl		R_Data,_src,0		;\
@@ -854,10 +857,12 @@
 		jal		_SNCPU_Write8		;\
 		srl		R_Data,_src,16		;\
 		addiu	R_S,R_S,-1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		move	R_Addr,R_S			;\
 		jal		_SNCPU_Write8		;\
 		srl		R_Data,_src,8		;\
 		addiu	R_S,R_S,-1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		move	R_Addr,R_S			;\
 		jal		_SNCPU_Write8		;\
 		srl		R_Data,_src,0		;\
@@ -866,10 +871,12 @@
 
 #define SNCPU_POP16_RAW(_dest) \
 		addiu	R_S,R_S,1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		jal		_SNCPU_Read8		;\
 		move	R_Addr,R_S			;\
 		sb		R_Data,SP_Data0		;\
 		addiu	R_S,R_S,1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		jal		_SNCPU_Read8		;\
 		move	R_Addr,R_S			;\
 		sb		R_Data,SP_Data1		;\
@@ -879,14 +886,17 @@
 #define SNCPU_POP24_RAW(_dest) \
 		sw		zr,SP_Data0			;\
 		addiu	R_S,R_S,1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		jal		_SNCPU_Read8		;\
 		move	R_Addr,R_S			;\
 		sb		R_Data,SP_Data0		;\
 		addiu	R_S,R_S,1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		jal		_SNCPU_Read8		;\
 		move	R_Addr,R_S			;\
 		sb		R_Data,SP_Data1		;\
 		addiu	R_S,R_S,1			;\
+        andi    R_S,R_S,0xFFFF          ;\
 		jal		_SNCPU_Read8		;\
 		move	R_Addr,R_S			;\
 		sb		R_Data,SP_Data2		;\
@@ -1130,12 +1140,16 @@ _SNCPU_Write8SA1Generic:
 #endif
 
 _SNCPU_Write8HostStart:
-		srl		t0,R_Addr,SNCPU_BANK_SHIFT
-		beq		t0,zr,_SNCPU_Write8ZeroBank
-		nop
-
+        srl     t0,R_Addr,SNCPU_BANK_SHIFT
+        beq     t0,zr,_SNCPU_Write8ZeroBank
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        sll     t0,t0,4
 _SNCPU_Write8Generic:
-        sll		t0,t0,4
+#else
+        nop
+_SNCPU_Write8Generic:
+        sll     t0,t0,4
+#endif
         addu	t0,t0,R_pCpu
         lh		t2,SNCPU_uBankCycle(t0)
         lw		t1,SNCPU_pMem(t0)
@@ -1496,12 +1510,15 @@ _SNCPU_Read8SA1Generic:
 #endif
 
 _SNCPU_Read8HostStart:
-		srl		t0,R_Addr,SNCPU_BANK_SHIFT
-		beq		t0,zr,_SNCPU_Read8ZeroBank
-		nop
-
+        srl     t0,R_Addr,SNCPU_BANK_SHIFT
+        beq     t0,zr,_SNCPU_Read8ZeroBank
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        sll     t0,t0,4
+#else
+        nop
 4:
-        sll		t0,t0,4									// t0 = (bank << 4) & bank mask
+        sll     t0,t0,4
+#endif
 
         addu	t0,t0,R_pCpu							// t0 -> Bank[bank]
 
@@ -1659,6 +1676,14 @@ _SNCPU_Read16_Fast:
         addu	t0,t1,R_Addr							// t0 = bank read addr +  R_Addr
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for second memory access
 
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        lbu     R_Data,0(t0)
+        lbu     t1,1(t0)
+        sll     t2,t1,8
+        or      R_Data,R_Data,t2
+        jr      ra
+        sb      t1,SNCPU_uOpenBus
+#else
         lwr		R_Data, 0(t0)							// load word
         lwl		R_Data, 3(t0)
 		SNCPU_SA1_TRACK(R_Addr,t2,2)
@@ -1667,6 +1692,7 @@ _SNCPU_Read16_Fast:
 		srl		t0,R_Data,8
 		jr		ra
         sb		t0,SNCPU_uOpenBus
+#endif
 
 _SNCPU_Read16Trap:
 		subu	R_Cycles, R_Cycles, t2					// consume cycles for second memory access
@@ -1801,7 +1827,14 @@ _SNCPU_Read16Wrap16:
    emulation mode when DL is zero.  R_DPMASK contains both that page base and
    the regular $FFFF bank-wrap mask. */
 _SNCPU_Read16DP:
-		addiu	t0,R_Addr,1
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        andi    t0,R_Addr,0x00FF
+        xori    t0,t0,0x00FF
+        bne     t0,zr,_SNCPU_Read16
+        addiu   t0,R_Addr,1
+#else
+        addiu   t0,R_Addr,1
+#endif
 		andi	t1,R_DPMASK,0xFFFF
 		and		t0,t0,t1
 		srl		t1,R_DPMASK,16
@@ -1970,9 +2003,14 @@ _SNCPU_Fetch8Slow:
 _SNCPU_Fetch16:
 
 _SNCPU_Fetch16Fast:
-		addiu	R_PCCount,R_PCCount,-2
-		blez	R_PCCount,_SNCPU_Fetch16Trap
-		nop
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        blez    R_PCCount,_SNCPU_Fetch16Trap
+        addiu   R_PCCount,R_PCCount,-2
+#else
+        addiu   R_PCCount,R_PCCount,-2
+        blez    R_PCCount,_SNCPU_Fetch16Trap
+        nop
+#endif
 		addiu	R_CpuCycle,R_CpuCycle,2
 
 #if !defined(SNCPU_ASM_VARIANT_PLAIN)
@@ -1980,12 +2018,21 @@ _SNCPU_Fetch16Fast:
 		subu	R_Addr,R_PC,t0
 #endif
 
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+        lbu     R_Data,0(R_PC)
+        lbu     t1,1(R_PC)
+        addiu   R_PC,R_PC,2
+        sll     t0,t1,8
+        or      R_Data,R_Data,t0
+        sb      t1,SNCPU_uOpenBus
+#else
 		lwr		R_Data,0(R_PC)
 		lwl		R_Data,3(R_PC)
 		addiu	R_PC,R_PC,2
 		andi	R_Data,R_Data,0xFFFF
 		srl		t0,R_Data,8
 		sb		t0,SNCPU_uOpenBus
+#endif
 
 #if defined(SNCPU_ASM_VARIANT_PLAIN)
 		subu	R_Cycles,R_Cycles,R_PCCycles
@@ -2702,6 +2749,73 @@ _SNCPUExecute_DoneNoRewind:
 
 	SNCPU_ENDOP(1)
 
+#if defined(SNCPU_ASM_VARIANT_PLAIN)
+    /* Eight conditional branches share the same taken tail. No change to
+       emulated timing; not-taken branches pay one extra native jump. */
+    SNCPU_OP_ALL(10);
+        SNCPU_GETFLAG_N(R_t1);
+        SNCPU_FETCH8(R_t0)
+        beq     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(30);
+        SNCPU_GETFLAG_N(R_t1);
+        SNCPU_FETCH8(R_t0)
+        bne     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(f0);
+        SNCPU_GETFLAG_Z(R_t1);
+        SNCPU_FETCH8(R_t0)
+        bne     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(d0);
+        SNCPU_GETFLAG_Z(R_t1);
+        SNCPU_FETCH8(R_t0)
+        beq     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(90);
+        SNCPU_GETFLAG_C(R_t1);
+        SNCPU_FETCH8(R_t0)
+        beq     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(b0);
+        SNCPU_GETFLAG_C(R_t1);
+        SNCPU_FETCH8(R_t0)
+        bne     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(50);
+        SNCPU_GETFLAG_V(R_t1);
+        SNCPU_FETCH8(R_t0)
+        beq     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(70);
+        SNCPU_GETFLAG_V(R_t1);
+        SNCPU_FETCH8(R_t0)
+        bne     R_t1,zr,_SNCPU_Branch8Taken
+        sll     R_t0,R_t0,24
+        j       _SNCPUExecute_Loop
+        nop
+    SNCPU_OP_ALL(80);
+        SNCPU_FETCH8(R_t0)
+        sll     R_t0,R_t0,24
+_SNCPU_Branch8Taken:
+        sra     R_t0,R_t0,24
+        SNCPU_BREL8_PC16(R_t0);
+    SNCPU_ENDOP(1)
+#else
 	SNCPU_OP_ALL(10);
 		// BPL N=0
         SNCPU_GETFLAG_N(R_t1);
@@ -2815,6 +2929,8 @@ _SNCPUExecute_DoneNoRewind:
 
 		SNCPU_BREL8_PC16(R_t0);
 	SNCPU_ENDOP(1)
+
+#endif
 
 	SNCPU_OP_ALL(82);
 
