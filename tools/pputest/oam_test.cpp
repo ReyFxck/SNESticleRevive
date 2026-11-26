@@ -6,9 +6,18 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <initializer_list>
 
 #include "types.h"
+/* Exercise the actual buffered transfer, not a copy of its mode dispatch. */
+#define private public
 #include "sndma.h"
+#undef private
+extern "C" {
+#include "sncpu.h"
+}
+extern "C" void SNCPUWrite8(SNCpuT *, Uint32, Uint8) { std::abort(); }
 #include "snppu.h"
 
 class TestRender : public ISnesPPURender
@@ -534,9 +543,62 @@ static void CheckOAMBulkEquivalence()
     std::printf("OAM bulk equivalence: %u cases %s\n", cases, g_Failures ? "FAIL" : "PASS");
 }
 
+static void CheckFixedPortDMA()
+{
+    Uint8 data[544];
+    for (unsigned i=0; i<sizeof(data); ++i) data[i]=(Uint8)(i*31u+7u);
+    for (unsigned mode : {0u, 2u, 6u})
+    for (unsigned port : {4u, 0x22u})
+    for (unsigned line : {1u, 225u})
+    for (unsigned start : {0u, 0x180u, 0x3feu})
+    {
+        SnesPPU ppu, ref; TestRender r, rr;
+        ppu.SetPPURender(&r); r.SetPPU(&ppu); ppu.Reset();
+        ref.SetPPURender(&rr); rr.SetPPU(&ref); ref.Reset();
+        for (SnesPPU *p : {&ppu, &ref}) {
+            p->Write8(0x2100, 0x0f);
+            p->Write8(0x2102, (Uint8)(start >> 1));
+            p->Write8(0x2103, (Uint8)(start >> 9));
+            p->Write8(0x2121, (Uint8)(start >> 1));
+        }
+        SNCpuT cpu = {}; cpu.Cycles=10000; cpu.Counter[SNCPU_COUNTER_LINE]=11000;
+        SnesDMAC dma; dma.SetCPU(&cpu); dma.SetPPU(&ppu); dma.SetVideoLine(line);
+        SnesDMAChT ch = {}; ch.dmapx=mode; ch.bbadx=port;
+        dma.TransferData(&ch, data, sizeof(data));
+        for (unsigned i=0; i<sizeof(data); ++i)
+            ref.WriteTimed(0x2100+port, data[i], line, 1000+i*SNCPU_CYCLE_SLOW);
+        Check("fixed port OAM", memcmp(ppu.GetOAM(),ref.GetOAM(),sizeof(SnesOAMT)),0);
+        Check("fixed port CGRAM", memcmp(ppu.GetCGData(),ref.GetCGData(),512),0);
+        Check("fixed port regs",memcmp(ppu.GetRegs(),ref.GetRegs(),sizeof(SnesPPURegsT)),0);
+        Check("fixed port cycles",cpu.Cycles,10000-sizeof(data)*SNCPU_CYCLE_SLOW);
+        Check("fixed port bus",cpu.uOpenBus,data[sizeof(data)-1]);
+    }
+}
+
+static void CheckSyncGuard()
+{
+    SnesPPU ppu; TestRender r; ppu.SetPPURender(&r); r.SetPPU(&ppu); ppu.Reset();
+    Check("initial line pending",ppu.NeedsSync(0),TRUE);
+    ppu.Sync(0);
+    Check("already synchronized",ppu.NeedsSync(0),FALSE);
+    ppu.EnqueueWrite(0,0x2100,0x8f);
+    Check("same-line queue pending",ppu.NeedsSync(0),TRUE);
+    ppu.Sync(0);
+    Check("same-line queue flushed",ppu.GetRegs()->inidisp,0x8f);
+    Check("next line pending",ppu.NeedsSync(1),TRUE);
+    ppu.EndFrame();
+    Check("vblank empty",ppu.NeedsSync(225),FALSE);
+    ppu.EnqueueWrite(225,0x2100,0x0f);
+    Check("vblank queue pending",ppu.NeedsSync(225),TRUE);
+    ppu.Sync(225);
+    Check("vblank write flushed",ppu.GetRegs()->inidisp,0x0f);
+}
+
 int main(int argc, char **argv)
 {
-	if (argc == 2 && !std::strcmp(argv[1], "--vram-hotpath"))
+	CheckFixedPortDMA();
+    CheckSyncGuard();
+    if (argc == 2 && !std::strcmp(argv[1], "--vram-hotpath"))
 	{
         CheckOAMBulkEquivalence();
 		CheckVRAMBlockEquivalence();

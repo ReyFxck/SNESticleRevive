@@ -10,7 +10,7 @@
 #include <rfauds2/rfauds2.h>
 #include "audio.h"
 
-#define CAPACITY 2048u
+#define CAPACITY 3072u
 #define STREAM 262144u
 static short ring[CAPACITY * 2], request[RFAUDS2_ASYNC_MAX_FRAMES * 2];
 static short expected[STREAM * 2], played[STREAM * 2];
@@ -104,7 +104,8 @@ static int control(void)
     return 0;
 }
 int rfauds2_bind(void) { return control(); }
-int rfauds2_set_latency_ms(u32 latency) { assert(latency == 43); return control(); }
+int rfauds2_shutdown(void) { return control(); }
+int rfauds2_set_latency_ms(u32 latency) { assert(latency == 64); return control(); }
 int rfauds2_set_volume(u32 volume) { assert(volume <= RFAUDS2_VOLUME_MAX); return control(); }
 int rfauds2_start(void)
 {
@@ -227,6 +228,7 @@ int main(void)
     assert(Aud_Available() == CAPACITY);
     consume_rate = 0;
     enqueue(4000, 0);
+    enqueue(512, 0); /* Fill the larger ring after the two primed halves. */
     for (i = 0; i < 40; ++i) { advance(); Aud_Service(); }
     assert(zero_accepts);
     consume_rate = 173;

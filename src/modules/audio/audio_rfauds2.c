@@ -10,7 +10,9 @@ extern void DLog(const char *fmt, ...);
 
 #define AUD_EE_FRAMES 8192u
 #define AUD_EE_MASK (AUD_EE_FRAMES - 1u)
-#define AUD_PREBUFFER_FRAMES 1536u
+/* More headroom for transient late frames, not sustained slowdown. */
+#define AUD_LATENCY_MS 64u
+#define AUD_PREBUFFER_FRAMES 2560u
 
 static short s_pcm[AUD_EE_FRAMES * 2u] __attribute__((aligned(64)));
 static unsigned int s_read, s_write, s_count, s_flight_frames;
@@ -138,9 +140,8 @@ static int Locked_Aud_Init(int sync, int buffersize, int maxenqueuesamples)
     s_play_requested = 1;
     result = rfauds2_bind();
     if (!Aud_Result(result, "bind")) return result;
-    /* 43 ms rounds to a 2048-frame IOP queue. Start with both 512-frame
-       SPU2 halves plus one refill already available, rather than silence. */
-    result = rfauds2_set_latency_ms(43);
+    /* 64 ms = 3072 frames; prebuffer five 512-frame blocks. */
+    result = rfauds2_set_latency_ms(AUD_LATENCY_MS);
     if (!Aud_Result(result, "latency")) return result;
     result = rfauds2_set_volume(RFAUDS2_VOLUME_MAX);
     if (!Aud_Result(result, "initial volume")) return result;

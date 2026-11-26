@@ -591,6 +591,7 @@ void SnesSystem::AssertTimerIRQ()
 
 inline void SnesSystem::SyncPPU()
 {
+	if (!m_PPU.NeedsSync(m_uLine)) return;
 #if SNDBG_LOG
 	Uint32 _tSync = ProfCtrGetCycle();
 	g_DbgPPUSyncCalls++;

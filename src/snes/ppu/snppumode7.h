@@ -225,37 +225,19 @@ _INLINE void SnesPPUMode7FetchClamp(
 	Int32 x, Int32 y, Int32 dx, Int32 dy)
 {
 	Uint32 uLastTileAddr = 0xFFFFFFFFu;
-	Uint32 uCachedChrBase = 0;
-
+	Uint32 uChrBase = 0;
 	while (nPixels-- > 0)
 	{
-		Int32 x2 = x >> 8;
-		Int32 y2 = y >> 8;
-		Uint32 uChrBase;
-
+		/* 24.8 coordinates: a single unsigned test covers both axes,
+		   including negative positions. Reuse the repeat-mode byte fields. */
+		if (((Uint32)x | (Uint32)y) >= 0x40000u)
+			*pLine++ = pVram[SnesPPUMode7PixelByteOffset(x, y)];
+		else
+			*pLine++ = SnesPPUMode7RepeatPixel(pVram,
+				SnesPPUMode7TileByteAddress(x, y), x, y,
+				uLastTileAddr, uChrBase);
 		x += dx;
 		y += dy;
-
-		if ((Uint32)x2 > 0x3FFu || (Uint32)y2 > 0x3FFu)
-		{
-			/* Character zero is repeated outside the tilemap. */
-			uChrBase = 0;
-		}
-		else
-		{
-			Uint32 uTileAddr = ((Uint32)(y2 >> 3) << 7) |
-			                       (Uint32)(x2 >> 3);
-			if (uTileAddr != uLastTileAddr)
-			{
-				uCachedChrBase = (Uint32)pVram[uTileAddr * 2] << 6;
-				uLastTileAddr = uTileAddr;
-			}
-			uChrBase = uCachedChrBase;
-		}
-
-		Uint32 uChrAddr = uChrBase + (Uint32)(x2 & 7) +
-		                  ((Uint32)(y2 & 7) << 3);
-		*pLine++ = pVram[uChrAddr * 2 + 1];
 	}
 }
 
@@ -264,34 +246,17 @@ _INLINE void SnesPPUMode7FetchBlack(
 	Int32 x, Int32 y, Int32 dx, Int32 dy)
 {
 	Uint32 uLastTileAddr = 0xFFFFFFFFu;
-	Uint32 uCachedChrBase = 0;
-
+	Uint32 uChrBase = 0;
 	while (nPixels-- > 0)
 	{
-		Int32 x2 = x >> 8;
-		Int32 y2 = y >> 8;
-
+		if (((Uint32)x | (Uint32)y) >= 0x40000u)
+			*pLine++ = 0;
+		else
+			*pLine++ = SnesPPUMode7RepeatPixel(pVram,
+				SnesPPUMode7TileByteAddress(x, y), x, y,
+				uLastTileAddr, uChrBase);
 		x += dx;
 		y += dy;
-
-		if ((Uint32)x2 > 0x3FFu || (Uint32)y2 > 0x3FFu)
-		{
-			*pLine++ = 0;
-		}
-		else
-		{
-			Uint32 uTileAddr = ((Uint32)(y2 >> 3) << 7) |
-			                       (Uint32)(x2 >> 3);
-			if (uTileAddr != uLastTileAddr)
-			{
-				uCachedChrBase = (Uint32)pVram[uTileAddr * 2] << 6;
-				uLastTileAddr = uTileAddr;
-			}
-
-			Uint32 uChrAddr = uCachedChrBase + (Uint32)(x2 & 7) +
-			                  ((Uint32)(y2 & 7) << 3);
-			*pLine++ = pVram[uChrAddr * 2 + 1];
-		}
 	}
 }
 

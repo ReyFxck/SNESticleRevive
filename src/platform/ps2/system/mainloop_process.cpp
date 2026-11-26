@@ -637,6 +637,14 @@ Bool MainLoopProcess()
                 (unsigned)window.uMinWork,
                 (unsigned)((window.uLoop - window.uFlip) / window.nFrames),
                 (unsigned)window.uMaxWork);
+            AudOutputStatsT audio;
+            if (Aud_GetOutputStats(&audio))
+                DLog("[ps2-audio] session=%u ee/io=%u/%u underruns=%u silent=%u backpressure=%u missed-refills=%u",
+                    (unsigned)window.uSession, audio.queued_ee_frames,
+                    audio.queued_iop_frames, audio.underruns, audio.silent_frames,
+                    audio.backpressure_waits, audio.missed_refills);
+            else
+                DLog("[ps2-audio] session=%u stats=unavailable", (unsigned)window.uSession);
             memset(&window, 0, sizeof(window));
             window.uSession = g_DbgSessionId;
         }

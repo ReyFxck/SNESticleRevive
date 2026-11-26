@@ -598,7 +598,11 @@ void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 	/* Keep the bulk paths for the overwhelmingly common VBlank/forced-blank
 	   uploads. Active-display transfers must visit each bus byte because OAM
 	   is redirected and CGRAM has H-clock access windows. */
-	if ((pChan->dmapx & 7) == 0)
+	const Uint32 uMode = pChan->dmapx & 7;
+	/* Modes 0, 2 and 6 all target the same B-bus register. Extend only
+	   the existing memory-port bulk paths outside active display. */
+	if (uMode == 0 || ((uMode == 2 || uMode == 6) && !bActive &&
+	    (pChan->bbadx == 0x04 || pChan->bbadx == 0x22)))
 	{
 		switch (pChan->bbadx)
 		{

@@ -211,6 +211,11 @@ public:
 		return bQueued;
 	}
 	#endif
+	/* Sync drains even same-line queued writes. Only skip empty work. */
+	_INLINE Bool            NeedsSync(Uint32 uLine)
+	{
+		return (!m_bVBlank && m_uLine <= uLine) || !m_Queue.IsEmpty();
+	}
 	void                    Sync(Uint32 uLine);
 
 	void                    WriteCGDATA(Uint8 uData);

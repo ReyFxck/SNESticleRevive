@@ -665,7 +665,6 @@ void SnesPPU::WriteTimed(Uint32 uAddr, Uint8 uData,
 	Uint32 uLine, Uint32 uHClock)
 {
 	uAddr &= 0xFFFF;
-	Bool bVRAM = CanAccessVRAM(uLine);
 
 	switch (uAddr)
 	{
@@ -676,22 +675,22 @@ void SnesPPU::WriteTimed(Uint32 uAddr, Uint8 uData,
 
 	case 0x2116:
 		m_Regs.vmaddr.b.l = uData;
-		m_Regs.vmreadlatch.w = bVRAM ?
+		m_Regs.vmreadlatch.w = CanAccessVRAM(uLine) ?
 			m_VRAM[_SwizzleVramAddr(m_Regs.vmaddr.w,
 			                       (m_Regs.vmain >> 2) & 3)] : 0;
 		return;
 	case 0x2117:
 		m_Regs.vmaddr.b.h = uData & 0x7F;
-		m_Regs.vmreadlatch.w = bVRAM ?
+		m_Regs.vmreadlatch.w = CanAccessVRAM(uLine) ?
 			m_VRAM[_SwizzleVramAddr(m_Regs.vmaddr.w,
 			                       (m_Regs.vmain >> 2) & 3)] : 0;
 		return;
 
 	case 0x2118:
-		WriteVMDATALTimed(uData, bVRAM);
+		WriteVMDATALTimed(uData, CanAccessVRAM(uLine));
 		return;
 	case 0x2119:
-		WriteVMDATAHTimed(uData, bVRAM);
+		WriteVMDATAHTimed(uData, CanAccessVRAM(uLine));
 		return;
 
 	case 0x2122:
@@ -1251,6 +1250,7 @@ void SnesPPU::AdvanceField()
 
 void SnesPPU::Sync(Uint32 uLine)
 {
+	if (!NeedsSync(uLine)) return;
 	SNQueueElementT *pElement;
 #if SNDBG_LOG
 	Uint32 uAppliedWrites = 0;
