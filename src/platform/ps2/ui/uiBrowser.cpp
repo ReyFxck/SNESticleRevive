@@ -288,7 +288,8 @@ static int BrowserOpenDirectory(const Char *pPath)
 	if (bMass && !UsbBdmIsLoaded() && !Mx4sioIsLoaded())
 	{
 		MainLoopModalPrintf(1, "%s", I18nTranslate("USB: Starting driver..."));
-		if (UsbBdmLoadEmbeddedIrx() < 0)
+		if (!(Mx4sioIsEnabled() && Mx4sioLoadIfEnabled() >= 0) &&
+            (!MassStorageIsEnabled() || UsbBdmLoadEmbeddedIrx() < 0))
 		{
 			MainLoopModalPrintf(180, I18nTranslate("USB: Driver failed (%d)"),
 			                    UsbBdmGetLastError());
@@ -1932,7 +1933,9 @@ void CBrowserScreen::SetDir(const Char *pDir)
            physical ports and list only devices that actually answered. */
         if (MmceSupportIsEnabled())
         {
-            int mmceSlots = MmceProbeAvailableSlots();
+            /* Before the first explicit access, show possible ports without
+               issuing a PING or loading a driver from the root menu. */
+            int mmceSlots = MmceIsLoaded() ? MmceGetAvailableSlots() : 3;
             if (mmceSlots & 1)
                 AddEntry("mmce0:", BROWSER_ENTRYTYPE_DRIVE, 0);
             if (mmceSlots & 2)

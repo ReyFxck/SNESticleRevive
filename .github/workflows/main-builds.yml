@@ -44,6 +44,11 @@ jobs:
             artifact_name: SNESticle-diag2
             vu0_shadow: 0
 
+          - name: boot-recovery
+            diagnostics: 1
+            artifact_name: SNESticle-boot-recovery
+            vu0_shadow: 0
+
           - name: diag-vu0
             diagnostics: 2
             artifact_name: SNESticle-diag-vu0
@@ -56,6 +61,10 @@ jobs:
       - name: Verify HostFS URI and directory handling
         if: matrix.name == 'release'
         run: python3 tools/test_hostfs_saf.py
+
+      - name: Verify boot origin and lazy storage policy
+        if: matrix.name == 'release'
+        run: python3 tools/test_boot_origin.py
 
       - name: Verify PPU hot-path equivalence
         if: matrix.name == 'release'
@@ -130,6 +139,22 @@ jobs:
           python3 tools/cputest/check_ps2_echo.py build/SNESticle.elf
           python3 tools/cputest/check_ps2_voice.py build/SNESticle.elf
 
+      - name: Keep unpacked release ELF
+        if: matrix.name == 'release'
+        run: |
+          mkdir -p unpacked
+          cp build/SNESticle.stripped.elf unpacked/SNESticle-unpacked.elf
+          test -s unpacked/SNESticle-unpacked.elf
+
+      - name: Upload unpacked release ZIP
+        if: matrix.name == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticle-release-unpacked
+          path: unpacked/SNESticle-unpacked.elf
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Pack stripped release ELF
         if: matrix.name == 'release'
         run: |
@@ -151,7 +176,7 @@ jobs:
           ls -lh artifacts/SNESticle.elf
 
       - name: Build and pack diagnostic ELF (retain separate symbols)
-        if: matrix.name != 'release'
+        if: matrix.name != 'release' && matrix.name != 'boot-recovery'
         run: |
           make AUTO_INSTALL=yes COLOR=0 JOBS=4 \
             strip \
@@ -173,6 +198,16 @@ jobs:
           file artifacts/SNESticle-${{ matrix.name }}.elf
           ls -lh artifacts/SNESticle-${{ matrix.name }}.elf
 
+      - name: Build unpacked boot recovery ELF
+        if: matrix.name == 'boot-recovery'
+        run: |
+          make AUTO_INSTALL=yes COLOR=0 JOBS=4 strip \
+            SNES_DIAGNOSTICS=1 SNES_VU0_SHADOW=0 \
+            SNES_TARGET_PROFILE=0 PROFILE=0 PACK=0 PS2_BOOT_RECOVERY=1
+          mkdir -p artifacts
+          cp build/SNESticle.stripped.elf artifacts/SNESticle-boot-recovery.elf
+          test -s artifacts/SNESticle-boot-recovery.elf
+
       - name: Verify artifact contains exactly one ELF
         run: |
           test "$(find artifacts -maxdepth 1 -type f -name '*.elf' | wc -l)" -eq 1
@@ -188,7 +223,7 @@ jobs:
           retention-days: 30
 
       - name: Upload diagnostic symbols (unpacked, optional)
-        if: matrix.name != 'release'
+        if: matrix.name != 'release' && matrix.name != 'boot-recovery'
         uses: actions/upload-artifact@v4
         with:
           name: SNESticle-${{ matrix.name }}-symbols

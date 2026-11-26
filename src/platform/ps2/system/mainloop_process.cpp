@@ -14,6 +14,7 @@
 #include "mainloop_state.h"
 #include "mainloop_exec.h"
 #include "mainloop_iop.h"
+#include "mainloop_bgm.h"
 #include "mainloop_safe_frameskip.h"
 #include "mainloop_region_cadence.h"
 #include "mainloop_target_profile.h"
@@ -493,6 +494,18 @@ Bool MainLoopProcess()
             fpsDrawnFrames);
     else
         MainLoopFPSFinish(FALSE, 0, 0, 0);
+
+    /* Only normal, completed presentations count. Boot markers and nested
+       storage modals do not trigger discovery. Keep the first menu visible
+       for ~2 seconds before any optional BGM filesystem access. */
+#if !PS2_BOOT_RECOVERY
+    static unsigned menuPresented = 0;
+    if (_bMenu && _MainLoop_bAudioReady)
+    {
+        if (menuPresented < 120) ++menuPresented;
+        else BgmUpdate();
+    }
+#endif
 
 #if SNES_TARGET_PROFILE
     _MainLoopTargetProfileFinish(bSnesAtStart && _pSystem == _pSnes &&

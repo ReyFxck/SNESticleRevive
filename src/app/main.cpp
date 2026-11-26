@@ -77,9 +77,9 @@ extern "C" void _ps2sdk_fileXio_init(void);
    pointer in that case and immediately passed it to strcpy(), crashing
    before video or the boot log existed.  Keep owned, always-valid buffers
    instead of retaining the launcher's pointer. */
-static char  _Main_BootPath[256] = "host:";
+static char  _Main_BootPath[256] = "";
 static char *_Main_pBootPath     = _Main_BootPath;
-static char  _Main_BootDir[256]  = "host:";
+static char  _Main_BootDir[256]  = "";
 
 char *MainGetBootDir()
 {
@@ -282,8 +282,11 @@ void MainSetBootDir(const char *pPath)
 	size_t keep = 0;
 	size_t i;
 
-	if (!pPath || !pPath[0])
-		pPath = "host:";
+	if (!pPath || !pPath[0] || !strchr(pPath, ':') || strlen(pPath) >= sizeof(_Main_BootDir))
+	{
+		_Main_BootDir[0] = 0;
+		return;
+	}
 
 	/* Android PS2 emulators may expose a Storage Access Framework URI in
 	   argv[0], e.g. host:content://.../SNESticle.elf. That URI is metadata
@@ -301,10 +304,7 @@ void MainSetBootDir(const char *pPath)
 	_Main_BootDir[sizeof(_Main_BootDir) - 1] = 0;
 	len = strlen(_Main_BootDir);
 
-	/* Keep everything through the final device/path separator.  A launcher
-	   that only supplies "SNESticle.elf" gives us no directory information;
-	   host: is the only safe fallback and is also what ps2link/PCSX2 expose
-	   for a directly loaded ELF. */
+	/* An unspecified device must not be guessed as HostFS. */
 	for (i = len; i > 0; i--)
 	{
 		char c = _Main_BootDir[i - 1];
@@ -317,7 +317,7 @@ void MainSetBootDir(const char *pPath)
 
 	if (keep == 0)
 	{
-		strcpy(_Main_BootDir, "host:");
+		_Main_BootDir[0] = 0;
 	}
 	else
 	{
@@ -330,7 +330,8 @@ int main(int argc, char **argv)
 {
     int iArg;
 
-	if (argc > 0 && argv && argv[0] && argv[0][0])
+	if (argc > 0 && argv && argv[0] && argv[0][0] &&
+	    strlen(argv[0]) < sizeof(_Main_BootPath))
 	{
 		strncpy(_Main_BootPath, argv[0], sizeof(_Main_BootPath) - 1);
 		_Main_BootPath[sizeof(_Main_BootPath) - 1] = 0;

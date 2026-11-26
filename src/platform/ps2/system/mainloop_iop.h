@@ -18,4 +18,4 @@ extern Char *_MainLoop_IOPModulePaths[];
    custom IRX. */
 extern Bool _MainLoop_bAudioReady;
 extern Bool _MainLoop_bMCSaveReady;
-void _MainLoopLoadModules(Char **ppSearchPaths);
+void _MainLoopLoadModules(Char **ppSearchPaths, Bool bMemCardReady);

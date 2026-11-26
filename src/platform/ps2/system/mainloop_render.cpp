@@ -577,18 +577,11 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
 
     }
 
-	/* Keep menu audio alive even while a modal overlays the UI. Previously
-	   BgmUpdate lived only in the non-modal branch below, so every fixed-time
-	   message starved audsrv regardless of whether any I/O was happening. */
+	/* Rendering may be nested inside a storage modal or boot marker.
+	   Never start BGM discovery here; only the outer process loop may do so. */
 	if (_bMenu)
 	{
-		static Bool s_bgmArmed = FALSE;
-		if ((void *)_MainLoop_pScreen == (void *)_MainLoop_pBrowserScreen)
-			s_bgmArmed = TRUE;
-		if (s_bgmArmed)
-			BgmUpdate();
-		/* Draw the live menu first, then place modal/status text on top. The
-		   previous order painted _MenuDraw after the status and hid it. */
+		if (_MainLoop_ModalCount > 0) BgmServicePCM();
 		_MenuDraw();
 	}
 

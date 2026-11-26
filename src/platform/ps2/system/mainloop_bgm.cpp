@@ -864,7 +864,8 @@ static void _MmceScanStep(void)
         return;
     }
 
-    slots = MmceProbeAvailableSlots();
+    if (!MmceIsLoaded()) return;
+    slots = MmceGetAvailableSlots();
     before = s_indexCount;
 
     slot = _MmcePathSlot(s_bootBgm);
@@ -921,6 +922,7 @@ static void _HddScanStep(void)
     }
     if (s_hddScanDone) return;
 
+    if (!HddIsMounted()) return;
     if (s_indexCount >= BGM_INDEX_MAX || HddLoadEmbeddedIrx() < 0)
     {
         s_hddScanDone = TRUE;
@@ -1012,14 +1014,15 @@ static void _BuildIndex(void)
     /* Primeiro escaneia caminhos que nao dependem de CD/DVD, MMCE ou HDD.
        Os dispositivos especiais possuem etapas proprias abaixo. */
     if (_IsHostPath(s_bootBgm))
-        _ScanHostBootBgm();
-    else if (s_bootBgm[0] && !_IsDiscPath(s_bootBgm) &&
-        !_IsMassPath(s_bootBgm) && _MmcePathSlot(s_bootBgm) < 0 &&
-        !_IsHddPath(s_bootBgm))
+    {
+        if (HostFsSupportIsEnabled()) _ScanHostBootBgm();
+    }
+    else if (!strncmp(s_bootBgm, "mc0:", 4) || !strncmp(s_bootBgm, "mc1:", 4))
         _ScanDir(s_bootBgm, 0);
 
     for (d = 0; d < BGM_NUM_DIRS && s_indexCount < BGM_INDEX_MAX; d++)
-        if (!_IsDiscPath(s_dirs[d]) && !_IsMassPath(s_dirs[d]) &&
+        if ((!_IsHostPath(s_dirs[d]) || (HostFsSupportIsEnabled() && _IsHostPath(s_bootBgm))) &&
+            !_IsDiscPath(s_dirs[d]) && !_IsMassPath(s_dirs[d]) &&
             _MmcePathSlot(s_dirs[d]) < 0 && !_IsHddPath(s_dirs[d]))
             _ScanDir(s_dirs[d], 0);
 
@@ -1467,7 +1470,7 @@ static void _BgmUpdateLocked(Bool allowFilesystem)
 {
     int avail, n, j;
 
-    if (s_volume <= 0)         return;   /* OFF: nem toca o drive */
+    if (s_volume <= 0 || !Aud_IsInitialized()) return; /* no discovery without audio */
     if (s_indexCount < 0)
     {
         if (!allowFilesystem) return;
@@ -1480,8 +1483,6 @@ static void _BgmUpdateLocked(Bool allowFilesystem)
         _HddScanStep();
         _DiscScanStep();
     }
-    if (!Aud_IsInitialized())  return;
-
     /* Respiro entre faixas: apos detectar o fim e avancar (decoder ja'
        liberado), tocamos alguns frames de SILENCIO antes de carregar a
        proxima.  Enche o ring de zeros -- quando o _TryLoad bloquear a EE
@@ -1647,6 +1648,15 @@ void BgmUpdate(void)
     _BgmUnlock();
 }
 
+/* Nested modal rendering may feed an already-loaded decoder, but must
+   never start filesystem discovery. Do not arm menu audio during boot. */
+void BgmServicePCM(void)
+{
+    _BgmLock();
+    if (s_menuActive && s_ioDepth == 0) _BgmUpdateLocked(FALSE);
+    _BgmUnlock();
+}
+
 static void _BgmIOThread(void *argument)
 {
     (void)argument;
@@ -1718,8 +1728,10 @@ void BgmIOBegin(void)
 {
     Bool wake;
 
-    if (!_BgmEnsureIOThread())
-        return;
+    /* If a helper already owns a scope, keep Begin/End balanced even
+       if audio failed since the previous call. */
+    if (s_ioLock <= 0 && !Aud_IsInitialized()) return;
+    if (!_BgmEnsureIOThread()) return;
 
     _BgmLock();
     wake = s_ioDepth == 0 ? TRUE : FALSE;

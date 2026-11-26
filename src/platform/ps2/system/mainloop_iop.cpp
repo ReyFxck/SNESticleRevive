@@ -187,10 +187,9 @@ Int32 IOPLoadModule(const Char *pModuleName, Char **ppSearchPaths, int arglen, c
 		// iterate through search paths
 		while (*ppSearchPaths)
 		{
-			if (strlen(*ppSearchPaths) > 0)
-			{
-				strcpy(ModulePath, *ppSearchPaths);
-				strcat(ModulePath, pModuleName);
+            const char *base = *ppSearchPaths;
+            if (base[0] && snprintf(ModulePath, sizeof(ModulePath), "%s%s", base, pModuleName) < (int)sizeof(ModulePath))
+            {
 				if (ModulePath[0] == 'm' && ModulePath[1]=='c')
 				{
 					ret = _LoadMcModule(ModulePath, arglen, pArgs);
@@ -229,11 +228,9 @@ Int32 IOPLoadModule(const Char *pModuleName, Char **ppSearchPaths, int arglen, c
 
 Char _MainLoop_BootDir[256];
 
+/* Boot modules are embedded. Do not probe optional filesystems on failure. */
 Char *_MainLoop_IOPModulePaths[]=
 {
-	_MainLoop_BootDir,
-	(char *)"host:",
-	(char *)"cdrom:\\",
 	(char *)"rom0:",
 	NULL
 };
@@ -241,7 +238,7 @@ Char *_MainLoop_IOPModulePaths[]=
 Bool _MainLoop_bAudioReady = FALSE;
 Bool _MainLoop_bMCSaveReady = FALSE;
 
-void _MainLoopLoadModules(Char **ppSearchPaths)
+void _MainLoopLoadModules(Char **ppSearchPaths, Bool bMemCardReady)
 {
 	Bool bLoadedNetwork;
 
@@ -269,8 +266,10 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	 * Every step is mirrored to the on-screen log via ScrPrintf so it
 	 * can be diagnosed on a real console without an EE SIO cable. */
 	{
+		BootMark("[IOP] pad module...");
 		int pad_ok = (PadLoadEmbeddedIrx() == 0)
 		          || (IOPLoadModule("rom0:PADMAN", NULL, 0, NULL) >= 0);
+		BootMark("[IOP] pad bind...");
 		int pi     = pad_ok ? padInit(0) : -1;
 		BootImport("pad", (pad_ok && pi == 1) ? 0 : -1);
 		if (pad_ok && pi == 1)
@@ -280,10 +279,9 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	/* libmc finalise. mcInit() picks up whichever MCMAN/MCSERV pair
 	   is currently loaded - the modern PS2DEV ones registered by
 	   init_memcard_driver() in main.cpp are detected automatically. */
-	MemCardInit();
-	#if MAINLOOP_MEMCARD
-	MemCardCreateSave(_SramPath, _MainLoop_SaveTitle, TRUE);
-	#endif
+    /* Do not rewrite the save icons on every launch. SRAM/state saves and
+       the video settings writer create the directory on actual demand. */
+    if (bMemCardReady) MemCardInit();
 
 	/* NETWORK IS NO LONGER BROUGHT UP AT BOOT.
 	 *
@@ -341,9 +339,12 @@ void _MainLoopLoadModules(Char **ppSearchPaths)
 	   RPC. CDVD_FlushCache call-sites have been replaced with no-ops
 	   or fileXioSync()/cdfs_FlushCache() where appropriate. */
 
-#if AUDIO_RFAUDS2
+#if PS2_BOOT_RECOVERY
+    BootMark("[SAFE] SPU2 skipped");
+#elif AUDIO_RFAUDS2
     /* RFAuds2 owns the SPU2 directly; audsrv/LIBSD must not own it too. */
     {
+        BootMark("[IOP] rfauds2 module...");
         int loaded = IOPLoadModule("RFAUDS2.IRX", ppSearchPaths, 0, NULL) >= 0;
         BootImport("rfauds2.irx", loaded ? 0 : -1);
         if (loaded) {

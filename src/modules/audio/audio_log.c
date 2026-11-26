@@ -48,8 +48,8 @@ static int           _capture_pending = 0;
 static int           _capture_in_io = 0;
 static int           _capture_io_error = 0;
 static FILE         *_capture_fp = NULL;
-static char          _capture_boot_path[256] = "host:";
-static char          _capture_boot_dir[256] = "host:";
+static char          _capture_boot_path[256] = "";
+static char          _capture_boot_dir[256] = "";
 static char          _capture_log_path[320] = "host:emulog.txt";
 
 static int _DLogStartsWith(const char *p, const char *prefix)
@@ -225,6 +225,8 @@ static int _DLogFlushBuffered(int force)
 void DLogCaptureSetBootPath(const char *bootPath, const char *bootDir)
 {
 #if SNDBG_LOG
+    _capture_boot_path[0] = 0;
+    _capture_boot_dir[0] = 0;
     if (bootPath && bootPath[0])
     {
         strncpy(_capture_boot_path, bootPath, sizeof(_capture_boot_path) - 1);

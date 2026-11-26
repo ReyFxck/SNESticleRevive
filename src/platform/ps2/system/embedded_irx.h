@@ -123,8 +123,8 @@ int  MmceNeedsRestart(void);
    controla a listagem de mass0:/mass1:. SMB (smb:) e' listado por opcao,
    mas sua rede e seu driver so' carregam quando o usuario abre o dispositivo.
    MX4SIO (SD via SIO2) tem toggle PROPRIO (Mx4sioIsEnabled/SetEnabled),
-   padrao DESLIGADO -- Mx4sioLoadIfEnabled carrega o mx4sio_bd APOS a
-   config se o toggle estiver ligado (chamado em mainloop_init). */
+   padrao DESLIGADO -- Mx4sioLoadIfEnabled carrega o mx4sio_bd
+   sob demanda, ao abrir o dispositivo ou habilitar nas configs. */
 int  MassStorageIsEnabled(void);
 void MassStorageSetEnabled(int enabled);
 /* Emulator/development HostFS. This only controls whether host: is exposed

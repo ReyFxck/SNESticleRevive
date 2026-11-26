@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <kernel.h>
 #include <libpad.h>
 #include "types.h"
@@ -36,6 +37,7 @@ extern "C" {
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
+extern Char _MainLoop_SaveTitle[];
 extern TextureT _OutTex;
 
 #define VIDEO_ITEM_COUNT 24
@@ -261,6 +263,10 @@ static void _VideoCfgPath(char *pOut)
 
 void VideoSettingsSave(void)
 {
+#if PS2_BOOT_RECOVERY
+    /* Do not overwrite the user's saved video/device configuration. */
+    return;
+#endif
 	VideoCfgT cfg;
 	char      path[300];
 
@@ -293,7 +299,11 @@ void VideoSettingsSave(void)
 
 	_VideoCfgPath(path);
 	BgmIOBegin();
-	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
+    struct stat st;
+    if (stat(_SramPath, &st) == 0 && S_ISDIR(st.st_mode))
+        MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
+    else if (MemCardCreateSave(_SramPath, _MainLoop_SaveTitle, FALSE) >= 0)
+        MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
 	BgmIOEnd();
 }
 

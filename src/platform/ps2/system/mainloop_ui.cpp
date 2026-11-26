@@ -12,6 +12,7 @@
 #include "mainloop_ui.h"
 #include "mainloop_shared.h"
 #include "mainloop_menu.h"
+#include "audio_log.h"
 
 #include "poly.h"
 #include "font.h"
@@ -123,7 +124,11 @@ extern "C" void BootImportFlush(void)
 
 extern "C" void BootMark(const char *pLabel)
 {
-	if (pLabel) ScrPrintf("%s", pLabel);
+	if (pLabel)
+	{
+		DLog("[boot-stage] %s", pLabel);
+		ScrPrintf("%s", pLabel);
+	}
 }
 void _MainLoopSetScreen(CScreen *pScreen)
 {

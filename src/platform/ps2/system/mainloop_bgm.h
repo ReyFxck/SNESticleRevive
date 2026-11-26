@@ -17,6 +17,8 @@ extern "C" {
    chamada.  Seguro chamar todo frame; nao faz nada se desabilitado,
    se nao houver faixa, ou se o audio ainda nao esta pronto. */
 void BgmUpdate(void);
+/* Memory-only service for nested modal presentations. */
+void BgmServicePCM(void);
 
 /* Mark menu entry without doing discovery or file I/O. This lets L2+R2 show
    its first frame immediately; normal BgmUpdate performs lazy loading. */

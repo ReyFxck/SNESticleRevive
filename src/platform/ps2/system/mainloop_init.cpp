@@ -12,6 +12,7 @@
 #include "mainloop_debug.h"
 #include "mainloop_shared.h"
 #include "mainloop_iop.h"
+#include "mainloop_bgm.h"
 #include "mainloop_net.h"
 #include "mainloop_ui.h"
 #include "mainloop_menu.h"
@@ -213,13 +214,7 @@ Bool MainLoopReinitVideo()
     return TRUE;
 }
 
-/* Browser starting directory. On real PS2 you typically want "mass:/"
-   (USB stick) or a memcard path. On PCSX2/AetherSX2/NetherSX2 the
-   "host:" device is not mapped, so an empty string here makes the
-   browser screen list nothing - which looks like a "dead" menu even
-   though everything is rendering correctly. "mass:/" is the safe
-   default that works on real PS2 and on emulators with a USB image
-   attached. Override at runtime if needed. */
+/* Start with the virtual device list, not a synchronous storage scan. */
 static Char _MainLoop_MenuStartDir[] = "";
 
 static int dispx, dispy;
@@ -265,6 +260,7 @@ Bool MainLoopInit()
        2.5 MiB and could fail in packed builds on the 32 MiB PS2. */
     ProfInit(32 * 1024);
     #endif
+	BOOTLOG("[boot] graphics: init");
 	GS_InitGraph(GS_NTSC,GS_INTERLACE);
 	dispx = MAINLOOP_DISPX;
 	dispy = MAINLOOP_DISPY;
@@ -273,7 +269,11 @@ Bool MainLoopInit()
 	          FB0, FB1, GS_PSMCT32, Z0, GS_PSMZ16S);
 
 	if (!_MainLoopAllocVideoVram())
+	{
+		BOOTLOG("[boot] graphics: VRAM allocation failed");
 		return FALSE;
+	}
+	BOOTLOG("[boot] graphics: VRAM allocated");
 
 	GPFifoInit((Uint128 *)_MainLoop_GfxPipe, sizeof(_MainLoop_GfxPipe));
 	PolyInit();
@@ -314,6 +314,7 @@ Bool MainLoopInit()
 
 	// set boot dir
 	strcpy(_MainLoop_BootDir, MainGetBootDir());
+	HostFsSupportSetEnabled(strncmp(_MainLoop_BootDir, "host:", 5) == 0);
 
 	/* Keep the last mandatory embedded-module stack out of main()'s invisible
 	   OPL hand-off. Pad initialization below depends on this sio2man, so load
@@ -322,12 +323,9 @@ Bool MainLoopInit()
 	   real console now stops on this explicit marker instead of an inherited
 	   black/white loader background. */
 	BootMark("[IOP] memory card...");
-	{
-		int mcret = MemCardLoadEmbeddedIrx();
-		BOOTLOG("[boot] MemCardLoadEmbeddedIrx: done (ret=%d)", mcret);
-		(void)mcret;
-	}
-    _MainLoopLoadModules(_MainLoop_IOPModulePaths);
+	int mcret = MemCardLoadEmbeddedIrx();
+	BOOTLOG("[boot] MemCardLoadEmbeddedIrx: done (ret=%d)", mcret);
+    _MainLoopLoadModules(_MainLoop_IOPModulePaths, mcret >= 0);
 
     /* Video settings live on the memory card, whose stack came up immediately
        before _MainLoopLoadModules. Load them now and apply: the display offset
@@ -335,14 +333,20 @@ Bool MainLoopInit()
        re-init + font re-upload, since the first GSK_Init already ran at
        480i before the card was available.  Default (480i) users take the
        else branch and the GS is left exactly as it was. */
-    VideoSettingsLoad();
-    /* MX4SIO (SD via SIO2) carrega AQUI, depois da config -- nunca no boot.
-       So' se o suporte a Mass estiver ligado (padrao on).  Best-effort:
-       em quem nao tem o adaptador, so' nao acha hardware. */
-    Mx4sioLoadIfEnabled();
-    /* state.cfg can live on USB/MX4SIO/MMCE as well as a memory card. Load it
-       only after the configured removable-storage backend is available. */
-    MainLoopStateSettingsLoad();
+    BootMark("[CFG] video settings...");
+#if PS2_BOOT_RECOVERY
+    /* Diagnostic only: ignore saved settings and keep the initial video mode. */
+    HostFsSupportSetEnabled(0);
+    BgmSetVolume(0);
+    BootMark("[SAFE] saved settings/audio disabled");
+#else
+    if (mcret >= 0) VideoSettingsLoad();
+    /* Do not start MX4SIO merely because its toggle was saved. The browser
+       starts it on explicit mass-device access; config reads remain passive. */
+    BootMark("[CFG] state settings...");
+    if (mcret >= 0) MainLoopStateSettingsLoad();
+#endif
+    BootMark("[VID] apply mode...");
     if (g_GskVideoMode != GSK_GetActiveVideoMode() ||
         GSK_TvStandardNeedsReinit())
     {
@@ -410,6 +414,7 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 
 	SNPPUColorCalibrate(&_ColorCalib);
 
+	BootMark("[CORE] SNES...");
 	// create nes machine
 	_pSnes = new SnesSystem();
 	_pSnes->Reset();
@@ -424,6 +429,7 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 
 	/* Instantiate the MesenCE-backed NES system and register .nes / .fds /
 	   disksys.rom with the same browser used by SNES content. */
+	BootMark("[CORE] NES...");
 	_pNes = new NesSystem();
 	_pNes->Reset();
 
@@ -445,12 +451,15 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 		PathExtAdd(MAINLOOP_ENTRYTYPE_NESFDSBIOS, _pNesFDSBios->GetExtName(iExt));
 	}
 
+	BootMark("[CORE] movie buffers...");
 	s_pMovieClip = new Emu::MovieClip(_pSnes->GetStateSize(), 60 * 60 * 60);
 
+	BootMark("[UI] allocate browser...");
 	// init menu
 	_MainLoop_pBrowserScreen = new CBrowserScreen(6000);
 	_MainLoop_pBrowserScreen->SetMsgFunc(_MainLoopBrowserEvent);
 	_MainLoop_pBrowserScreen->SetDir(MENU_STARTDIR);
+	BOOTLOG("[boot] browser root ready");
 
 	/* Separate, smaller browser for state-file maintenance.  Keeping it
 	   independent means opening State Manager never destroys the user's
@@ -494,8 +503,10 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
         // espera ~2s (ajuste se quiser)
 	_bMenu = FALSE;
 
-	// load snes palette
-        _MainLoopLoadSnesPalette("mc0:/SNESticle/default.snpal");
+	// load snes palette (not in recovery)
+#if !PS2_BOOT_RECOVERY
+        if (mcret >= 0) _MainLoopLoadSnesPalette("mc0:/SNESticle/default.snpal");
+#endif
 	// load rom
         _MainLoopExecuteFile(_pRomFile, TRUE);
         _bMenu = _pSystem ? FALSE : TRUE;

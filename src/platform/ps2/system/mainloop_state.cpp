@@ -1115,7 +1115,9 @@ void MainLoopStateSettingsLoad()
         }
     }
 
-    if (_MainLoop_BootDir[0] &&
+    if ((!strncmp(_MainLoop_BootDir, "mc0:", 4) ||
+         !strncmp(_MainLoop_BootDir, "mc1:", 4) ||
+         !strncmp(_MainLoop_BootDir, "mass", 4)) &&
         _MainLoopStateConfigPathIsWritable(_MainLoop_BootDir) &&
         snprintf(
             BootPath,
@@ -1140,13 +1142,9 @@ void MainLoopStateSettingsLoad()
         }
     }
 
-    if (MmceSupportIsEnabled() && !MmceNeedsRestart())
+    if (MmceSupportIsEnabled() && MmceIsLoaded() && !MmceNeedsRestart())
     {
         Int32 iSlots = MmceGetAvailableSlots();
-        if (!iSlots)
-        {
-            iSlots = MmceProbeAvailableSlots();
-        }
         for (i = 0; pMMCEPaths[i]; i++)
         {
             if ((iSlots & (1 << i)) &&
