@@ -17,8 +17,20 @@
 extern "C" {
 #include "sncpu.h"
 }
-extern "C" void SNCPUWrite8(SNCpuT *, Uint32, Uint8) { std::abort(); }
 #include "snppu.h"
+/* Minimal B-bus fixture, only enabled for the HDMA CGRAM test. */
+static SnesPPU *g_HDMATestPPU;
+static Uint32 g_HDMATestLine;
+static Uint32 g_HDMATestWrites;
+extern "C" void SNCPUWrite8(SNCpuT *cpu, Uint32 addr, Uint8 data)
+{
+    if (!g_HDMATestPPU || addr != 0x2122) std::abort();
+    cpu->uOpenBus = data;
+    g_HDMATestPPU->Sync(g_HDMATestLine);
+    g_HDMATestPPU->WriteTimed(addr, data, g_HDMATestLine,
+        SNCPUGetCounter(cpu, SNCPU_COUNTER_LINE));
+    ++g_HDMATestWrites;
+}
 
 class TestRender : public ISnesPPURender
 {
@@ -575,6 +587,55 @@ static void CheckFixedPortDMA()
     }
 }
 
+static void CheckFixedCGRAMHDMA()
+{
+    static Uint8 mem[65536];
+    for (unsigned i=0;i<sizeof(mem);++i) mem[i]=(Uint8)(i*13+9);
+    unsigned cases=0;
+    for (unsigned mode : {2u,6u})
+    for (unsigned indirect : {0u,0x40u})
+    for (unsigned line : {1u,225u})
+    for (unsigned clock : {80u,84u,88u,1088u,1092u,1096u})
+    for (unsigned start : {0u,0x20ffu,0x2100u,0x7fffu,0xffffu})
+    for (unsigned cgaddr : {0u,255u})
+    {
+        SnesPPU ppu, ref; TestRender r, rr;
+        ppu.SetPPURender(&r); r.SetPPU(&ppu); ppu.Reset();
+        ref.SetPPURender(&rr); rr.SetPPU(&ref); ref.Reset();
+        for (SnesPPU *p : {&ppu,&ref}) {
+            p->Write8(0x2100,0x0f);
+            p->EnqueueWrite(line,0x2121,(Uint8)cgaddr);
+        }
+        r.uInternalCGRAMAddress=rr.uInternalCGRAMAddress=0x61;
+        SNCpuT cpu={}; cpu.Cycles=10000; cpu.Counter[SNCPU_COUNTER_LINE]=10000+clock;
+        cpu.uOpenBus=0xe3;
+        for (unsigned i=0;i<8;++i) cpu.Bank[i].pMem=mem;
+        SnesDMAC dma; dma.SetCPU(&cpu); dma.SetPPU(&ppu);
+        SnesDMAChT &ch=dma.m_Channels[0];
+        ch.dmapx=(Uint8)(mode|indirect); ch.bbadx=0x22;
+        ch.a2ax=indirect?0xaaaa:start; ch.dasx=indirect?start:0x5555;
+        g_HDMATestPPU=&ppu; g_HDMATestLine=line; g_HDMATestWrites=0;
+        dma.ProcessHDMACh(0,line);
+        g_HDMATestPPU=NULL;
+        Uint8 bus=0xe3;
+        for(unsigned i=0;i<2;++i) {
+            Uint16 address=(Uint16)(start+i);
+            if(!SnesDMAC::IsABusForbidden(address)) bus=mem[address];
+            ref.Sync(line);
+            ref.WriteTimed(0x2122,bus,line,clock+i*SNCPU_CYCLE_SLOW);
+        }
+        Check("HDMA CGRAM bytes",g_HDMATestWrites,2);
+        Check("HDMA CGRAM content",memcmp(ppu.GetCGData(),ref.GetCGData(),512),0);
+        Check("HDMA CGRAM regs",memcmp(ppu.GetRegs(),ref.GetRegs(),sizeof(SnesPPURegsT)),0);
+        Check("HDMA CGRAM bus",cpu.uOpenBus,bus);
+        Check("HDMA CGRAM clocks",cpu.Cycles,10000-2*SNCPU_CYCLE_SLOW);
+        Check("HDMA direct offset",ch.a2ax,indirect?0xaaaa:(Uint16)(start+2));
+        Check("HDMA indirect offset",ch.dasx,indirect?(Uint16)(start+2):0x5555);
+        ++cases;
+    }
+    std::printf("HDMA CGRAM equivalence: %u cases %s\n",cases,g_Failures?"FAIL":"PASS");
+}
+
 static void CheckSyncGuard()
 {
     SnesPPU ppu; TestRender r; ppu.SetPPURender(&r); r.SetPPU(&ppu); ppu.Reset();
@@ -597,6 +658,7 @@ static void CheckSyncGuard()
 int main(int argc, char **argv)
 {
 	CheckFixedPortDMA();
+    CheckFixedCGRAMHDMA();
     CheckSyncGuard();
     if (argc == 2 && !std::strcmp(argv[1], "--vram-hotpath"))
 	{

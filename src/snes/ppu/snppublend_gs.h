@@ -8,6 +8,7 @@
 #define _SNPPUBLEND_GS_H
 
 #include "snppublend.h"
+#include "snppupalettedirty.h"
 
 struct SNPPUDmaListT
 {
@@ -62,6 +63,7 @@ class SNPPUBlendGS : public ISNPPUBlend
 	Uint64 *m_pHiresTrxPos;
 	Bool m_bHiresDmaListReady;
 	Uint32 m_uPaletteDirty[8];
+	SnesPPUPaletteGroups m_PaletteGroups;
 	Uint32 m_nPaletteDirty;
 	SNPPUDmaListT *m_pDirectExecList;
 	Uint64 m_uDirectDirtyGroups;

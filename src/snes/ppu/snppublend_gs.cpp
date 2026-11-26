@@ -259,6 +259,7 @@ void SNPPUBlendGS::MarkPaletteEntryDirty(Uint32 uAddr)
 	if (!(m_uPaletteDirty[uWord] & uBit))
 	{
 		m_uPaletteDirty[uWord] |= uBit;
+		m_PaletteGroups.Mark(uAddr);
 		m_nPaletteDirty++;
 	}
 	m_bPaletteDirty = TRUE;
@@ -270,6 +271,7 @@ void SNPPUBlendGS::MarkPaletteAllDirty()
 
 	for (iWord = 0; iWord < 8; iWord++)
 		m_uPaletteDirty[iWord] = 0xFFFFFFFFu;
+	m_PaletteGroups.All();
 	m_nPaletteDirty = 256;
 	m_bPaletteDirty = TRUE;
 }
@@ -313,6 +315,7 @@ Uint32 SNPPUBlendGS::CopyDirtyPalette(PaletteT *pDest,
 	}
 
 	memset(m_uPaletteDirty, 0, sizeof(m_uPaletteDirty));
+	m_PaletteGroups.Clear();
 	m_nPaletteDirty = 0;
 	m_bPaletteDirty = FALSE;
 	return uCopiedBytes;
@@ -320,23 +323,7 @@ Uint32 SNPPUBlendGS::CopyDirtyPalette(PaletteT *pDest,
 
 Uint64 SNPPUBlendGS::GetDirtyPaletteGroups() const
 {
-	Uint64 uGroups = 0;
-	Uint32 iWord;
-
-	/* GIF image payloads are qword-sized. Group four adjacent PSMCT32
-	   entries so every sparse source and destination is 16-byte aligned. */
-	for (iWord = 0; iWord < 8; iWord++)
-	{
-		Uint32 uBits = m_uPaletteDirty[iWord];
-		while (uBits)
-		{
-			Uint32 uBit = (Uint32)__builtin_ctz(uBits);
-			Uint32 uAddr = iWord * 32u + uBit;
-			uGroups |= (Uint64)1u << (uAddr >> 2);
-			uBits &= uBits - 1u;
-		}
-	}
-	return uGroups;
+    return m_PaletteGroups.Bits();
 }
 
 #if SNPPUBLEND_PAL32
@@ -1042,6 +1029,7 @@ SNPPUBlendGS::SNPPUBlendGS(Uint32 uVramAddr, Uint32 uOutAddr)
 
     m_pDmaBlendInfo = NULL;
 	memset(m_uPaletteDirty, 0, sizeof(m_uPaletteDirty));
+	m_PaletteGroups.Clear();
 	m_nPaletteDirty = 0;
 	MarkPaletteAllDirty();
     m_bAttribPalettesUploaded = FALSE;

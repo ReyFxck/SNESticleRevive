@@ -228,6 +228,7 @@ public:
 	void                    Write8(Uint32 uAddr, Uint8 uData);
 	/* CPU/DMA timed B-bus accessors. These preserve port-address side effects
 	   even when active display redirects or blocks the underlying memory. */
+	void                    WriteCGRAMTimed(Uint8 uData, Uint32 uLine, Uint32 uHClock);
 	void                    WriteTimed(Uint32 uAddr, Uint8 uData,
 	                                   Uint32 uLine, Uint32 uHClock);
 	Uint8                   ReadTimed(Uint32 uAddr, Uint8 uCpuOpenBus,

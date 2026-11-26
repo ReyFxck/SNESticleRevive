@@ -1034,6 +1034,29 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan, Uint32 uLine)
 	nBytes = _SNDma_HDMABytes[uMode];
 	pTransfer = _SNDma_MDMATransfer[uMode];
 
+    /* Modes 2 and 6 write twice to the same B-bus port. In the CGRAM
+       case the generic loop would reject the queue fast path twice anyway.
+       Keep each read/write and its clock debit separate: the second byte
+       can cross a CGRAM access boundary or wrap the 16-bit source address. */
+    if (pChan->bbadx == 0x22 && !(pChan->dmapx & 0x80) &&
+        (uMode == 2 || uMode == 6))
+    {
+        Uint16 *pOffset = (pChan->dmapx & 0x40) ? &pChan->dasx : &pChan->a2ax;
+        const Uint32 bank = (Uint32)((pChan->dmapx & 0x40) ?
+                                    pChan->dasbx : pChan->a1bx) << 16;
+        for (Uint32 i = 0; i < 2; ++i)
+        {
+            Uint8 data = ReadABus(bank | *pOffset);
+            SNCPUWrite8(m_pCPU, 0x2122, data);
+            ++*pOffset;
+            ConsumeMasterClocks(SNCPU_CYCLE_SLOW);
+        }
+#if SNDBG_LOG
+        g_DbgHDMACGRAMBytes += 2;
+#endif
+        return;
+    }
+
 	for (Uint32 i = 0; i < nBytes; i++)
 	{
 		Uint32 uAddrA;

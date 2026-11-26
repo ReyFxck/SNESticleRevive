@@ -66,8 +66,8 @@ static unsigned SpcTest() {
     std::printf("SPC differential: %u cases, %u I/O events, PASS\n",n,ioEvents);
     return n;
 }
+static int FloorDiv(int n, int d) { return n >= 0 ? n/d : -((-n+d-1)/d); }
 static Uint8 ReferenceBRR(const Uint8 *data, Int16 *out, Int16 p0, Int16 p1) {
-    const int coeff[4][2]={{0,0},{240,0},{488,-240},{460,-208}};
     unsigned h=data[0],r=h>>4;
     Int16 decode[16];
     for (unsigned j=0;j<16;++j) {
@@ -77,7 +77,13 @@ static Uint8 ReferenceBRR(const Uint8 *data, Int16 *out, Int16 p0, Int16 p1) {
     }
     for(unsigned j=0;j<16;++j) {
         int f=(h>>2)&3;
-        int v=(decode[j]>>1)+((p0*coeff[f][0])>>9)+((p1*coeff[f][1])>>9);
+        int v=FloorDiv(decode[j],2);
+        int old=FloorDiv(p1,2);
+        switch(f) {
+        case 1: v+=FloorDiv(p0,2)+FloorDiv(-p0,32); break;
+        case 2: v+=p0-old+FloorDiv(old,16)+FloorDiv(-3*p0,64); break;
+        case 3: v+=p0-old+FloorDiv(-13*p0,128)+FloorDiv(3*old,16); break;
+        }
         if(v>32767)v=32767;
         if(v<-32768)v=-32768;
         out[j]=(Int16)(v*2); p1=p0; p0=out[j];

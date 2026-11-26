@@ -761,6 +761,18 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 
 	uAddr &= 0xFFFF;
 
+    /* CGDATA is a particularly frequent HDMA target. Keep the exact same
+       queue barrier and H/V clock calculation, without the generic port switch. */
+    if (uAddr == 0x2122)
+    {
+#if SNPPU_WRITEQUEUE
+        pSnes->SyncPPU();
+#endif
+        pSnes->m_PPU.WriteCGRAMTimed(uData, pSnes->m_uLine,
+                                    pSnes->GetSCPULineClock());
+        return;
+    }
+
 	/* PPU ports are the frequent CPU/HDMA writes and are disjoint from
 	   every cartridge device window below. Preserve their original queue,
 	   bus timing and side effects before testing unrelated chip state. */
@@ -770,7 +782,7 @@ void SNCPU_TRAPFUNC SnesSystem::Write2000(SNCpuT *pCpu, Uint32 uAddr, Uint8 uDat
 		   control/address writes, then perform this bus transaction now so
 		   active-display restrictions are decided at the original access. */
 		if (uAddr == 0x2104 || uAddr == 0x2116 || uAddr == 0x2117 ||
-		    uAddr == 0x2118 || uAddr == 0x2119 || uAddr == 0x2122)
+		    uAddr == 0x2118 || uAddr == 0x2119)
 		{
 #if SNPPU_WRITEQUEUE
 			pSnes->SyncPPU();

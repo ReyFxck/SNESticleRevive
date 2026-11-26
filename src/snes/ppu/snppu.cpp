@@ -661,6 +661,14 @@ void SnesPPU::UpdateMatMul()
 	m_Regs.mpyh = (Uint8)(iProduct  >> 16);
 }
 
+void SnesPPU::WriteCGRAMTimed(Uint8 uData, Uint32 uLine, Uint32 uHClock)
+{
+    Uint32 address = (m_Regs.cgadd.w >> 1) & (SNESPPU_CGRAM_NUM - 1);
+    if (!CanAccessCGRAM(uLine, uHClock) && m_pRender)
+        address = m_pRender->GetInternalCGRAMAddress(uLine, uHClock);
+    WriteCGDATATimed(uData, address);
+}
+
 void SnesPPU::WriteTimed(Uint32 uAddr, Uint8 uData,
 	Uint32 uLine, Uint32 uHClock)
 {
@@ -694,14 +702,8 @@ void SnesPPU::WriteTimed(Uint32 uAddr, Uint8 uData,
 		return;
 
 	case 0x2122:
-	{
-		Uint32 uCGAddr = (m_Regs.cgadd.w >> 1) &
-		                 (SNESPPU_CGRAM_NUM - 1);
-		if (!CanAccessCGRAM(uLine, uHClock) && m_pRender)
-			uCGAddr = m_pRender->GetInternalCGRAMAddress(uLine, uHClock);
-		WriteCGDATATimed(uData, uCGAddr);
-		return;
-	}
+        WriteCGRAMTimed(uData, uLine, uHClock);
+        return;
 	default:
 		Write8(uAddr, uData);
 		return;

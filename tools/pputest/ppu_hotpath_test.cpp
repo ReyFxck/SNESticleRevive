@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <initializer_list>
+#include "snppupalettedirty.h"
 #include "../../src/snes/ppu/snppurender8.cpp"
 #include "../../src/snes/ppu/snppubg.cpp"
 
@@ -152,4 +153,24 @@ static void TestMosaicAndKey()
     }
     std::printf("Mosaic masks: %u cases; cache key: 64 checks PASS\n",cases);
 }
-int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); }
+static void TestPaletteGroups()
+{
+    SnesPPUPaletteGroups groups;
+    for (unsigned run=0;run<4096;++run) {
+        bool dirty[256]={};
+        groups.Clear();
+        Check(groups.Bits()==0,"palette group reset");
+        for (unsigned j=0;j<256;++j) {
+            unsigned entry=(run==0)?j:(Next()&255);
+            dirty[entry]=true;
+            groups.Mark(entry);
+            Uint64 expected=0;
+            for (unsigned k=0;k<256;++k) if (dirty[k]) expected |= (Uint64)1 << (k/4);
+            Check(groups.Bits()==expected,"palette group bitmap");
+        }
+        groups.All();
+        Check(groups.Bits()==~(Uint64)0,"all palette groups dirty");
+    }
+    std::puts("Palette groups: 1048576 incremental marks PASS");
+}
+int main() { InitLookup(); TestCHR(); TestMap(); TestMasks(); TestMosaicAndKey(); TestPaletteGroups(); }
